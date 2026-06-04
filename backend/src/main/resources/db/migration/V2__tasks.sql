@@ -12,8 +12,8 @@ CREATE TABLE tasks (
     budget        NUMERIC(14, 2) NOT NULL CHECK (budget > 0),
     output_spec   JSONB NOT NULL,
     status        TEXT NOT NULL CHECK (status IN (
-                      'SUBMITTED', 'ROUTING', 'IN_PROGRESS', 'SUBMITTED_FOR_REVIEW',
-                      'VALIDATING', 'ACCEPTED', 'REJECTED', 'DISPUTED', 'SETTLED', 'CANCELLED')),
+                      'SUBMITTED', 'QUEUED', 'EXECUTING', 'RESULT_RECEIVED', 'PENDING_REVIEW',
+                      'RESOLVED', 'AWAITING_CAPACITY', 'TIMED_OUT', 'SPEC_VIOLATION', 'FAILED', 'CANCELLED')),
     gmt_create    TIMESTAMPTZ NOT NULL DEFAULT now(),
     gmt_modified  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
