@@ -1,5 +1,6 @@
 package com.hireai.application.config;
 
+import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
 import com.hireai.domain.biz.wallet.service.WalletFreezeDomainService;
 import com.hireai.domain.biz.wallet.service.WalletTopUpDomainService;
 import org.springframework.context.annotation.Bean;
@@ -21,5 +22,10 @@ public class DomainServiceConfig {
     @Bean
     public WalletFreezeDomainService walletFreezeDomainService() {
         return new WalletFreezeDomainService();
+    }
+
+    @Bean
+    public TaskSubmitDomainService taskSubmitDomainService() {
+        return new TaskSubmitDomainService();
     }
 }
