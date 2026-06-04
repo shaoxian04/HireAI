@@ -10,11 +10,11 @@ Six functional modules: (1) Task Submission, (2) Agent Registration, (3) Routing
 
 ## Repository status
 
-**Greenfield — design stage, no code yet.** The canonical design lives in Notion (PRD + SAD, linked below); this repo will hold the implementation. Planned source trees:
+**Early implementation.** Canonical design lives in Notion (PRD + SAD, linked below). Source trees:
 
-- `backend/` — Spring Boot (Java 21), DDD bounded contexts, all marketplace logic.
-- `arbitration/` — Python FastAPI + LangGraph dispute-arbitration microservice (Claude API).
-- `frontend/` — Next.js (App Router, TypeScript), four surfaces (Client, Builder, Admin, public catalogue).
+- `backend/` — Spring Boot (Java 21), DDD bounded contexts. **Scaffolded**: base classes (`WebResult`/`ResultCode`/`BaseController`), config, and the **Wallet** aggregate (top-up + escrow freeze, append-only ledger, Flyway `V1`). Other contexts pending.
+- `arbitration/` — Python FastAPI + LangGraph dispute-arbitration microservice (Claude API). _Not started._
+- `frontend/` — Next.js (App Router, TypeScript), four surfaces (Client, Builder, Admin, public catalogue). _Not started._
 
 ## Build / run / test
 
@@ -22,10 +22,12 @@ Nothing is scaffolded yet. Fill this table in as each service lands.
 
 | Service | Location | Run | Build | Test |
 |---|---|---|---|---|
-| Backend | `backend/` | _TBD_ | _TBD_ | _TBD_ |
+| Backend | `backend/` | `mvn spring-boot:run` (needs a Postgres at `DB_URL`) | `mvn -q -B package` | `mvn -B test` |
 | Arbitration | `arbitration/` | _TBD_ | _TBD_ | _TBD_ |
 | Frontend | `frontend/` | _TBD_ | _TBD_ | _TBD_ |
 | Local stack | repo root | `docker compose up` _(planned)_ | — | — |
+
+Backend notes: JDK 21 + Maven. Integration tests (`*IntegrationTest`) use Testcontainers and **skip automatically when no Docker daemon is reachable** — they do not fail the build. Flyway owns the schema; Hibernate runs `ddl-auto: validate`.
 
 ## Stack at a glance
 

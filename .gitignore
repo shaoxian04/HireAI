@@ -45,3 +45,6 @@ Thumbs.db
 # Logs & local data
 *.log
 /tmp/
+
+# Maven build output
+backend/target/
