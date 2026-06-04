@@ -1,0 +1,47 @@
+# Secrets & environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Java / Spring Boot (backend/)
+target/
+build/
+*.class
+*.jar
+*.war
+.gradle/
+.mvn/
+hs_err_pid*
+
+# Python / FastAPI (arbitration/)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# Node / Next.js (frontend/)
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Logs & local data
+*.log
+/tmp/
