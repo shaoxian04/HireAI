@@ -24,7 +24,7 @@ class SpineContractsTest {
         AgentCandidate candidate = new AgentCandidate(
                 agentId, agentVersionId, List.of("SUMMARISATION", "TRANSLATION"),
                 new BigDecimal("12.50"), "https://agent.example.com/webhook", 120,
-                new BigDecimal("87.25"));
+                new BigDecimal("87.25"), "{\"format\":\"JSON\"}");
 
         assertThat(candidate.agentId()).isEqualTo(agentId);
         assertThat(candidate.agentVersionId()).isEqualTo(agentVersionId);
@@ -33,6 +33,7 @@ class SpineContractsTest {
         assertThat(candidate.webhookUrl()).isEqualTo("https://agent.example.com/webhook");
         assertThat(candidate.maxExecutionSeconds()).isEqualTo(120);
         assertThat(candidate.reputationScore()).isEqualByComparingTo("87.25");
+        assertThat(candidate.outputSpecJson()).isEqualTo("{\"format\":\"JSON\"}");
     }
 
     @Test

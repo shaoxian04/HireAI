@@ -75,7 +75,8 @@ public class AgentRepositoryImpl implements AgentRepository {
                 .map(row -> new AgentCandidate(
                         row.getAgentId(), row.getAgentVersionId(),
                         List.of(row.getCapabilityCategories()), row.getPrice(),
-                        row.getWebhookUrl(), row.getMaxExecutionSeconds(), row.getReputationScore()))
+                        row.getWebhookUrl(), row.getMaxExecutionSeconds(), row.getReputationScore(),
+                        row.getOutputSpec()))
                 .toList();
     }
 

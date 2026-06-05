@@ -9,8 +9,12 @@ import java.util.UUID;
  * Framework-free (the domain layer has zero framework imports). Produced by
  * {@code AgentRepository.findActiveCandidates} (Plan 1) and consumed by the routing
  * matcher (Plan 4) to pick the best agent for a submitted task.
+ *
+ * <p>{@code outputSpecJson} is the chosen version's declared {@code output_spec} as stored
+ * (opaque JSON). It is irrelevant to selection but must be threaded through routing so the
+ * winning agent's binding output contract reaches the dispatch payload (Hard Invariant #4).
  */
 public record AgentCandidate(UUID agentId, UUID agentVersionId, List<String> capabilityCategories,
                              BigDecimal price, String webhookUrl, int maxExecutionSeconds,
-                             BigDecimal reputationScore) {
+                             BigDecimal reputationScore, String outputSpecJson) {
 }

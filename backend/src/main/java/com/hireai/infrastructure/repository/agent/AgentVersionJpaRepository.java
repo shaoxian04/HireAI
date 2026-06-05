@@ -26,7 +26,8 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionJpa
                    v.price               AS price,
                    v.webhook_url         AS webhook_url,
                    v.max_execution_seconds AS max_execution_seconds,
-                   a.reputation_score    AS reputation_score
+                   a.reputation_score    AS reputation_score,
+                   v.output_spec         AS output_spec
             FROM agent_versions v
             JOIN agents a ON a.id = v.agent_id AND a.current_version_id = v.id
             WHERE a.status = 'ACTIVE'
@@ -46,5 +47,6 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionJpa
         String getWebhookUrl();
         int getMaxExecutionSeconds();
         BigDecimal getReputationScore();
+        String getOutputSpec();
     }
 }

@@ -23,7 +23,8 @@ class RoutingMatchDomainServiceTest {
     private AgentCandidate candidate(UUID versionId, List<String> categories, String price, String reputation) {
         return new AgentCandidate(
                 UUID.randomUUID(), versionId, categories,
-                new BigDecimal(price), "https://agent.example/hook", 60, new BigDecimal(reputation));
+                new BigDecimal(price), "https://agent.example/hook", 60, new BigDecimal(reputation),
+                "{\"format\":\"JSON\"}");
     }
 
     @Test

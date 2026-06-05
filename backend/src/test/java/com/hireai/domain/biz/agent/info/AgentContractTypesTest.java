@@ -22,7 +22,7 @@ class AgentContractTypesTest {
         UUID versionId = UUID.randomUUID();
         AgentCandidate candidate = new AgentCandidate(agentId, versionId,
                 List.of("summarisation"), new BigDecimal("5.00"),
-                "https://a.example.com", 120, new BigDecimal("50.00"));
+                "https://a.example.com", 120, new BigDecimal("50.00"), "{\"format\":\"JSON\"}");
 
         assertThat(candidate.agentId()).isEqualTo(agentId);
         assertThat(candidate.agentVersionId()).isEqualTo(versionId);
@@ -31,6 +31,7 @@ class AgentContractTypesTest {
         assertThat(candidate.webhookUrl()).isEqualTo("https://a.example.com");
         assertThat(candidate.maxExecutionSeconds()).isEqualTo(120);
         assertThat(candidate.reputationScore()).isEqualByComparingTo("50.00");
+        assertThat(candidate.outputSpecJson()).isEqualTo("{\"format\":\"JSON\"}");
     }
 
     @Test

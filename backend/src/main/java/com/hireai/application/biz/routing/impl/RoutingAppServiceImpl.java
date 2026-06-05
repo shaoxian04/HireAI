@@ -85,7 +85,7 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                 view.category(),               // description placeholder
                 view.category(),
                 null,                          // expectedDeliverableJson: not enriched in this slice
-                null,                          // outputSpecJson: not enriched in this slice
+                winner.outputSpecJson(),       // binding agent output contract (Hard Invariant #4)
                 callbackUrl);
         return new DispatchMessage(taskId, agentVersionId, winner.webhookUrl(), correlationId, payload);
     }
