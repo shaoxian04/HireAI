@@ -1,6 +1,7 @@
 package com.hireai.contracts;
 
 import com.hireai.domain.biz.agent.info.AgentCandidate;
+import com.hireai.domain.biz.routing.info.TaskDispatchPayload;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import org.junit.jupiter.api.Test;
 
@@ -40,5 +41,20 @@ class SpineContractsTest {
         assertThat(view.category()).isEqualTo("SUMMARISATION");
         assertThat(view.budget()).isEqualByComparingTo("25.00");
         assertThat(view.status()).isEqualTo("SUBMITTED");
+    }
+
+    @Test
+    void taskDispatchPayloadExposesAllAccessors() {
+        TaskDispatchPayload payload = new TaskDispatchPayload(
+                "Summarise doc", "Summarise the attached report", "SUMMARISATION",
+                "{\"format\":\"TEXT\"}", "{\"format\":\"TEXT\",\"acceptanceCriteria\":\"concise\"}",
+                "https://platform.example.com/api/agent-callbacks/abc/result");
+
+        assertThat(payload.title()).isEqualTo("Summarise doc");
+        assertThat(payload.description()).isEqualTo("Summarise the attached report");
+        assertThat(payload.category()).isEqualTo("SUMMARISATION");
+        assertThat(payload.expectedDeliverableJson()).isEqualTo("{\"format\":\"TEXT\"}");
+        assertThat(payload.outputSpecJson()).isEqualTo("{\"format\":\"TEXT\",\"acceptanceCriteria\":\"concise\"}");
+        assertThat(payload.callbackUrl()).isEqualTo("https://platform.example.com/api/agent-callbacks/abc/result");
     }
 }
