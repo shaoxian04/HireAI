@@ -12,22 +12,22 @@ Six functional modules: (1) Task Submission, (2) Agent Registration, (3) Routing
 
 **Early implementation.** Canonical design lives in Notion (PRD + SAD, linked below). Source trees:
 
-- `backend/` — Spring Boot (Java 21), DDD bounded contexts. **Scaffolded**: base classes (`WebResult`/`ResultCode`/`BaseController`), config, the **Wallet** aggregate (top-up + escrow freeze, append-only ledger, Flyway `V1`), and the **Task** aggregate (submit + atomic escrow freeze + binding `output_spec` JSONB, Flyway `V2`). All service classes use interface + `impl/` (app services Spring-managed; domain services kept framework-free, wired in `DomainServiceConfig`). Other contexts pending.
+- `backend/` — Spring Boot (Java 21), DDD bounded contexts. **Built (on `feat/marketplace-spine`):** base classes (`WebResult`/`ResultCode`/`BaseController`), config; the **Wallet** aggregate (top-up + escrow freeze, append-only ledger, `V1`); the **Task** aggregate (submit + atomic escrow freeze + binding `output_spec`, `V2`); **Module 2 — Agent Registration** (`AgentModel`/`AgentVersionModel`, register/activate, `V3`); **Module 3 — Routing & Execution** (event-triggered matching → RabbitMQ dispatch → signed HTTPS webhook → token-authenticated callback → `task_results`, `V4`); and a **thin JWT auth slice** (`POST /api/auth/login`, `JwtCurrentUserProvider`, profile-scoped security chains, seeded demo users `V5`) enforcing invariant #5. ~147 tests green. All service classes use interface + `impl/` (app services Spring-managed; domain services framework-free, wired in `DomainServiceConfig`). **Pending:** Module 4 (validation + dispute), Module 5 settlement/reputation, Module 6 (discovery).
 - `arbitration/` — Python FastAPI + LangGraph dispute-arbitration microservice (Claude API). _Not started._
 - `frontend/` — Next.js (App Router, TypeScript), four surfaces (Client, Builder, Admin, public catalogue). _Not started._
 
 ## Build / run / test
 
-Nothing is scaffolded yet. Fill this table in as each service lands.
+Backend is built and tested; arbitration + frontend not started.
 
 | Service | Location | Run | Build | Test |
 |---|---|---|---|---|
-| Backend | `backend/` | `mvn spring-boot:run` (needs a Postgres at `DB_URL`) | `mvn -q -B package` | `mvn -B test` |
+| Backend | `backend/` | `mvn -f backend/pom.xml spring-boot:run` (needs Postgres at `DB_URL` **and** a RabbitMQ broker; JWT auth enforced by default) | `mvn -f backend/pom.xml -q -B package` | `mvn -f backend/pom.xml -B test` |
 | Arbitration | `arbitration/` | _TBD_ | _TBD_ | _TBD_ |
 | Frontend | `frontend/` | _TBD_ | _TBD_ | _TBD_ |
 | Local stack | repo root | `docker compose up` _(planned)_ | — | — |
 
-Backend notes: JDK 21 + Maven. Integration tests (`*IntegrationTest`) use Testcontainers and **skip automatically when no Docker daemon is reachable** — they do not fail the build. Flyway owns the schema; Hibernate runs `ddl-auto: validate`.
+Backend notes: JDK 21 + Maven. Integration tests (`*IntegrationTest`) use Testcontainers (Postgres **+ RabbitMQ**) and **skip automatically when no Docker daemon is reachable** — they do not fail the build. The default/`prod` profile **enforces JWT auth**; the `test` profile (applied to existing context-loading tests via `@ActiveProfiles("test")`) is permissive with a fixed dev user. Flyway owns the schema (`V1`–`V5`); Hibernate runs `ddl-auto: validate`.
 
 ## Stack at a glance
 
