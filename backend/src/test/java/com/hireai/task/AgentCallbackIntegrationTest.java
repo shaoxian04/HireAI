@@ -22,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.DockerClientFactory;
@@ -46,6 +47,7 @@ import static org.mockito.Mockito.when;
  */
 @SpringBootTest
 @Testcontainers
+@ActiveProfiles("test")
 @EnabledIf("dockerAvailable")
 class AgentCallbackIntegrationTest {
 

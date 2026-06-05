@@ -39,7 +39,7 @@ import static org.awaitility.Awaitility.await;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
-@ActiveProfiles("dev")
+@ActiveProfiles({"dev", "test"})
 @EnabledIf("dockerAvailable")
 class RoutingIntegrationTest {
 
