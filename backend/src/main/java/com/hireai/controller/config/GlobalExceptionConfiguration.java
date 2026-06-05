@@ -1,5 +1,6 @@
 package com.hireai.controller.config;
 
+import com.hireai.application.biz.auth.AuthenticationFailedException;
 import com.hireai.controller.base.ResultCode;
 import com.hireai.controller.base.WebResult;
 import com.hireai.domain.shared.exception.DomainException;
@@ -34,6 +35,12 @@ public class GlobalExceptionConfiguration {
                 .orElse("Validation failed");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(WebResult.error(ResultCode.VALIDATION_ERROR, message));
+    }
+
+    @ExceptionHandler(AuthenticationFailedException.class)
+    public ResponseEntity<WebResult<Void>> handleAuthFailure(AuthenticationFailedException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(WebResult.error(ResultCode.VALIDATION_ERROR, ex.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)
