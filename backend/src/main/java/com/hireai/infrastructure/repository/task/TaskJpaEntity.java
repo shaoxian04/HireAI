@@ -14,7 +14,8 @@ import java.util.UUID;
 /**
  * JPA persistence entity for a task. Separate from the domain {@code TaskModel} so the
  * domain stays framework-free. {@code output_spec} is stored as JSONB; the repository
- * impl serialises the {@code OutputSpec} value object to/from JSON.
+ * impl serialises the {@code OutputSpec} value object to/from JSON. {@code agentVersionId}
+ * is a plain UUID (no FK — the Agent context is independent).
  */
 @Entity
 @Table(name = "tasks")
@@ -40,8 +41,14 @@ public class TaskJpaEntity {
     @Column(name = "output_spec", columnDefinition = "jsonb", nullable = false)
     private String outputSpec;
 
+    @Column(name = "category")
+    private String category;
+
     @Column(name = "status", nullable = false)
     private String status;
+
+    @Column(name = "agent_version_id")
+    private UUID agentVersionId;
 
     @Column(name = "gmt_create", nullable = false)
     private Instant gmtCreate;
@@ -50,14 +57,17 @@ public class TaskJpaEntity {
     }
 
     public TaskJpaEntity(UUID id, UUID clientId, String title, String description,
-                         BigDecimal budget, String outputSpec, String status, Instant gmtCreate) {
+                         BigDecimal budget, String outputSpec, String category, String status,
+                         UUID agentVersionId, Instant gmtCreate) {
         this.id = id;
         this.clientId = clientId;
         this.title = title;
         this.description = description;
         this.budget = budget;
         this.outputSpec = outputSpec;
+        this.category = category;
         this.status = status;
+        this.agentVersionId = agentVersionId;
         this.gmtCreate = gmtCreate;
     }
 
@@ -67,6 +77,8 @@ public class TaskJpaEntity {
     public String getDescription() { return description; }
     public BigDecimal getBudget() { return budget; }
     public String getOutputSpec() { return outputSpec; }
+    public String getCategory() { return category; }
     public String getStatus() { return status; }
+    public UUID getAgentVersionId() { return agentVersionId; }
     public Instant getGmtCreate() { return gmtCreate; }
 }

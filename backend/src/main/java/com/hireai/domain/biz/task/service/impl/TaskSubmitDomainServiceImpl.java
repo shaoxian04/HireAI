@@ -10,6 +10,6 @@ public class TaskSubmitDomainServiceImpl implements TaskSubmitDomainService {
     @Override
     public TaskModel submit(TaskSubmitInfo info) {
         return TaskModel.submit(info.clientId(), info.title(), info.description(),
-                info.budget(), info.outputSpec());
+                info.budget(), info.outputSpec(), info.category());
     }
 }

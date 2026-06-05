@@ -2,6 +2,7 @@ package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.controller.base.ResultCode;
+import com.hireai.domain.biz.task.info.TaskRoutingView;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskQuery;
 import com.hireai.domain.biz.task.repository.TaskRepository;
@@ -35,5 +36,12 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     @Override
     public List<TaskModel> listForClient(UUID clientId, TaskQuery query) {
         return taskRepository.findByClientId(clientId, query);
+    }
+
+    @Override
+    public TaskRoutingView getRoutingView(UUID taskId) {
+        TaskModel task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
+        return new TaskRoutingView(task.id(), task.category(), task.budget().value(), task.status().name());
     }
 }

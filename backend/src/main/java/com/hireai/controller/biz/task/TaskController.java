@@ -54,7 +54,8 @@ public class TaskController extends BaseController {
                 request.title(),
                 request.description(),
                 Money.of(request.budget()),
-                new OutputSpec(specRequest.format(), specRequest.schema(), specRequest.acceptanceCriteria()));
+                new OutputSpec(specRequest.format(), specRequest.schema(), specRequest.acceptanceCriteria()),
+                request.category());
         UUID taskId = writeAppService.submit(info);
         TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId));
         return ok(dto);

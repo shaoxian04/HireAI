@@ -73,7 +73,8 @@ class TaskSubmissionIntegrationTest {
 
     private TaskSubmitInfo info(UUID clientId, String budget) {
         return new TaskSubmitInfo(clientId, "Summarise report", "Summarise the attached quarterly report",
-                Money.of(budget), new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON summary"));
+                Money.of(budget), new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON summary"),
+                "summarisation");
     }
 
     @Test

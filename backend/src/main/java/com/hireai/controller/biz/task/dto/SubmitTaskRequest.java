@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 public record SubmitTaskRequest(
         @NotBlank @Size(max = 200) String title,
         @NotBlank @Size(max = 5000) String description,
+        @NotBlank @Size(max = 100) String category,
         @NotNull
         @DecimalMin(value = "0.01", message = "budget must be positive")
         @Digits(integer = 12, fraction = 2, message = "budget must have at most 2 decimal places")
