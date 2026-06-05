@@ -40,6 +40,11 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
         }
         TaskModel task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
+        if (!claims.agentVersionId().equals(task.agentVersionId())) {
+            throw new DispatchTokenInvalidException(
+                    "Dispatch token agent version " + claims.agentVersionId()
+                            + " does not match task " + taskId + " assignment " + task.agentVersionId());
+        }
         TaskResultModel resultModel = TaskResultModel.record(
                 taskId, result.agentStatus(), result.resultPayloadJson(), result.resultUrl());
         taskRepository.save(task.recordResult(resultModel));

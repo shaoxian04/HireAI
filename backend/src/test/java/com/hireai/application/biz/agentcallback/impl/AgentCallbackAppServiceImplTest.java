@@ -93,6 +93,22 @@ class AgentCallbackAppServiceImplTest {
     }
 
     @Test
+    void recordResultRejectsAgentVersionMismatchAndNeverSaves() {
+        TaskModel task = executingTask();
+        UUID otherVersionId = UUID.randomUUID();
+        // Token is well-formed and its taskId matches the path, but it authorises a DIFFERENT
+        // agent version than the one assigned to the loaded task -> must fail like a bad token.
+        when(dispatchTokenService.verify("wrong-agent"))
+                .thenReturn(new DispatchTokenClaims(task.id(), otherVersionId, Instant.now().plusSeconds(60)));
+        when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
+
+        assertThatThrownBy(() -> service().recordResult(task.id(), "wrong-agent", result()))
+                .isInstanceOf(DispatchTokenInvalidException.class);
+
+        verify(taskRepository, never()).save(any());
+    }
+
+    @Test
     void recordResultThrowsNotFoundWhenTaskMissing() {
         UUID taskId = UUID.randomUUID();
         when(dispatchTokenService.verify("good"))
