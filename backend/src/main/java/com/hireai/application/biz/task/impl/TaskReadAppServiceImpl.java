@@ -4,6 +4,7 @@ import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.controller.base.ResultCode;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import com.hireai.domain.biz.task.model.TaskModel;
+import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskQuery;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.shared.exception.DomainException;
@@ -31,6 +32,16 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
             throw new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId);
         }
         return task;
+    }
+
+    @Override
+    public TaskResultModel getResult(UUID taskId, UUID clientId) {
+        TaskModel task = getForClient(taskId, clientId);
+        TaskResultModel result = task.result();
+        if (result == null) {
+            throw new DomainException(ResultCode.NOT_FOUND, "No result for task: " + taskId);
+        }
+        return result;
     }
 
     @Override
