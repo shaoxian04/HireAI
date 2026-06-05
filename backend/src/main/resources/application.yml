@@ -23,6 +23,21 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        # Bounded listener-side retry; on exhaustion the message dead-letters to the DLQ.
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000
+          multiplier: 2.0
+          max-interval: 10000
+        default-requeue-rejected: false
 
 server:
   port: 8080
@@ -30,3 +45,23 @@ server:
 logging:
   level:
     root: INFO
+
+hireai:
+  # Public base URL the platform advertises to Agents for result callbacks (Plan 4's routing
+  # builds callbackUrl = <this> + /api/agent-callbacks/{taskId}/result). Owned here in Plan 2's
+  # application.yml; consumed by Plan 4's RoutingAppServiceImpl. Localhost default for the demo.
+  platform:
+    public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
+  dispatch:
+    # HMAC secret for short-lived dispatch tokens. MUST be overridden in real deploys.
+    token-secret: ${DISPATCH_TOKEN_SECRET:dev-only-dispatch-secret-change-me-32b}
+    token-ttl-seconds: ${DISPATCH_TOKEN_TTL_SECONDS:900}
+    # Allow http://localhost webhooks only when explicitly enabled (dev/demo). HTTPS is
+    # enforced in every other case (Hard Invariant #6).
+    allow-insecure-localhost: ${DISPATCH_ALLOW_INSECURE_LOCALHOST:false}
+  auth:
+    # HS256 signing secret for authentication JWTs. MUST be overridden in real deploys.
+    # Dev default is >= 32 bytes (HS256 minimum). Never a real secret in git.
+    jwt-secret: ${AUTH_JWT_SECRET:dev-only-auth-jwt-secret-change-me-32bytes!!}
+    # Access-token lifetime in seconds (default 24h). Login only; no refresh in this slice.
+    jwt-ttl-seconds: ${AUTH_JWT_TTL_SECONDS:86400}

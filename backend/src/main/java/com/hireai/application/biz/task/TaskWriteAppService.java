@@ -11,9 +11,15 @@ import java.util.UUID;
  * (escrow before execution): the task is persisted and its budget frozen in the SAME
  * transaction, so a failed freeze rolls the task back — there is no task without a
  * successful escrow freeze. Returns only the task id; callers re-read via the read service.
+ * The routing transitions ({@link #assignAndQueue}, {@link #markAwaitingCapacity}) are
+ * driven by the routing module after a match decision.
  */
 @Validated
 public interface TaskWriteAppService {
 
     UUID submit(@NonNull TaskSubmitInfo taskSubmitInfo);
+
+    void assignAndQueue(@NonNull UUID taskId, @NonNull UUID agentVersionId);
+
+    void markAwaitingCapacity(@NonNull UUID taskId);
 }

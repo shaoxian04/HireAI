@@ -1,5 +1,6 @@
 package com.hireai.task;
 
+import com.hireai.application.biz.routing.RoutingAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.biz.wallet.WalletReadAppService;
@@ -15,7 +16,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.DockerClientFactory;
@@ -37,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 @SpringBootTest
 @Testcontainers
+@ActiveProfiles("test")
 @EnabledIf("dockerAvailable")
 class TaskSubmissionIntegrationTest {
 
@@ -65,6 +69,14 @@ class TaskSubmissionIntegrationTest {
     @Autowired WalletReadAppService walletReadAppService;
     @Autowired JdbcTemplate jdbc;
 
+    /**
+     * This slice asserts the post-submit state in isolation (status SUBMITTED + atomic escrow
+     * freeze, Hard Invariant #1). Mock out auto-routing (which now fires on TaskSubmittedDomainEvent
+     * after commit) so it does not flip the un-matched task to AWAITING_CAPACITY before the
+     * assertion. Routing is covered by RoutingIntegrationTest.
+     */
+    @MockBean RoutingAppService routingAppService;
+
     private UUID newClient() {
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO users (id, email, role) VALUES (?, ?, 'CLIENT')", id, id + "@test.local");
@@ -73,7 +85,8 @@ class TaskSubmissionIntegrationTest {
 
     private TaskSubmitInfo info(UUID clientId, String budget) {
         return new TaskSubmitInfo(clientId, "Summarise report", "Summarise the attached quarterly report",
-                Money.of(budget), new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON summary"));
+                Money.of(budget), new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON summary"),
+                "summarisation");
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.hireai.infrastructure.repository.task;
 
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.TaskModel;
+import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskQuery;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.shared.model.Money;
@@ -14,17 +15,21 @@ import java.util.UUID;
 
 /**
  * Infrastructure implementation of the domain {@link TaskRepository}. Maps
- * {@code TaskModel} &lt;-&gt; JPA entity and serialises the output spec via
- * {@link OutputSpecJsonMapper}.
+ * {@code TaskModel} &lt;-&gt; JPA entity, serialises the output spec via
+ * {@link OutputSpecJsonMapper}, and persists/loads the {@link TaskResultModel} child
+ * through the root only.
  */
 @Repository
 public class TaskRepositoryImpl implements TaskRepository {
 
     private final TaskJpaRepository taskJpa;
+    private final TaskResultJpaRepository taskResultJpa;
     private final OutputSpecJsonMapper outputSpecJsonMapper;
 
-    public TaskRepositoryImpl(TaskJpaRepository taskJpa, OutputSpecJsonMapper outputSpecJsonMapper) {
+    public TaskRepositoryImpl(TaskJpaRepository taskJpa, TaskResultJpaRepository taskResultJpa,
+                              OutputSpecJsonMapper outputSpecJsonMapper) {
         this.taskJpa = taskJpa;
+        this.taskResultJpa = taskResultJpa;
         this.outputSpecJsonMapper = outputSpecJsonMapper;
     }
 
@@ -33,7 +38,14 @@ public class TaskRepositoryImpl implements TaskRepository {
         taskJpa.save(new TaskJpaEntity(
                 task.id(), task.clientId(), task.title(), task.description(),
                 task.budget().value(), outputSpecJsonMapper.toJson(task.outputSpec()),
-                task.status().name(), task.createdAt()));
+                task.category(), task.status().name(), task.agentVersionId(), task.createdAt()));
+
+        TaskResultModel result = task.result();
+        if (result != null && taskResultJpa.findByTaskId(result.taskId()).isEmpty()) {
+            taskResultJpa.save(new TaskResultJpaEntity(
+                    result.id(), result.taskId(), result.resultPayloadJson(),
+                    result.resultUrl(), result.agentStatus(), result.receivedAt()));
+        }
         return task;
     }
 
@@ -52,9 +64,18 @@ public class TaskRepositoryImpl implements TaskRepository {
     }
 
     private TaskModel toModel(TaskJpaEntity entity) {
+        TaskResultModel result = taskResultJpa.findByTaskId(entity.getId())
+                .map(this::toResultModel)
+                .orElse(null);
         return new TaskModel(
                 entity.getId(), entity.getClientId(), entity.getTitle(), entity.getDescription(),
                 Money.of(entity.getBudget()), outputSpecJsonMapper.fromJson(entity.getOutputSpec()),
-                TaskStatus.valueOf(entity.getStatus()), entity.getGmtCreate());
+                entity.getCategory(), TaskStatus.valueOf(entity.getStatus()),
+                entity.getAgentVersionId(), result, entity.getGmtCreate());
+    }
+
+    private TaskResultModel toResultModel(TaskResultJpaEntity entity) {
+        return TaskResultModel.rehydrate(entity.getId(), entity.getTaskId(), entity.getAgentStatus(),
+                entity.getResultPayload(), entity.getResultUrl(), entity.getReceivedAt());
     }
 }

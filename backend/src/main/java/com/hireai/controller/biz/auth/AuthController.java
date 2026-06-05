@@ -1,0 +1,37 @@
+package com.hireai.controller.biz.auth;
+
+import com.hireai.application.biz.auth.AuthAppService;
+import com.hireai.application.biz.auth.AuthResult;
+import com.hireai.application.biz.auth.LoginInfo;
+import com.hireai.controller.base.BaseController;
+import com.hireai.controller.base.WebResult;
+import com.hireai.controller.biz.auth.dto.LoginRequest;
+import com.hireai.controller.biz.auth.dto.LoginResponse;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * Authentication HTTP surface. Thin: validate the request, delegate to the app service, wrap the
+ * result. {@code POST /api/auth/login} is the only endpoint and is permitAll in the security chain
+ * (you cannot have a token before you log in). Bad credentials surface as HTTP 401 via the global
+ * exception handler (generic message — no user enumeration).
+ */
+@RestController
+@RequestMapping("/api/auth")
+public class AuthController extends BaseController {
+
+    private final AuthAppService authAppService;
+
+    public AuthController(AuthAppService authAppService) {
+        this.authAppService = authAppService;
+    }
+
+    @PostMapping("/login")
+    public WebResult<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        AuthResult result = authAppService.login(new LoginInfo(request.email(), request.password()));
+        return ok(new LoginResponse(result.token(), result.userId(), result.role()));
+    }
+}

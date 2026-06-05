@@ -31,7 +31,10 @@ Distilled from SAD §2.3–2.4. Notion SAD has the full schema table + ERD: http
 The schema above is the **design target**. What's actually in Flyway today:
 
 - **V1** — `users`, `wallets`, `ledger_entries` (append-only triggers). Wallet aggregate.
-- **V2** — `tasks` as an MVP subset of the design row: `id, client_id (FK users), title, description, budget NUMERIC(14,2) CHECK > 0, output_spec JSONB NOT NULL, status, gmt_create/gmt_modified`, index `(client_id, gmt_create DESC)`. The `output_spec` JSONB holds `{ format, schema, acceptanceCriteria }` (the binding contract, Invariant #4). Submitting a task freezes its `budget` in escrow **atomically** with the row insert. Deferred to later slices: `agent_version_id`, `category`, `estimated_cost`, `retry_count`, `task_attachments`, `task_results`. Only the `SUBMITTED` status is reachable; the rest of the enum is forward-compat.
+- **V2** — `tasks` MVP subset: `id, client_id (FK users), title, description, budget NUMERIC(14,2) CHECK > 0, output_spec JSONB NOT NULL, status, gmt_create/gmt_modified`, index `(client_id, gmt_create DESC)`. `output_spec` holds `{ format, schema, acceptanceCriteria }` (the binding contract, Invariant #4). Submit freezes `budget` in escrow **atomically** with the row insert. Still deferred: `estimated_cost`, `retry_count`, `task_attachments`.
+- **V3** — `agents` (owner_id, name, status, current_version_id, reputation_score) + `agent_versions` (output_spec jsonb, capability_categories `text[]` with a GIN index, webhook_url, max_execution_seconds, price; `UNIQUE(agent_id, version_number)`). **Module 2 — Agent Registration.**
+- **V4** — `ALTER tasks ADD agent_version_id UUID` (unconstrained — cross-track FK deliberately omitted) `+ category TEXT`; `task_results` (task_id UNIQUE FK, result_payload jsonb, result_url, agent_status, received_at). **Module 3 — Routing & Execution.** Task lifecycle now reaches `QUEUED → EXECUTING → RESULT_RECEIVED` (off-path `AWAITING_CAPACITY`/`TIMED_OUT`/`FAILED`).
+- **V5** — seeds two demo users (`client@hireai.local` CLIENT, `builder@hireai.local` BUILDER; throwaway password `DemoPass123!`, BCrypt-hashed) + their wallets (client funded), for the thin JWT auth slice — `users.password_hash` is now used by `POST /api/auth/login`.
 
 ## Status enums
 

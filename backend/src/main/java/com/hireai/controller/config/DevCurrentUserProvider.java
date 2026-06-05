@@ -10,10 +10,10 @@ import java.util.UUID;
  * user so the Wallet slice is exercisable before JWT auth exists.
  *
  * TODO(auth): replace with a JwtCurrentUserProvider that reads the authenticated
- * principal. This bean is active only outside the "prod" profile.
+ * principal. This bean is active only under the "test" profile; production uses JwtCurrentUserProvider.
  */
 @Component
-@Profile("!prod")
+@Profile("test")
 public class DevCurrentUserProvider implements CurrentUserProvider {
 
     /** Matches the seeded dev user in db/migration. */
