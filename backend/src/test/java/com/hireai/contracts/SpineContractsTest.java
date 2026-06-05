@@ -1,12 +1,15 @@
 package com.hireai.contracts;
 
 import com.hireai.domain.biz.agent.info.AgentCandidate;
+import com.hireai.application.port.security.DispatchTokenClaims;
+import com.hireai.application.port.security.DispatchTokenInvalidException;
 import com.hireai.domain.biz.routing.info.DispatchMessage;
 import com.hireai.domain.biz.routing.info.TaskDispatchPayload;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -75,5 +78,21 @@ class SpineContractsTest {
         assertThat(message.webhookUrl()).isEqualTo("https://agent.example.com/webhook");
         assertThat(message.correlationId()).isEqualTo("corr-123");
         assertThat(message.payload()).isSameAs(payload);
+    }
+
+    @Test
+    void dispatchTokenClaimsAndExceptionAreUsable() {
+        UUID taskId = UUID.randomUUID();
+        UUID agentVersionId = UUID.randomUUID();
+        Instant expiresAt = Instant.parse("2026-06-05T12:00:00Z");
+        DispatchTokenClaims claims = new DispatchTokenClaims(taskId, agentVersionId, expiresAt);
+
+        assertThat(claims.taskId()).isEqualTo(taskId);
+        assertThat(claims.agentVersionId()).isEqualTo(agentVersionId);
+        assertThat(claims.expiresAt()).isEqualTo(expiresAt);
+
+        DispatchTokenInvalidException ex = new DispatchTokenInvalidException("expired");
+        assertThat(ex).isInstanceOf(RuntimeException.class);
+        assertThat(ex.getMessage()).isEqualTo("expired");
     }
 }
