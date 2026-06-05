@@ -5,8 +5,10 @@ import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.task.converter.TaskModel2DTOConverter;
+import com.hireai.controller.biz.task.converter.TaskResult2DTOConverter;
 import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
 import com.hireai.controller.biz.task.dto.TaskDTO;
+import com.hireai.controller.biz.task.dto.TaskResultDTO;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -65,6 +67,13 @@ public class TaskController extends BaseController {
     public WebResult<TaskDTO> getById(@PathVariable("id") UUID id) {
         UUID clientId = currentUser.currentUserId();
         TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId));
+        return ok(dto);
+    }
+
+    @GetMapping("/{taskId}/result")
+    public WebResult<TaskResultDTO> getResult(@PathVariable("taskId") UUID taskId) {
+        UUID clientId = currentUser.currentUserId();
+        TaskResultDTO dto = TaskResult2DTOConverter.toDTO(readAppService.getResult(taskId, clientId));
         return ok(dto);
     }
 
