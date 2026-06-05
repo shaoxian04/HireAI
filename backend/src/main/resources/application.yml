@@ -59,3 +59,9 @@ hireai:
     # Allow http://localhost webhooks only when explicitly enabled (dev/demo). HTTPS is
     # enforced in every other case (Hard Invariant #6).
     allow-insecure-localhost: ${DISPATCH_ALLOW_INSECURE_LOCALHOST:false}
+  auth:
+    # HS256 signing secret for authentication JWTs. MUST be overridden in real deploys.
+    # Dev default is >= 32 bytes (HS256 minimum). Never a real secret in git.
+    jwt-secret: ${AUTH_JWT_SECRET:dev-only-auth-jwt-secret-change-me-32bytes!!}
+    # Access-token lifetime in seconds (default 24h). Login only; no refresh in this slice.
+    jwt-ttl-seconds: ${AUTH_JWT_TTL_SECONDS:86400}
