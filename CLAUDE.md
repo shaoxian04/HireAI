@@ -12,7 +12,7 @@ Six functional modules: (1) Task Submission, (2) Agent Registration, (3) Routing
 
 **Early implementation.** Canonical design lives in Notion (PRD + SAD, linked below). Source trees:
 
-- `backend/` — Spring Boot (Java 21), DDD bounded contexts. **Scaffolded**: base classes (`WebResult`/`ResultCode`/`BaseController`), config, the **Wallet** aggregate (top-up + escrow freeze, append-only ledger, Flyway `V1`), and the **Task** aggregate (submit + atomic escrow freeze + binding `output_spec` JSONB, Flyway `V2`). App services use interface + `impl/`. Other contexts pending.
+- `backend/` — Spring Boot (Java 21), DDD bounded contexts. **Scaffolded**: base classes (`WebResult`/`ResultCode`/`BaseController`), config, the **Wallet** aggregate (top-up + escrow freeze, append-only ledger, Flyway `V1`), and the **Task** aggregate (submit + atomic escrow freeze + binding `output_spec` JSONB, Flyway `V2`). All service classes use interface + `impl/` (app services Spring-managed; domain services kept framework-free, wired in `DomainServiceConfig`). Other contexts pending.
 - `arbitration/` — Python FastAPI + LangGraph dispute-arbitration microservice (Claude API). _Not started._
 - `frontend/` — Next.js (App Router, TypeScript), four surfaces (Client, Builder, Admin, public catalogue). _Not started._
 
