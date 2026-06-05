@@ -110,6 +110,15 @@
             <artifactId>rabbitmq</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Apache HttpClient 5: lets TestRestTemplate surface a 401 response on a POST with a
+             body. The JDK HttpURLConnection (SimpleClientHttpRequestFactory) instead throws
+             HttpRetryException ("cannot retry due to server authentication, in streaming mode")
+             on a 401 to a streamed POST, which would mask the assertion. Test scope only. -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <dependencyManagement>
