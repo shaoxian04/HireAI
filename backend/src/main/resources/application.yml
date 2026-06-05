@@ -1,6 +1,12 @@
 spring:
   application:
     name: hireai-backend
+  # Optionally load a local, git-ignored backend/.env (KEY=VALUE) so DB_URL etc.
+  # resolve from it. "optional:" means startup still works when the file is absent
+  # (CI, tests). Integration tests override the datasource via @DynamicPropertySource,
+  # so a present .env does not affect them.
+  config:
+    import: "optional:file:.env[.properties]"
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/hireai}
     username: ${DB_USERNAME:hireai}

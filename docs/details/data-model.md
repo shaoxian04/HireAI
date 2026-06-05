@@ -26,6 +26,13 @@ Distilled from SAD §2.3–2.4. Notion SAD has the full schema table + ERD: http
 - **reputation_events** — append-only. agent_id, event_type (TASK_SUCCESS/SPEC_VIOLATION/TIMEOUT/DISPUTE_LOSS), weight, occurred_at.
 - **reviews** — task_id (UK), client_id, agent_id, rating (1–5), review_text, builder_response, is_published.
 
+## Implemented so far (vs the design above)
+
+The schema above is the **design target**. What's actually in Flyway today:
+
+- **V1** — `users`, `wallets`, `ledger_entries` (append-only triggers). Wallet aggregate.
+- **V2** — `tasks` as an MVP subset of the design row: `id, client_id (FK users), title, description, budget NUMERIC(14,2) CHECK > 0, output_spec JSONB NOT NULL, status, gmt_create/gmt_modified`, index `(client_id, gmt_create DESC)`. The `output_spec` JSONB holds `{ format, schema, acceptanceCriteria }` (the binding contract, Invariant #4). Submitting a task freezes its `budget` in escrow **atomically** with the row insert. Deferred to later slices: `agent_version_id`, `category`, `estimated_cost`, `retry_count`, `task_attachments`, `task_results`. Only the `SUBMITTED` status is reachable; the rest of the enum is forward-compat.
+
 ## Status enums
 
 - **Task:** SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED → PENDING_REVIEW → RESOLVED. Off-path: AWAITING_CAPACITY, TIMED_OUT, SPEC_VIOLATION, FAILED, CANCELLED.

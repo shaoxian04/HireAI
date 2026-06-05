@@ -1,0 +1,81 @@
+package com.hireai.controller.biz.task;
+
+import com.hireai.application.biz.task.TaskReadAppService;
+import com.hireai.application.biz.task.TaskWriteAppService;
+import com.hireai.controller.base.BaseController;
+import com.hireai.controller.base.WebResult;
+import com.hireai.controller.biz.task.converter.TaskModel2DTOConverter;
+import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
+import com.hireai.controller.biz.task.dto.TaskDTO;
+import com.hireai.controller.config.CurrentUserProvider;
+import com.hireai.domain.biz.task.info.TaskSubmitInfo;
+import com.hireai.domain.biz.task.model.OutputSpec;
+import com.hireai.domain.biz.task.repository.TaskQuery;
+import com.hireai.domain.shared.model.Money;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Task HTTP surface. Thin: validate the request, resolve identity server-side, build the
+ * domain carrier, call one app service, wrap the result. Identity comes from
+ * {@link CurrentUserProvider} (the JWT principal once auth lands) — never from path or body.
+ */
+@RestController
+@RequestMapping("/api/tasks")
+public class TaskController extends BaseController {
+
+    private final TaskWriteAppService writeAppService;
+    private final TaskReadAppService readAppService;
+    private final CurrentUserProvider currentUser;
+
+    public TaskController(TaskWriteAppService writeAppService,
+                          TaskReadAppService readAppService,
+                          CurrentUserProvider currentUser) {
+        this.writeAppService = writeAppService;
+        this.readAppService = readAppService;
+        this.currentUser = currentUser;
+    }
+
+    @PostMapping
+    public WebResult<TaskDTO> submit(@Valid @RequestBody SubmitTaskRequest request) {
+        UUID clientId = currentUser.currentUserId();
+        SubmitTaskRequest.OutputSpecRequest specRequest = request.outputSpec();
+        TaskSubmitInfo info = new TaskSubmitInfo(
+                clientId,
+                request.title(),
+                request.description(),
+                Money.of(request.budget()),
+                new OutputSpec(specRequest.format(), specRequest.schema(), specRequest.acceptanceCriteria()));
+        UUID taskId = writeAppService.submit(info);
+        TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId));
+        return ok(dto);
+    }
+
+    @GetMapping("/{id}")
+    public WebResult<TaskDTO> getById(@PathVariable("id") UUID id) {
+        UUID clientId = currentUser.currentUserId();
+        TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId));
+        return ok(dto);
+    }
+
+    @GetMapping
+    public WebResult<List<TaskDTO>> list(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        UUID clientId = currentUser.currentUserId();
+        List<TaskDTO> tasks = readAppService.listForClient(clientId, new TaskQuery(page, size))
+                .stream()
+                .map(TaskModel2DTOConverter::toDTO)
+                .toList();
+        return ok(tasks);
+    }
+}
