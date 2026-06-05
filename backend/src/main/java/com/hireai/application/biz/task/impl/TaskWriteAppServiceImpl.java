@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
@@ -41,7 +42,16 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
         return taskId;
     }
 
+    /**
+     * Routing transitions run in their OWN independent transaction. Routing is triggered from a
+     * {@code @TransactionalEventListener(AFTER_COMMIT)} callback (RoutingEventListener), where the
+     * thread is mid transaction-completion: a default REQUIRED transaction opened there is never
+     * committed (a documented Spring gotcha — writes silently vanish). REQUIRES_NEW forces a fresh,
+     * independently-committing transaction so the QUEUED write is durable before the dispatch
+     * message is published (see the routing plan: "Why publish-after-commit").
+     */
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void assignAndQueue(UUID taskId, UUID agentVersionId) {
         TaskModel task = load(taskId);
         taskRepository.save(task.assignAndQueue(agentVersionId));
@@ -49,6 +59,7 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     }
 
     @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markAwaitingCapacity(UUID taskId) {
         TaskModel task = load(taskId);
         taskRepository.save(task.markAwaitingCapacity());
