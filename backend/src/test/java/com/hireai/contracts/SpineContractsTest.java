@@ -1,6 +1,7 @@
 package com.hireai.contracts;
 
 import com.hireai.domain.biz.agent.info.AgentCandidate;
+import com.hireai.domain.biz.routing.info.DispatchMessage;
 import com.hireai.domain.biz.routing.info.TaskDispatchPayload;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import org.junit.jupiter.api.Test;
@@ -56,5 +57,23 @@ class SpineContractsTest {
         assertThat(payload.expectedDeliverableJson()).isEqualTo("{\"format\":\"TEXT\"}");
         assertThat(payload.outputSpecJson()).isEqualTo("{\"format\":\"TEXT\",\"acceptanceCriteria\":\"concise\"}");
         assertThat(payload.callbackUrl()).isEqualTo("https://platform.example.com/api/agent-callbacks/abc/result");
+    }
+
+    @Test
+    void dispatchMessageExposesAllAccessors() {
+        UUID taskId = UUID.randomUUID();
+        UUID agentVersionId = UUID.randomUUID();
+        TaskDispatchPayload payload = new TaskDispatchPayload(
+                "Summarise doc", "Summarise the attached report", "SUMMARISATION",
+                "{\"format\":\"TEXT\"}", "{\"format\":\"TEXT\"}",
+                "https://platform.example.com/api/agent-callbacks/abc/result");
+        DispatchMessage message = new DispatchMessage(
+                taskId, agentVersionId, "https://agent.example.com/webhook", "corr-123", payload);
+
+        assertThat(message.taskId()).isEqualTo(taskId);
+        assertThat(message.agentVersionId()).isEqualTo(agentVersionId);
+        assertThat(message.webhookUrl()).isEqualTo("https://agent.example.com/webhook");
+        assertThat(message.correlationId()).isEqualTo("corr-123");
+        assertThat(message.payload()).isSameAs(payload);
     }
 }
