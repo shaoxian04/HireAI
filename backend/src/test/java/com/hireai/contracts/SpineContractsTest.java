@@ -1,6 +1,7 @@
 package com.hireai.contracts;
 
 import com.hireai.domain.biz.agent.info.AgentCandidate;
+import com.hireai.domain.biz.task.info.TaskRoutingView;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -27,5 +28,17 @@ class SpineContractsTest {
         assertThat(candidate.webhookUrl()).isEqualTo("https://agent.example.com/webhook");
         assertThat(candidate.maxExecutionSeconds()).isEqualTo(120);
         assertThat(candidate.reputationScore()).isEqualByComparingTo("87.25");
+    }
+
+    @Test
+    void taskRoutingViewExposesAllAccessors() {
+        UUID taskId = UUID.randomUUID();
+        TaskRoutingView view = new TaskRoutingView(
+                taskId, "SUMMARISATION", new BigDecimal("25.00"), "SUBMITTED");
+
+        assertThat(view.taskId()).isEqualTo(taskId);
+        assertThat(view.category()).isEqualTo("SUMMARISATION");
+        assertThat(view.budget()).isEqualByComparingTo("25.00");
+        assertThat(view.status()).isEqualTo("SUBMITTED");
     }
 }
