@@ -7,11 +7,10 @@ import java.util.UUID;
 
 /**
  * Domain service for the escrow "freeze" state transition at task submission.
- * Enforces the hard invariant: no escrow without sufficient available balance.
+ * Enforces (via the aggregate) the hard invariant: no escrow without sufficient
+ * available balance. Framework-free; the bean is registered in DomainServiceConfig.
  */
-public class WalletFreezeDomainService {
+public interface WalletFreezeDomainService {
 
-    public void freeze(WalletModel wallet, Money amount, UUID taskId, String correlationId) {
-        wallet.freeze(amount, taskId, correlationId);
-    }
+    void freeze(WalletModel wallet, Money amount, UUID taskId, String correlationId);
 }
