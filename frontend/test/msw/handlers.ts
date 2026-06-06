@@ -18,6 +18,45 @@ export const handlers = [
     const role = body.email.startsWith("builder") ? "BUILDER" : "CLIENT";
     return ok({ token: "test-jwt", userId: "u-1", role });
   }),
+
+  http.get("*/api/agents", () =>
+    ok([
+      {
+        id: "a-1",
+        ownerId: "u-1",
+        name: "Summariser",
+        status: "PENDING_VERIFICATION",
+        currentVersionId: "v-1",
+        reputationScore: 0,
+        currentVersion: {
+          capabilityCategories: ["summarisation"],
+          price: 10,
+          webhookUrl: "https://agent.example.com/run",
+          maxExecutionSeconds: 60,
+          outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
+        },
+        createdAt: "2026-06-06T10:00:00Z",
+      },
+    ]),
+  ),
+  http.post("*/api/agents/:id/activate", ({ params }) =>
+    ok({
+      id: params.id,
+      ownerId: "u-1",
+      name: "Summariser",
+      status: "ACTIVE",
+      currentVersionId: "v-1",
+      reputationScore: 0,
+      currentVersion: {
+        capabilityCategories: ["summarisation"],
+        price: 10,
+        webhookUrl: "https://agent.example.com/run",
+        maxExecutionSeconds: 60,
+        outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
+      },
+      createdAt: "2026-06-06T10:00:00Z",
+    }),
+  ),
 ];
 
 export const server = setupServer(...handlers);
