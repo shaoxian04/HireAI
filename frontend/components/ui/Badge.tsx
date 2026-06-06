@@ -3,30 +3,36 @@ import type { ReactNode } from "react";
 /**
  * Tailwind colour classes per lifecycle status. Covers the full TaskStatus and AgentStatus
  * enums (see lib/types.ts); unknown values fall back to neutral so the UI never crashes on a
- * status the backend adds later. Greens = good/terminal-success, blues = in-flight,
- * ambers = waiting/attention, reds = failure/terminal-bad, slate = neutral/inactive.
+ * status the backend adds later. Lime = good/terminal-success + live, cyan = in-flight,
+ * amber = waiting/attention, red = failure/terminal-bad, neutral/dim = inactive.
  */
+const ACCENT = "text-accent border-accent/40 bg-accent/10";
+const CYAN = "text-cyan border-cyan/35 bg-cyan/10";
+const AMBER = "text-amber border-amber/35 bg-amber/10";
+const RED = "text-red border-red/35 bg-red/10";
+const VIOLET = "text-violet border-violet/35 bg-violet/10";
+const NEUTRAL = "text-muted border-line bg-surface-2";
+const DIM = "text-dim border-line bg-surface-2";
+
 const STATUS_CLASSES: Record<string, string> = {
   // task lifecycle
-  SUBMITTED: "bg-slate-100 text-slate-700",
-  QUEUED: "bg-blue-100 text-blue-700",
-  EXECUTING: "bg-indigo-100 text-indigo-700",
-  RESULT_RECEIVED: "bg-emerald-100 text-emerald-700",
-  PENDING_REVIEW: "bg-amber-100 text-amber-700",
-  RESOLVED: "bg-emerald-100 text-emerald-800",
-  AWAITING_CAPACITY: "bg-amber-100 text-amber-700",
-  TIMED_OUT: "bg-red-100 text-red-700",
-  SPEC_VIOLATION: "bg-red-100 text-red-700",
-  FAILED: "bg-red-100 text-red-700",
-  CANCELLED: "bg-slate-200 text-slate-600",
+  SUBMITTED: NEUTRAL,
+  QUEUED: CYAN,
+  EXECUTING: ACCENT,
+  RESULT_RECEIVED: VIOLET,
+  PENDING_REVIEW: AMBER,
+  RESOLVED: ACCENT,
+  AWAITING_CAPACITY: AMBER,
+  TIMED_OUT: RED,
+  SPEC_VIOLATION: RED,
+  FAILED: RED,
+  CANCELLED: DIM,
   // agent lifecycle
-  PENDING_VERIFICATION: "bg-amber-100 text-amber-700",
-  ACTIVE: "bg-emerald-100 text-emerald-700",
-  SUSPENDED: "bg-red-100 text-red-700",
-  DEACTIVATED: "bg-slate-200 text-slate-600",
+  PENDING_VERIFICATION: AMBER,
+  ACTIVE: ACCENT,
+  SUSPENDED: RED,
+  DEACTIVATED: DIM,
 };
-
-const NEUTRAL = "bg-slate-100 text-slate-700";
 
 /** Tailwind classes for a lifecycle status badge. Falls back to neutral for unknown values. */
 export function statusColor(status: string): string {
@@ -36,10 +42,11 @@ export function statusColor(status: string): string {
 export function Badge({ status, children }: { status: string; children?: ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColor(
+      className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[0.68rem] font-medium uppercase tracking-wider ${statusColor(
         status,
       )}`}
     >
+      <span className="size-1.5 rounded-full bg-current" aria-hidden />
       {children ?? status}
     </span>
   );

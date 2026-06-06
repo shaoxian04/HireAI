@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
+import { AppShell } from "@/components/AppShell";
+import { StatusTrack } from "@/components/StatusTrack";
 import type { TaskDTO, TaskResultDTO, TaskStatus } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
 
@@ -93,7 +96,7 @@ function TaskDetail() {
     return (
       <div className="mx-auto max-w-2xl">
         <Card>
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="font-mono text-sm text-red">
             {error}
           </p>
         </Card>
@@ -105,66 +108,90 @@ function TaskDetail() {
     return (
       <div className="mx-auto max-w-2xl">
         <Card>
-          <p className="text-sm text-slate-500">Loading task…</p>
+          <p className="font-mono text-sm text-dim">Loading task…</p>
         </Card>
       </div>
     );
   }
 
+  const inFlight =
+    task.status !== "RESULT_RECEIVED" &&
+    !result &&
+    !TERMINAL.has(task.status) &&
+    task.status !== "AWAITING_CAPACITY";
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <Card className="space-y-4">
+      <Link href="/client" className="font-mono text-xs text-dim transition hover:text-accent">
+        ← console
+      </Link>
+
+      <Card className="space-y-5">
         <header className="flex items-start justify-between gap-4">
-          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{task.title}</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl font-extrabold tracking-tight">{task.title}</h1>
+            <p className="mt-1 font-mono text-xs text-dim">
+              #{task.id.slice(0, 8)} ·{" "}
+              <span className="tabular text-accent">{task.budget}</span> cr in escrow
+            </p>
+          </div>
           <Badge status={task.status}>{task.status}</Badge>
         </header>
-        <p className="text-sm text-slate-500">
-          Budget: <span className="font-medium text-slate-900">{task.budget}</span> credits
-        </p>
-        <p className="text-sm text-slate-700">{task.description}</p>
+
+        {/* pipeline */}
+        <div className="rounded-md border border-line bg-surface-2 p-4">
+          <p className="eyebrow mb-4">Pipeline</p>
+          <StatusTrack status={task.status} labels />
+        </div>
+
+        <p className="text-sm leading-relaxed text-muted">{task.description}</p>
 
         {task.status === "AWAITING_CAPACITY" && (
           <section
             aria-live="polite"
-            className="rounded-lg border border-amber-200 bg-amber-50 p-4"
+            className="rounded-md border border-amber/30 bg-amber/10 p-4"
           >
-            <h2 className="text-sm font-semibold text-amber-800">Waiting for an available agent</h2>
-            <p className="mt-1 text-sm text-amber-700">
+            <h2 className="font-mono text-xs font-semibold uppercase tracking-wider text-amber">
+              Waiting for an available agent
+            </h2>
+            <p className="mt-1.5 text-sm text-muted">
               No agent currently has capacity for this category. We&apos;ll keep checking and start
               your task as soon as one is free.
             </p>
           </section>
         )}
 
-        {task.status !== "RESULT_RECEIVED" &&
-          !result &&
-          !TERMINAL.has(task.status) &&
-          task.status !== "AWAITING_CAPACITY" && (
-            <p aria-live="polite" className="text-sm text-slate-500">
-              Working… (status updates automatically)
-            </p>
-          )}
+        {inFlight && (
+          <p
+            aria-live="polite"
+            className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-cyan"
+          >
+            <span className="size-1.5 rounded-full bg-cyan dot-live text-cyan" />
+            working
+            <span className="animate-blink">— status updates automatically</span>
+          </p>
+        )}
 
         {result && (
-          <section className="space-y-3 border-t border-slate-200 pt-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Result</h2>
-            <p className="text-sm text-slate-700">
-              Agent status: <strong className="text-slate-900">{result.agentStatus}</strong>
-            </p>
-            <pre className="overflow-auto rounded-md bg-slate-900 p-4 text-xs leading-relaxed text-slate-100">
+          <section className="space-y-3 border-t border-line pt-5">
+            <div className="flex items-center justify-between">
+              <h2 className="eyebrow">Result</h2>
+              <p className="font-mono text-xs text-muted">
+                Agent status: <strong className="text-accent">{result.agentStatus}</strong>
+              </p>
+            </div>
+            <pre className="overflow-auto rounded-md border border-line bg-base p-4 font-mono text-xs leading-relaxed text-fg">
               {prettyJson(result.resultPayloadJson)}
             </pre>
             {result.resultUrl && (
-              <p>
-                <a
-                  href={result.resultUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm font-medium text-indigo-600 underline-offset-2 hover:underline"
-                >
-                  Open deliverable
-                </a>
-              </p>
+              <a
+                href={result.resultUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-mono text-xs font-semibold uppercase tracking-wider text-accent underline-offset-4 hover:underline"
+              >
+                Open deliverable →
+              </a>
             )}
           </section>
         )}
@@ -175,8 +202,10 @@ function TaskDetail() {
 
 export default function Page() {
   return (
-    <RoleGuard role="CLIENT">
-      <TaskDetail />
-    </RoleGuard>
+    <AppShell>
+      <RoleGuard role="CLIENT">
+        <TaskDetail />
+      </RoleGuard>
+    </AppShell>
   );
 }

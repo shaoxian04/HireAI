@@ -4,8 +4,10 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
+import { AppShell } from "@/components/AppShell";
+import { StatusTrack } from "@/components/StatusTrack";
 import type { TaskDTO, TopupRequest, WalletDTO } from "@/lib/types";
-import { Badge, Button, Card, Input } from "@/components/ui";
+import { Badge, Button, Input } from "@/components/ui";
 
 function ClientDashboard() {
   const [wallet, setWallet] = useState<WalletDTO | null>(null);
@@ -40,85 +42,160 @@ function ClientDashboard() {
     }
   }
 
+  const total = wallet ? wallet.availableBalance + wallet.escrowBalance : 0;
+  const availablePct = total > 0 ? (wallet!.availableBalance / total) * 100 : 0;
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">My wallet</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Credits fund tasks; submitting one freezes its budget in escrow.
+        <p className="eyebrow flex items-center gap-2">
+          <span className="inline-block h-px w-6 bg-accent" />
+          Client console
+        </p>
+        <h1 className="mt-3 text-3xl font-extrabold tracking-tight">Treasury &amp; tasks</h1>
+        <p className="mt-2 text-sm text-muted">
+          Credits fund tasks; submitting one freezes its budget in escrow until the work is accepted.
         </p>
       </header>
 
       {error && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          role="alert"
+          className="rounded-md border border-red/30 bg-red/10 px-3 py-2 font-mono text-xs text-red"
+        >
           {error}
         </p>
       )}
 
-      <Card>
+      {/* ── balance instrument ───────────────────────────────────────── */}
+      <section className="panel hud p-6">
+        <div className="flex items-center justify-between border-b border-line pb-3">
+          <span className="eyebrow">Wallet</span>
+          <span className="font-mono text-[0.65rem] uppercase tracking-wider text-dim">
+            balance · credits
+          </span>
+        </div>
+
         {wallet === null ? (
-          <p className="text-sm text-slate-500">Loading wallet…</p>
+          <p className="py-6 font-mono text-sm text-dim">Loading wallet…</p>
         ) : (
-          <div className="flex flex-wrap items-end justify-between gap-6">
-            <div className="flex gap-10">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                  Available
-                </p>
-                <p className="mt-1 text-3xl font-semibold text-slate-900">
-                  {wallet.availableBalance}
-                </p>
+          <>
+            <div className="mt-6 flex flex-wrap items-end justify-between gap-6">
+              <div className="flex flex-wrap gap-12">
+                <div>
+                  <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted">
+                    Available
+                  </p>
+                  <p className="tabular mt-1 text-4xl font-extrabold text-accent">
+                    {wallet.availableBalance}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted">
+                    In escrow
+                  </p>
+                  <p className="tabular mt-1 text-4xl font-extrabold text-amber">
+                    {wallet.escrowBalance}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted">
+                    Total
+                  </p>
+                  <p className="tabular mt-1 text-4xl font-extrabold text-fg">{total}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                  In escrow
-                </p>
-                <p className="mt-1 text-3xl font-semibold text-amber-600">{wallet.escrowBalance}</p>
+
+              <form onSubmit={topup} className="flex items-end gap-2">
+                <div>
+                  <label
+                    htmlFor="topup"
+                    className="mb-1.5 block font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted"
+                  >
+                    Top up
+                  </label>
+                  <Input
+                    id="topup"
+                    type="number"
+                    min={1}
+                    value={topupAmount}
+                    aria-label="Top-up amount"
+                    onChange={(e) => setTopupAmount(Number(e.target.value))}
+                    className="w-28"
+                  />
+                </div>
+                <Button type="submit" disabled={toppingUp}>
+                  {toppingUp ? "…" : "Add"}
+                </Button>
+              </form>
+            </div>
+
+            {/* available / escrow ratio bar */}
+            <div className="mt-6">
+              <div className="flex h-2 overflow-hidden rounded-full bg-surface-2">
+                <div className="bg-accent" style={{ width: `${availablePct}%` }} />
+                <div className="bg-amber" style={{ width: `${100 - availablePct}%` }} />
+              </div>
+              <div className="mt-2 flex justify-between font-mono text-[0.6rem] uppercase tracking-wider text-dim">
+                <span>available</span>
+                <span>escrow</span>
               </div>
             </div>
-            <form onSubmit={topup} className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={1}
-                value={topupAmount}
-                aria-label="Top-up amount"
-                onChange={(e) => setTopupAmount(Number(e.target.value))}
-                className="w-28"
-              />
-              <Button type="submit" disabled={toppingUp}>
-                {toppingUp ? "Topping up…" : "Top up"}
-              </Button>
-            </form>
-          </div>
+          </>
         )}
-      </Card>
+      </section>
 
+      {/* ── tasks ────────────────────────────────────────────────────── */}
       <section className="space-y-4">
         <header className="flex items-end justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">My tasks</h2>
-          <Link
-            href="/client/tasks/new"
-            className="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
-          >
-            Submit task
+          <div>
+            <h2 className="text-xl font-extrabold tracking-tight">Tasks</h2>
+            <p className="mt-1 font-mono text-xs text-dim">
+              {tasks ? `${tasks.length} total` : "…"}
+            </p>
+          </div>
+          <Link href="/client/tasks/new">
+            <Button>+ Submit task</Button>
           </Link>
         </header>
+
         {tasks === null ? (
-          <p className="text-sm text-slate-500">Loading tasks…</p>
+          <p className="font-mono text-sm text-dim">Loading tasks…</p>
         ) : tasks.length === 0 ? (
-          <Card>
-            <p className="text-sm text-slate-500">No tasks yet.</p>
-          </Card>
+          <div className="panel p-10 text-center">
+            <p className="font-mono text-sm text-muted">No tasks yet.</p>
+            <p className="mt-1 font-mono text-xs text-dim">
+              Submit one and watch it travel the pipeline.
+            </p>
+          </div>
         ) : (
-          <ul className="space-y-2">
-            {tasks.map((t) => (
+          <ul className="overflow-hidden rounded-xl border border-line">
+            {tasks.map((t, i) => (
               <li key={t.id}>
                 <Link
                   href={`/client/tasks/${t.id}`}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+                  className={`group flex flex-wrap items-center justify-between gap-4 bg-surface px-5 py-4 transition hover:bg-surface-2 ${
+                    i > 0 ? "border-t border-line" : ""
+                  }`}
                 >
-                  <span className="font-medium text-slate-900">{t.title}</span>
-                  <Badge status={t.status}>{t.status}</Badge>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-3">
+                      <span className="truncate font-medium text-fg group-hover:text-accent">
+                        {t.title}
+                      </span>
+                      <Badge status={t.status}>{t.status}</Badge>
+                    </div>
+                    <p className="mt-1 font-mono text-xs text-dim">
+                      <span className="tabular text-muted">{t.budget}</span> cr · #
+                      {t.id.slice(0, 6)}
+                    </p>
+                  </div>
+                  <div className="hidden w-64 shrink-0 sm:block">
+                    <StatusTrack status={t.status} />
+                  </div>
+                  <span className="font-mono text-muted transition group-hover:translate-x-0.5 group-hover:text-accent">
+                    →
+                  </span>
                 </Link>
               </li>
             ))}
@@ -131,8 +208,10 @@ function ClientDashboard() {
 
 export default function Page() {
   return (
-    <RoleGuard role="CLIENT">
-      <ClientDashboard />
-    </RoleGuard>
+    <AppShell>
+      <RoleGuard role="CLIENT">
+        <ClientDashboard />
+      </RoleGuard>
+    </AppShell>
   );
 }

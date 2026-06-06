@@ -28,8 +28,8 @@ export function OutputSpecFields({
     onChange({ ...value, [key]: v });
 
   return (
-    <fieldset className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/60 p-4">
-      <legend className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+    <fieldset className="space-y-4 rounded-lg border border-line bg-surface-2/50 p-4">
+      <legend className="px-2 font-mono text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-accent">
         Output contract
       </legend>
       <Field label="Format" htmlFor="outputSpec.format">

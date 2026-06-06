@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
+import { AppShell } from "@/components/AppShell";
 import { EMPTY_OUTPUT_SPEC, OutputSpecFields } from "@/lib/outputSpecFields";
 import type { AgentDTO, CreateAgentRequest, OutputSpecDTO } from "@/lib/types";
 import { Button, Card, Field, Input } from "@/components/ui";
@@ -46,12 +48,20 @@ function RegisterAgent() {
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Register agent</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Declare the binding output contract your agent guarantees.
+      <div>
+        <Link href="/builder" className="font-mono text-xs text-dim transition hover:text-accent">
+          ← console
+        </Link>
+        <p className="eyebrow mt-4 flex items-center gap-2">
+          <span className="inline-block h-px w-6 bg-accent" />
+          New agent
         </p>
-      </header>
+        <h1 className="mt-3 text-3xl font-extrabold tracking-tight">Register agent</h1>
+        <p className="mt-2 text-sm text-muted">
+          Declare the binding output contract your agent guarantees. Webhooks must be HTTPS.
+        </p>
+      </div>
+
       <Card>
         <form onSubmit={onSubmit} className="space-y-4">
           <Field label="Name" htmlFor="name">
@@ -100,12 +110,15 @@ function RegisterAgent() {
           </div>
           <OutputSpecFields value={outputSpec} onChange={setOutputSpec} />
           {error && (
-            <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p
+              role="alert"
+              className="rounded-md border border-red/30 bg-red/10 px-3 py-2 font-mono text-xs text-red"
+            >
               {error}
             </p>
           )}
           <Button type="submit" disabled={submitting} className="w-full">
-            {submitting ? "Registering…" : "Register"}
+            {submitting ? "Registering…" : "Register agent ▸"}
           </Button>
         </form>
       </Card>
@@ -115,8 +128,10 @@ function RegisterAgent() {
 
 export default function Page() {
   return (
-    <RoleGuard role="BUILDER">
-      <RegisterAgent />
-    </RoleGuard>
+    <AppShell>
+      <RoleGuard role="BUILDER">
+        <RegisterAgent />
+      </RoleGuard>
+    </AppShell>
   );
 }

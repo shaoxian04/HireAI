@@ -1,11 +1,6 @@
 import type { HTMLAttributes } from "react";
 
-/** Surface container with border + subtle shadow. Compose freely for list items and panels. */
+/** Surface panel with ruled border. Compose freely for list items and instruments. */
 export function Card({ className = "", ...props }: HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={`rounded-lg border border-slate-200 bg-white p-5 shadow-sm ${className}`}
-      {...props}
-    />
-  );
+  return <div className={`panel p-5 ${className}`} {...props} />;
 }
