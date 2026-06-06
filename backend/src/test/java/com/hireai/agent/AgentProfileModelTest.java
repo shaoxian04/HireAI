@@ -23,7 +23,16 @@ class AgentProfileModelTest {
 
         assertThat(profile.agentId()).isEqualTo(agentId);
         assertThat(profile.listed()).isFalse();
+        assertThat(profile.featured()).isFalse();
         assertThat(profile.galleryUrls()).isEmpty();
+    }
+
+    @Test
+    void createDefaultRejectsNullAgentId() {
+        assertThatThrownBy(() -> AgentProfileModel.createDefault(null))
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).resultCode())
+                        .isEqualTo(ResultCode.VALIDATION_ERROR));
     }
 
     @Test

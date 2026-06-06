@@ -101,9 +101,26 @@ class AgentProfileRepositoryIntegrationTest {
         // First save: default (unlisted, no tagline)
         agentProfileRepository.save(AgentProfileModel.createDefault(agentId));
 
+        // Capture gmt_create after first write
+        java.sql.Timestamp gmtCreateBefore = jdbc.queryForObject(
+                "SELECT gmt_create FROM agent_profiles WHERE agent_id = ?",
+                java.sql.Timestamp.class, agentId);
+
         // Second save: updated content
         agentProfileRepository.save(AgentProfileModel.createDefault(agentId)
                 .updateContent("Updated", null, null, true));
+
+        // gmt_create must be unchanged across the upsert
+        java.sql.Timestamp gmtCreateAfter = jdbc.queryForObject(
+                "SELECT gmt_create FROM agent_profiles WHERE agent_id = ?",
+                java.sql.Timestamp.class, agentId);
+        assertThat(gmtCreateAfter).isEqualTo(gmtCreateBefore);
+
+        // gmt_modified must be >= gmt_create after the second write
+        java.sql.Timestamp gmtModified = jdbc.queryForObject(
+                "SELECT gmt_modified FROM agent_profiles WHERE agent_id = ?",
+                java.sql.Timestamp.class, agentId);
+        assertThat(gmtModified).isAfterOrEqualTo(gmtCreateAfter);
 
         // Reload and assert only one row + updated tagline
         Optional<AgentProfileModel> loaded = agentProfileRepository.findByAgentId(agentId);
