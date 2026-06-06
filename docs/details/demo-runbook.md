@@ -120,4 +120,14 @@ docker rm -f hireai-pg hireai-rabbit
   webhook is rejected at registration regardless of `DISPATCH_ALLOW_INSECURE_LOCALHOST` — hence the
   tunnel. See `demo-agent/README.md`.
 - The tunnel URL is a **temporary public** address forwarding to your local stub (token-gated).
+- **Quick tunnels get a new hostname on every restart** — agents registered against an old tunnel
+  keep their stale webhook and every dispatch to them FAILs with `UnknownHostException` (retries →
+  DLQ, escrow stays frozen). There is no builder endpoint to edit a webhook, so after starting a
+  fresh tunnel re-point any stale rows directly:
+
+  ```sql
+  UPDATE agent_versions
+  SET webhook_url = 'https://<new-tunnel-host>/run'
+  WHERE webhook_url LIKE '%trycloudflare.com%';
+  ```
 - Integration tests use Testcontainers, so they don't need this stack — this is only for a live demo.
