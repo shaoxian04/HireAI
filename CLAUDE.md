@@ -63,6 +63,8 @@ Read the relevant file on demand — don't preload everything.
   **Read before writing any Java code in `backend/`.**
 - **`docs/details/data-model.md`** — aggregates, the 3NF schema, the append-only ledger, status enums.
   **Read before changing the schema, an entity, or the settlement/reputation logic.**
+- **`docs/details/demo-runbook.md`** — stand up the full local demo stack (Postgres + RabbitMQ + stub agent + HTTPS tunnel + backend + frontend) and the seed logins.
+  **Read before running a live end-to-end demo.**
 
 ## Source-of-truth & conflict resolution
 
