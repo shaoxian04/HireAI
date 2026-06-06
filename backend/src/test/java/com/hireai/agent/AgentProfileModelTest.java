@@ -85,4 +85,29 @@ class AgentProfileModelTest {
 
         assertThat(profile.galleryUrls()).containsExactly("b.png");
     }
+
+    @Test
+    void removeLogoAndCoverClearTheField() {
+        UUID agentId = UUID.randomUUID();
+        AgentProfileModel profile = AgentProfileModel.createDefault(agentId)
+                .withLogo("https://x/l.png")
+                .withCover("https://x/c.png");
+
+        profile = profile.removeMedia("logo", null);
+        profile = profile.removeMedia("cover", null);
+
+        assertThat(profile.logoUrl()).isNull();
+        assertThat(profile.coverUrl()).isNull();
+    }
+
+    @Test
+    void removeMediaUnknownKindThrows() {
+        UUID agentId = UUID.randomUUID();
+        AgentProfileModel profile = AgentProfileModel.createDefault(agentId);
+
+        assertThatThrownBy(() -> profile.removeMedia("banner", "https://x/y.png"))
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).resultCode())
+                        .isEqualTo(ResultCode.VALIDATION_ERROR));
+    }
 }

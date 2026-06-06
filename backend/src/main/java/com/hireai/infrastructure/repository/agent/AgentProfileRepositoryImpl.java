@@ -26,6 +26,7 @@ public class AgentProfileRepositoryImpl implements AgentProfileRepository {
     @Override
     public AgentProfileModel save(AgentProfileModel profile) {
         Instant now = Instant.now();
+        // Read-before-write upsert: non-atomic, acceptable here — a profile has a single writer (its owner).
         Instant created = jpa.findById(profile.agentId())
                 .map(AgentProfileJpaEntity::getGmtCreate)
                 .orElse(now);

@@ -89,6 +89,7 @@ class AgentWriteAppServiceImplTest {
         assertThat(saved.status()).isEqualTo(AgentStatus.PENDING_VERIFICATION);
         assertThat(saved.ownerId()).isEqualTo(ownerId);
         assertThat(publisher.events).anyMatch(e -> e instanceof AgentRegisteredDomainEvent);
+        assertThat(profileRepository.store).containsKey(agentId);
     }
 
     @Test
