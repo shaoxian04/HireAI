@@ -9,6 +9,12 @@ function fail(code: string, message: string, status = 400) {
   return HttpResponse.json({ success: false, code, message, data: null }, { status });
 }
 
+/** Drives the task-detail lifecycle across polls; reset before each task-detail test. */
+export let taskDetailPolls = 0;
+export function resetTaskDetailPolls() {
+  taskDetailPolls = 0;
+}
+
 export const handlers = [
   http.post("*/api/auth/login", async ({ request }) => {
     const body = (await request.json()) as { email: string; password: string };
@@ -69,6 +75,32 @@ export const handlers = [
       status: "SUBMITTED",
       outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
       createdAt: "2026-06-06T10:00:00Z",
+    });
+  }),
+
+  // Drives a deterministic lifecycle: EXECUTING (poll 1) -> RESULT_RECEIVED (poll 2+).
+  http.get("*/api/tasks/:id", ({ params }) => {
+    taskDetailPolls += 1;
+    const status = taskDetailPolls >= 2 ? "RESULT_RECEIVED" : "EXECUTING";
+    return ok({
+      id: params.id,
+      clientId: "u-1",
+      title: "Summarise Q2 report",
+      description: "Summarise it",
+      budget: 30,
+      status,
+      outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
+      createdAt: "2026-06-06T10:00:00Z",
+    });
+  }),
+  http.get("*/api/tasks/:id/result", ({ params }) => {
+    if (taskDetailPolls < 2) return fail("NOT_FOUND", "No result yet", 404);
+    return ok({
+      taskId: params.id,
+      agentStatus: "COMPLETED",
+      resultPayloadJson: '{"summary":"all good"}',
+      resultUrl: "https://example.com/out.json",
+      receivedAt: "2026-06-06T10:05:00Z",
     });
   }),
 ];
