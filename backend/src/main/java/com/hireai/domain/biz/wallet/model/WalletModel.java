@@ -64,7 +64,11 @@ public final class WalletModel {
         append(LedgerEntryType.ESCROW_FREEZE, amount.negated(), taskId, correlationId);
     }
 
-    /** Release escrowed credits out of this wallet (Agent payout / commission). */
+    /**
+     * Release escrowed credits out of this wallet (Agent payout / commission).
+     * The ledger entry records the released amount with an unchanged available balance —
+     * see {@link LedgerEntryModel} for the reconstruction semantics.
+     */
     public void release(Money amount, UUID taskId, LedgerEntryType type, String correlationId) {
         requireType(type, LedgerEntryType.PAYOUT, LedgerEntryType.COMMISSION, LedgerEntryType.SPLIT);
         requirePositive(amount);
