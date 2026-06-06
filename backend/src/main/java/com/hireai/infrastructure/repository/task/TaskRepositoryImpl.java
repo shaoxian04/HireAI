@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.repository.task;
 
+import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
@@ -38,7 +39,9 @@ public class TaskRepositoryImpl implements TaskRepository {
         taskJpa.save(new TaskJpaEntity(
                 task.id(), task.clientId(), task.title(), task.description(),
                 task.budget().value(), outputSpecJsonMapper.toJson(task.outputSpec()),
-                task.category(), task.status().name(), task.agentVersionId(), task.createdAt()));
+                task.category(), task.status().name(), task.agentVersionId(), task.createdAt(),
+                task.resolution() == null ? null : task.resolution().name(),
+                task.resolvedAt(), task.rejectionReason()));
 
         TaskResultModel result = task.result();
         if (result != null && taskResultJpa.findByTaskId(result.taskId()).isEmpty()) {
@@ -71,7 +74,9 @@ public class TaskRepositoryImpl implements TaskRepository {
                 entity.getId(), entity.getClientId(), entity.getTitle(), entity.getDescription(),
                 Money.of(entity.getBudget()), outputSpecJsonMapper.fromJson(entity.getOutputSpec()),
                 entity.getCategory(), TaskStatus.valueOf(entity.getStatus()),
-                entity.getAgentVersionId(), result, entity.getGmtCreate());
+                entity.getAgentVersionId(), result, entity.getGmtCreate(),
+                entity.getResolution() == null ? null : TaskResolution.valueOf(entity.getResolution()),
+                entity.getResolvedAt(), entity.getRejectionReason());
     }
 
     private TaskResultModel toResultModel(TaskResultJpaEntity entity) {
