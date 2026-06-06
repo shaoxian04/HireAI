@@ -3,6 +3,7 @@ package com.hireai.controller.biz.agent;
 import com.hireai.application.biz.agent.AgentReadAppService;
 import com.hireai.application.biz.agent.AgentStorefrontAppService;
 import com.hireai.application.biz.agent.AgentWriteAppService;
+import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.controller.base.ResultCode;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
@@ -28,6 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -240,5 +242,70 @@ class AgentControllerStorefrontTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ---- GET /{agentId}/stats tests ----
+
+    private BuilderStatsQueryPort.StatsBundle statsBundle(int total, int completed) {
+        BuilderStatsQueryPort.StatsRow statsRow = new BuilderStatsQueryPort.StatsRow(
+                total, completed, 1, 1,
+                new BigDecimal("80.00"), new BigDecimal("40.00"),
+                30.0, 1, 2);
+        List<BuilderStatsQueryPort.TrendPointRow> trend =
+                List.of(new BuilderStatsQueryPort.TrendPointRow(LocalDate.now(), total));
+        List<BuilderStatsQueryPort.RecentTaskRow> recent =
+                List.of(new BuilderStatsQueryPort.RecentTaskRow(
+                        UUID.randomUUID(), "Task Alpha", "RESULT_RECEIVED", Instant.now()));
+        return new BuilderStatsQueryPort.StatsBundle(statsRow, trend, recent);
+    }
+
+    private BuilderStatsQueryPort.StatsBundle emptyBundle() {
+        BuilderStatsQueryPort.StatsRow empty = new BuilderStatsQueryPort.StatsRow(
+                0, 0, 0, 0,
+                BigDecimal.ZERO, BigDecimal.ZERO,
+                null, 0, 0);
+        return new BuilderStatsQueryPort.StatsBundle(empty, List.of(), List.of());
+    }
+
+    @Test
+    void getStats_happyPath_returns200WithAllFields() throws Exception {
+        when(currentUserProvider.currentUserId()).thenReturn(OWNER_ID);
+        when(storefrontAppService.getStats(AGENT_ID, OWNER_ID)).thenReturn(statsBundle(4, 2));
+
+        mockMvc.perform(get("/api/agents/{id}/stats", AGENT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.volume.total").value(4))
+                .andExpect(jsonPath("$.data.volume.completed").value(2))
+                // successRate = 2/4 = 0.5
+                .andExpect(jsonPath("$.data.volume.successRate").value(0.5))
+                // onTimeRate = 1/2 = 0.5
+                .andExpect(jsonPath("$.data.performance.onTimeRate").value(0.5))
+                .andExpect(jsonPath("$.data.earnings.creditsInEscrow").value(80.0))
+                .andExpect(jsonPath("$.data.trend[0].count").value(4))
+                .andExpect(jsonPath("$.data.recentTasks[0].title").value("Task Alpha"));
+    }
+
+    @Test
+    void getStats_zeroTasks_successRateIsNull() throws Exception {
+        when(currentUserProvider.currentUserId()).thenReturn(OWNER_ID);
+        when(storefrontAppService.getStats(AGENT_ID, OWNER_ID)).thenReturn(emptyBundle());
+
+        mockMvc.perform(get("/api/agents/{id}/stats", AGENT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.volume.total").value(0))
+                .andExpect(jsonPath("$.data.volume.successRate").doesNotExist());
+    }
+
+    @Test
+    void getStats_foreignOwner_returns404() throws Exception {
+        UUID foreignId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(foreignId);
+        when(storefrontAppService.getStats(AGENT_ID, foreignId))
+                .thenThrow(new DomainException(ResultCode.NOT_FOUND, "Agent not found: " + AGENT_ID));
+
+        mockMvc.perform(get("/api/agents/{id}/stats", AGENT_ID))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
     }
 }

@@ -6,8 +6,10 @@ import com.hireai.application.biz.agent.AgentWriteAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.agent.converter.AgentModel2DTOConverter;
+import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.controller.biz.agent.dto.AgentDTO;
 import com.hireai.controller.biz.agent.dto.AgentProfileViewDTO;
+import com.hireai.controller.biz.agent.dto.AgentStatsDTO;
 import com.hireai.controller.biz.agent.dto.RegisterAgentRequest;
 import com.hireai.controller.biz.agent.dto.RespondReviewRequest;
 import com.hireai.controller.biz.agent.dto.ReviewDTO;
@@ -170,5 +172,25 @@ public class AgentController extends BaseController {
                                         @Valid @RequestBody RespondReviewRequest request) {
         return ok(ReviewDTO.from(storefrontAppService.respondToReview(
                 agentId, currentUser.currentUserId(), reviewId, request.response())));
+    }
+
+    @GetMapping("/{agentId}/stats")
+    public WebResult<AgentStatsDTO> stats(@PathVariable("agentId") UUID agentId) {
+        BuilderStatsQueryPort.StatsBundle bundle =
+                storefrontAppService.getStats(agentId, currentUser.currentUserId());
+        BuilderStatsQueryPort.StatsRow s = bundle.stats();
+        Double successRate = s.total() == 0 ? null : (double) s.completed() / s.total();
+        Double onTimeRate = s.withResultCount() == 0 ? null
+                : (double) s.onTimeCount() / s.withResultCount();
+        return ok(new AgentStatsDTO(
+                new AgentStatsDTO.Volume(s.total(), s.completed(), s.failed(), s.open(), successRate),
+                new AgentStatsDTO.Performance(s.avgTurnaroundSeconds(), onTimeRate),
+                new AgentStatsDTO.Earnings(s.creditsInEscrow(), s.potentialEarnings()),
+                bundle.trend().stream()
+                        .map(t -> new AgentStatsDTO.TrendPoint(t.day(), t.count()))
+                        .toList(),
+                bundle.recent().stream()
+                        .map(r -> new AgentStatsDTO.RecentTask(r.id(), r.title(), r.status(), r.createdAt()))
+                        .toList()));
     }
 }

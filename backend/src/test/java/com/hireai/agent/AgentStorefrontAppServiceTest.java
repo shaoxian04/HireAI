@@ -2,6 +2,7 @@ package com.hireai.agent;
 
 import com.hireai.application.biz.agent.AgentReadAppService;
 import com.hireai.application.biz.agent.impl.AgentStorefrontAppServiceImpl;
+import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.application.port.storage.MediaStoragePort;
 import com.hireai.controller.base.ResultCode;
 import com.hireai.domain.biz.agent.info.ProfileUpdateInfo;
@@ -13,7 +14,9 @@ import com.hireai.domain.shared.exception.DomainException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -37,9 +40,11 @@ class AgentStorefrontAppServiceTest {
     private final AgentProfileRepository profileRepository = mock(AgentProfileRepository.class);
     private final MediaStoragePort mediaStoragePort = mock(MediaStoragePort.class);
     private final ReviewRepository reviewRepository = mock(ReviewRepository.class);
+    private final BuilderStatsQueryPort builderStatsQueryPort = mock(BuilderStatsQueryPort.class);
 
     private final AgentStorefrontAppServiceImpl service = new AgentStorefrontAppServiceImpl(
-            agentReadAppService, profileRepository, mediaStoragePort, reviewRepository);
+            agentReadAppService, profileRepository, mediaStoragePort, reviewRepository,
+            builderStatsQueryPort);
 
     // ---- helpers ----
 
@@ -231,5 +236,59 @@ class AgentStorefrontAppServiceTest {
                         .isEqualTo(ResultCode.NOT_FOUND));
 
         verify(reviewRepository, never()).save(any());
+    }
+
+    // ---- getStats ----
+
+    @Test
+    void getStats_happyPath_ownerGateVerifiedAndBundleAssembled() {
+        UUID agentId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        BuilderStatsQueryPort.StatsRow statsRow = new BuilderStatsQueryPort.StatsRow(
+                4, 2, 1, 1,
+                new BigDecimal("80.00"), new BigDecimal("40.00"),
+                30.0, 1, 1);
+        List<BuilderStatsQueryPort.TrendPointRow> trend =
+                List.of(new BuilderStatsQueryPort.TrendPointRow(LocalDate.now(), 4));
+        List<BuilderStatsQueryPort.RecentTaskRow> recent =
+                List.of(new BuilderStatsQueryPort.RecentTaskRow(
+                        UUID.randomUUID(), "Task A", "RESULT_RECEIVED", Instant.now()));
+
+        when(builderStatsQueryPort.stats(agentId)).thenReturn(statsRow);
+        when(builderStatsQueryPort.trend(agentId, 14)).thenReturn(trend);
+        when(builderStatsQueryPort.recentTasks(agentId, 10)).thenReturn(recent);
+
+        BuilderStatsQueryPort.StatsBundle bundle = service.getStats(agentId, ownerId);
+
+        // Owner gate must fire BEFORE port calls
+        verify(agentReadAppService).getForOwner(agentId, ownerId);
+        verify(builderStatsQueryPort).stats(agentId);
+        verify(builderStatsQueryPort).trend(agentId, 14);
+        verify(builderStatsQueryPort).recentTasks(agentId, 10);
+
+        assertThat(bundle.stats().total()).isEqualTo(4);
+        assertThat(bundle.stats().completed()).isEqualTo(2);
+        assertThat(bundle.stats().creditsInEscrow()).isEqualByComparingTo(new BigDecimal("80.00"));
+        assertThat(bundle.trend()).hasSize(1);
+        assertThat(bundle.recent()).hasSize(1);
+    }
+
+    @Test
+    void getStats_foreignOwner_notFoundAndPortNeverCalled() {
+        UUID agentId = UUID.randomUUID();
+        UUID foreignOwner = UUID.randomUUID();
+
+        when(agentReadAppService.getForOwner(agentId, foreignOwner))
+                .thenThrow(new DomainException(ResultCode.NOT_FOUND, "Agent not found: " + agentId));
+
+        assertThatThrownBy(() -> service.getStats(agentId, foreignOwner))
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).resultCode())
+                        .isEqualTo(ResultCode.NOT_FOUND));
+
+        verify(builderStatsQueryPort, never()).stats(any());
+        verify(builderStatsQueryPort, never()).trend(any(), org.mockito.ArgumentMatchers.anyInt());
+        verify(builderStatsQueryPort, never()).recentTasks(any(), org.mockito.ArgumentMatchers.anyInt());
     }
 }

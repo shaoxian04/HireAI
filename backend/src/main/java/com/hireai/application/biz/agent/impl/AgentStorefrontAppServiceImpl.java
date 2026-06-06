@@ -2,6 +2,7 @@ package com.hireai.application.biz.agent.impl;
 
 import com.hireai.application.biz.agent.AgentReadAppService;
 import com.hireai.application.biz.agent.AgentStorefrontAppService;
+import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.application.port.storage.MediaStoragePort;
 import com.hireai.controller.base.ResultCode;
 import com.hireai.domain.biz.agent.info.ProfileUpdateInfo;
@@ -35,6 +36,7 @@ public class AgentStorefrontAppServiceImpl implements AgentStorefrontAppService 
     private final AgentProfileRepository profileRepository;
     private final MediaStoragePort mediaStoragePort;
     private final ReviewRepository reviewRepository;
+    private final BuilderStatsQueryPort builderStatsQueryPort;
 
     @Override
     @Transactional(readOnly = true)
@@ -106,6 +108,16 @@ public class AgentStorefrontAppServiceImpl implements AgentStorefrontAppService 
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
                         "Review not found: " + reviewId));
         return reviewRepository.save(review.respond(response));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BuilderStatsQueryPort.StatsBundle getStats(UUID agentId, UUID ownerId) {
+        agentReadAppService.getForOwner(agentId, ownerId); // owner gate first (Invariant #5)
+        return new BuilderStatsQueryPort.StatsBundle(
+                builderStatsQueryPort.stats(agentId),
+                builderStatsQueryPort.trend(agentId, 14),
+                builderStatsQueryPort.recentTasks(agentId, 10));
     }
 
     private AgentProfileModel loadProfile(UUID agentId) {

@@ -1,5 +1,6 @@
 package com.hireai.application.biz.agent;
 
+import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.domain.biz.agent.info.ProfileUpdateInfo;
 import com.hireai.domain.biz.agent.model.AgentProfileModel;
 import com.hireai.domain.biz.review.model.ReviewModel;
@@ -32,4 +33,6 @@ public interface AgentStorefrontAppService {
 
     ReviewModel respondToReview(@NonNull UUID agentId, @NonNull UUID ownerId,
                                 @NonNull UUID reviewId, @NonNull String response);
+
+    BuilderStatsQueryPort.StatsBundle getStats(@NonNull UUID agentId, @NonNull UUID ownerId);
 }
