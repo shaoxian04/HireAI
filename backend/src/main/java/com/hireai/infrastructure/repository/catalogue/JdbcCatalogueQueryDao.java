@@ -9,6 +9,8 @@ import org.springframework.stereotype.Repository;
 import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,6 +45,7 @@ public class JdbcCatalogueQueryDao implements CatalogueQueryPort {
                    (a.reputation_score * 0.5
                     + COALESCE(t.recent_count, 0) * 8
                     + CASE WHEN t.last_request_at > now() - INTERVAL '3 days' THEN 10 ELSE 0 END
+                    + CASE WHEN p.is_featured THEN 1000 ELSE 0 END
                    ) AS hot_score
             FROM agents a
             JOIN users u          ON u.id = a.owner_id
@@ -72,16 +75,19 @@ public class JdbcCatalogueQueryDao implements CatalogueQueryPort {
     @Override
     public List<AgentCardRow> searchCards(String q, String category, String sort, int page, int size) {
         String orderBy = SORTS.getOrDefault(sort == null ? "hot" : sort, SORTS.get("hot"));
+        // Clamp to [1,100] — mirrors AgentQuery/TaskQuery convention in the application layer.
+        int bounded = Math.min(Math.max(size, 1), 100);
         String sql = CARD_SELECT + """
                   AND (:q = '' OR a.name ILIKE '%' || :q || '%'
                        OR split_part(u.email, '@', 1) ILIKE '%' || :q || '%')
-                  AND (:category = '' OR :category = ANY(v.capability_categories))
+                  /* NOTE: % and _ in :q act as ILIKE wildcards — intentional; callers may sanitise if needed */
+                  AND (:category = '' OR v.capability_categories @> ARRAY[:category]::text[])
                 ORDER BY """ + " " + orderBy + " LIMIT :size OFFSET :offset";
         var params = new MapSqlParameterSource()
                 .addValue("q", q == null ? "" : q.trim())
                 .addValue("category", category == null ? "" : category.trim().toLowerCase())
-                .addValue("size", size)
-                .addValue("offset", Math.max(page, 0) * size);
+                .addValue("size", bounded)
+                .addValue("offset", Math.max(page, 0) * bounded);
         return jdbc.query(sql, params, cardMapper());
     }
 
@@ -148,6 +154,8 @@ public class JdbcCatalogueQueryDao implements CatalogueQueryPort {
 
     @Override
     public List<ReviewRow> reviewsForAgent(UUID agentId, int limit) {
+        // Clamp to [1,50] — mirrors AgentQuery/TaskQuery clamp convention in the application layer.
+        int bounded = Math.min(Math.max(limit, 1), 50);
         String sql = """
                 SELECT r.id, r.rating, r.review_text, r.builder_response,
                        split_part(u.email, '@', 1) AS author, r.gmt_create
@@ -156,11 +164,11 @@ public class JdbcCatalogueQueryDao implements CatalogueQueryPort {
                 ORDER BY r.gmt_create DESC
                 LIMIT :limit
                 """;
-        var params = new MapSqlParameterSource().addValue("agentId", agentId).addValue("limit", limit);
+        var params = new MapSqlParameterSource().addValue("agentId", agentId).addValue("limit", bounded);
         return jdbc.query(sql, params, (rs, i) -> new ReviewRow(
                 rs.getObject("id", UUID.class), rs.getInt("rating"), rs.getString("review_text"),
                 rs.getString("builder_response"), rs.getString("author"),
-                rs.getTimestamp("gmt_create").toInstant()));
+                toInstant(rs.getTimestamp("gmt_create"))));
     }
 
     private RowMapper<AgentCardRow> cardMapper() {
@@ -175,10 +183,15 @@ public class JdbcCatalogueQueryDao implements CatalogueQueryPort {
                 stringList(rs.getArray("capability_categories")), rs.getBigDecimal("price"),
                 rs.getInt("max_execution_seconds"), rs.getBigDecimal("rating_avg"),
                 rs.getInt("rating_count"), rs.getInt("request_count"),
-                rs.getTimestamp("gmt_create").toInstant());
+                toInstant(rs.getTimestamp("gmt_create")));
     }
 
     private static List<String> stringList(Array array) throws SQLException {
         return array == null ? List.of() : List.of((String[]) array.getArray());
+    }
+
+    /** Null-safe Timestamp → Instant conversion. */
+    private static Instant toInstant(Timestamp ts) {
+        return ts != null ? ts.toInstant() : null;
     }
 }

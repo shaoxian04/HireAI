@@ -246,6 +246,55 @@ class CatalogueQueryDaoIntegrationTest {
     }
 
     // -----------------------------------------------------------------------
+    // Test 7: Pagination bounds — page/size correctly slices results
+    // -----------------------------------------------------------------------
+
+    @Test
+    void paginationBoundsResults() {
+        String cat = "pagetest_" + UUID.randomUUID().toString().replace("-", "").substring(0, 6);
+        seedAgent(uniqueEmail("pg1"), "Page Agent 1", "ACTIVE", cat, new BigDecimal("5.00"), true, false);
+        seedAgent(uniqueEmail("pg2"), "Page Agent 2", "ACTIVE", cat, new BigDecimal("5.00"), true, false);
+        seedAgent(uniqueEmail("pg3"), "Page Agent 3", "ACTIVE", cat, new BigDecimal("5.00"), true, false);
+
+        List<AgentCardRow> page0 = catalogueQueryPort.searchCards("", cat, "newest", 0, 2);
+        assertThat(page0).hasSize(2);
+
+        List<AgentCardRow> page1 = catalogueQueryPort.searchCards("", cat, "newest", 1, 2);
+        assertThat(page1).hasSize(1);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 8: reviewsForAgent excludes unpublished reviews
+    // -----------------------------------------------------------------------
+
+    @Test
+    void reviewsExcludeUnpublished() {
+        UUID agentId = seedAgent(uniqueEmail("revpub"), "Rev Pub Agent",
+                "ACTIVE", "general", new BigDecimal("5.00"), true, false);
+
+        UUID clientId = UUID.randomUUID();
+        jdbc.update("INSERT INTO users (id, email, role) VALUES (?, ?, 'CLIENT')",
+                clientId, uniqueEmail("revclient"));
+
+        // Published review
+        UUID publishedId = UUID.randomUUID();
+        jdbc.update("INSERT INTO reviews (id, client_id, agent_id, rating, review_text, is_published) " +
+                        "VALUES (?, ?, ?, 4, 'published review', true)",
+                publishedId, clientId, agentId);
+
+        // Unpublished review (explicitly false)
+        UUID unpublishedId = UUID.randomUUID();
+        jdbc.update("INSERT INTO reviews (id, client_id, agent_id, rating, review_text, is_published) " +
+                        "VALUES (?, ?, ?, 1, 'unpublished review', false)",
+                unpublishedId, clientId, agentId);
+
+        List<ReviewRow> reviews = catalogueQueryPort.reviewsForAgent(agentId, 10);
+        assertThat(reviews).hasSize(1);
+        assertThat(reviews.get(0).id()).isEqualTo(publishedId);
+        assertThat(reviews.get(0).reviewText()).isEqualTo("published review");
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 
