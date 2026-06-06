@@ -30,9 +30,13 @@ function handleUnauthorized(): void {
   if (typeof window !== "undefined") window.location.assign("/login");
 }
 
-/** Shared envelope parser used by both `api()` and `apiUpload()`. */
+/**
+ * Shared envelope parser used by both `api()` and `apiUpload()`. Expects an already-fetched
+ * Response; throws ApiError on every non-success outcome.
+ */
 async function parseEnvelope<T>(res: Response): Promise<T> {
   if (res.status === 401) {
+    // Redirect is intentional and happens before the throw — the caller never sees this error.
     handleUnauthorized();
     throw new ApiError("UNAUTHORIZED", "Session expired", 401);
   }

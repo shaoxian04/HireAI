@@ -124,6 +124,7 @@ export const handlers = [
 
   // ── Catalogue handlers ──
 
+  // Single-fixture stub — filters by name/category only; sort and pagination are not modelled.
   http.get("*/api/catalogue/agents", ({ request }) => {
     const url = new URL(request.url);
     const q = url.searchParams.get("q") ?? "";
