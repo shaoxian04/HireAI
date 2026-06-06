@@ -31,6 +31,9 @@ public class CatalogueReadAppServiceImpl implements CatalogueReadAppService {
     @Override
     public List<CatalogueQueryPort.AgentCardRow> search(String q, String category, String sort,
                                                         int page, int size) {
+        if (sort != null && !sort.isBlank() && !CatalogueQueryPort.SORT_KEYS.contains(sort)) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "Unknown sort: " + sort);
+        }
         int bounded = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
         return catalogueQueryPort.searchCards(q, category, sort, Math.max(page, 0), bounded);
     }

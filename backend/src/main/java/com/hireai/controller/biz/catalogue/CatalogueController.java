@@ -10,6 +10,7 @@ import com.hireai.controller.biz.catalogue.dto.AgentProfileDTO;
 import com.hireai.controller.biz.catalogue.dto.CategoryCountDTO;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.infrastructure.repository.task.OutputSpecJsonMapper;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,7 +33,7 @@ public class CatalogueController extends BaseController {
     private final OutputSpecJsonMapper outputSpecJsonMapper;
 
     public CatalogueController(CatalogueReadAppService readAppService,
-                               OutputSpecJsonMapper outputSpecJsonMapper) {
+                               @Qualifier("outputSpecJsonMapper") OutputSpecJsonMapper outputSpecJsonMapper) {
         this.readAppService = readAppService;
         this.outputSpecJsonMapper = outputSpecJsonMapper;
     }

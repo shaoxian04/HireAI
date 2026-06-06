@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -38,7 +39,7 @@ class CatalogueControllerTest {
 
     @Autowired MockMvc mockMvc;
     @MockBean CatalogueReadAppService catalogueReadAppService;
-    @MockBean OutputSpecJsonMapper outputSpecJsonMapper;
+    @MockBean(name = "outputSpecJsonMapper") OutputSpecJsonMapper outputSpecJsonMapper;
 
     private AgentCardRow card(String name) {
         return new AgentCardRow(UUID.randomUUID(), name, "alice", new BigDecimal("60.00"),
@@ -82,6 +83,25 @@ class CatalogueControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].category").value("summarisation"))
                 .andExpect(jsonPath("$.data[0].agentCount").value(2));
+    }
+
+    @Test
+    void listUsesDefaultParams() throws Exception {
+        when(catalogueReadAppService.search(eq(""), eq(""), eq("hot"), eq(0), eq(20)))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/catalogue/agents"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(catalogueReadAppService).search("", "", "hot", 0, 20);
+    }
+
+    @Test
+    void nonUuidAgentPathReturns400() throws Exception {
+        mockMvc.perform(get("/api/catalogue/agents/not-a-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     @Test

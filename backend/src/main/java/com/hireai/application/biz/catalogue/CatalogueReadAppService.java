@@ -25,5 +25,10 @@ public interface CatalogueReadAppService {
 
     List<CategoryCountRow> categories();
 
+    /**
+     * Returns reviews for the given agent. Callers must independently verify that the agent is
+     * visible (ACTIVE + listed) before exposing these results; this method does not gate on
+     * visibility.
+     */
     List<ReviewRow> reviews(UUID agentId);
 }
