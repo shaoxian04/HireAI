@@ -9,6 +9,7 @@ import { AppShell } from "@/components/AppShell";
 import { StatusTrack } from "@/components/StatusTrack";
 import type { TaskDTO, TaskResultDTO, TaskStatus } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
+import { ResultReviewBar } from "@/components/ResultReviewBar";
 
 const POLL_MS = 2000;
 
@@ -61,7 +62,7 @@ function TaskDetail() {
         if (cancelled) return;
         setTask(t);
 
-        if (t.status === "RESULT_RECEIVED" && !resultRef.current) {
+        if ((t.status === "RESULT_RECEIVED" || t.status === "RESOLVED") && !resultRef.current) {
           try {
             const r = await api<TaskResultDTO>(`/tasks/${id}/result`);
             if (cancelled) return;
@@ -132,10 +133,13 @@ function TaskDetail() {
             <h1 className="text-xl font-extrabold tracking-tight">{task.title}</h1>
             <p className="mt-1 font-mono text-xs text-dim">
               #{task.id.slice(0, 8)} ·{" "}
-              <span className="tabular text-accent">{task.budget}</span> cr in escrow
+              <span className="tabular text-accent">{task.budget}</span> cr{" "}
+              {task.resolution ? "settled" : "in escrow"}
             </p>
           </div>
-          <Badge status={task.status}>{task.status}</Badge>
+          <Badge status={task.status}>
+            {task.resolution ? `RESOLVED · ${task.resolution}` : task.status}
+          </Badge>
         </header>
 
         {/* pipeline */}
@@ -192,6 +196,26 @@ function TaskDetail() {
               >
                 Open deliverable →
               </a>
+            )}
+            {task.status === "RESULT_RECEIVED" && (
+              <ResultReviewBar taskId={task.id} onResolved={setTask} />
+            )}
+          </section>
+        )}
+
+        {task.resolution && (
+          <section aria-live="polite" className="space-y-1 border-t border-line pt-5">
+            <p className="eyebrow">Settled</p>
+            {task.resolution === "ACCEPTED" ? (
+              <p className="font-mono text-sm text-accent">
+                {task.payoutAmount} cr paid to the builder · {task.commissionAmount} cr platform
+                commission
+              </p>
+            ) : (
+              <p className="font-mono text-sm text-red">
+                {task.refundAmount} cr refunded to your wallet
+                {task.rejectionReason ? ` — "${task.rejectionReason}"` : ""}
+              </p>
             )}
           </section>
         )}

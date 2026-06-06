@@ -3,6 +3,9 @@
 /** Declared deliverable shape (task/enums/OutputFormat.java). */
 export type OutputFormat = "TEXT" | "JSON" | "FILE";
 
+/** Client review outcome (task/enums/TaskResolution.java). */
+export type TaskResolution = "ACCEPTED" | "REJECTED";
+
 /** Full task lifecycle (task/enums/TaskStatus.java). */
 export type TaskStatus =
   | "SUBMITTED"
@@ -110,6 +113,12 @@ export interface TaskDTO {
   status: TaskStatus;
   outputSpec: OutputSpecDTO;
   createdAt: string;
+  resolution?: TaskResolution | null;
+  resolvedAt?: string | null;
+  rejectionReason?: string | null;
+  payoutAmount?: number | null;
+  commissionAmount?: number | null;
+  refundAmount?: number | null;
 }
 
 export interface CreateTaskRequest {

@@ -144,6 +144,40 @@ export const handlers = [
     });
   }),
 
+  http.post("*/api/tasks/:id/accept", ({ params }) =>
+    ok({
+      id: params.id,
+      clientId: "u-1",
+      title: "Summarise Q2 report",
+      description: "Summarise it",
+      budget: 30,
+      status: "RESOLVED",
+      outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
+      createdAt: "2026-06-06T10:00:00Z",
+      resolution: "ACCEPTED",
+      resolvedAt: "2026-06-06T10:10:00Z",
+      payoutAmount: 25.5,
+      commissionAmount: 4.5,
+    }),
+  ),
+  http.post("*/api/tasks/:id/reject", async ({ params, request }) => {
+    const body = (await request.json().catch(() => null)) as { reason?: string } | null;
+    return ok({
+      id: params.id,
+      clientId: "u-1",
+      title: "Summarise Q2 report",
+      description: "Summarise it",
+      budget: 30,
+      status: "RESOLVED",
+      outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
+      createdAt: "2026-06-06T10:00:00Z",
+      resolution: "REJECTED",
+      resolvedAt: "2026-06-06T10:10:00Z",
+      rejectionReason: body?.reason ?? null,
+      refundAmount: 30,
+    });
+  }),
+
   // ── Catalogue handlers ──
 
   // Single-fixture stub — filters by name/category only; sort and pagination are not modelled.

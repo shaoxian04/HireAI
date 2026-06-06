@@ -183,7 +183,9 @@ function ClientTasks() {
                       <span className="truncate font-medium text-fg group-hover:text-accent">
                         {t.title}
                       </span>
-                      <Badge status={t.status}>{t.status}</Badge>
+                      <Badge status={t.status}>
+                        {t.resolution ? `RESOLVED · ${t.resolution}` : t.status}
+                      </Badge>
                     </div>
                     <p className="mt-1 font-mono text-xs text-dim">
                       <span className="tabular text-muted">{t.budget}</span> cr · #
