@@ -49,6 +49,21 @@ class TaskModelReviewTest {
     }
 
     @Test
+    void rejectReasonAtExactly500CharsIsAccepted() {
+        String exactly500 = "x".repeat(500);
+        TaskModel resolved = resultReceivedTask().reject(exactly500);
+        assertThat(resolved.rejectionReason()).isEqualTo(exactly500);
+    }
+
+    @Test
+    void rejectReasonOver500CharsAfterTrimmingIsRejected() {
+        assertThatThrownBy(() -> resultReceivedTask().reject("  " + "x".repeat(501) + "  "))
+                .isInstanceOf(DomainException.class)
+                .satisfies(e -> assertThat(((DomainException) e).resultCode())
+                        .isEqualTo(ResultCode.VALIDATION_ERROR));
+    }
+
+    @Test
     void rejectReasonOver500CharsIsRejected() {
         assertThatThrownBy(() -> resultReceivedTask().reject("x".repeat(501)))
                 .isInstanceOf(DomainException.class)

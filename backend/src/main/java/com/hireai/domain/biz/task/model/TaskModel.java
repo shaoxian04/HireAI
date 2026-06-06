@@ -32,6 +32,7 @@ public final class TaskModel {
     private final Instant resolvedAt;          // nullable until RESOLVED
     private final String rejectionReason;      // nullable; only set on REJECTED
 
+    // Must stay in sync with the V9 rejection_reason DB CHECK and RejectTaskRequest's @Size(max).
     private static final int MAX_REASON_LENGTH = 500;
 
     /** Canonical 14-arg constructor: used by the rehydration path and all transition helpers. */
