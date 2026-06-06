@@ -19,6 +19,9 @@ public interface TaskWriteAppService {
 
     UUID submit(@NonNull TaskSubmitInfo taskSubmitInfo);
 
+    /** Direct booking: identical atomic submit+freeze, but routing is pinned to agentVersionId. */
+    UUID submitDirectlyBooked(@NonNull TaskSubmitInfo taskSubmitInfo, @NonNull UUID agentVersionId);
+
     void assignAndQueue(@NonNull UUID taskId, @NonNull UUID agentVersionId);
 
     void markAwaitingCapacity(@NonNull UUID taskId);

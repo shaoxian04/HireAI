@@ -45,6 +45,9 @@ class AgentWriteAppServiceImplTest {
         @Override public List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice) {
             return List.of();
         }
+        @Override public java.util.Optional<AgentCandidate> findCandidateByVersionId(UUID agentVersionId) {
+            return java.util.Optional.empty();
+        }
     }
 
     /** In-memory fake of the AgentProfile repository. */

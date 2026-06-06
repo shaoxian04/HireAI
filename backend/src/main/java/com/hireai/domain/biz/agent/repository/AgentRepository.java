@@ -24,4 +24,10 @@ public interface AgentRepository {
     List<AgentModel> findByOwnerId(UUID ownerId, AgentQuery query);
 
     List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice);
+
+    /**
+     * Looks up a single ACTIVE agent version by its id (no category/price filters).
+     * Returns empty if the version does not exist or its agent is not ACTIVE.
+     */
+    Optional<AgentCandidate> findCandidateByVersionId(UUID agentVersionId);
 }

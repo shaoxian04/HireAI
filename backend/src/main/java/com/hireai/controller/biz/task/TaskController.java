@@ -1,15 +1,18 @@
 package com.hireai.controller.biz.task;
 
+import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.task.converter.TaskModel2DTOConverter;
 import com.hireai.controller.biz.task.converter.TaskResult2DTOConverter;
+import com.hireai.controller.biz.task.dto.DirectBookRequest;
 import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
 import com.hireai.controller.biz.task.dto.TaskDTO;
 import com.hireai.controller.biz.task.dto.TaskResultDTO;
 import com.hireai.controller.config.CurrentUserProvider;
+import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.repository.TaskQuery;
@@ -38,13 +41,16 @@ public class TaskController extends BaseController {
     private final TaskWriteAppService writeAppService;
     private final TaskReadAppService readAppService;
     private final CurrentUserProvider currentUser;
+    private final DirectBookingAppService directBookingAppService;
 
     public TaskController(TaskWriteAppService writeAppService,
                           TaskReadAppService readAppService,
-                          CurrentUserProvider currentUser) {
+                          CurrentUserProvider currentUser,
+                          DirectBookingAppService directBookingAppService) {
         this.writeAppService = writeAppService;
         this.readAppService = readAppService;
         this.currentUser = currentUser;
+        this.directBookingAppService = directBookingAppService;
     }
 
     @PostMapping
@@ -61,6 +67,15 @@ public class TaskController extends BaseController {
         UUID taskId = writeAppService.submit(info);
         TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId));
         return ok(dto);
+    }
+
+    @PostMapping("/direct")
+    public WebResult<TaskDTO> bookDirect(@Valid @RequestBody DirectBookRequest request) {
+        UUID clientId = currentUser.currentUserId();
+        UUID taskId = directBookingAppService.book(new DirectBookingInfo(
+                clientId, request.title(), request.description(),
+                Money.of(request.budget()), request.agentId()));
+        return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId)));
     }
 
     @GetMapping("/{id}")

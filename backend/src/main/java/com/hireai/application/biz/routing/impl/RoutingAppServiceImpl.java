@@ -76,6 +76,20 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                 taskId, agentVersionId, message.correlationId());
     }
 
+    @Override
+    public void dispatchDirect(UUID taskId, UUID agentVersionId) {
+        TaskRoutingView view = taskReadAppService.getRoutingView(taskId);
+        AgentCandidate target = agentRepository.findCandidateByVersionId(agentVersionId)
+                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
+                        "Active agent version not found: " + agentVersionId));
+        // Same ordering contract as route(): QUEUED commits FIRST (REQUIRES_NEW), then publish.
+        taskWriteAppService.assignAndQueue(taskId, agentVersionId);
+        DispatchMessage message = buildDispatchMessage(taskId, agentVersionId, view, target);
+        taskDispatchPublisher.publish(message);
+        log.info("Task {} direct-dispatched to agentVersion {} (correlationId={})",
+                taskId, agentVersionId, message.correlationId());
+    }
+
     private DispatchMessage buildDispatchMessage(UUID taskId, UUID agentVersionId,
                                                  TaskRoutingView view, AgentCandidate winner) {
         String correlationId = UUID.randomUUID().toString();

@@ -72,12 +72,22 @@ public class AgentRepositoryImpl implements AgentRepository {
     public List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice) {
         String normalisedCategory = category == null ? "" : category.trim().toLowerCase();
         return versionJpa.findActiveCandidates(normalisedCategory, maxPrice).stream()
-                .map(row -> new AgentCandidate(
-                        row.getAgentId(), row.getAgentVersionId(),
-                        List.of(row.getCapabilityCategories()), row.getPrice(),
-                        row.getWebhookUrl(), row.getMaxExecutionSeconds(), row.getReputationScore(),
-                        row.getOutputSpec()))
+                .map(this::rowToCandidate)
                 .toList();
+    }
+
+    @Override
+    public java.util.Optional<AgentCandidate> findCandidateByVersionId(UUID agentVersionId) {
+        return versionJpa.findCandidateByVersionId(agentVersionId)
+                .map(this::rowToCandidate);
+    }
+
+    private AgentCandidate rowToCandidate(AgentVersionJpaRepository.AgentCandidateRow row) {
+        return new AgentCandidate(
+                row.getAgentId(), row.getAgentVersionId(),
+                List.of(row.getCapabilityCategories()), row.getPrice(),
+                row.getWebhookUrl(), row.getMaxExecutionSeconds(), row.getReputationScore(),
+                row.getOutputSpec());
     }
 
     private AgentModel toModel(AgentJpaEntity entity) {
