@@ -52,3 +52,7 @@ The schema above is the **design target**. What's actually in Flyway today:
 - Spec-violation after one retry: **80% refund to client, 20% platform fee**.
 - Escrow invariant is reconstructable from `ledger_entries` at any time (used by the settlement reconstruction test).
 - Reputation: rolling 30-day window — success rate (50%), spec-violation (−20%), timeout (−20%), dispute-loss (−10%) with temporal decay. Below threshold (or >30% dispute-loss) → auto-suspend via `ReputationDroppedBelowThresholdDomainEvent`.
+
+## Known concurrency backlog
+
+Neither `wallets` nor `tasks` carry an `@Version` column, so saves are last-writer-wins outside the locked path. The settlement path (accept/reject) is protected against double-payout by a pessimistic `SELECT … FOR UPDATE` on the task row: the second concurrent transaction blocks on the lock, re-reads the already-RESOLVED row, and the domain state guard throws before any money moves. Cross-task wallet mutations (e.g. two simultaneous top-ups, or accepts of two different tasks sharing the same wallet) remain last-writer-wins — tracked as platform hardening: add `@Version` to `WalletJpaEntity` and `TaskJpaEntity`.

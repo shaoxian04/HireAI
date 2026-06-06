@@ -69,9 +69,13 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
         return taskId;
     }
 
-    /** Ownership check (Invariant #5): a foreign task is indistinguishable from a missing one. */
+    /**
+     * Ownership check (Invariant #5): a foreign task is indistinguishable from a missing one.
+     * Takes a row-level lock on the task so concurrent resolution attempts serialize (the loser
+     * sees RESOLVED and the state guard throws).
+     */
     private TaskModel loadOwned(UUID taskId, UUID clientId) {
-        TaskModel task = taskRepository.findById(taskId)
+        TaskModel task = taskRepository.findByIdForUpdate(taskId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
         if (!task.clientId().equals(clientId)) {
             throw new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId);

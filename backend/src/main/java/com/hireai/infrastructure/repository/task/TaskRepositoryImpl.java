@@ -58,6 +58,11 @@ public class TaskRepositoryImpl implements TaskRepository {
     }
 
     @Override
+    public Optional<TaskModel> findByIdForUpdate(UUID taskId) {
+        return taskJpa.findByIdForUpdate(taskId).map(this::toModel);
+    }
+
+    @Override
     public List<TaskModel> findByClientId(UUID clientId, TaskQuery query) {
         return taskJpa.findByClientIdOrderByGmtCreateDesc(
                         clientId, PageRequest.of(query.page(), query.size()))

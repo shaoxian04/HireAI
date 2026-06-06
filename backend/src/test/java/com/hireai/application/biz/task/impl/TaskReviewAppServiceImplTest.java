@@ -67,7 +67,7 @@ class TaskReviewAppServiceImplTest {
         TaskModel task = resultReceivedTask();
         WalletModel clientWallet = WalletModel.openFor(clientId);
         WalletModel builderWallet = WalletModel.openFor(builderId);
-        when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
         when(agentRepository.findOwnerByVersionId(versionId)).thenReturn(Optional.of(builderId));
         when(walletRepository.findByUserId(clientId)).thenReturn(Optional.of(clientWallet));
         when(walletRepository.findByUserId(builderId)).thenReturn(Optional.of(builderWallet));
@@ -88,7 +88,7 @@ class TaskReviewAppServiceImplTest {
     @Test
     void acceptOpensBuilderWalletWhenAbsent() {
         TaskModel task = resultReceivedTask();
-        when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
         when(agentRepository.findOwnerByVersionId(versionId)).thenReturn(Optional.of(builderId));
         when(walletRepository.findByUserId(clientId)).thenReturn(Optional.of(WalletModel.openFor(clientId)));
         when(walletRepository.findByUserId(builderId)).thenReturn(Optional.empty());
@@ -107,7 +107,7 @@ class TaskReviewAppServiceImplTest {
     void selfAcceptUsesOneWalletAndSavesItOnce() {
         TaskModel task = resultReceivedTask();
         WalletModel shared = WalletModel.openFor(clientId);
-        when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
         when(agentRepository.findOwnerByVersionId(versionId)).thenReturn(Optional.of(clientId));
         when(walletRepository.findByUserId(clientId)).thenReturn(Optional.of(shared));
         when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -124,7 +124,7 @@ class TaskReviewAppServiceImplTest {
     void rejectRefundsAndNeverTouchesTheBuilder() {
         TaskModel task = resultReceivedTask();
         WalletModel clientWallet = WalletModel.openFor(clientId);
-        when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
         when(walletRepository.findByUserId(clientId)).thenReturn(Optional.of(clientWallet));
         when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -142,7 +142,7 @@ class TaskReviewAppServiceImplTest {
     @Test
     void nonOwnerGetsNotFound() {
         TaskModel task = resultReceivedTask();
-        when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
 
         assertThatThrownBy(() -> service.accept(task.id(), UUID.randomUUID()))
                 .isInstanceOf(DomainException.class)
