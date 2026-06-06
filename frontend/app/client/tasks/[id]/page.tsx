@@ -36,7 +36,9 @@ function TaskDetail() {
 
   // Keep the latest result in a ref so the interval closure can read it without re-subscribing.
   const resultRef = useRef<TaskResultDTO | null>(null);
-  resultRef.current = result;
+  useEffect(() => {
+    resultRef.current = result;
+  }, [result]);
 
   useEffect(() => {
     if (!id) return;
