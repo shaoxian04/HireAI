@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * Translates exceptions into the unified {@link WebResult} envelope with an
@@ -45,6 +46,12 @@ public class GlobalExceptionConfiguration {
                 .orElse("Validation failed");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(WebResult.error(ResultCode.VALIDATION_ERROR, message));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<WebResult<Void>> handleOversizeUpload(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(WebResult.error(ResultCode.VALIDATION_ERROR, "Upload exceeds the 2 MB limit"));
     }
 
     @ExceptionHandler(AuthenticationFailedException.class)

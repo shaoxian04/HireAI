@@ -24,7 +24,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -132,6 +135,22 @@ class AgentControllerStorefrontTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.builderResponse").value("Thank you!"));
+    }
+
+    @Test
+    void postMedia_oversizeUpload_returns413WithValidationErrorCode() throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", "big.png", "image/png", new byte[512]);
+        when(currentUserProvider.currentUserId()).thenReturn(OWNER_ID);
+        when(storefrontAppService.uploadMedia(any(), any(), any(), any(), anyLong(), any()))
+                .thenThrow(new MaxUploadSizeExceededException(2097152));
+
+        mockMvc.perform(multipart("/api/agents/{id}/media", AGENT_ID)
+                        .file(file)
+                        .param("kind", "logo"))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("2 MB")));
     }
 
     @Test

@@ -72,6 +72,7 @@ public class AgentStorefrontAppServiceImpl implements AgentStorefrontAppService 
                     "Gallery is full (max " + AgentProfileModel.MAX_GALLERY + " images)");
         }
         String objectKey = "agents/" + agentId + "/" + kind + "-" + UUID.randomUUID() + "." + ext;
+        // Tech debt: remote upload inside @Transactional holds a DB connection; acceptable at demo scale.
         String url = mediaStoragePort.upload(objectKey, contentType, bytes);
         AgentProfileModel updated = switch (kind) {
             case "logo" -> profile.withLogo(url);
@@ -85,7 +86,8 @@ public class AgentStorefrontAppServiceImpl implements AgentStorefrontAppService 
     public AgentProfileModel removeMedia(UUID agentId, UUID ownerId, String kind, String url) {
         agentReadAppService.getForOwner(agentId, ownerId);
         AgentProfileModel updated = loadProfile(agentId).removeMedia(kind, url);
-        mediaStoragePort.deleteByUrl(url); // best-effort; storage drift is acceptable
+        // Best-effort delete before save: if save then fails, the URL dangles but a retry re-converges; storage drift is acceptable at demo scale.
+        mediaStoragePort.deleteByUrl(url);
         return profileRepository.save(updated);
     }
 

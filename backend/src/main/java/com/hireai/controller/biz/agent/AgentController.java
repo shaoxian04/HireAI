@@ -13,10 +13,12 @@ import com.hireai.controller.biz.agent.dto.RespondReviewRequest;
 import com.hireai.controller.biz.agent.dto.ReviewDTO;
 import com.hireai.controller.biz.agent.dto.UpdateProfileRequest;
 import com.hireai.controller.config.CurrentUserProvider;
+import com.hireai.controller.base.ResultCode;
 import com.hireai.domain.biz.agent.info.AgentRegisterInfo;
 import com.hireai.domain.biz.agent.info.ProfileUpdateInfo;
 import com.hireai.domain.biz.agent.repository.AgentQuery;
 import com.hireai.domain.biz.task.model.OutputSpec;
+import com.hireai.domain.shared.exception.DomainException;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -122,12 +124,17 @@ public class AgentController extends BaseController {
     @PostMapping(value = "/{agentId}/media", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public WebResult<AgentProfileViewDTO> uploadMedia(@PathVariable("agentId") UUID agentId,
                                                       @RequestParam("kind") String kind,
-                                                      @RequestPart("file") MultipartFile file)
-            throws java.io.IOException {
+                                                      @RequestPart("file") MultipartFile file) {
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (java.io.IOException e) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "Could not read upload");
+        }
         return ok(AgentProfileViewDTO.from(storefrontAppService.uploadMedia(
                 agentId, currentUser.currentUserId(), kind,
                 file.getContentType() == null ? "" : file.getContentType(),
-                file.getSize(), file.getBytes())));
+                file.getSize(), bytes)));
     }
 
     @DeleteMapping("/{agentId}/media")
