@@ -6,12 +6,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.*;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class SupabaseStorageClientTest {
@@ -69,16 +71,37 @@ class SupabaseStorageClientTest {
     void deleteByUrlIgnoresForeignUrl() {
         // A URL that does not contain the public marker for this bucket — no HTTP call, no exception.
         // server has zero expectations; server.verify() confirms nothing was sent.
-        MockRestServiceServer freshServer;
-        RestTemplate restTemplate = new RestTemplate();
-        freshServer = MockRestServiceServer.bindTo(restTemplate).build();
-        SupabaseStorageClient localClient = new SupabaseStorageClient(
-                RestClient.builder(restTemplate),
-                "https://proj.supabase.co", "service-key-123", "agent-media");
+        client.deleteByUrl("https://other.cdn.example.com/images/logo.png");
 
-        // No exception, no HTTP call
-        localClient.deleteByUrl("https://other.cdn.example.com/images/logo.png");
+        server.verify(); // zero expectations — passes only if no request was made
+    }
 
-        freshServer.verify(); // zero expectations — passes only if no request was made
+    @Test
+    void uploadRejectsTraversalObjectKey() {
+        // Path traversal attempt must be rejected before any HTTP call is made.
+        assertThatThrownBy(() -> client.upload("../../etc/passwd", "image/png", new byte[]{1}))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid object key");
+        server.verify(); // no HTTP call must have been made
+    }
+
+    @Test
+    void deleteByUrlIgnoresForeignProjectUrl() {
+        // Marker string is present in the path but the host/base does not match our configured base.
+        // No HTTP call, no exception.
+        client.deleteByUrl("https://evil.example.com/storage/v1/object/public/agent-media/agents/a1/x.png");
+
+        server.verify(); // zero expectations — passes only if no request was made
+    }
+
+    @Test
+    void uploadPropagatesServerError() {
+        server.expect(requestTo("https://proj.supabase.co/storage/v1/object/agent-media/agents/a1/err.png"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withServerError());
+
+        assertThatThrownBy(() -> client.upload("agents/a1/err.png", "image/png", new byte[]{1}))
+                .isInstanceOf(HttpServerErrorException.class);
+        server.verify();
     }
 }

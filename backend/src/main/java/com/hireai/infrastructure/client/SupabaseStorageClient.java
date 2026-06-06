@@ -37,6 +37,7 @@ public class SupabaseStorageClient implements MediaStoragePort {
     @Override
     public String upload(String objectKey, String contentType, byte[] bytes) {
         requireConfigured();
+        validateObjectKey(objectKey);
         restClient.post()
                 .uri(URI.create(baseUrl + "/storage/v1/object/" + bucket + "/" + objectKey))
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + serviceKey)
@@ -50,14 +51,16 @@ public class SupabaseStorageClient implements MediaStoragePort {
 
     @Override
     public void deleteByUrl(String publicUrl) {
+        // Fail loudly on misconfiguration even for a best-effort op.
         requireConfigured();
         String marker = "/storage/v1/object/public/" + bucket + "/";
-        int idx = publicUrl == null ? -1 : publicUrl.indexOf(marker);
-        if (idx < 0) {
-            log.warn("Ignoring delete for unrecognised media URL: {}", publicUrl);
+        String expectedPrefix = baseUrl + marker;
+        if (publicUrl == null || !publicUrl.startsWith(expectedPrefix)) {
+            log.warn("Ignoring delete: URL does not match configured storage base: {}", publicUrl);
             return;
         }
-        String objectKey = publicUrl.substring(idx + marker.length());
+        String objectKey = publicUrl.substring(expectedPrefix.length());
+        validateObjectKey(objectKey);
         try {
             restClient.delete()
                     .uri(URI.create(baseUrl + "/storage/v1/object/" + bucket + "/" + objectKey))
@@ -80,7 +83,19 @@ public class SupabaseStorageClient implements MediaStoragePort {
         }
     }
 
+    private static void validateObjectKey(String key) {
+        if (key == null || key.isBlank() || key.contains("..") || key.startsWith("/")) {
+            throw new IllegalArgumentException("Invalid object key: " + key);
+        }
+    }
+
     private static String trimTrailingSlash(String url) {
-        return url != null && url.endsWith("/") ? url.substring(0, url.length() - 1) : url == null ? "" : url;
+        if (url == null) {
+            return "";
+        }
+        if (url.endsWith("/")) {
+            return url.substring(0, url.length() - 1);
+        }
+        return url;
     }
 }

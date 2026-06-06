@@ -10,12 +10,12 @@ import org.springframework.http.client.ClientHttpRequestFactory;
 import java.time.Duration;
 
 /**
- * Applies bounded connect/read timeouts to Spring's auto-configured {@link
- * org.springframework.web.client.RestClient.Builder} bean (used by {@link AgentDispatchClient}
- * in production), so a slow or unresponsive Agent webhook cannot block a dispatch thread
- * indefinitely. Implemented as a {@link RestClientCustomizer} rather than a per-instance
- * {@code requestFactory(...)} override so that a test's {@code MockRestServiceServer}, which
- * installs its own factory on a plain {@code RestClient.builder()}, is never clobbered.
+ * Applies bounded connect/read timeouts to ALL Spring RestClient.Builder instances —
+ * including {@link AgentDispatchClient} and {@link SupabaseStorageClient} — so that a slow or
+ * unresponsive remote endpoint cannot block a thread indefinitely. Implemented as a
+ * {@link RestClientCustomizer} rather than a per-instance {@code requestFactory(...)} override
+ * so that a test's {@code MockRestServiceServer}, which installs its own factory on a plain
+ * {@code RestClient.builder()}, is never clobbered.
  */
 @Configuration
 public class DispatchRestClientConfig {
@@ -24,7 +24,7 @@ public class DispatchRestClientConfig {
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(15);
 
     @Bean
-    public RestClientCustomizer dispatchRestClientTimeoutCustomizer() {
+    public RestClientCustomizer outboundRestClientTimeoutCustomizer() {
         ClientHttpRequestFactorySettings settings = ClientHttpRequestFactorySettings.DEFAULTS
                 .withConnectTimeout(CONNECT_TIMEOUT)
                 .withReadTimeout(READ_TIMEOUT);
