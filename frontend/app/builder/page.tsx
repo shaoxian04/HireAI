@@ -154,15 +154,20 @@ function BuilderDashboard() {
                   {hostOf(a.currentVersion?.webhookUrl ?? "")}
                 </p>
 
-                {a.status === "PENDING_VERIFICATION" && (
-                  <Button
-                    className="mt-5 w-fit"
-                    onClick={() => activate(a.id)}
-                    disabled={activatingId === a.id}
-                  >
-                    {activatingId === a.id ? "Activating…" : "Activate ▸"}
-                  </Button>
-                )}
+                <div className="mt-5 flex flex-wrap gap-3">
+                  {a.status === "PENDING_VERIFICATION" && (
+                    <Button
+                      className="w-fit"
+                      onClick={() => activate(a.id)}
+                      disabled={activatingId === a.id}
+                    >
+                      {activatingId === a.id ? "Activating…" : "Activate ▸"}
+                    </Button>
+                  )}
+                  <Link href={`/builder/agents/${a.id}`} className="w-fit">
+                    <Button variant="secondary">Manage ▸</Button>
+                  </Link>
+                </div>
               </div>
             </li>
           ))}

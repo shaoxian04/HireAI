@@ -189,3 +189,47 @@ export interface DirectBookRequest {
 }
 
 export type CatalogueSort = "hot" | "rating" | "price_asc" | "price_desc" | "newest";
+
+// ── Builder storefront management ──
+
+export interface AgentProfileViewDTO {
+  tagline: string | null;
+  description: string | null;
+  sampleOutput: string | null;
+  logoUrl: string | null;
+  coverUrl: string | null;
+  galleryUrls: string[];
+  listed: boolean;
+  featured: boolean;
+}
+
+export interface UpdateProfileRequest {
+  tagline: string | null;
+  description: string | null;
+  sampleOutput: string | null;
+  isListed: boolean;
+}
+
+export interface UpdatePricingRequest {
+  price: number;
+  maxExecutionSeconds: number;
+  capabilityCategories: string[];
+}
+
+export interface BuilderReviewDTO {
+  id: string;
+  rating: number;
+  reviewText: string | null;
+  builderResponse: string | null;
+  createdAt: string;
+}
+
+export interface AgentStatsDTO {
+  volume: { total: number; completed: number; failed: number; open: number; successRate: number | null };
+  performance: { avgTurnaroundSeconds: number | null; onTimeRate: number | null };
+  earnings: { creditsInEscrow: number; potentialEarnings: number };
+  trend: { day: string; count: number }[];
+  recentTasks: { id: string; title: string; status: TaskStatus; createdAt: string }[];
+}
+
+export type MediaKind = "logo" | "cover" | "gallery";

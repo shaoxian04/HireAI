@@ -199,5 +199,145 @@ export const handlers = [
   }),
 ];
 
-export const server = setupServer(...handlers);
+// ── Builder manage-agent handlers ──
+
+/** Mutable profile state; reset between tests with resetProfileState(). */
+let profileState: {
+  tagline: string | null;
+  description: string | null;
+  sampleOutput: string | null;
+  logoUrl: string | null;
+  coverUrl: string | null;
+  galleryUrls: string[];
+  listed: boolean;
+  featured: boolean;
+} = {
+  tagline: "Fast, spec-true summaries",
+  description: null,
+  sampleOutput: null,
+  logoUrl: null,
+  coverUrl: null,
+  galleryUrls: [],
+  listed: false,
+  featured: false,
+};
+
+export function resetProfileState() {
+  profileState = {
+    tagline: "Fast, spec-true summaries",
+    description: null,
+    sampleOutput: null,
+    logoUrl: null,
+    coverUrl: null,
+    galleryUrls: [],
+    listed: false,
+    featured: false,
+  };
+}
+
+/** The single agent-DTO fixture reused across manage handlers. */
+const AGENT_DTO_A1 = {
+  id: "a-1",
+  ownerId: "u-1",
+  name: "Summariser",
+  status: "ACTIVE" as const,
+  currentVersionId: "v-1",
+  reputationScore: 0,
+  currentVersion: {
+    capabilityCategories: ["summarisation"],
+    price: 10,
+    webhookUrl: "https://agent.example.com/run",
+    maxExecutionSeconds: 60,
+    outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
+  },
+  createdAt: "2026-06-06T10:00:00Z",
+};
+
+export const manageHandlers = [
+  http.get("*/api/agents/:id/profile", () => ok(profileState)),
+
+  http.put("*/api/agents/:id/profile", async ({ request }) => {
+    const body = (await request.json()) as {
+      tagline: string | null;
+      description: string | null;
+      sampleOutput: string | null;
+      isListed: boolean;
+    };
+    profileState = {
+      ...profileState,
+      tagline: body.tagline,
+      description: body.description,
+      sampleOutput: body.sampleOutput,
+      listed: body.isListed,
+    };
+    return ok(profileState);
+  }),
+
+  // Single-fixture stub: sets logoUrl regardless of kind (comment: only one fixture needed for tests)
+  http.post("*/api/agents/:id/media", async () => {
+    profileState = { ...profileState, logoUrl: "https://cdn.test/logo.png" };
+    return ok(profileState);
+  }),
+
+  http.delete("*/api/agents/:id/media", () => {
+    profileState = { ...profileState, logoUrl: null };
+    return ok(profileState);
+  }),
+
+  http.put("*/api/agents/:id/pricing", async ({ params, request }) => {
+    const body = (await request.json()) as { price: number; maxExecutionSeconds: number; capabilityCategories: string[] };
+    return ok({
+      ...AGENT_DTO_A1,
+      id: params.id as string,
+      currentVersion: { ...AGENT_DTO_A1.currentVersion, price: body.price },
+    });
+  }),
+
+  http.get("*/api/agents/:id/stats", () =>
+    ok({
+      volume: { total: 7, completed: 6, failed: 1, open: 0, successRate: 0.857 },
+      performance: { avgTurnaroundSeconds: 42, onTimeRate: 0.83 },
+      earnings: { creditsInEscrow: 40, potentialEarnings: 60 },
+      trend: [
+        { day: "2026-06-04", count: 2 },
+        { day: "2026-06-05", count: 1 },
+        { day: "2026-06-06", count: 4 },
+      ],
+      recentTasks: [
+        { id: "t-1", title: "Summarise Q2 report", status: "RESULT_RECEIVED", createdAt: "2026-06-06T10:00:00Z" },
+        { id: "t-0", title: "Old task", status: "FAILED", createdAt: "2026-06-05T10:00:00Z" },
+      ],
+    }),
+  ),
+
+  http.get("*/api/agents/:id/reviews", () =>
+    ok([
+      {
+        id: "rev-1",
+        rating: 5,
+        reviewText: "Output matched the spec exactly.",
+        builderResponse: null,
+        createdAt: "2026-06-05T10:00:00Z",
+      },
+    ]),
+  ),
+
+  http.put("*/api/agents/:id/reviews/:rid/response", async ({ request }) => {
+    const body = (await request.json()) as { response: string };
+    return ok({
+      id: "rev-1",
+      rating: 5,
+      reviewText: "Output matched the spec exactly.",
+      builderResponse: body.response,
+      createdAt: "2026-06-05T10:00:00Z",
+    });
+  }),
+
+  // Single agent GET (owner-scoped) — used by manage page initial load
+  http.get("*/api/agents/:id", ({ params }) =>
+    ok({ ...AGENT_DTO_A1, id: params.id as string }),
+  ),
+];
+
+export const server = setupServer(...handlers, ...manageHandlers);
 export { ok, fail };
