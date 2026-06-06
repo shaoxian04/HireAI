@@ -122,6 +122,22 @@ class AgentStorefrontAppServiceTest {
     }
 
     @Test
+    void uploadMedia_unknownKind_validationErrorPortNeverCalled() {
+        UUID agentId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        byte[] bytes = new byte[512];
+
+        assertThatThrownBy(() ->
+                service.uploadMedia(agentId, ownerId, "banner", "image/png", 512, bytes))
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).resultCode())
+                        .isEqualTo(ResultCode.VALIDATION_ERROR));
+
+        verify(mediaStoragePort, never()).upload(any(), any(), any());
+        verify(profileRepository, never()).save(any());
+    }
+
+    @Test
     void uploadMedia_pdfContentType_validationErrorPortNeverCalled() {
         UUID agentId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
