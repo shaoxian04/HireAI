@@ -80,6 +80,7 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
         AgentVersionModel updated = agent.currentVersion()
                 .updateCommercials(Pricing.of(info.price()), info.maxExecutionSeconds(),
                         info.capabilityCategories());
+        // Non-atomic write-then-read; concurrent edits are last-writer-wins — acceptable for this slice.
         agentRepository.updateCurrentVersion(updated);
         log.info("Agent {} pricing updated by owner {} (price={}, maxExec={})",
                 agentId, ownerId, info.price(), info.maxExecutionSeconds());
