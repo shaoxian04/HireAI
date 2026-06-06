@@ -127,3 +127,65 @@ export interface TaskResultDTO {
   resultUrl: string | null;
   receivedAt: string;
 }
+
+// ── Catalogue (public discovery) ──
+
+export interface AgentCardDTO {
+  id: string;
+  name: string;
+  builderName: string;
+  tagline: string | null;
+  logoUrl: string | null;
+  coverUrl: string | null;
+  categories: string[];
+  price: number;
+  maxExecutionSeconds: number;
+  reputationScore: number;
+  ratingAvg: number | null;
+  ratingCount: number;
+  requestCount: number;
+  featured: boolean;
+  createdAt: string;
+}
+
+export interface CatalogueReviewDTO {
+  id: string;
+  rating: number;
+  reviewText: string | null;
+  builderResponse: string | null;
+  author: string;
+  createdAt: string;
+}
+
+export interface CatalogueStatsDTO {
+  requestCount: number;
+  completedCount: number;
+  successRate: number | null;
+  avgTurnaroundSeconds: number | null;
+}
+
+export interface AgentProfileDTO {
+  card: AgentCardDTO;
+  description: string | null;
+  sampleOutput: string | null;
+  galleryUrls: string[];
+  outputSpec: OutputSpecDTO;
+  stats: CatalogueStatsDTO;
+  reviews: CatalogueReviewDTO[];
+}
+
+export interface CategoryCountDTO {
+  category: string;
+  agentCount: number;
+}
+
+// ── Direct booking ──
+
+export interface DirectBookRequest {
+  title: string;
+  description: string;
+  budget: number;
+  agentId: string;
+}
+
+export type CatalogueSort = "hot" | "rating" | "price_asc" | "price_desc" | "newest";

@@ -30,22 +30,8 @@ function handleUnauthorized(): void {
   if (typeof window !== "undefined") window.location.assign("/login");
 }
 
-/**
- * The single HTTP chokepoint. Injects the bearer token, calls same-origin `/api${path}`, parses the
- * `WebResult<T>` envelope, returns `data` on success, and throws `ApiError{code,message,status}`
- * otherwise. A 401 clears the token and redirects to /login; a 404 surfaces as an ApiError that
- * `isPendingError` recognises.
- */
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = readToken();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(init?.headers as Record<string, string> | undefined),
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(`/api${path}`, { ...init, headers });
-
+/** Shared envelope parser used by both `api()` and `apiUpload()`. */
+async function parseEnvelope<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     handleUnauthorized();
     throw new ApiError("UNAUTHORIZED", "Session expired", 401);
@@ -63,4 +49,34 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(body.code || "UNKNOWN", body.message || res.statusText, res.status);
   }
   return body.data as T;
+}
+
+/**
+ * The single HTTP chokepoint. Injects the bearer token, calls same-origin `/api${path}`, parses the
+ * `WebResult<T>` envelope, returns `data` on success, and throws `ApiError{code,message,status}`
+ * otherwise. A 401 clears the token and redirects to /login; a 404 surfaces as an ApiError that
+ * `isPendingError` recognises.
+ */
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = readToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`/api${path}`, { ...init, headers });
+  return parseEnvelope<T>(res);
+}
+
+/**
+ * Multipart variant for file uploads: NO Content-Type header (the browser sets the
+ * multipart boundary itself); same bearer token + WebResult envelope handling.
+ */
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  const token = readToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`/api${path}`, { method: "POST", body: form, headers });
+  return parseEnvelope<T>(res);
 }

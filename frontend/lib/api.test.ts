@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError, isPendingError } from "./api";
+import { api, ApiError, apiUpload, isPendingError } from "./api";
 
 const ok = <T>(data: T) =>
   new Response(JSON.stringify({ success: true, code: "OK", message: "", data }), { status: 200 });
@@ -67,5 +67,49 @@ describe("api()", () => {
     expect(err).toBeInstanceOf(ApiError);
     expect(isPendingError(err)).toBe(true);
     expect(isPendingError(new ApiError("OTHER", "", 500))).toBe(false);
+  });
+});
+
+describe("apiUpload()", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("posts multipart without a JSON content-type and parses the envelope", async () => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      // The browser sets multipart/form-data boundary automatically; we must NOT set
+      // Content-Type ourselves — verify it is absent.
+      const headers = (init.headers ?? {}) as Record<string, string>;
+      const contentType = headers["Content-Type"] ?? headers["content-type"] ?? "";
+      if (contentType.startsWith("application/json")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ success: false, code: "BAD", message: "wrong content type", data: null }),
+            { status: 400 },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ success: true, code: "OK", message: null, data: { ok: true } }), {
+          status: 200,
+        }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    localStorage.setItem("hireai.token", "t");
+    const form = new FormData();
+    form.append("kind", "logo");
+    form.append("file", new File([new Uint8Array([1])], "x.png", { type: "image/png" }));
+
+    await expect(apiUpload("/agents/a-1/media", form)).resolves.toEqual({ ok: true });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/agents/a-1/media");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(form);
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer t");
   });
 });
