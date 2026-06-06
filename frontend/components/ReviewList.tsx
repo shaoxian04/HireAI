@@ -1,3 +1,5 @@
+"use client";
+
 import type { CatalogueReviewDTO } from "@/lib/types";
 import { RatingStars } from "./RatingStars";
 
@@ -10,6 +12,7 @@ export function ReviewList({ reviews }: { reviews: CatalogueReviewDTO[] }) {
       {reviews.map((r) => (
         <li key={r.id} className="rounded-md border border-line bg-surface-2 p-4">
           <div className="flex items-center justify-between gap-3">
+            {/* count=1 only bypasses the "no reviews" branch; the count itself is hidden. */}
             <RatingStars avg={r.rating} count={1} showCount={false} />
             <p className="font-mono text-[0.65rem] text-dim">
               {r.author} · {new Date(r.createdAt).toLocaleDateString()}

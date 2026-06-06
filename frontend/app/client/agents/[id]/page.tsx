@@ -18,6 +18,9 @@ function Storefront() {
 
   useEffect(() => {
     if (!id) return;
+    // Reset so navigating between storefronts never flashes the previous agent.
+    setProfile(null);
+    setError(null);
     api<AgentProfileDTO>(`/catalogue/agents/${id}`)
       .then(setProfile)
       .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load agent"));
