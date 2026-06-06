@@ -79,6 +79,13 @@ class AgentWriteAppServiceImplTest {
         @Override public java.util.Optional<AgentCandidate> findCandidateByVersionId(UUID agentVersionId) {
             return java.util.Optional.empty();
         }
+        @Override public java.util.Optional<UUID> findOwnerByVersionId(UUID agentVersionId) {
+            return store.values().stream()
+                    .filter(a -> a.currentVersion() != null
+                            && a.currentVersion().id().equals(agentVersionId))
+                    .map(AgentModel::ownerId)
+                    .findFirst();
+        }
     }
 
     /** In-memory fake of the AgentProfile repository. */
