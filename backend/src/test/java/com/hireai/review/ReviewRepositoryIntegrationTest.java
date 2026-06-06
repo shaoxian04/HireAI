@@ -120,4 +120,51 @@ class ReviewRepositoryIntegrationTest {
         assertThat(loaded.get().reviewText()).isEqualTo("Excellent result.");
         assertThat(loaded.get().agentId()).isEqualTo(agentId);
     }
+
+    @Test
+    void gmtCreatePreservedOnRespond() {
+        SeedResult seed = seedClientAndAgent();
+        UUID clientId = seed.clientId();
+        UUID agentId = seed.agentId();
+
+        ReviewModel review = ReviewModel.seeded(clientId, agentId, 4, "Solid work.");
+        reviewRepository.save(review);
+
+        // Capture gmt_create after the first write
+        java.sql.Timestamp gmtCreateBefore = jdbc.queryForObject(
+                "SELECT gmt_create FROM reviews WHERE id = ?",
+                java.sql.Timestamp.class, review.id());
+
+        // Builder responds — triggers a second save (upsert)
+        reviewRepository.save(review.respond("Thanks!"));
+
+        // gmt_create must be unchanged across the upsert
+        java.sql.Timestamp gmtCreateAfter = jdbc.queryForObject(
+                "SELECT gmt_create FROM reviews WHERE id = ?",
+                java.sql.Timestamp.class, review.id());
+        assertThat(gmtCreateAfter).isEqualTo(gmtCreateBefore);
+    }
+
+    @Test
+    void findPublishedExcludesUnpublished() {
+        SeedResult seed = seedClientAndAgent();
+        UUID clientId = seed.clientId();
+        UUID agentId = seed.agentId();
+
+        // Published review — visible
+        ReviewModel published = ReviewModel.seeded(clientId, agentId, 5, "Visible review.");
+        reviewRepository.save(published);
+
+        // Unpublished review — must be excluded from findPublishedByAgentId
+        ReviewModel unpublished = new ReviewModel(
+                UUID.randomUUID(), null, clientId, agentId, 3,
+                "Hidden review.", null, false, Instant.now());
+        reviewRepository.save(unpublished);
+
+        List<ReviewModel> results = reviewRepository.findPublishedByAgentId(agentId, 10);
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).reviewText()).isEqualTo("Visible review.");
+        assertThat(results.get(0).published()).isTrue();
+    }
 }

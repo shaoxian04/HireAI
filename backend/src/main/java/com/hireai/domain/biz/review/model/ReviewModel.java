@@ -8,7 +8,8 @@ import java.util.UUID;
 
 /**
  * A client's rating of an agent. In this slice reviews are SEEDED (taskId nullable) because
- * the rate-a-settled-task flow needs Modules 4/5. Builder may respond once content exists.
+ * the rate-a-settled-task flow needs Modules 4/5. Builder may set or replace a response via
+ * respond(); each call returns a new copy with the updated response.
  * Immutable; respond() returns a copy.
  */
 public final class ReviewModel {
@@ -48,7 +49,7 @@ public final class ReviewModel {
                 reviewText, null, true, Instant.now());
     }
 
-    /** Builder responds to the review. */
+    /** Builder sets or replaces their response to the review. Returns a new ReviewModel copy. */
     public ReviewModel respond(String response) {
         if (response == null || response.isBlank()) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "response must not be blank");

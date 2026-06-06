@@ -30,7 +30,7 @@ public class ReviewRepositoryImpl implements ReviewRepository {
         // Read-before-write upsert: non-atomic, acceptable here — a review has a single writer per flow.
         Instant created = jpa.findById(review.id())
                 .map(ReviewJpaEntity::getGmtCreate)
-                .orElse(review.createdAt());
+                .orElse(now);
         jpa.save(new ReviewJpaEntity(
                 review.id(), review.taskId(), review.clientId(), review.agentId(),
                 (short) review.rating(), review.reviewText(), review.builderResponse(),
