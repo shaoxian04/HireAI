@@ -39,4 +39,11 @@ public interface AgentRepository {
      * Returns empty if the version does not exist or its agent is not ACTIVE.
      */
     Optional<AgentCandidate> findCandidateByVersionId(UUID agentVersionId);
+
+    /**
+     * Owner (builder user id) of the agent that owns this version. Deliberately NO status
+     * filter — settlement must resolve the payee even if the agent was deactivated after
+     * executing the task.
+     */
+    Optional<UUID> findOwnerByVersionId(UUID agentVersionId);
 }

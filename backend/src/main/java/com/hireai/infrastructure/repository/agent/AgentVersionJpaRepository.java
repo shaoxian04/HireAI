@@ -59,6 +59,18 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionJpa
             """, nativeQuery = true)
     Optional<AgentCandidateRow> findCandidateByVersionId(@Param("versionId") UUID versionId);
 
+    /**
+     * Owner id of the agent that owns this version. No status filter — settlement must
+     * resolve the payee even if the agent was deactivated after executing the task.
+     */
+    @Query(value = """
+            SELECT a.owner_id
+            FROM agent_versions v
+            JOIN agents a ON a.id = v.agent_id
+            WHERE v.id = :versionId
+            """, nativeQuery = true)
+    Optional<UUID> findOwnerByVersionId(@Param("versionId") UUID versionId);
+
     /** Projection for the candidate query; mapped to the domain AgentCandidate in the impl. */
     interface AgentCandidateRow {
         UUID getAgentId();

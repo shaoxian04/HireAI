@@ -94,6 +94,11 @@ public class AgentRepositoryImpl implements AgentRepository {
                 .map(this::rowToCandidate);
     }
 
+    @Override
+    public Optional<UUID> findOwnerByVersionId(UUID agentVersionId) {
+        return versionJpa.findOwnerByVersionId(agentVersionId);
+    }
+
     private AgentCandidate rowToCandidate(AgentVersionJpaRepository.AgentCandidateRow row) {
         return new AgentCandidate(
                 row.getAgentId(), row.getAgentVersionId(),
