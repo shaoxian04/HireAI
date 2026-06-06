@@ -21,7 +21,9 @@ public class GlobalExceptionConfiguration {
     public ResponseEntity<WebResult<Void>> handleDomain(DomainException ex) {
         HttpStatus status = switch (ex.resultCode()) {
             case NOT_FOUND -> HttpStatus.NOT_FOUND;
-            case INSUFFICIENT_BALANCE, DOMAIN_RULE_VIOLATION, VALIDATION_ERROR -> HttpStatus.CONFLICT;
+            // Genuine state conflicts → 409. VALIDATION_ERROR is bad input, so it falls through
+            // to the default 400 Bad Request.
+            case INSUFFICIENT_BALANCE, DOMAIN_RULE_VIOLATION -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status).body(WebResult.error(ex.resultCode(), ex.getMessage()));
