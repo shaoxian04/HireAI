@@ -28,11 +28,13 @@ function Marketplace() {
 
   // Categories load once; the grid re-queries on every filter change (debounced search).
   useEffect(() => {
+    // Failure here just leaves the category bar empty — the grid still works, so swallow quietly.
     api<CategoryCountDTO[]>("/catalogue/categories").then(setCategories).catch(() => {});
   }, []);
 
   useEffect(() => {
     const t = setTimeout(() => {
+      setError(null); // a successful refetch must clear any stale error banner
       const params = new URLSearchParams({ q, category, sort });
       api<AgentCardDTO[]>(`/catalogue/agents?${params}`)
         .then(setAgents)
