@@ -86,6 +86,15 @@ class SupabaseStorageClientTest {
     }
 
     @Test
+    void uploadRejectsPercentEncodedTraversalObjectKey() {
+        // %2e%2e would survive a plain ".." check; the validator rejects any "%" in the key.
+        assertThatThrownBy(() -> client.upload("%2e%2e/etc/passwd", "image/png", new byte[]{1}))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid object key");
+        server.verify(); // no HTTP call must have been made
+    }
+
+    @Test
     void deleteByUrlIgnoresForeignProjectUrl() {
         // Marker string is present in the path but the host/base does not match our configured base.
         // No HTTP call, no exception.

@@ -84,7 +84,9 @@ public class SupabaseStorageClient implements MediaStoragePort {
     }
 
     private static void validateObjectKey(String key) {
-        if (key == null || key.isBlank() || key.contains("..") || key.startsWith("/")) {
+        // "%" rejected so percent-encoded traversal (%2e%2e) can't slip past the ".." check.
+        if (key == null || key.isBlank() || key.contains("..") || key.startsWith("/")
+                || key.contains("%")) {
             throw new IllegalArgumentException("Invalid object key: " + key);
         }
     }
