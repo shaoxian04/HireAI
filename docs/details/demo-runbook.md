@@ -40,7 +40,7 @@ mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.arguments='--spring.dat
 npm --prefix frontend run dev
 ```
 
-Flyway applies `V1`–`V5` on first backend boot (incl. the seeded demo users).
+Flyway applies `V1`–`V9` on first backend boot (incl. the seeded demo users).
 
 ## Supabase Storage (agent images)
 
@@ -79,12 +79,12 @@ The datasource is env-driven (`application.yml` reads `${DB_URL}` / `${DB_USERNA
    DB_PASSWORD=<db-password>
    ```
 3. Run the backend WITHOUT the datasource args: `mvn -f backend/pom.xml spring-boot:run`.
-   Flyway applies `V1`–`V5` into the project's `public` schema on first boot (incl. demo users).
+   Flyway applies `V1`–`V9` into the project's `public` schema on first boot (incl. demo users).
 
 Migrations are plain DDL + triggers (no extensions/roles), so they run unchanged on Supabase. To
 confirm a boot, watch the log for `Database: jdbc:postgresql://…supabase.com…` followed by Flyway's
 `Successfully applied N migrations … now at version v5`. If `flyway_schema_history` stops short of
-V5 (an interrupted earlier boot), the next boot resumes the remaining migrations.
+V5 (an interrupted earlier boot), the next boot resumes the remaining migrations. Watch for `now at version v9`.
 
 **Security note:** the money tables (`wallets`, `ledger_entries`) live in the `public` schema,
 which Supabase can expose over its Data API to the `anon`/`authenticated` roles. The Spring backend
@@ -106,6 +106,8 @@ Seed logins (from Flyway `V5`), password `DemoPass123!`:
    budget ≥ 10 (e.g. 50). Submitting freezes the budget in escrow.
 3. Watch the task detail page poll `SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED`, then render
    the agent's `COMPLETED` result. The wallet shows the budget moved into escrow.
+4. → **Accept** the result: the builder's wallet receives 85% of the budget (log in as the builder
+   to see the payout in wallet/stats), or **Reject** for a full refund to the client's wallet.
 
 ## Teardown
 

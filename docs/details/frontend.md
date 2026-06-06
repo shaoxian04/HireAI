@@ -43,7 +43,9 @@ reads `hireai.token` directly so it doesn't bounce an authenticated user before 
 - `builder/` — portfolio dashboard; `builder/agents/new` — register an agent; `builder/agents/[id]` —
   manage console (tabs: Storefront · Pricing & tags · Stats · Reviews; image uploader via `apiUpload`).
 - `client/` — **Marketplace** (search/category/sort/hot strip/agent grid); `client/tasks` — task list +
-  wallet; `client/tasks/new` — auto-route submit; `client/tasks/[id]` — polls result; `client/agents/[id]`
+  wallet (resolution badges on each task row); `client/tasks/new` — auto-route submit; `client/tasks/[id]` — polls
+  result; at `RESULT_RECEIVED` renders the `ResultReviewBar` (accept / reject with optional reason), then on
+  `RESOLVED` shows the settled summary (payout/commission/refund amounts); `client/agents/[id]`
   — agent storefront; `client/agents/[id]/book` — direct-booking form (adopts agent's `output_spec`).
 
 **`AgentDTO` is nested** — read `agent.currentVersion.{ capabilityCategories, price, webhookUrl }`, not the root.
