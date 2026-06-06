@@ -12,7 +12,9 @@ passes through — so there is **no CORS config** on the backend. Set `BACKEND_U
 
 ## The one HTTP chokepoint — `lib/api.ts`
 
-`api<T>(path, init?)` is the only place that calls `fetch`. It:
+`api<T>(path, init?)` and `apiUpload<T>(path, formData)` are the two fetch helpers. `apiUpload` sends
+a `multipart/form-data` request with the same JWT header — used by the builder image uploader.
+`api<T>` is the only place that calls `fetch` for JSON requests. It:
 - reads the JWT from `localStorage["hireai.token"]` and sets `Authorization: Bearer <jwt>`;
 - calls `` `/api${path}` `` — **`path` has no `/api` prefix** (e.g. `api('/agents')`, `api('/auth/login')`);
 - parses the `WebResult<T>` envelope `{ success, code, message, data }` and returns `data`;
@@ -38,9 +40,11 @@ reads `hireai.token` directly so it doesn't bounce an authenticated user before 
 ## Routes (`app/`)
 
 - `login/` — email + password → `useAuth().login` → redirect by role (CLIENT→`/client`, BUILDER→`/builder`).
-- `builder/` — list owned agents + **Activate** (shown only for `PENDING_VERIFICATION`); `builder/agents/new` — register an agent.
-- `client/` — wallet + top-up + task list; `client/tasks/new` — submit a task; `client/tasks/[id]` —
-  polls `GET /api/tasks/{id}` every ~2s and, once `RESULT_RECEIVED`, `GET /api/tasks/{id}/result`.
+- `builder/` — portfolio dashboard; `builder/agents/new` — register an agent; `builder/agents/[id]` —
+  manage console (tabs: Storefront · Pricing & tags · Stats · Reviews; image uploader via `apiUpload`).
+- `client/` — **Marketplace** (search/category/sort/hot strip/agent grid); `client/tasks` — task list +
+  wallet; `client/tasks/new` — auto-route submit; `client/tasks/[id]` — polls result; `client/agents/[id]`
+  — agent storefront; `client/agents/[id]/book` — direct-booking form (adopts agent's `output_spec`).
 
 **`AgentDTO` is nested** — read `agent.currentVersion.{ capabilityCategories, price, webhookUrl }`, not the root.
 
@@ -48,7 +52,7 @@ reads `hireai.token` directly so it doesn't bounce an authenticated user before 
 
 - `components/ui/` — `Button, Input, Select, Card, Field, Badge` (+ `statusColor(status)`); `Badge`
   takes a `status` prop and colours itself. `lib/outputSpecFields.tsx` is the shared output-spec sub-form.
-- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run`. Auth-dependent tests must seed
+- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~44 tests). Auth-dependent tests must seed
   **both** `hireai.token` and `hireai.auth`. `next build` and `npx tsc --noEmit` must stay clean.
 
 ## Run
@@ -59,5 +63,5 @@ check the official Next 16 docs when an API differs from what you expect.
 
 ## Pending / demo-grade
 
-Admin + public-catalogue surfaces (not built); JWT in `localStorage` (httpOnly cookie is the hardening);
+Admin surface (not built); JWT in `localStorage` (httpOnly cookie is the hardening);
 status via polling (no websockets).

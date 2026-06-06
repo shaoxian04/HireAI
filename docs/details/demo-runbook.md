@@ -42,6 +42,25 @@ npm --prefix frontend run dev
 
 Flyway applies `V1`–`V5` on first backend boot (incl. the seeded demo users).
 
+## Supabase Storage (agent images)
+
+Builder image upload (logo/cover/gallery) requires two extra env vars in `backend/.env` (**never commit**):
+
+```
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_SERVICE_KEY=<service_role key — dashboard → Settings → API → service_role>
+```
+
+One-time bucket creation (run once after the project is created):
+
+```bash
+curl -X POST "$SUPABASE_URL/storage/v1/bucket" \
+  -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" -H "Content-Type: application/json" \
+  -d '{"id":"agent-media","name":"agent-media","public":true}'
+```
+
+Image uploads will 500 until this is configured; the rest of the demo (task flow, catalogue read, etc.) is unaffected.
+
 ## Option B — Supabase (hosted Postgres) instead of local Postgres
 
 The datasource is env-driven (`application.yml` reads `${DB_URL}` / `${DB_USERNAME}` /

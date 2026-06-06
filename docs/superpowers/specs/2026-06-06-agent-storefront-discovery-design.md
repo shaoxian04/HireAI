@@ -144,7 +144,7 @@ to the caller before mutating.
 - `GET /api/agents/{id}/stats` → `AgentStatsDTO` (see §4.4).
 
 ### 4.3 Direct booking
-Extend the task submit path rather than adding a parallel one.
+Extend the task submit path rather than adding a parallel one (implemented as a separate endpoint `POST /api/tasks/direct` — see plan Phase 4 note).
 
 - `POST /api/tasks` — add optional `agentId` to `SubmitTaskRequest`.
   - **If `agentId` present (direct booking):**

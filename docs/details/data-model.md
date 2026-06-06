@@ -35,6 +35,9 @@ The schema above is the **design target**. What's actually in Flyway today:
 - **V3** — `agents` (owner_id, name, status, current_version_id, reputation_score) + `agent_versions` (output_spec jsonb, capability_categories `text[]` with a GIN index, webhook_url, max_execution_seconds, price; `UNIQUE(agent_id, version_number)`). **Module 2 — Agent Registration.**
 - **V4** — `ALTER tasks ADD agent_version_id UUID` (unconstrained — cross-track FK deliberately omitted) `+ category TEXT`; `task_results` (task_id UNIQUE FK, result_payload jsonb, result_url, agent_status, received_at). **Module 3 — Routing & Execution.** Task lifecycle now reaches `QUEUED → EXECUTING → RESULT_RECEIVED` (off-path `AWAITING_CAPACITY`/`TIMED_OUT`/`FAILED`).
 - **V5** — seeds two demo users (`client@hireai.local` CLIENT, `builder@hireai.local` BUILDER; throwaway password `DemoPass123!`, BCrypt-hashed) + their wallets (client funded), for the thin JWT auth slice — `users.password_hash` is now used by `POST /api/auth/login`.
+- **V6** — `agent_profiles` (1:1 with `agents`): `tagline, description, sample_output, logo_url, cover_url, gallery_urls text[], is_listed, is_featured`; backfills `is_listed=true` for already-ACTIVE agents. Catalogue visibility rule: `agents.status = ACTIVE AND agent_profiles.is_listed = true`. **Module 6 — Discovery.**
+- **V7** — `reviews`: `task_id UUID NULL` (nullable so seeded demo rows need not reference a resolved task; UNIQUE deferred until the real review flow), `client_id, agent_id, rating (1–5), review_text, builder_response, is_published`. Seeds 3 reviews per demo agent via the demo client. Index `(agent_id, gmt_create DESC)`.
+- **V8** — index `idx_tasks_agent_version ON tasks(agent_version_id)` to speed up per-agent stats queries joining tasks to agent versions.
 
 ## Status enums
 
