@@ -4,6 +4,8 @@ import com.hireai.application.biz.auth.AuthenticationFailedException;
 import com.hireai.controller.base.ResultCode;
 import com.hireai.controller.base.WebResult;
 import com.hireai.domain.shared.exception.DomainException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -18,6 +20,8 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
  */
 @RestControllerAdvice
 public class GlobalExceptionConfiguration {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionConfiguration.class);
 
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<WebResult<Void>> handleDomain(DomainException ex) {
@@ -62,6 +66,8 @@ public class GlobalExceptionConfiguration {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<WebResult<Void>> handleUnexpected(Exception ex) {
+        // The client gets an opaque message; the full context must land in the server log.
+        log.error("Unhandled exception while serving a request", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(WebResult.error(ResultCode.INTERNAL_ERROR, "Unexpected error"));
     }

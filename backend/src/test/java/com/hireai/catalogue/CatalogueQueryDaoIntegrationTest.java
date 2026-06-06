@@ -295,6 +295,40 @@ class CatalogueQueryDaoIntegrationTest {
     }
 
     // -----------------------------------------------------------------------
+    // Test 9: profile turnaround maps when a completed task HAS a result row
+    // (regression: AVG(EXTRACT(...)) returns BigDecimal, not Double — live 500)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void profileMapsTurnaroundWhenResultsExist() {
+        UUID agentId = seedAgent(uniqueEmail("turn"), "Turnaround Agent",
+                "ACTIVE", "general", new BigDecimal("5.00"), true, false);
+        UUID versionId = jdbc.queryForObject(
+                "SELECT current_version_id FROM agents WHERE id = ?", UUID.class, agentId);
+
+        UUID clientId = UUID.randomUUID();
+        jdbc.update("INSERT INTO users (id, email, role) VALUES (?, ?, 'CLIENT')",
+                clientId, uniqueEmail("turnclient"));
+
+        UUID taskId = UUID.randomUUID();
+        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, output_spec, " +
+                        "category, status, agent_version_id) " +
+                        "VALUES (?, ?, 'T', 'D', 10.00, '{\"format\":\"JSON\"}'::jsonb, " +
+                        "'general', 'RESULT_RECEIVED', ?)",
+                taskId, clientId, versionId);
+        jdbc.update("INSERT INTO task_results (id, task_id, result_payload, agent_status, received_at) " +
+                        "VALUES (?, ?, '{}'::jsonb, 'COMPLETED', " +
+                        "(SELECT gmt_create + INTERVAL '30 seconds' FROM tasks WHERE id = ?))",
+                UUID.randomUUID(), taskId, taskId);
+
+        Optional<AgentProfileRow> profile = catalogueQueryPort.findProfile(agentId);
+        assertThat(profile).isPresent();
+        assertThat(profile.get().completedCount()).isEqualTo(1);
+        assertThat(profile.get().avgTurnaroundSeconds()).isNotNull();
+        assertThat(profile.get().avgTurnaroundSeconds()).isCloseTo(30.0, org.assertj.core.data.Offset.offset(2.0));
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 

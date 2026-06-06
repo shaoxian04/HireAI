@@ -125,14 +125,18 @@ public class JdbcCatalogueQueryDao implements CatalogueQueryPort {
                 WHERE a.id = :agentId AND a.status = 'ACTIVE' AND p.is_listed
                 """;
         var params = new MapSqlParameterSource().addValue("agentId", agentId);
-        List<AgentProfileRow> rows = jdbc.query(sql, params, (rs, i) -> new AgentProfileRow(
-                mapCard(rs),
-                rs.getString("description"),
-                rs.getString("sample_output"),
-                stringList(rs.getArray("gallery_urls")),
-                rs.getString("output_spec_json"),
-                rs.getInt("completed_count"),
-                (Double) rs.getObject("avg_turnaround_seconds")));
+        List<AgentProfileRow> rows = jdbc.query(sql, params, (rs, i) -> {
+            // AVG(EXTRACT(EPOCH ...)) comes back as BigDecimal, not Double — convert via Number.
+            Number turnaround = (Number) rs.getObject("avg_turnaround_seconds");
+            return new AgentProfileRow(
+                    mapCard(rs),
+                    rs.getString("description"),
+                    rs.getString("sample_output"),
+                    stringList(rs.getArray("gallery_urls")),
+                    rs.getString("output_spec_json"),
+                    rs.getInt("completed_count"),
+                    turnaround == null ? null : turnaround.doubleValue());
+        });
         return rows.stream().findFirst();
     }
 
