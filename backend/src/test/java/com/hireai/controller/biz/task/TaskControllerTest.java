@@ -2,6 +2,7 @@ package com.hireai.controller.biz.task;
 
 import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
+import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.controller.base.ResultCode;
 import com.hireai.controller.config.CurrentUserProvider;
@@ -52,6 +53,7 @@ class TaskControllerTest {
     @MockBean TaskWriteAppService taskWriteAppService;
     @MockBean CurrentUserProvider currentUserProvider;
     @MockBean DirectBookingAppService directBookingAppService;
+    @MockBean TaskReviewAppService taskReviewAppService;
 
     @Test
     void returns200WithResultPayloadForOwningClient() throws Exception {
@@ -181,5 +183,92 @@ class TaskControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ---- POST /api/tasks/{id}/accept and /reject ----
+
+    private TaskModel resolvedTask(UUID clientId, boolean accepted) {
+        TaskModel t = TaskModel.submit(clientId, "title", "desc", Money.of("20.00"),
+                        new OutputSpec(OutputFormat.TEXT, null, null), "summarisation")
+                .assignAndQueue(UUID.randomUUID()).markExecuting();
+        t = t.recordResult(TaskResultModel.rehydrate(
+                UUID.randomUUID(), t.id(), "COMPLETED", "{}", null, Instant.now()));
+        return accepted ? t.accept() : t.reject("not what I asked");
+    }
+
+    @Test
+    void acceptReturnsResolvedTaskWithSettlementAmounts() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(clientId);
+        when(taskReviewAppService.accept(eq(taskId), eq(clientId))).thenReturn(taskId);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId)))
+                .thenReturn(resolvedTask(clientId, true));
+
+        mockMvc.perform(post("/api/tasks/{id}/accept", taskId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("RESOLVED"))
+                .andExpect(jsonPath("$.data.resolution").value("ACCEPTED"))
+                .andExpect(jsonPath("$.data.payoutAmount").value(17.00))
+                .andExpect(jsonPath("$.data.commissionAmount").value(3.00))
+                .andExpect(jsonPath("$.data.refundAmount").doesNotExist());
+    }
+
+    @Test
+    void rejectPassesReasonAndReturnsRefundAmount() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(clientId);
+        when(taskReviewAppService.reject(eq(taskId), eq(clientId), eq("not what I asked"))).thenReturn(taskId);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId)))
+                .thenReturn(resolvedTask(clientId, false));
+
+        mockMvc.perform(post("/api/tasks/{id}/reject", taskId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"not what I asked\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.resolution").value("REJECTED"))
+                .andExpect(jsonPath("$.data.refundAmount").value(20.00))
+                .andExpect(jsonPath("$.data.rejectionReason").value("not what I asked"));
+    }
+
+    @Test
+    void rejectWithoutBodyIsAccepted() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(clientId);
+        when(taskReviewAppService.reject(eq(taskId), eq(clientId), eq(null))).thenReturn(taskId);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId)))
+                .thenReturn(resolvedTask(clientId, false));
+
+        mockMvc.perform(post("/api/tasks/{id}/reject", taskId))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void acceptOnNonReviewableStateMapsTo409() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(clientId);
+        when(taskReviewAppService.accept(eq(taskId), eq(clientId)))
+                .thenThrow(new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                        "Illegal transition accept from RESOLVED"));
+
+        mockMvc.perform(post("/api/tasks/{id}/accept", taskId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DOMAIN_RULE_VIOLATION"));
+    }
+
+    @Test
+    void rejectReasonOver500CharsIs400() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(clientId);
+
+        mockMvc.perform(post("/api/tasks/{id}/reject", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"" + "x".repeat(501) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 }
