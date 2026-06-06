@@ -78,4 +78,14 @@ describe("CategoryBar", () => {
     const codingBtn = screen.getByRole("button", { name: /coding/ });
     expect(codingBtn.className).toContain("text-accent");
   });
+
+  it("sets aria-pressed=true on the active chip and false on others", () => {
+    render(<CategoryBar categories={cats} active="summarisation" onSelect={vi.fn()} />);
+    const activeBtn = screen.getByRole("button", { name: /summarisation/ });
+    const otherBtn = screen.getByRole("button", { name: /coding/ });
+    const allBtn = screen.getByRole("button", { name: /^all$/i });
+    expect(activeBtn).toHaveAttribute("aria-pressed", "true");
+    expect(otherBtn).toHaveAttribute("aria-pressed", "false");
+    expect(allBtn).toHaveAttribute("aria-pressed", "false");
+  });
 });

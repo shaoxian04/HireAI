@@ -15,6 +15,7 @@ export function CategoryBar({
       key={value || "all"}
       type="button"
       onClick={() => onSelect(value)}
+      aria-pressed={active === value}
       className={`shrink-0 rounded-md border px-3 py-1.5 font-mono text-[0.68rem] uppercase tracking-wider transition ${
         active === value
           ? "border-accent/60 bg-accent/15 text-accent"
@@ -26,7 +27,7 @@ export function CategoryBar({
     </button>
   );
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Browse by category">
+    <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Browse by category">
       {chip("All", "")}
       {categories.map((c) => chip(c.category, c.category, c.agentCount))}
     </div>

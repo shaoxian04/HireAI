@@ -5,7 +5,7 @@ import { RatingStars } from "./RatingStars";
 /** Marketplace unit card → links to the agent storefront. Builder-private fields never appear. */
 export function AgentCard({ agent }: { agent: AgentCardDTO }) {
   return (
-    <Link href={`/client/agents/${agent.id}`} className="block h-full">
+    <Link href={`/client/agents/${agent.id}`} className="block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-base">
       <article className="panel panel-hover hud flex h-full flex-col overflow-hidden">
         {/* cover strip */}
         <div className="relative h-20 border-b border-line bg-surface-2">
