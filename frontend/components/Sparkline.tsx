@@ -12,8 +12,11 @@ export function Sparkline({
     return <p className="font-mono text-xs text-dim">No requests in the window.</p>;
   }
   const max = Math.max(...points.map((p) => p.count), 1);
-  const step = points.length > 1 ? width / (points.length - 1) : 0;
-  const coords = points.map((p, i) => `${i * step},${height - (p.count / max) * (height - 4) - 2}`);
+  const coords = points.map((p, i) => {
+    const x = points.length > 1 ? (i / (points.length - 1)) * width : width / 2;
+    const y = height - (p.count / max) * (height - 4) - 2;
+    return { x, y, day: p.day };
+  });
   return (
     <svg
       width={width}
@@ -22,16 +25,17 @@ export function Sparkline({
       aria-label="Requests over time"
       className="overflow-visible"
     >
-      <polyline
-        points={coords.join(" ")}
-        fill="none"
-        stroke="var(--color-accent)"
-        strokeWidth="2"
-      />
-      {coords.map((c) => {
-        const [x, y] = c.split(",").map(Number);
-        return <circle key={c} cx={x} cy={y} r="2.5" fill="var(--color-accent)" />;
-      })}
+      {points.length > 1 && (
+        <polyline
+          points={coords.map((c) => `${c.x},${c.y}`).join(" ")}
+          fill="none"
+          stroke="var(--color-accent)"
+          strokeWidth="2"
+        />
+      )}
+      {coords.map((c) => (
+        <circle key={c.day} cx={c.x} cy={c.y} r="2.5" fill="var(--color-accent)" />
+      ))}
     </svg>
   );
 }

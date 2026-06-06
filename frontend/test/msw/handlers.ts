@@ -201,6 +201,7 @@ export const handlers = [
 
 // ── Builder manage-agent handlers ──
 
+// Module-level mutable fixture shared by ALL test files using this server: tests that touch the manage handlers MUST call resetProfileState() in afterEach (see manage.test.tsx).
 /** Mutable profile state; reset between tests with resetProfileState(). */
 let profileState: {
   tagline: string | null;

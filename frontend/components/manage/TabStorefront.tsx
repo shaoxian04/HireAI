@@ -87,7 +87,7 @@ export function TabStorefront({ agentId, profile, onProfileChange }: Props) {
           value={sampleOutput}
           onChange={(e) => setSampleOutput(e.target.value)}
           placeholder='{"example": "output"}'
-          className="block w-full rounded-md border border-line bg-surface-2 px-3 py-2 font-mono text-sm text-fg shadow-inner transition placeholder:text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-50 font-mono"
+          className="block w-full rounded-md border border-line bg-surface-2 px-3 py-2 font-mono text-sm text-fg shadow-inner transition placeholder:text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-50"
         />
       </Field>
 

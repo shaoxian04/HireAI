@@ -54,7 +54,7 @@ describe("manage agent console", () => {
 
     // Wait for initial load then switch to Stats tab
     await screen.findByRole("textbox", { name: /tagline/i });
-    await userEvent.click(screen.getByRole("tab", { name: /stats/i }));
+    await userEvent.click(screen.getByRole("button", { name: /stats/i }));
 
     // total volume tile
     expect(await screen.findByText("7")).toBeInTheDocument();
@@ -77,7 +77,7 @@ describe("manage agent console", () => {
 
     // Wait for initial load then switch to Reviews tab
     await screen.findByRole("textbox", { name: /tagline/i });
-    await userEvent.click(screen.getByRole("tab", { name: /reviews/i }));
+    await userEvent.click(screen.getByRole("button", { name: /reviews/i }));
 
     // Review text is visible
     expect(await screen.findByText(/output matched the spec exactly/i)).toBeInTheDocument();
@@ -98,7 +98,7 @@ describe("manage agent console", () => {
 
     // Wait for initial load then switch to Pricing tab
     await screen.findByRole("textbox", { name: /tagline/i });
-    await userEvent.click(screen.getByRole("tab", { name: /pricing/i }));
+    await userEvent.click(screen.getByRole("button", { name: /pricing/i }));
 
     // Price input shows current value (10)
     const priceInput = await screen.findByRole("spinbutton", { name: /price/i });

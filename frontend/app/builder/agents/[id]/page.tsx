@@ -92,15 +92,13 @@ function ManageAgentPage() {
 
       {/* Tab bar */}
       <div
-        role="tablist"
         className="flex gap-1 border-b border-line"
         aria-label="Agent management sections"
       >
         {TABS.map((t) => (
           <button
             key={t.id}
-            role="tab"
-            aria-selected={activeTab === t.id}
+            aria-pressed={activeTab === t.id}
             onClick={() => handleTabChange(t.id)}
             className={`px-4 pb-2 font-mono text-xs uppercase tracking-wider transition ${
               activeTab === t.id
@@ -114,7 +112,7 @@ function ManageAgentPage() {
       </div>
 
       {/* Tab panels */}
-      <div role="tabpanel">
+      <div>
         {activeTab === "storefront" && (
           <TabStorefront
             agentId={id}
