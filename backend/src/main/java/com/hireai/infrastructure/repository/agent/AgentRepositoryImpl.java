@@ -55,6 +55,18 @@ public class AgentRepositoryImpl implements AgentRepository {
     }
 
     @Override
+    public void updateCurrentVersion(AgentVersionModel version) {
+        AgentVersionJpaEntity existing = versionJpa.findById(version.id())
+                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
+                        "Agent version not found: " + version.id()));
+        versionJpa.save(new AgentVersionJpaEntity(
+                existing.getId(), existing.getAgentId(), existing.getVersionNumber(),
+                outputSpecJsonMapper.toJson(version.outputSpec()),
+                version.capabilityCategories(), version.webhookUrl(),
+                version.maxExecutionSeconds(), version.pricing().price(), existing.getGmtCreate()));
+    }
+
+    @Override
     public Optional<AgentModel> findById(UUID agentId) {
         return agentJpa.findById(agentId).map(this::toModel);
     }

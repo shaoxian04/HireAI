@@ -11,11 +11,14 @@ import com.hireai.controller.biz.agent.dto.AgentProfileViewDTO;
 import com.hireai.controller.biz.agent.dto.RegisterAgentRequest;
 import com.hireai.controller.biz.agent.dto.RespondReviewRequest;
 import com.hireai.controller.biz.agent.dto.ReviewDTO;
+import com.hireai.controller.biz.agent.dto.UpdatePricingRequest;
 import com.hireai.controller.biz.agent.dto.UpdateProfileRequest;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.base.ResultCode;
 import com.hireai.domain.biz.agent.info.AgentRegisterInfo;
+import com.hireai.domain.biz.agent.info.PricingUpdateInfo;
 import com.hireai.domain.biz.agent.info.ProfileUpdateInfo;
+import com.hireai.domain.biz.agent.model.AgentModel;
 import com.hireai.domain.biz.agent.repository.AgentQuery;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.shared.exception.DomainException;
@@ -83,6 +86,16 @@ public class AgentController extends BaseController {
         writeAppService.activate(agentId, ownerId);
         AgentDTO dto = AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId));
         return ok(dto);
+    }
+
+    @PutMapping("/{agentId}/pricing")
+    public WebResult<AgentDTO> updatePricing(@PathVariable("agentId") UUID agentId,
+                                             @Valid @RequestBody UpdatePricingRequest request) {
+        UUID ownerId = currentUser.currentUserId();
+        AgentModel updated = writeAppService.updatePricing(agentId, ownerId,
+                new PricingUpdateInfo(request.price(), request.maxExecutionSeconds(),
+                        request.capabilityCategories()));
+        return ok(AgentModel2DTOConverter.toDTO(updated));
     }
 
     @GetMapping("/{agentId}")

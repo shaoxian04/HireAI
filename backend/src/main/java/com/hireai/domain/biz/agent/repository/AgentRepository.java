@@ -2,6 +2,7 @@ package com.hireai.domain.biz.agent.repository;
 
 import com.hireai.domain.biz.agent.info.AgentCandidate;
 import com.hireai.domain.biz.agent.model.AgentModel;
+import com.hireai.domain.biz.agent.model.AgentVersionModel;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -18,6 +19,14 @@ import java.util.UUID;
 public interface AgentRepository {
 
     AgentModel save(AgentModel agent);
+
+    /**
+     * Overwrites the persisted agent-version row identified by {@code version.id()}.
+     * Used for in-place commercial updates (price / maxExecutionSeconds / categories).
+     * Throws {@code DomainException(NOT_FOUND)} if the row does not already exist —
+     * updating a version that was never persisted is a programming error.
+     */
+    void updateCurrentVersion(AgentVersionModel version);
 
     Optional<AgentModel> findById(UUID agentId);
 

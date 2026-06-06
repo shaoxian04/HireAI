@@ -6,8 +6,14 @@ import com.hireai.application.biz.agent.AgentWriteAppService;
 import com.hireai.controller.base.ResultCode;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
+import com.hireai.domain.biz.agent.enums.AgentStatus;
+import com.hireai.domain.biz.agent.model.AgentModel;
 import com.hireai.domain.biz.agent.model.AgentProfileModel;
+import com.hireai.domain.biz.agent.model.AgentVersionModel;
+import com.hireai.domain.biz.agent.model.Pricing;
 import com.hireai.domain.biz.review.model.ReviewModel;
+import com.hireai.domain.biz.task.enums.OutputFormat;
+import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.shared.exception.DomainException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +26,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -162,6 +169,75 @@ class AgentControllerStorefrontTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"response": "   "}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ---- PUT /{agentId}/pricing tests ----
+
+    private AgentModel updatedPricingModel(BigDecimal price, int maxExec, List<String> categories) {
+        AgentVersionModel version = new AgentVersionModel(
+                UUID.randomUUID(), AGENT_ID, 1,
+                new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
+                categories, "https://agent.example.com/hook", maxExec,
+                Pricing.of(price), Instant.now());
+        return new AgentModel(AGENT_ID, OWNER_ID, "Test Agent",
+                AgentStatus.ACTIVE, version.id(), new BigDecimal("50.00"), version, Instant.now());
+    }
+
+    @Test
+    void putPricing_happyPath_returns200WithUpdatedPrice() throws Exception {
+        AgentModel updated = updatedPricingModel(new BigDecimal("99.50"), 120, List.of("translation"));
+        when(currentUserProvider.currentUserId()).thenReturn(OWNER_ID);
+        when(writeAppService.updatePricing(eq(AGENT_ID), eq(OWNER_ID), any()))
+                .thenReturn(updated);
+
+        mockMvc.perform(put("/api/agents/{id}/pricing", AGENT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "price": 99.50,
+                                  "maxExecutionSeconds": 120,
+                                  "capabilityCategories": ["translation"]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.currentVersion.price").value(99.50));
+    }
+
+    @Test
+    void putPricing_foreignOwner_returns404() throws Exception {
+        UUID foreignId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(foreignId);
+        when(writeAppService.updatePricing(eq(AGENT_ID), eq(foreignId), any()))
+                .thenThrow(new DomainException(ResultCode.NOT_FOUND, "Agent not found: " + AGENT_ID));
+
+        mockMvc.perform(put("/api/agents/{id}/pricing", AGENT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "price": 10.00,
+                                  "maxExecutionSeconds": 60,
+                                  "capabilityCategories": ["summarisation"]
+                                }
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
+
+    @Test
+    void putPricing_emptyCategories_returns400() throws Exception {
+        when(currentUserProvider.currentUserId()).thenReturn(OWNER_ID);
+
+        mockMvc.perform(put("/api/agents/{id}/pricing", AGENT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "price": 10.00,
+                                  "maxExecutionSeconds": 60,
+                                  "capabilityCategories": []
+                                }
                                 """))
                 .andExpect(status().isBadRequest());
     }
