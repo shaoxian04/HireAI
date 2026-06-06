@@ -1,5 +1,6 @@
 package com.hireai.task;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hireai.application.biz.agent.AgentWriteAppService;
 import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.wallet.WalletReadAppService;
@@ -34,6 +35,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -85,6 +88,7 @@ class DirectBookingIntegrationTest {
     @Autowired WalletWriteAppService walletWriteAppService;
     @Autowired WalletReadAppService walletReadAppService;
     @Autowired JdbcTemplate jdbc;
+    @Autowired ObjectMapper objectMapper;
 
     private UUID newClient() {
         UUID id = UUID.randomUUID();
@@ -123,7 +127,7 @@ class DirectBookingIntegrationTest {
     }
 
     @Test
-    void happyPathTaskQueuedWithAgentSpecAndWalletDebited() {
+    void happyPathTaskQueuedWithAgentSpecAndWalletDebited() throws Exception {
         UUID client = newClient();
         walletWriteAppService.topUp(client, Money.of("100.00"), "seed");
 
@@ -147,10 +151,13 @@ class DirectBookingIntegrationTest {
                 "SELECT agent_version_id FROM tasks WHERE id = ?", UUID.class, taskId);
         assertThat(assignedVersion).isEqualTo(agentVersionId);
 
-        // outputSpec in the task must match the agent's spec (Invariant #4)
-        String outputSpecJson = jdbc.queryForObject(
-                "SELECT output_spec FROM tasks WHERE id = ?", String.class, taskId);
-        assertThat(outputSpecJson).contains("JSON");
+        // outputSpec in the task must equal the agent version's spec (Invariant #4).
+        // Use Postgres JSONB semantic equality to avoid whitespace/key-order sensitivity.
+        Boolean outputSpecMatches = jdbc.queryForObject(
+                "SELECT (SELECT output_spec FROM tasks WHERE id = ?) = " +
+                "(SELECT output_spec FROM agent_versions WHERE id = ?)",
+                Boolean.class, taskId, agentVersionId);
+        assertThat(outputSpecMatches).isTrue();
 
         // Wallet: available 80.00, escrow 20.00
         assertThat(walletReadAppService.getByUserId(client).available()).isEqualTo(Money.of("80.00"));
@@ -162,7 +169,14 @@ class DirectBookingIntegrationTest {
         DispatchMessage dispatched = captor.getValue();
         assertThat(dispatched.agentVersionId()).isEqualTo(agentVersionId);
         assertThat(dispatched.taskId()).isEqualTo(taskId);
-        assertThat(dispatched.payload().outputSpecJson()).isNotBlank();
+        // Dispatch payload's outputSpecJson must semantically equal the agent's stored spec.
+        String agentOutputSpec = jdbc.queryForObject(
+                "SELECT output_spec::text FROM agent_versions WHERE id = ?",
+                String.class, agentVersionId);
+        assertEquals(
+                objectMapper.readTree(agentOutputSpec),
+                objectMapper.readTree(dispatched.payload().outputSpecJson()),
+                "dispatch payload outputSpecJson must be semantically equal to agent version's output_spec");
     }
 
     @Test
