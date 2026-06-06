@@ -46,5 +46,9 @@ Thumbs.db
 *.log
 /tmp/
 
+# Local tooling artifacts
+.superpowers/
+cloudflared.exe
+
 # Maven build output
 backend/target/
