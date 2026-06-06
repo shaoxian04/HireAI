@@ -82,6 +82,28 @@ export const handlers = [
     }),
   ),
 
+  http.get("*/api/wallet", () =>
+    ok({ walletId: "w-1", availableBalance: 950, escrowBalance: 50 }),
+  ),
+  http.post("*/api/wallet/topup", async ({ request }) => {
+    const body = (await request.json()) as { amount: number };
+    return ok({ walletId: "w-1", availableBalance: 950 + body.amount, escrowBalance: 50 });
+  }),
+  http.get("*/api/tasks", () =>
+    ok([
+      {
+        id: "t-1",
+        clientId: "u-1",
+        title: "Summarise Q2 report",
+        description: "d",
+        budget: 30,
+        status: "EXECUTING",
+        outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
+        createdAt: "2026-06-06T10:00:00Z",
+      },
+    ]),
+  ),
+
   http.post("*/api/tasks", async ({ request }) => {
     const body = (await request.json()) as { title: string; budget: number };
     return ok({

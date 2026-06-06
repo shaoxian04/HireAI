@@ -122,8 +122,8 @@ function TaskDetail() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <Link href="/client" className="font-mono text-xs text-dim transition hover:text-accent">
-        ← console
+      <Link href="/client/tasks" className="font-mono text-xs text-dim transition hover:text-accent">
+        ← my tasks
       </Link>
 
       <Card className="space-y-5">

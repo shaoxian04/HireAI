@@ -1,205 +1,132 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
-import { StatusTrack } from "@/components/StatusTrack";
-import type { TaskDTO, TopupRequest, WalletDTO } from "@/lib/types";
-import { Badge, Button, Input } from "@/components/ui";
+import { AgentCard } from "@/components/AgentCard";
+import { CategoryBar } from "@/components/CategoryBar";
+import { Button, Input } from "@/components/ui";
+import type { AgentCardDTO, CatalogueSort, CategoryCountDTO } from "@/lib/types";
 
-function ClientDashboard() {
-  const [wallet, setWallet] = useState<WalletDTO | null>(null);
-  const [tasks, setTasks] = useState<TaskDTO[] | null>(null);
-  const [topupAmount, setTopupAmount] = useState(50);
+const SORTS: { value: CatalogueSort; label: string }[] = [
+  { value: "hot", label: "🔥 Hot" },
+  { value: "rating", label: "Top rated" },
+  { value: "price_asc", label: "Price ↑" },
+  { value: "price_desc", label: "Price ↓" },
+  { value: "newest", label: "Newest" },
+];
+
+function Marketplace() {
+  const [agents, setAgents] = useState<AgentCardDTO[] | null>(null);
+  const [categories, setCategories] = useState<CategoryCountDTO[]>([]);
+  const [q, setQ] = useState("");
+  const [category, setCategory] = useState("");
+  const [sort, setSort] = useState<CatalogueSort>("hot");
   const [error, setError] = useState<string | null>(null);
-  const [toppingUp, setToppingUp] = useState(false);
 
+  // Categories load once; the grid re-queries on every filter change (debounced search).
   useEffect(() => {
-    function showError(e: unknown) {
-      setError(e instanceof ApiError ? e.message : "Failed to load");
-    }
-    api<WalletDTO>("/wallet").then(setWallet).catch(showError);
-    api<TaskDTO[]>("/tasks").then(setTasks).catch(showError);
+    api<CategoryCountDTO[]>("/catalogue/categories").then(setCategories).catch(() => {});
   }, []);
 
-  async function topup(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setToppingUp(true);
-    try {
-      const body: TopupRequest = { amount: topupAmount };
-      const updated = await api<WalletDTO>("/wallet/topup", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      setWallet(updated);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Top-up failed");
-    } finally {
-      setToppingUp(false);
-    }
-  }
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const params = new URLSearchParams({ q, category, sort });
+      api<AgentCardDTO[]>(`/catalogue/agents?${params}`)
+        .then(setAgents)
+        .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load agents"));
+    }, q ? 250 : 0);
+    return () => clearTimeout(t);
+  }, [q, category, sort]);
 
-  const total = wallet ? wallet.availableBalance + wallet.escrowBalance : 0;
-  const availablePct = total > 0 ? (wallet!.availableBalance / total) * 100 : 0;
+  const featured = useMemo(() => (agents ?? []).filter((a) => a.featured), [agents]);
 
   return (
-    <div className="space-y-10">
-      <header>
-        <p className="eyebrow flex items-center gap-2">
-          <span className="inline-block h-px w-6 bg-accent" />
-          Client console
-        </p>
-        <h1 className="mt-3 text-3xl font-extrabold tracking-tight">Treasury &amp; tasks</h1>
-        <p className="mt-2 text-sm text-muted">
-          Credits fund tasks; submitting one freezes its budget in escrow until the work is accepted.
-        </p>
+    <div className="space-y-8">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="eyebrow flex items-center gap-2">
+            <span className="inline-block h-px w-6 bg-accent" />
+            Marketplace
+          </p>
+          <h1 className="mt-3 text-3xl font-extrabold tracking-tight">Hire an agent</h1>
+          <p className="mt-2 text-sm text-muted">
+            Browse verified agents, inspect their output contract, and book directly — escrow
+            protects every credit.
+          </p>
+        </div>
+        <Link href="/client/tasks/new">
+          <Button variant="secondary">+ Submit open task</Button>
+        </Link>
       </header>
 
+      {/* search + sort */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-64 flex-1">
+          <Input
+            placeholder="Search agents or builders…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            aria-label="Search agents or builders"
+          />
+        </div>
+        <div className="flex gap-1.5">
+          {SORTS.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              aria-pressed={sort === s.value}
+              onClick={() => setSort(s.value)}
+              className={`rounded-md border px-2.5 py-1.5 font-mono text-[0.65rem] uppercase tracking-wider transition ${
+                sort === s.value
+                  ? "border-accent/60 bg-accent/15 text-accent"
+                  : "border-line bg-surface-2 text-muted hover:text-fg"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <CategoryBar categories={categories} active={category} onSelect={setCategory} />
+
       {error && (
-        <p
-          role="alert"
-          className="rounded-md border border-red/30 bg-red/10 px-3 py-2 font-mono text-xs text-red"
-        >
+        <p role="alert" className="rounded-md border border-red/30 bg-red/10 px-3 py-2 font-mono text-xs text-red">
           {error}
         </p>
       )}
 
-      {/* ── balance instrument ───────────────────────────────────────── */}
-      <section className="panel hud p-6">
-        <div className="flex items-center justify-between border-b border-line pb-3">
-          <span className="eyebrow">Wallet</span>
-          <span className="font-mono text-[0.65rem] uppercase tracking-wider text-dim">
-            balance · credits
-          </span>
-        </div>
-
-        {wallet === null ? (
-          <p className="py-6 font-mono text-sm text-dim">Loading wallet…</p>
-        ) : (
-          <>
-            <div className="mt-6 flex flex-wrap items-end justify-between gap-6">
-              <div className="flex flex-wrap gap-12">
-                <div>
-                  <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted">
-                    Available
-                  </p>
-                  <p className="tabular mt-1 text-4xl font-extrabold text-accent">
-                    {wallet.availableBalance}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted">
-                    In escrow
-                  </p>
-                  <p className="tabular mt-1 text-4xl font-extrabold text-amber">
-                    {wallet.escrowBalance}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted">
-                    Total
-                  </p>
-                  <p className="tabular mt-1 text-4xl font-extrabold text-fg">{total}</p>
-                </div>
-              </div>
-
-              <form onSubmit={topup} className="flex items-end gap-2">
-                <div>
-                  <label
-                    htmlFor="topup"
-                    className="mb-1.5 block font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted"
-                  >
-                    Top up
-                  </label>
-                  <Input
-                    id="topup"
-                    type="number"
-                    min={1}
-                    value={topupAmount}
-                    aria-label="Top-up amount"
-                    onChange={(e) => setTopupAmount(Number(e.target.value))}
-                    className="w-28"
-                  />
-                </div>
-                <Button type="submit" disabled={toppingUp}>
-                  {toppingUp ? "…" : "Add"}
-                </Button>
-              </form>
-            </div>
-
-            {/* available / escrow ratio bar */}
-            <div className="mt-6">
-              <div className="flex h-2 overflow-hidden rounded-full bg-surface-2">
-                <div className="bg-accent" style={{ width: `${availablePct}%` }} />
-                <div className="bg-amber" style={{ width: `${100 - availablePct}%` }} />
-              </div>
-              <div className="mt-2 flex justify-between font-mono text-[0.6rem] uppercase tracking-wider text-dim">
-                <span>available</span>
-                <span>escrow</span>
-              </div>
-            </div>
-          </>
-        )}
-      </section>
-
-      {/* ── tasks ────────────────────────────────────────────────────── */}
-      <section className="space-y-4">
-        <header className="flex items-end justify-between">
-          <div>
-            <h2 className="text-xl font-extrabold tracking-tight">Tasks</h2>
-            <p className="mt-1 font-mono text-xs text-dim">
-              {tasks ? `${tasks.length} total` : "…"}
-            </p>
-          </div>
-          <Link href="/client/tasks/new">
-            <Button>+ Submit task</Button>
-          </Link>
-        </header>
-
-        {tasks === null ? (
-          <p className="font-mono text-sm text-dim">Loading tasks…</p>
-        ) : tasks.length === 0 ? (
-          <div className="panel p-10 text-center">
-            <p className="font-mono text-sm text-muted">No tasks yet.</p>
-            <p className="mt-1 font-mono text-xs text-dim">
-              Submit one and watch it travel the pipeline.
-            </p>
-          </div>
-        ) : (
-          <ul className="overflow-hidden rounded-xl border border-line">
-            {tasks.map((t, i) => (
-              <li key={t.id}>
-                <Link
-                  href={`/client/tasks/${t.id}`}
-                  className={`group flex flex-wrap items-center justify-between gap-4 bg-surface px-5 py-4 transition hover:bg-surface-2 ${
-                    i > 0 ? "border-t border-line" : ""
-                  }`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-3">
-                      <span className="truncate font-medium text-fg group-hover:text-accent">
-                        {t.title}
-                      </span>
-                      <Badge status={t.status}>{t.status}</Badge>
-                    </div>
-                    <p className="mt-1 font-mono text-xs text-dim">
-                      <span className="tabular text-muted">{t.budget}</span> cr · #
-                      {t.id.slice(0, 6)}
-                    </p>
-                  </div>
-                  <div className="hidden w-64 shrink-0 sm:block">
-                    <StatusTrack status={t.status} />
-                  </div>
-                  <span className="font-mono text-muted transition group-hover:translate-x-0.5 group-hover:text-accent">
-                    →
-                  </span>
-                </Link>
-              </li>
+      {/* hot strip (only on unfiltered hot view) */}
+      {sort === "hot" && !q && !category && featured.length > 0 && (
+        <section aria-label="Hot agents">
+          <p className="eyebrow mb-3">🔥 Hot right now</p>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {featured.map((a) => (
+              <AgentCard key={a.id} agent={a} />
             ))}
-          </ul>
+          </div>
+        </section>
+      )}
+
+      {/* grid */}
+      <section aria-label="All agents">
+        <p className="eyebrow mb-3">All agents</p>
+        {agents === null ? (
+          <p className="font-mono text-sm text-dim">Scanning the registry…</p>
+        ) : agents.length === 0 ? (
+          <div className="panel p-10 text-center">
+            <p className="font-mono text-sm text-muted">No agents match.</p>
+            <p className="mt-1 font-mono text-xs text-dim">Try a different search or category.</p>
+          </div>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {agents.map((a) => (
+              <AgentCard key={a.id} agent={a} />
+            ))}
+          </div>
         )}
       </section>
     </div>
@@ -210,7 +137,7 @@ export default function Page() {
   return (
     <AppShell>
       <RoleGuard role="CLIENT">
-        <ClientDashboard />
+        <Marketplace />
       </RoleGuard>
     </AppShell>
   );
