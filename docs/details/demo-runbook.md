@@ -14,6 +14,9 @@ browser (submit → route → dispatch → execute → result). Verified live on
 | Backend (Spring Boot) | 8080 | `mvn spring-boot:run` against the local DB/broker |
 | Frontend (Next.js) | 3000 | `npm run dev` (proxies `/api/*` → `:8080`) |
 
+_Postgres can instead be a hosted Supabase project — see **Option B** below; only the DB moves,
+RabbitMQ still runs locally._
+
 ## Steps
 
 ```bash
@@ -38,6 +41,39 @@ npm --prefix frontend run dev
 ```
 
 Flyway applies `V1`–`V5` on first backend boot (incl. the seeded demo users).
+
+## Option B — Supabase (hosted Postgres) instead of local Postgres
+
+The datasource is env-driven (`application.yml` reads `${DB_URL}` / `${DB_USERNAME}` /
+`${DB_PASSWORD}`), so the backend can point at a Supabase project instead of the local container.
+**Only Postgres moves — RabbitMQ still runs locally** (step 1's `hireai-rabbit`). Skip the
+`hireai-pg` container and the datasource args on `mvn`.
+
+1. Supabase dashboard → **Connect** → **Session pooler**. Use the **session pooler (port 5432)**,
+   NOT the transaction pooler (6543) — Flyway's advisory locks + DDL transactions break under
+   transaction pooling. Keep `?sslmode=require`. Username is `postgres.<project-ref>`.
+2. Put the values in a git-ignored `backend/.env` (loaded via `spring.config.import` in
+   `application.yml`), or export them as `$env:DB_URL` etc. before running mvn:
+   ```
+   DB_URL=jdbc:postgresql://aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require
+   DB_USERNAME=postgres.<project-ref>
+   DB_PASSWORD=<db-password>
+   ```
+3. Run the backend WITHOUT the datasource args: `mvn -f backend/pom.xml spring-boot:run`.
+   Flyway applies `V1`–`V5` into the project's `public` schema on first boot (incl. demo users).
+
+Migrations are plain DDL + triggers (no extensions/roles), so they run unchanged on Supabase. To
+confirm a boot, watch the log for `Database: jdbc:postgresql://…supabase.com…` followed by Flyway's
+`Successfully applied N migrations … now at version v5`. If `flyway_schema_history` stops short of
+V5 (an interrupted earlier boot), the next boot resumes the remaining migrations.
+
+**Security note:** the money tables (`wallets`, `ledger_entries`) live in the `public` schema,
+which Supabase can expose over its Data API to the `anon`/`authenticated` roles. The Spring backend
+connects as the privileged `postgres` role (bypasses RLS) and never uses the Data API — so either
+**disable the project's Data API** or enable RLS (deny-all is fine) on the public tables.
+
+**Persistence:** unlike the throwaway Docker DB, Supabase data persists across restarts; demo and
+seed rows accumulate there.
 
 ## Demo script (in the browser)
 
