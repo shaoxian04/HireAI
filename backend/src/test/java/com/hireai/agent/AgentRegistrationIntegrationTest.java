@@ -6,6 +6,7 @@ import com.hireai.domain.biz.agent.enums.AgentStatus;
 import com.hireai.domain.biz.agent.info.AgentCandidate;
 import com.hireai.domain.biz.agent.info.AgentRegisterInfo;
 import com.hireai.domain.biz.agent.model.AgentModel;
+import com.hireai.domain.biz.agent.repository.AgentProfileRepository;
 import com.hireai.domain.biz.agent.repository.AgentQuery;
 import com.hireai.domain.biz.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
@@ -66,6 +67,7 @@ class AgentRegistrationIntegrationTest {
     @Autowired AgentWriteAppService agentWriteAppService;
     @Autowired AgentReadAppService agentReadAppService;
     @Autowired AgentRepository agentRepository;
+    @Autowired AgentProfileRepository agentProfileRepository;
     @Autowired JdbcTemplate jdbc;
 
     private UUID newOwner() {
@@ -91,6 +93,7 @@ class AgentRegistrationIntegrationTest {
         assertThat(agent.currentVersion().versionNumber()).isEqualTo(1);
         assertThat(agent.currentVersion().capabilityCategories()).containsExactly("summarisation");
         assertThat(agent.currentVersion().outputSpec().format()).isEqualTo(OutputFormat.JSON);
+        assertThat(agentProfileRepository.findByAgentId(agentId)).isPresent();
     }
 
     @Test

@@ -7,6 +7,8 @@ import com.hireai.domain.biz.agent.event.AgentRegisteredDomainEvent;
 import com.hireai.domain.biz.agent.info.AgentCandidate;
 import com.hireai.domain.biz.agent.info.AgentRegisterInfo;
 import com.hireai.domain.biz.agent.model.AgentModel;
+import com.hireai.domain.biz.agent.model.AgentProfileModel;
+import com.hireai.domain.biz.agent.repository.AgentProfileRepository;
 import com.hireai.domain.biz.agent.repository.AgentQuery;
 import com.hireai.domain.biz.agent.repository.AgentRepository;
 import com.hireai.domain.biz.agent.service.impl.AgentActivateDomainServiceImpl;
@@ -45,6 +47,19 @@ class AgentWriteAppServiceImplTest {
         }
     }
 
+    /** In-memory fake of the AgentProfile repository. */
+    static class FakeAgentProfileRepository implements AgentProfileRepository {
+        final Map<UUID, AgentProfileModel> store = new HashMap<>();
+
+        @Override public AgentProfileModel save(AgentProfileModel profile) {
+            store.put(profile.agentId(), profile);
+            return profile;
+        }
+        @Override public Optional<AgentProfileModel> findByAgentId(UUID agentId) {
+            return Optional.ofNullable(store.get(agentId));
+        }
+    }
+
     /** Recording event publisher. */
     static class RecordingPublisher implements ApplicationEventPublisher {
         final List<Object> events = new ArrayList<>();
@@ -53,9 +68,10 @@ class AgentWriteAppServiceImplTest {
     }
 
     private final FakeAgentRepository repository = new FakeAgentRepository();
+    private final FakeAgentProfileRepository profileRepository = new FakeAgentProfileRepository();
     private final RecordingPublisher publisher = new RecordingPublisher();
     private final AgentWriteAppService service = new AgentWriteAppServiceImpl(
-            repository, new AgentRegisterDomainServiceImpl(),
+            repository, profileRepository, new AgentRegisterDomainServiceImpl(),
             new AgentActivateDomainServiceImpl(), publisher);
 
     private AgentRegisterInfo info(UUID ownerId) {
