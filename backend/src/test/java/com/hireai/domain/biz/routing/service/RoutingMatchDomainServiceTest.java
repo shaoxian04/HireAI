@@ -17,7 +17,8 @@ class RoutingMatchDomainServiceTest {
     private final RoutingMatchDomainService service = new RoutingMatchDomainServiceImpl();
 
     private TaskRoutingView task(String category, String budget) {
-        return new TaskRoutingView(UUID.randomUUID(), category, new BigDecimal(budget), "SUBMITTED");
+        return new TaskRoutingView(UUID.randomUUID(), category, new BigDecimal(budget), "SUBMITTED",
+                "{\"format\":\"JSON\"}");
     }
 
     private AgentCandidate candidate(UUID versionId, List<String> categories, String price, String reputation) {

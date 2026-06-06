@@ -1,4 +1,4 @@
-package com.hireai.application.biz.routing;
+package com.hireai.routing;
 
 import com.hireai.application.biz.routing.impl.RoutingAppServiceImpl;
 import com.hireai.application.biz.task.TaskReadAppService;
@@ -10,7 +10,6 @@ import com.hireai.domain.biz.routing.info.DispatchMessage;
 import com.hireai.domain.biz.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import java.math.BigDecimal;
@@ -20,14 +19,17 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class RoutingAppServiceImplTest {
+/**
+ * Unit tests for the dispatchDirect path of RoutingAppServiceImpl. Plain Mockito — no
+ * Spring context, no Docker required.
+ */
+class RoutingAppServiceDirectDispatchTest {
 
     private final TaskReadAppService taskReadAppService = mock(TaskReadAppService.class);
     private final TaskWriteAppService taskWriteAppService = mock(TaskWriteAppService.class);
@@ -39,16 +41,13 @@ class RoutingAppServiceImplTest {
             taskReadAppService, taskWriteAppService, agentRepository,
             routingMatchDomainService, taskDispatchPublisher);
 
-    // The task's adopted output spec snapshot (Invariant #4). In unit tests the view carries
-    // this directly; candidates supply only webhookUrl/version identity.
-    private static final String TASK_OUTPUT_SPEC = "{\"format\":\"TEXT\",\"schema\":\"task-snap\"}";
+    private static final String TASK_OUTPUT_SPEC = "{\"format\":\"JSON\",\"schema\":\"task-snap\"}";
+    private static final String CANDIDATE_OUTPUT_SPEC = "{\"format\":\"TEXT\",\"schema\":\"agent-live\"}";
 
     private TaskRoutingView view(UUID taskId) {
         return new TaskRoutingView(taskId, "summarisation", new BigDecimal("30.00"), "SUBMITTED",
                 TASK_OUTPUT_SPEC);
     }
-
-    private static final String CANDIDATE_OUTPUT_SPEC = "{\"format\":\"JSON\"}";
 
     private AgentCandidate candidate(UUID versionId) {
         return new AgentCandidate(
@@ -57,17 +56,19 @@ class RoutingAppServiceImplTest {
                 CANDIDATE_OUTPUT_SPEC);
     }
 
+    /**
+     * Happy path: findCandidateByVersionId returns the candidate → assignAndQueue called BEFORE
+     * publish (ordering contract), and the payload carries the task's output spec (Invariant #4).
+     */
     @Test
-    void onMatchAssignsAndQueuesThenPublishesInThatOrder() {
+    void happyPathAssignsAndQueuesThenPublishesInThatOrder() {
         UUID taskId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
         AgentCandidate candidate = candidate(versionId);
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00")))
-                .thenReturn(List.of(candidate));
-        when(routingMatchDomainService.selectAgentVersion(any(), any())).thenReturn(Optional.of(versionId));
+        when(agentRepository.findCandidateByVersionId(versionId)).thenReturn(Optional.of(candidate));
 
-        service.route(taskId);
+        service.dispatchDirect(taskId, versionId);
 
         InOrder inOrder = inOrder(taskWriteAppService, taskDispatchPublisher);
         inOrder.verify(taskWriteAppService).assignAndQueue(taskId, versionId);
@@ -75,59 +76,47 @@ class RoutingAppServiceImplTest {
         verify(taskWriteAppService, never()).markAwaitingCapacity(any());
     }
 
+    /**
+     * Happy path: dispatch payload carries the TASK's output spec snapshot, not the candidate's
+     * live spec (Hard Invariant #4 — the binding contract is the task's adopted copy).
+     */
     @Test
-    void onMatchPublishesDispatchMessageWithTaskAndVersionAndWebhook() {
+    void happyPathPayloadCarriesTaskOutputSpec() {
         UUID taskId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
         AgentCandidate candidate = candidate(versionId);
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates(eq("summarisation"), any())).thenReturn(List.of(candidate));
-        when(routingMatchDomainService.selectAgentVersion(any(), any())).thenReturn(Optional.of(versionId));
+        when(agentRepository.findCandidateByVersionId(versionId)).thenReturn(Optional.of(candidate));
 
-        service.route(taskId);
+        service.dispatchDirect(taskId, versionId);
 
-        ArgumentCaptor<DispatchMessage> captor = ArgumentCaptor.forClass(DispatchMessage.class);
+        org.mockito.ArgumentCaptor<DispatchMessage> captor =
+                org.mockito.ArgumentCaptor.forClass(DispatchMessage.class);
         verify(taskDispatchPublisher).publish(captor.capture());
-        DispatchMessage message = captor.getValue();
-        assertThat(message.taskId()).isEqualTo(taskId);
-        assertThat(message.agentVersionId()).isEqualTo(versionId);
-        assertThat(message.webhookUrl()).isEqualTo("https://agent.example/hook");
-        assertThat(message.correlationId()).isNotBlank();
-        assertThat(message.payload().category()).isEqualTo("summarisation");
-    }
+        DispatchMessage msg = captor.getValue();
 
-    @Test
-    void onMatchPublishesDispatchPayloadCarryingTaskOutputSpec() {
-        // Invariant #4: the task's adopted snapshot (view.outputSpecJson) is the binding contract,
-        // NOT the candidate's live spec. The two are deliberately different here to pin the contract.
-        UUID taskId = UUID.randomUUID();
-        UUID versionId = UUID.randomUUID();
-        AgentCandidate candidate = candidate(versionId);
-        when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates(eq("summarisation"), any())).thenReturn(List.of(candidate));
-        when(routingMatchDomainService.selectAgentVersion(any(), any())).thenReturn(Optional.of(versionId));
-
-        service.route(taskId);
-
-        ArgumentCaptor<DispatchMessage> captor = ArgumentCaptor.forClass(DispatchMessage.class);
-        verify(taskDispatchPublisher).publish(captor.capture());
-        // Must carry the TASK snapshot, not the candidate's (different) spec.
-        assertThat(captor.getValue().payload().outputSpecJson())
+        // The payload must carry the task's snapshot, not the candidate's (different) live spec.
+        assertThat(msg.payload().outputSpecJson())
                 .isEqualTo(TASK_OUTPUT_SPEC)
                 .isNotEqualTo(CANDIDATE_OUTPUT_SPEC);
     }
 
+    /**
+     * Deactivation race: findCandidateByVersionId returns empty (agent was deactivated/suspended
+     * between booking and dispatch). Must mark AWAITING_CAPACITY, NEVER publish, and NOT throw.
+     */
     @Test
-    void onNoMatchMarksAwaitingCapacityAndPublishesNothing() {
+    void deactivationRaceMarksAwaitingCapacityNeverPublishes() {
         UUID taskId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates(any(), any())).thenReturn(List.of());
-        when(routingMatchDomainService.selectAgentVersion(any(), any())).thenReturn(Optional.empty());
+        when(agentRepository.findCandidateByVersionId(versionId)).thenReturn(Optional.empty());
 
-        service.route(taskId);
+        // Must not throw.
+        service.dispatchDirect(taskId, versionId);
 
         verify(taskWriteAppService).markAwaitingCapacity(taskId);
-        verify(taskWriteAppService, never()).assignAndQueue(any(), any());
         verify(taskDispatchPublisher, never()).publish(any());
+        verify(taskWriteAppService, never()).assignAndQueue(any(), any());
     }
 }

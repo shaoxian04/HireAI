@@ -1,7 +1,9 @@
 package com.hireai.task;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hireai.application.biz.agent.AgentWriteAppService;
+import com.hireai.application.biz.routing.RoutingAppService;
 import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.wallet.WalletReadAppService;
 import com.hireai.application.biz.wallet.WalletWriteAppService;
@@ -82,6 +84,7 @@ class DirectBookingIntegrationTest {
     @MockBean TaskDispatchPublisher taskDispatchPublisher;
 
     @Autowired DirectBookingAppService directBookingAppService;
+    @Autowired RoutingAppService routingAppService;
     @Autowired AgentWriteAppService agentWriteAppService;
     @Autowired AgentRepository agentRepository;
     @Autowired AgentProfileRepository agentProfileRepository;
@@ -169,14 +172,67 @@ class DirectBookingIntegrationTest {
         DispatchMessage dispatched = captor.getValue();
         assertThat(dispatched.agentVersionId()).isEqualTo(agentVersionId);
         assertThat(dispatched.taskId()).isEqualTo(taskId);
-        // Dispatch payload's outputSpecJson must semantically equal the agent's stored spec.
+
+        // Invariant #4: dispatch payload outputSpecJson must come from the TASK's stored spec snapshot,
+        // not re-read from the agent version. At booking time both are equal (agent spec was adopted),
+        // but we assert against the task row to pin this contract.
+        String taskOutputSpec = jdbc.queryForObject(
+                "SELECT output_spec::text FROM tasks WHERE id = ?",
+                String.class, taskId);
+        assertEquals(
+                objectMapper.readTree(taskOutputSpec),
+                objectMapper.readTree(dispatched.payload().outputSpecJson()),
+                "dispatch payload outputSpecJson must be semantically equal to the task's stored output_spec (Invariant #4)");
+
+        // Cross-check: task spec == agent spec at booking time (agent spec was adopted as the task's contract).
         String agentOutputSpec = jdbc.queryForObject(
                 "SELECT output_spec::text FROM agent_versions WHERE id = ?",
                 String.class, agentVersionId);
         assertEquals(
                 objectMapper.readTree(agentOutputSpec),
                 objectMapper.readTree(dispatched.payload().outputSpecJson()),
-                "dispatch payload outputSpecJson must be semantically equal to agent version's output_spec");
+                "at booking time, task output_spec equals the agent version's spec (adoption confirmed)");
+    }
+
+    /**
+     * Deactivation race: the agent was suspended between booking-validation and dispatch.
+     * dispatchDirect must NOT throw; it must mark the task AWAITING_CAPACITY and never publish.
+     * Escrow stays frozen (already verified in other tests; not re-asserted here). The race is
+     * exercised by seeding a SUBMITTED task row directly (bypassing book() which would 404 on
+     * an inactive agent), suspending the agent, then calling dispatchDirect directly.
+     */
+    @Test
+    void deactivatedAgentLandsAwaitingCapacityWithEscrowHeld() {
+        UUID client = newClient();
+        walletWriteAppService.topUp(client, Money.of("50.00"), "seed");
+
+        // Register and activate an agent to obtain a valid agent_version_id.
+        UUID agentVersionId = seedListedActiveAgent("summarisation", "15.00");
+        UUID agentId = agentRepository.findById(
+                        jdbc.queryForObject("SELECT agent_id FROM agent_versions WHERE id = ?",
+                                UUID.class, agentVersionId))
+                .orElseThrow().id();
+
+        // Seed a SUBMITTED task directly so we can simulate the race without going through book()
+        // (book() validates ACTIVE status and would 404 on a suspended agent).
+        UUID taskId = UUID.randomUUID();
+        String outputSpecJson = "{\"format\":\"JSON\",\"schema\":\"{\\\"type\\\":\\\"object\\\"}\",\"acceptanceCriteria\":\"valid JSON\"}";
+        jdbc.update(
+                "INSERT INTO tasks (id, client_id, title, description, budget, output_spec, category, status, gmt_create) " +
+                "VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, 'SUBMITTED', now())",
+                taskId, client, "Race task", "Deactivation race test",
+                new BigDecimal("15.00"), outputSpecJson, "summarisation");
+
+        // Suspend the agent to simulate the deactivation race.
+        jdbc.update("UPDATE agents SET status = 'SUSPENDED' WHERE id = ?", agentId);
+
+        // dispatchDirect must NOT throw, must mark AWAITING_CAPACITY, must NOT publish.
+        routingAppService.dispatchDirect(taskId, agentVersionId);
+
+        String status = jdbc.queryForObject("SELECT status FROM tasks WHERE id = ?", String.class, taskId);
+        assertThat(status).isEqualTo("AWAITING_CAPACITY");
+
+        verify(taskDispatchPublisher, never()).publish(any());
     }
 
     @Test

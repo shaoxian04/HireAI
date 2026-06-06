@@ -8,6 +8,7 @@ import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskQuery;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.infrastructure.repository.task.OutputSpecJsonMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ import java.util.UUID;
 public class TaskReadAppServiceImpl implements TaskReadAppService {
 
     private final TaskRepository taskRepository;
+    private final OutputSpecJsonMapper outputSpecJsonMapper;
 
     @Override
     public TaskModel getForClient(UUID taskId, UUID clientId) {
@@ -53,6 +55,10 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     public TaskRoutingView getRoutingView(UUID taskId) {
         TaskModel task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
-        return new TaskRoutingView(task.id(), task.category(), task.budget().value(), task.status().name());
+        // Serialise the task's stored output_spec snapshot: this is the binding contract
+        // (Hard Invariant #4) that must travel with the dispatch, not the agent version's live spec.
+        String outputSpecJson = outputSpecJsonMapper.toJson(task.outputSpec());
+        return new TaskRoutingView(task.id(), task.category(), task.budget().value(),
+                task.status().name(), outputSpecJson);
     }
 }
