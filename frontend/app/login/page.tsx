@@ -29,16 +29,38 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="mx-auto max-w-sm">
+    <div className="mx-auto mt-12 max-w-sm">
+      <div className="mb-6 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Welcome back</h1>
+        <p className="mt-1 text-sm text-slate-500">Sign in to the HireAI marketplace.</p>
+      </div>
       <Card>
-        <h1 className="mb-4 text-lg font-semibold">Sign in</h1>
         <form onSubmit={onSubmit} className="space-y-4">
           <Field label="Email" htmlFor="email">
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <Input
+              id="email"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
           </Field>
-          <Field label="Password" htmlFor="password" error={error}>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <Field label="Password" htmlFor="password">
+            <Input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
           </Field>
+          {error && (
+            <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </p>
+          )}
           <Button type="submit" disabled={busy} className="w-full">
             {busy ? "Signing in…" : "Sign in"}
           </Button>
