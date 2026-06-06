@@ -57,6 +57,20 @@ export const handlers = [
       createdAt: "2026-06-06T10:00:00Z",
     }),
   ),
+
+  http.post("*/api/tasks", async ({ request }) => {
+    const body = (await request.json()) as { title: string; budget: number };
+    return ok({
+      id: "t-99",
+      clientId: "u-1",
+      title: body.title,
+      description: "desc",
+      budget: body.budget,
+      status: "SUBMITTED",
+      outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
+      createdAt: "2026-06-06T10:00:00Z",
+    });
+  }),
 ];
 
 export const server = setupServer(...handlers);
