@@ -74,7 +74,7 @@ export function ResultReviewBar({ taskId, onResolved }: Props) {
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={2}
-            className="w-full rounded-md border border-line bg-base p-3 font-mono text-xs text-fg"
+            className="w-full rounded-md border border-line bg-canvas p-3 font-mono text-xs text-fg"
           />
           <div className="flex items-center gap-3">
             <Button variant="danger" onClick={() => resolve("reject")} disabled={busy}>

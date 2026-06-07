@@ -27,7 +27,7 @@ export function Nav() {
   const home = role === "BUILDER" ? "/builder" : "/client";
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-base/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-line bg-canvas/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-6">
         <Logo href={role ? home : "/"} />
 

@@ -184,7 +184,7 @@ function TaskDetail() {
                 Agent status: <strong className="text-accent">{result.agentStatus}</strong>
               </p>
             </div>
-            <pre className="overflow-auto rounded-md border border-line bg-base p-4 font-mono text-xs leading-relaxed text-fg">
+            <pre className="overflow-auto rounded-md border border-line bg-canvas p-4 font-mono text-xs leading-relaxed text-fg">
               {prettyJson(result.resultPayloadJson)}
             </pre>
             {result.resultUrl && (

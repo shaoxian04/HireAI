@@ -3,7 +3,7 @@
 /* ─────────────────────────────────────────────────────────────────────────
    HireAI — "Mission Control" design system
    Dark graphite console · acid-lime signal · monospace instrumentation.
-   Tokens live in @theme so they're both Tailwind utilities (bg-base, text-accent…)
+   Tokens live in @theme so they're both Tailwind utilities (bg-canvas, text-accent…)
    and raw CSS vars (var(--color-accent)) for the bespoke effects below.
    ───────────────────────────────────────────────────────────────────────── */
 @theme {
@@ -12,7 +12,7 @@
   --font-display: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
 
   /* surfaces */
-  --color-base: #0a0c0e;
+  --color-canvas: #0a0c0e; /* NOT named `base`: a color named base hijacks the `text-base` font-size utility */
   --color-ink: #0a0c0e; /* dark text on accent/light fills (text-base is a font-size in Tailwind) */
   --color-surface: #101418;
   --color-surface-2: #161b21;
@@ -39,7 +39,7 @@ html {
 }
 
 body {
-  background: var(--color-base);
+  background: var(--color-canvas);
   color: var(--color-fg);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -58,7 +58,7 @@ body {
 *::-webkit-scrollbar-thumb {
   background: var(--color-line-bright);
   border-radius: 999px;
-  border: 2px solid var(--color-base);
+  border: 2px solid var(--color-canvas);
 }
 *::-webkit-scrollbar-track {
   background: transparent;
@@ -70,7 +70,7 @@ body {
   inset: 0;
   z-index: -10;
   pointer-events: none;
-  background-color: var(--color-base);
+  background-color: var(--color-canvas);
   background-image:
     linear-gradient(to right, color-mix(in oklab, var(--color-line) 55%, transparent) 1px, transparent 1px),
     linear-gradient(to bottom, color-mix(in oklab, var(--color-line) 55%, transparent) 1px, transparent 1px);
