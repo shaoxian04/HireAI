@@ -1,6 +1,7 @@
 package com.hireai.domain.biz.task.model;
 
 import com.hireai.controller.base.ResultCode;
+import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.shared.exception.DomainException;
 import com.hireai.domain.shared.model.Money;
@@ -27,10 +28,18 @@ public final class TaskModel {
     private final UUID agentVersionId; // nullable until assigned
     private final TaskResultModel result; // nullable until a result is recorded
     private final Instant createdAt;
+    private final TaskResolution resolution;   // nullable until RESOLVED
+    private final Instant resolvedAt;          // nullable until RESOLVED
+    private final String rejectionReason;      // nullable; only set on REJECTED
 
+    // Must stay in sync with the V9 rejection_reason DB CHECK and RejectTaskRequest's @Size(max).
+    private static final int MAX_REASON_LENGTH = 500;
+
+    /** Canonical 14-arg constructor: used by the rehydration path and all transition helpers. */
     public TaskModel(UUID id, UUID clientId, String title, String description,
                      Money budget, OutputSpec outputSpec, String category, TaskStatus status,
-                     UUID agentVersionId, TaskResultModel result, Instant createdAt) {
+                     UUID agentVersionId, TaskResultModel result, Instant createdAt,
+                     TaskResolution resolution, Instant resolvedAt, String rejectionReason) {
         this.id = id;
         this.clientId = clientId;
         this.title = title;
@@ -42,6 +51,17 @@ public final class TaskModel {
         this.agentVersionId = agentVersionId;
         this.result = result;
         this.createdAt = createdAt;
+        this.resolution = resolution;
+        this.resolvedAt = resolvedAt;
+        this.rejectionReason = rejectionReason;
+    }
+
+    /** Pre-review rehydration overload (11-arg): delegates to the canonical constructor. */
+    public TaskModel(UUID id, UUID clientId, String title, String description,
+                     Money budget, OutputSpec outputSpec, String category, TaskStatus status,
+                     UUID agentVersionId, TaskResultModel result, Instant createdAt) {
+        this(id, clientId, title, description, budget, outputSpec, category, status,
+                agentVersionId, result, createdAt, null, null, null);
     }
 
     /** Factory for the SUBMIT transition: enforces invariants and creates a SUBMITTED task. */
@@ -115,9 +135,33 @@ public final class TaskModel {
         return copyWith(TaskStatus.FAILED, this.agentVersionId, this.result);
     }
 
+    /** RESULT_RECEIVED → RESOLVED (ACCEPTED): the client accepted the result. */
+    public TaskModel accept() {
+        requireStatus(TaskStatus.RESULT_RECEIVED, "accept");
+        return resolved(TaskResolution.ACCEPTED, null);
+    }
+
+    /** RESULT_RECEIVED → RESOLVED (REJECTED): the client rejected the result. Reason optional, ≤500 chars. */
+    public TaskModel reject(String reason) {
+        requireStatus(TaskStatus.RESULT_RECEIVED, "reject");
+        String trimmed = (reason == null || reason.isBlank()) ? null : reason.trim();
+        if (trimmed != null && trimmed.length() > MAX_REASON_LENGTH) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "Rejection reason must be at most " + MAX_REASON_LENGTH + " characters");
+        }
+        return resolved(TaskResolution.REJECTED, trimmed);
+    }
+
+    private TaskModel resolved(TaskResolution resolution, String rejectionReason) {
+        return new TaskModel(this.id, this.clientId, this.title, this.description, this.budget,
+                this.outputSpec, this.category, TaskStatus.RESOLVED, this.agentVersionId, this.result,
+                this.createdAt, resolution, Instant.now(), rejectionReason);
+    }
+
     private TaskModel copyWith(TaskStatus newStatus, UUID newAgentVersionId, TaskResultModel newResult) {
         return new TaskModel(this.id, this.clientId, this.title, this.description, this.budget,
-                this.outputSpec, this.category, newStatus, newAgentVersionId, newResult, this.createdAt);
+                this.outputSpec, this.category, newStatus, newAgentVersionId, newResult, this.createdAt,
+                this.resolution, this.resolvedAt, this.rejectionReason);
     }
 
     private void requireStatus(TaskStatus expected, String transition) {
@@ -148,4 +192,7 @@ public final class TaskModel {
     public UUID agentVersionId() { return agentVersionId; }
     public TaskResultModel result() { return result; }
     public Instant createdAt() { return createdAt; }
+    public TaskResolution resolution() { return resolution; }
+    public Instant resolvedAt() { return resolvedAt; }
+    public String rejectionReason() { return rejectionReason; }
 }

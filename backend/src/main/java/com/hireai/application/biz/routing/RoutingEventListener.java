@@ -23,6 +23,12 @@ public class RoutingEventListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onTaskSubmitted(TaskSubmittedDomainEvent event) {
+        if (event.directAgentVersionId() != null) {
+            log.info("Task {} submit committed; dispatching directly to version {}",
+                    event.taskId(), event.directAgentVersionId());
+            routingAppService.dispatchDirect(event.taskId(), event.directAgentVersionId());
+            return;
+        }
         log.info("Task {} submit committed; starting routing", event.taskId());
         routingAppService.route(event.taskId());
     }

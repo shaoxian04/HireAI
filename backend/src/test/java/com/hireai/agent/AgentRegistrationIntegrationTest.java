@@ -5,7 +5,9 @@ import com.hireai.application.biz.agent.AgentWriteAppService;
 import com.hireai.domain.biz.agent.enums.AgentStatus;
 import com.hireai.domain.biz.agent.info.AgentCandidate;
 import com.hireai.domain.biz.agent.info.AgentRegisterInfo;
+import com.hireai.domain.biz.agent.info.PricingUpdateInfo;
 import com.hireai.domain.biz.agent.model.AgentModel;
+import com.hireai.domain.biz.agent.repository.AgentProfileRepository;
 import com.hireai.domain.biz.agent.repository.AgentQuery;
 import com.hireai.domain.biz.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
@@ -66,6 +68,7 @@ class AgentRegistrationIntegrationTest {
     @Autowired AgentWriteAppService agentWriteAppService;
     @Autowired AgentReadAppService agentReadAppService;
     @Autowired AgentRepository agentRepository;
+    @Autowired AgentProfileRepository agentProfileRepository;
     @Autowired JdbcTemplate jdbc;
 
     private UUID newOwner() {
@@ -91,6 +94,7 @@ class AgentRegistrationIntegrationTest {
         assertThat(agent.currentVersion().versionNumber()).isEqualTo(1);
         assertThat(agent.currentVersion().capabilityCategories()).containsExactly("summarisation");
         assertThat(agent.currentVersion().outputSpec().format()).isEqualTo(OutputFormat.JSON);
+        assertThat(agentProfileRepository.findByAgentId(agentId)).isPresent();
     }
 
     @Test
@@ -124,6 +128,34 @@ class AgentRegistrationIntegrationTest {
         List<AgentModel> mine = agentReadAppService.listForOwner(owner, AgentQuery.firstPage());
         assertThat(mine).hasSize(2);
         assertThat(mine).allMatch(a -> a.ownerId().equals(owner));
+    }
+
+    @Test
+    void updatePricingPersistsNewCommercialsWithSameVersionIdentity() {
+        UUID owner = newOwner();
+        UUID agentId = agentWriteAppService.register(info(owner, "summarisation", "5.00"));
+
+        // capture original version id and outputSpec before update
+        AgentModel before = agentReadAppService.getForOwner(agentId, owner);
+        UUID originalVersionId = before.currentVersion().id();
+        int originalVersionNumber = before.currentVersion().versionNumber();
+        String originalOutputSpecFormat = before.currentVersion().outputSpec().format().name();
+
+        // perform the commercial update
+        agentWriteAppService.updatePricing(agentId, owner,
+                new PricingUpdateInfo(new BigDecimal("99.50"), 120, List.of("Translation ")));
+
+        // reload and verify
+        AgentModel after = agentReadAppService.getForOwner(agentId, owner);
+        assertThat(after.currentVersion().pricing().price())
+                .isEqualByComparingTo("99.50");
+        assertThat(after.currentVersion().maxExecutionSeconds()).isEqualTo(120);
+        // categories normalised to lowercase + trimmed
+        assertThat(after.currentVersion().capabilityCategories()).containsExactly("translation");
+        // identity fields unchanged
+        assertThat(after.currentVersion().id()).isEqualTo(originalVersionId);
+        assertThat(after.currentVersion().versionNumber()).isEqualTo(originalVersionNumber);
+        assertThat(after.currentVersion().outputSpec().format().name()).isEqualTo(originalOutputSpecFormat);
     }
 
     @Test

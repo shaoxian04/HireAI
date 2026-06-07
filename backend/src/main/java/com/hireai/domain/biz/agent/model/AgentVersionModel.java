@@ -79,6 +79,23 @@ public final class AgentVersionModel {
         }
     }
 
+    /**
+     * In-place commercial update for this slice (spec §9: no version history yet).
+     * Returns a new snapshot with the updated price, maxExecutionSeconds, and normalised
+     * categories; webhookUrl, outputSpec, id, agentId, versionNumber and createdAt are
+     * preserved so no in-flight contract is invalidated.
+     */
+    public AgentVersionModel updateCommercials(Pricing pricing, int maxExecutionSeconds,
+                                               List<String> capabilityCategories) {
+        requirePresent(pricing, "pricing");
+        List<String> normalised = normaliseCategories(capabilityCategories);
+        if (maxExecutionSeconds <= 0) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "maxExecutionSeconds must be positive");
+        }
+        return new AgentVersionModel(id, agentId, versionNumber, outputSpec, normalised,
+                webhookUrl, maxExecutionSeconds, pricing, createdAt);
+    }
+
     private static void requirePresent(Object value, String field) {
         if (value == null) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, field + " is required");

@@ -53,12 +53,22 @@ public class TaskJpaEntity {
     @Column(name = "gmt_create", nullable = false)
     private Instant gmtCreate;
 
+    @Column(name = "resolution")
+    private String resolution;
+
+    @Column(name = "resolved_at")
+    private Instant resolvedAt;
+
+    @Column(name = "rejection_reason")
+    private String rejectionReason;
+
     protected TaskJpaEntity() {
     }
 
     public TaskJpaEntity(UUID id, UUID clientId, String title, String description,
                          BigDecimal budget, String outputSpec, String category, String status,
-                         UUID agentVersionId, Instant gmtCreate) {
+                         UUID agentVersionId, Instant gmtCreate,
+                         String resolution, Instant resolvedAt, String rejectionReason) {
         this.id = id;
         this.clientId = clientId;
         this.title = title;
@@ -69,6 +79,9 @@ public class TaskJpaEntity {
         this.status = status;
         this.agentVersionId = agentVersionId;
         this.gmtCreate = gmtCreate;
+        this.resolution = resolution;
+        this.resolvedAt = resolvedAt;
+        this.rejectionReason = rejectionReason;
     }
 
     public UUID getId() { return id; }
@@ -81,4 +94,7 @@ public class TaskJpaEntity {
     public String getStatus() { return status; }
     public UUID getAgentVersionId() { return agentVersionId; }
     public Instant getGmtCreate() { return gmtCreate; }
+    public String getResolution() { return resolution; }
+    public Instant getResolvedAt() { return resolvedAt; }
+    public String getRejectionReason() { return rejectionReason; }
 }

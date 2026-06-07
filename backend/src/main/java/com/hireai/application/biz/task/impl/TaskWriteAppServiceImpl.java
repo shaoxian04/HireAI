@@ -31,14 +31,29 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
 
     @Override
     public UUID submit(TaskSubmitInfo taskSubmitInfo) {
+        return doSubmit(taskSubmitInfo, null);
+    }
+
+    @Override
+    public UUID submitDirectlyBooked(TaskSubmitInfo taskSubmitInfo, UUID agentVersionId) {
+        return doSubmit(taskSubmitInfo, agentVersionId);
+    }
+
+    /**
+     * Shared atomic submit: domain submit → repo save → wallet freeze → publish event.
+     * {@code directAgentVersionId} is null for normal routing, non-null for direct booking.
+     * The transactional semantics are class-level @Transactional (REQUIRED by default).
+     */
+    private UUID doSubmit(TaskSubmitInfo taskSubmitInfo, UUID directAgentVersionId) {
         String correlationId = UUID.randomUUID().toString();
         TaskModel task = taskSubmitDomainService.submit(taskSubmitInfo);
         UUID taskId = taskRepository.save(task).id();
         walletWriteAppService.freeze(taskSubmitInfo.clientId(), taskSubmitInfo.budget(), taskId, correlationId);
         eventPublisher.publishEvent(new TaskSubmittedDomainEvent(
-                taskId, taskSubmitInfo.clientId(), taskSubmitInfo.budget(), task.createdAt()));
-        log.info("Task {} submitted by client {}; budget {} frozen in escrow",
-                taskId, taskSubmitInfo.clientId(), taskSubmitInfo.budget());
+                taskId, taskSubmitInfo.clientId(), taskSubmitInfo.budget(), task.createdAt(),
+                directAgentVersionId));
+        log.info("Task {} submitted by client {}; budget {} frozen in escrow (directAgentVersionId={})",
+                taskId, taskSubmitInfo.clientId(), taskSubmitInfo.budget(), directAgentVersionId);
         return taskId;
     }
 

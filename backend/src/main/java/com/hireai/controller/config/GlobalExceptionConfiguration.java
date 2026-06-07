@@ -4,11 +4,15 @@ import com.hireai.application.biz.auth.AuthenticationFailedException;
 import com.hireai.controller.base.ResultCode;
 import com.hireai.controller.base.WebResult;
 import com.hireai.domain.shared.exception.DomainException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * Translates exceptions into the unified {@link WebResult} envelope with an
@@ -17,14 +21,25 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionConfiguration {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionConfiguration.class);
+
     @ExceptionHandler(DomainException.class)
     public ResponseEntity<WebResult<Void>> handleDomain(DomainException ex) {
         HttpStatus status = switch (ex.resultCode()) {
             case NOT_FOUND -> HttpStatus.NOT_FOUND;
-            case INSUFFICIENT_BALANCE, DOMAIN_RULE_VIOLATION, VALIDATION_ERROR -> HttpStatus.CONFLICT;
+            // Genuine state conflicts → 409. VALIDATION_ERROR is bad input, so it falls through
+            // to the default 400 Bad Request.
+            case INSUFFICIENT_BALANCE, DOMAIN_RULE_VIOLATION -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status).body(WebResult.error(ex.resultCode(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<WebResult<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(WebResult.error(ResultCode.VALIDATION_ERROR,
+                        "Invalid value for parameter '" + ex.getName() + "'"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -37,6 +52,12 @@ public class GlobalExceptionConfiguration {
                 .body(WebResult.error(ResultCode.VALIDATION_ERROR, message));
     }
 
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<WebResult<Void>> handleOversizeUpload(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(WebResult.error(ResultCode.VALIDATION_ERROR, "Upload exceeds the 2 MB limit"));
+    }
+
     @ExceptionHandler(AuthenticationFailedException.class)
     public ResponseEntity<WebResult<Void>> handleAuthFailure(AuthenticationFailedException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -45,6 +66,8 @@ public class GlobalExceptionConfiguration {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<WebResult<Void>> handleUnexpected(Exception ex) {
+        // The client gets an opaque message; the full context must land in the server log.
+        log.error("Unhandled exception while serving a request", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(WebResult.error(ResultCode.INTERNAL_ERROR, "Unexpected error"));
     }

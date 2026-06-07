@@ -39,13 +39,15 @@ class SpineContractsTest {
     @Test
     void taskRoutingViewExposesAllAccessors() {
         UUID taskId = UUID.randomUUID();
+        String outputSpecJson = "{\"format\":\"JSON\",\"schema\":\"{}\"}";
         TaskRoutingView view = new TaskRoutingView(
-                taskId, "SUMMARISATION", new BigDecimal("25.00"), "SUBMITTED");
+                taskId, "SUMMARISATION", new BigDecimal("25.00"), "SUBMITTED", outputSpecJson);
 
         assertThat(view.taskId()).isEqualTo(taskId);
         assertThat(view.category()).isEqualTo("SUMMARISATION");
         assertThat(view.budget()).isEqualByComparingTo("25.00");
         assertThat(view.status()).isEqualTo("SUBMITTED");
+        assertThat(view.outputSpecJson()).isEqualTo(outputSpecJson);
     }
 
     @Test

@@ -55,6 +55,18 @@ public class AgentRepositoryImpl implements AgentRepository {
     }
 
     @Override
+    public void updateCurrentVersion(AgentVersionModel version) {
+        AgentVersionJpaEntity existing = versionJpa.findById(version.id())
+                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
+                        "Agent version not found: " + version.id()));
+        versionJpa.save(new AgentVersionJpaEntity(
+                existing.getId(), existing.getAgentId(), existing.getVersionNumber(),
+                outputSpecJsonMapper.toJson(version.outputSpec()),
+                version.capabilityCategories(), version.webhookUrl(),
+                version.maxExecutionSeconds(), version.pricing().price(), existing.getGmtCreate()));
+    }
+
+    @Override
     public Optional<AgentModel> findById(UUID agentId) {
         return agentJpa.findById(agentId).map(this::toModel);
     }
@@ -72,12 +84,27 @@ public class AgentRepositoryImpl implements AgentRepository {
     public List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice) {
         String normalisedCategory = category == null ? "" : category.trim().toLowerCase();
         return versionJpa.findActiveCandidates(normalisedCategory, maxPrice).stream()
-                .map(row -> new AgentCandidate(
-                        row.getAgentId(), row.getAgentVersionId(),
-                        List.of(row.getCapabilityCategories()), row.getPrice(),
-                        row.getWebhookUrl(), row.getMaxExecutionSeconds(), row.getReputationScore(),
-                        row.getOutputSpec()))
+                .map(this::rowToCandidate)
                 .toList();
+    }
+
+    @Override
+    public java.util.Optional<AgentCandidate> findCandidateByVersionId(UUID agentVersionId) {
+        return versionJpa.findCandidateByVersionId(agentVersionId)
+                .map(this::rowToCandidate);
+    }
+
+    @Override
+    public Optional<UUID> findOwnerByVersionId(UUID agentVersionId) {
+        return versionJpa.findOwnerByVersionId(agentVersionId);
+    }
+
+    private AgentCandidate rowToCandidate(AgentVersionJpaRepository.AgentCandidateRow row) {
+        return new AgentCandidate(
+                row.getAgentId(), row.getAgentVersionId(),
+                List.of(row.getCapabilityCategories()), row.getPrice(),
+                row.getWebhookUrl(), row.getMaxExecutionSeconds(), row.getReputationScore(),
+                row.getOutputSpec());
     }
 
     private AgentModel toModel(AgentJpaEntity entity) {

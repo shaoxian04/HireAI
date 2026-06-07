@@ -1,13 +1,20 @@
 package com.hireai.controller.biz.task;
 
+import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
+import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.task.converter.TaskModel2DTOConverter;
+import com.hireai.controller.biz.task.converter.TaskResult2DTOConverter;
+import com.hireai.controller.biz.task.dto.DirectBookRequest;
+import com.hireai.controller.biz.task.dto.RejectTaskRequest;
 import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
 import com.hireai.controller.biz.task.dto.TaskDTO;
+import com.hireai.controller.biz.task.dto.TaskResultDTO;
 import com.hireai.controller.config.CurrentUserProvider;
+import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.repository.TaskQuery;
@@ -36,13 +43,19 @@ public class TaskController extends BaseController {
     private final TaskWriteAppService writeAppService;
     private final TaskReadAppService readAppService;
     private final CurrentUserProvider currentUser;
+    private final DirectBookingAppService directBookingAppService;
+    private final TaskReviewAppService reviewAppService;
 
     public TaskController(TaskWriteAppService writeAppService,
                           TaskReadAppService readAppService,
-                          CurrentUserProvider currentUser) {
+                          CurrentUserProvider currentUser,
+                          DirectBookingAppService directBookingAppService,
+                          TaskReviewAppService reviewAppService) {
         this.writeAppService = writeAppService;
         this.readAppService = readAppService;
         this.currentUser = currentUser;
+        this.directBookingAppService = directBookingAppService;
+        this.reviewAppService = reviewAppService;
     }
 
     @PostMapping
@@ -61,10 +74,26 @@ public class TaskController extends BaseController {
         return ok(dto);
     }
 
+    @PostMapping("/direct")
+    public WebResult<TaskDTO> bookDirect(@Valid @RequestBody DirectBookRequest request) {
+        UUID clientId = currentUser.currentUserId();
+        UUID taskId = directBookingAppService.book(new DirectBookingInfo(
+                clientId, request.title(), request.description(),
+                Money.of(request.budget()), request.agentId()));
+        return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId)));
+    }
+
     @GetMapping("/{id}")
     public WebResult<TaskDTO> getById(@PathVariable("id") UUID id) {
         UUID clientId = currentUser.currentUserId();
         TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId));
+        return ok(dto);
+    }
+
+    @GetMapping("/{taskId}/result")
+    public WebResult<TaskResultDTO> getResult(@PathVariable("taskId") UUID taskId) {
+        UUID clientId = currentUser.currentUserId();
+        TaskResultDTO dto = TaskResult2DTOConverter.toDTO(readAppService.getResult(taskId, clientId));
         return ok(dto);
     }
 
@@ -78,5 +107,20 @@ public class TaskController extends BaseController {
                 .map(TaskModel2DTOConverter::toDTO)
                 .toList();
         return ok(tasks);
+    }
+
+    @PostMapping("/{id}/accept")
+    public WebResult<TaskDTO> accept(@PathVariable("id") UUID id) {
+        UUID clientId = currentUser.currentUserId();
+        reviewAppService.accept(id, clientId);
+        return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
+    }
+
+    @PostMapping("/{id}/reject")
+    public WebResult<TaskDTO> reject(@PathVariable("id") UUID id,
+                                     @Valid @RequestBody(required = false) RejectTaskRequest request) {
+        UUID clientId = currentUser.currentUserId();
+        reviewAppService.reject(id, clientId, request == null ? null : request.reason());
+        return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
     }
 }

@@ -8,8 +8,10 @@ import com.hireai.domain.biz.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.routing.service.impl.RoutingMatchDomainServiceImpl;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
 import com.hireai.domain.biz.task.service.impl.TaskSubmitDomainServiceImpl;
+import com.hireai.domain.biz.wallet.service.SettlementDomainService;
 import com.hireai.domain.biz.wallet.service.WalletFreezeDomainService;
 import com.hireai.domain.biz.wallet.service.WalletTopUpDomainService;
+import com.hireai.domain.biz.wallet.service.impl.SettlementDomainServiceImpl;
 import com.hireai.domain.biz.wallet.service.impl.WalletFreezeDomainServiceImpl;
 import com.hireai.domain.biz.wallet.service.impl.WalletTopUpDomainServiceImpl;
 import org.springframework.context.annotation.Bean;
@@ -51,5 +53,10 @@ public class DomainServiceConfig {
     @Bean
     public AgentActivateDomainService agentActivateDomainService() {
         return new AgentActivateDomainServiceImpl();
+    }
+
+    @Bean
+    public SettlementDomainService settlementDomainService() {
+        return new SettlementDomainServiceImpl();
     }
 }

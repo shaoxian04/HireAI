@@ -12,22 +12,22 @@ Six functional modules: (1) Task Submission, (2) Agent Registration, (3) Routing
 
 **Early implementation.** Canonical design lives in Notion (PRD + SAD, linked below). Source trees:
 
-- `backend/` — Spring Boot (Java 21), DDD bounded contexts. **Built (on `feat/marketplace-spine`):** base classes (`WebResult`/`ResultCode`/`BaseController`), config; the **Wallet** aggregate (top-up + escrow freeze, append-only ledger, `V1`); the **Task** aggregate (submit + atomic escrow freeze + binding `output_spec`, `V2`); **Module 2 — Agent Registration** (`AgentModel`/`AgentVersionModel`, register/activate, `V3`); **Module 3 — Routing & Execution** (event-triggered matching → RabbitMQ dispatch → signed HTTPS webhook → token-authenticated callback → `task_results`, `V4`); and a **thin JWT auth slice** (`POST /api/auth/login`, `JwtCurrentUserProvider`, profile-scoped security chains, seeded demo users `V5`) enforcing invariant #5. ~147 tests green. All service classes use interface + `impl/` (app services Spring-managed; domain services framework-free, wired in `DomainServiceConfig`). **Pending:** Module 4 (validation + dispute), Module 5 settlement/reputation, Module 6 (discovery).
+- `backend/` — Spring Boot (Java 21), DDD bounded contexts. **Built (on `feat/marketplace-spine`):** base classes (`WebResult`/`ResultCode`/`BaseController`), config; the **Wallet** aggregate (top-up + escrow freeze, append-only ledger, `V1`); the **Task** aggregate (submit + atomic escrow freeze + binding `output_spec`, `V2`); **Module 2 — Agent Registration** (`AgentModel`/`AgentVersionModel`, register/activate, `V3`); **Module 3 — Routing & Execution** (event-triggered matching → RabbitMQ dispatch → signed HTTPS webhook → token-authenticated callback → `task_results`, `V4`, read via `GET /api/tasks/{id}/result`); and a **thin JWT auth slice** (`POST /api/auth/login`, `JwtCurrentUserProvider`, profile-scoped security chains, seeded demo users `V5`) enforcing invariant #5; and **Module 6 — Discovery & storefront** (public catalogue + agent profiles `V6`, seeded reviews `V7`, direct booking `POST /api/tasks/direct`, builder storefront/media/pricing/stats endpoints, Supabase Storage media); and **client review + settlement** (accept → 85/15 payout, reject → full refund, `V9`, `POST /api/tasks/{id}/accept|reject`, `SettlementPolicy`/`SettlementDomainService`, race-safe pessimistic lock); and a **builder earnings read** (`GET /api/builder/earnings` — totals/per-agent/payout history derived from tasks via `SettlementPolicy`, never ledger sums). ~295 backend tests green. All service classes use interface + `impl/` (app services Spring-managed; domain services framework-free, wired in `DomainServiceConfig`). **Pending:** Module 4 (automated output-spec validation + disputes); Module 5 (reputation events + earned reviews + auto-refund on failure — settlement core done).
 - `arbitration/` — Python FastAPI + LangGraph dispute-arbitration microservice (Claude API). _Not started._
-- `frontend/` — Next.js (App Router, TypeScript), four surfaces (Client, Builder, Admin, public catalogue). _Not started._
+- `frontend/` — Next.js 16 (App Router, TypeScript, Tailwind). **Built:** the **Client + Builder** demo happy-path (login, agent register/activate, wallet/top-up, task submit, task-detail polling → result → accept/reject review flow with settled summary) and the **Marketplace + storefront + direct booking + builder manage console + earnings view** over a `/api/*` proxy with a JWT-bearing `api()` client; ~50 vitest tests. **Pending:** Admin surface.
 
 ## Build / run / test
 
-Backend is built and tested; arbitration + frontend not started.
+Backend + frontend are built and tested; the arbitration service is not started.
 
 | Service | Location | Run | Build | Test |
 |---|---|---|---|---|
 | Backend | `backend/` | `mvn -f backend/pom.xml spring-boot:run` (needs Postgres at `DB_URL` **and** a RabbitMQ broker; JWT auth enforced by default) | `mvn -f backend/pom.xml -q -B package` | `mvn -f backend/pom.xml -B test` |
 | Arbitration | `arbitration/` | _TBD_ | _TBD_ | _TBD_ |
-| Frontend | `frontend/` | _TBD_ | _TBD_ | _TBD_ |
+| Frontend | `frontend/` | `npm --prefix frontend run dev` (proxies `/api/*` → `:8080`) | `npm --prefix frontend run build` | `npx vitest run` (in `frontend/`) |
 | Local stack | repo root | `docker compose up` _(planned)_ | — | — |
 
-Backend notes: JDK 21 + Maven. Integration tests (`*IntegrationTest`) use Testcontainers (Postgres **+ RabbitMQ**) and **skip automatically when no Docker daemon is reachable** — they do not fail the build. The default/`prod` profile **enforces JWT auth**; the `test` profile (applied to existing context-loading tests via `@ActiveProfiles("test")`) is permissive with a fixed dev user. Flyway owns the schema (`V1`–`V5`); Hibernate runs `ddl-auto: validate`.
+Backend notes: JDK 21 + Maven. Integration tests (`*IntegrationTest`) use Testcontainers (Postgres **+ RabbitMQ**) and **skip automatically when no Docker daemon is reachable** — they do not fail the build. The default/`prod` profile **enforces JWT auth**; the `test` profile (applied to existing context-loading tests via `@ActiveProfiles("test")`) is permissive with a fixed dev user. Flyway owns the schema (`V1`–`V9`); Hibernate runs `ddl-auto: validate`.
 
 ## Stack at a glance
 
@@ -63,6 +63,12 @@ Read the relevant file on demand — don't preload everything.
   **Read before writing any Java code in `backend/`.**
 - **`docs/details/data-model.md`** — aggregates, the 3NF schema, the append-only ledger, status enums.
   **Read before changing the schema, an entity, or the settlement/reputation logic.**
+- **`docs/details/demo-runbook.md`** — stand up the full local demo stack (Postgres + RabbitMQ + stub agent + HTTPS tunnel + backend + frontend) and the seed logins.
+  **Read before running a live end-to-end demo.**
+- **`docs/details/frontend.md`** — Next.js app structure + conventions (the `/api/*` proxy, the `api()` client, the auth context + localStorage scheme, the UI kit, the route map).
+  **Read before changing anything in `frontend/`.**
+- **`docs/details/identity-and-authz.md`** — JWT auth, the two profile-scoped security chains, the `CurrentUserProvider` seam + owner checks, and the callback's dispatch-token auth (not JWT).
+  **Read before touching auth, security config, or anything that derives the current user.**
 
 ## Source-of-truth & conflict resolution
 

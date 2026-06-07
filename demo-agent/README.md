@@ -16,17 +16,32 @@ uvicorn app:app --host 127.0.0.1 --port 9000
 
 The agent listens on `http://localhost:9000/run`.
 
-## HTTPS note (Hard Invariant #6)
+## Demo content (staged pairing)
 
-The platform's `AgentDispatchClient` enforces HTTPS for webhook URLs. Two ways to demo:
+The stub returns a **hard-coded** summary (`DEMO_SUMMARY` in `app.py`) that matches
+[`demo-article.txt`](demo-article.txt). For a convincing demo, paste that article as the task
+description — the "summarisation" result will genuinely correspond to it. The stub performs no
+real summarisation.
 
-1. **Dev-profile localhost exception (simplest).** Set
-   `DISPATCH_ALLOW_INSECURE_LOCALHOST=true` on the backend and register the Agent with
-   `webhook_url = http://localhost:9000/run`. The signed-token check still applies; only the
-   transport check is relaxed for `localhost`.
-2. **HTTPS tunnel (faithful).** Expose the stub over HTTPS with a tunnel, e.g.
-   `cloudflared tunnel --url http://localhost:9000` or `ngrok http 9000`, and register the
-   Agent with the resulting `https://...` URL. No backend flag needed.
+## HTTPS is required at registration (Hard Invariant #6)
+
+The platform enforces HTTPS for Agent webhooks **at registration** (`AgentVersionModel.create`
+rejects any non-`https://` URL) *and* at dispatch (`AgentDispatchClient`). The registration check
+is **unconditional**: `DISPATCH_ALLOW_INSECURE_LOCALHOST` relaxes only the *dispatch-time*
+transport check, **not** registration. So `webhook_url = http://localhost:9000/run` **cannot be
+registered** — the API rejects it with `Webhook URL must be HTTPS`, before dispatch is ever
+reached. (That flag is therefore effectively unreachable for the Agent-webhook path.)
+
+For a local demo, expose this stub over HTTPS with a tunnel and register the Agent with the
+resulting `https://…` URL — no backend flag needed (the dispatch is HTTPS too):
+
+```
+cloudflared tunnel --url http://localhost:9000     # -> https://<random>.trycloudflare.com
+# or: ngrok http 9000
+```
+
+Register the Agent with `webhook_url = https://<tunnel-host>/run`. The signed dispatch token is
+still issued on dispatch and verified on the callback.
 
 ## Wire contracts
 

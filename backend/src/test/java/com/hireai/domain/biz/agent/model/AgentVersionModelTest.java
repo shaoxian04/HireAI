@@ -75,4 +75,45 @@ class AgentVersionModelTest {
                 List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE)))
                 .isInstanceOf(DomainException.class);
     }
+
+    // ---- updateCommercials tests ----
+
+    @Test
+    void updateCommercialsReturnsCopyWithNewPriceMaxExecAndCategories() {
+        UUID agentId = UUID.randomUUID();
+        AgentVersionModel original = AgentVersionModel.create(agentId, 1, spec(),
+                List.of("summarisation"), "https://agent.example.com/hook",
+                120, Pricing.of(new BigDecimal("5.00")));
+
+        AgentVersionModel updated = original.updateCommercials(
+                Pricing.of(new BigDecimal("99.50")), 300, List.of(" Translation "));
+
+        // new commercials
+        assertThat(updated.pricing().price()).isEqualByComparingTo("99.50");
+        assertThat(updated.maxExecutionSeconds()).isEqualTo(300);
+        assertThat(updated.capabilityCategories()).containsExactly("translation");
+
+        // identity fields preserved
+        assertThat(updated.id()).isEqualTo(original.id());
+        assertThat(updated.versionNumber()).isEqualTo(original.versionNumber());
+        assertThat(updated.webhookUrl()).isEqualTo(original.webhookUrl());
+        assertThat(updated.outputSpec()).isEqualTo(original.outputSpec());
+        assertThat(updated.createdAt()).isEqualTo(original.createdAt());
+    }
+
+    @Test
+    void updateCommercialsRejectsZeroMaxExecutionSeconds() {
+        AgentVersionModel v = AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE));
+        assertThatThrownBy(() -> v.updateCommercials(Pricing.of(BigDecimal.ONE), 0, List.of("summarisation")))
+                .isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void updateCommercialsRejectsEmptyCategories() {
+        AgentVersionModel v = AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE));
+        assertThatThrownBy(() -> v.updateCommercials(Pricing.of(BigDecimal.ONE), 60, List.of()))
+                .isInstanceOf(DomainException.class);
+    }
 }

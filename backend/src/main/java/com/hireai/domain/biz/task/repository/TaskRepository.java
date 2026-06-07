@@ -17,5 +17,13 @@ public interface TaskRepository {
 
     Optional<TaskModel> findById(UUID taskId);
 
+    /**
+     * Loads the task taking a row-level write lock for the duration of the current
+     * transaction. Used by the review/settlement path to serialize concurrent
+     * accept/reject attempts: the second transaction blocks here, then re-reads the
+     * already-RESOLVED row and fails the domain state guard instead of double-settling.
+     */
+    Optional<TaskModel> findByIdForUpdate(UUID taskId);
+
     List<TaskModel> findByClientId(UUID clientId, TaskQuery query);
 }

@@ -17,4 +17,11 @@ import java.util.UUID;
 public interface RoutingAppService {
 
     void route(@NonNull UUID taskId);
+
+    /**
+     * Direct booking path: skip the matcher and dispatch to a specific agent version.
+     * Follows the same ordering contract as route(): QUEUED commits first (REQUIRES_NEW),
+     * then the dispatch message is published.
+     */
+    void dispatchDirect(@NonNull UUID taskId, @NonNull UUID agentVersionId);
 }

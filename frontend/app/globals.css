@@ -1,0 +1,262 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────────
+   HireAI — "Mission Control" design system
+   Dark graphite console · acid-lime signal · monospace instrumentation.
+   Tokens live in @theme so they're both Tailwind utilities (bg-base, text-accent…)
+   and raw CSS vars (var(--color-accent)) for the bespoke effects below.
+   ───────────────────────────────────────────────────────────────────────── */
+@theme {
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SFMono-Regular", monospace;
+  --font-display: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+
+  /* surfaces */
+  --color-base: #0a0c0e;
+  --color-ink: #0a0c0e; /* dark text on accent/light fills (text-base is a font-size in Tailwind) */
+  --color-surface: #101418;
+  --color-surface-2: #161b21;
+  --color-line: #232932;
+  --color-line-bright: #313945;
+
+  /* text */
+  --color-fg: #e9edec;
+  --color-muted: #8b939d;
+  --color-dim: #5a626d;
+
+  /* signal + semantics */
+  --color-accent: #c7f24a;
+  --color-accent-2: #a6d92f;
+  --color-cyan: #4fd6e6;
+  --color-amber: #f5b740;
+  --color-red: #ff5f4d;
+  --color-violet: #b69bff;
+}
+
+/* ── base ─────────────────────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-base);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: #0a0c0e;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-line-bright);
+  border-radius: 999px;
+  border: 2px solid var(--color-base);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── ambient background: ruled grid + scope glow (fixed, behind all) ───── */
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  pointer-events: none;
+  background-color: var(--color-base);
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--color-line) 55%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-line) 55%, transparent) 1px, transparent 1px);
+  background-size: 60px 60px;
+  -webkit-mask-image: radial-gradient(120% 80% at 50% -10%, #000 30%, transparent 78%);
+  mask-image: radial-gradient(120% 80% at 50% -10%, #000 30%, transparent 78%);
+}
+.bg-grid::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(55rem 38rem at 78% -8%, color-mix(in oklab, var(--color-accent) 13%, transparent), transparent 60%),
+    radial-gradient(48rem 36rem at 8% 2%, color-mix(in oklab, var(--color-cyan) 9%, transparent), transparent 58%);
+}
+
+/* ── instrumentation primitives ───────────────────────────────────────── */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.panel {
+  position: relative;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--color-surface) 92%, transparent), var(--color-surface));
+  border: 1px solid var(--color-line);
+  border-radius: 0.75rem;
+}
+.panel-hover {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.panel-hover:hover {
+  border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-line));
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-accent) 20%, transparent),
+    0 18px 40px -28px color-mix(in oklab, var(--color-accent) 60%, transparent);
+  transform: translateY(-2px);
+}
+
+/* HUD corner ticks */
+.hud::before,
+.hud::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 1px solid color-mix(in oklab, var(--color-accent) 55%, transparent);
+  pointer-events: none;
+}
+.hud::before {
+  top: -1px;
+  left: -1px;
+  border-right: 0;
+  border-bottom: 0;
+}
+.hud::after {
+  bottom: -1px;
+  right: -1px;
+  border-left: 0;
+  border-top: 0;
+}
+
+.glow {
+  box-shadow: 0 0 24px -6px color-mix(in oklab, var(--color-accent) 55%, transparent);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+}
+
+/* ── live status dot ──────────────────────────────────────────────────── */
+.dot-live {
+  position: relative;
+}
+.dot-live::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: currentColor;
+  animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* ── ticker / marquee ─────────────────────────────────────────────────── */
+.ticker {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: marquee 38s linear infinite;
+}
+.ticker-mask {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+}
+
+/* ── pipeline flow line ───────────────────────────────────────────────── */
+.flow {
+  position: relative;
+  height: 2px;
+  background: var(--color-line-bright);
+  overflow: hidden;
+}
+.flow::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 38%;
+  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+  animation: flow 2.6s linear infinite;
+}
+
+/* ── entrance reveal (staggered via inline animation-delay) ────────────── */
+.reveal {
+  opacity: 0;
+  animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes flow {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(360%);
+  }
+}
+@keyframes ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  75%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.animate-blink {
+  animation: blink 1.4s steps(2, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal {
+    opacity: 1;
+  }
+}

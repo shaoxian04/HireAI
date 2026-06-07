@@ -76,6 +76,28 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                 taskId, agentVersionId, message.correlationId());
     }
 
+    @Override
+    public void dispatchDirect(UUID taskId, UUID agentVersionId) {
+        TaskRoutingView view = taskReadAppService.getRoutingView(taskId);
+        Optional<AgentCandidate> maybeTarget = agentRepository.findCandidateByVersionId(agentVersionId);
+        if (maybeTarget.isEmpty()) {
+            // The agent was deactivated or suspended between booking and dispatch (deactivation race).
+            // Mirror route()'s no-match branch: the task stays observable with escrow frozen pending
+            // capacity/ops — same contract as the matched path (spec §4.3 step 6).
+            log.warn("AgentVersion {} no longer ACTIVE; task {} left in AWAITING_CAPACITY (deactivation race)",
+                    agentVersionId, taskId);
+            taskWriteAppService.markAwaitingCapacity(taskId);
+            return;
+        }
+        AgentCandidate target = maybeTarget.get();
+        // Same ordering contract as route(): QUEUED commits FIRST (REQUIRES_NEW), then publish.
+        taskWriteAppService.assignAndQueue(taskId, agentVersionId);
+        DispatchMessage message = buildDispatchMessage(taskId, agentVersionId, view, target);
+        taskDispatchPublisher.publish(message);
+        log.info("Task {} direct-dispatched to agentVersion {} (correlationId={})",
+                taskId, agentVersionId, message.correlationId());
+    }
+
     private DispatchMessage buildDispatchMessage(UUID taskId, UUID agentVersionId,
                                                  TaskRoutingView view, AgentCandidate winner) {
         String correlationId = UUID.randomUUID().toString();
@@ -85,7 +107,9 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                 view.category(),               // description placeholder
                 view.category(),
                 null,                          // expectedDeliverableJson: not enriched in this slice
-                winner.outputSpecJson(),       // binding agent output contract (Hard Invariant #4)
+                // Hard Invariant #4: use the task's adopted copy (frozen at submit time) as the binding
+                // contract. The candidate supplies only webhookUrl/version identity — not the spec.
+                view.outputSpecJson(),
                 callbackUrl);
         return new DispatchMessage(taskId, agentVersionId, winner.webhookUrl(), correlationId, payload);
     }

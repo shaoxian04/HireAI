@@ -39,8 +39,13 @@ class RoutingAppServiceImplTest {
             taskReadAppService, taskWriteAppService, agentRepository,
             routingMatchDomainService, taskDispatchPublisher);
 
+    // The task's adopted output spec snapshot (Invariant #4). In unit tests the view carries
+    // this directly; candidates supply only webhookUrl/version identity.
+    private static final String TASK_OUTPUT_SPEC = "{\"format\":\"TEXT\",\"schema\":\"task-snap\"}";
+
     private TaskRoutingView view(UUID taskId) {
-        return new TaskRoutingView(taskId, "summarisation", new BigDecimal("30.00"), "SUBMITTED");
+        return new TaskRoutingView(taskId, "summarisation", new BigDecimal("30.00"), "SUBMITTED",
+                TASK_OUTPUT_SPEC);
     }
 
     private static final String CANDIDATE_OUTPUT_SPEC = "{\"format\":\"JSON\"}";
@@ -92,7 +97,9 @@ class RoutingAppServiceImplTest {
     }
 
     @Test
-    void onMatchPublishesDispatchPayloadCarryingWinnerOutputSpec() {
+    void onMatchPublishesDispatchPayloadCarryingTaskOutputSpec() {
+        // Invariant #4: the task's adopted snapshot (view.outputSpecJson) is the binding contract,
+        // NOT the candidate's live spec. The two are deliberately different here to pin the contract.
         UUID taskId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
         AgentCandidate candidate = candidate(versionId);
@@ -104,9 +111,10 @@ class RoutingAppServiceImplTest {
 
         ArgumentCaptor<DispatchMessage> captor = ArgumentCaptor.forClass(DispatchMessage.class);
         verify(taskDispatchPublisher).publish(captor.capture());
+        // Must carry the TASK snapshot, not the candidate's (different) spec.
         assertThat(captor.getValue().payload().outputSpecJson())
-                .isEqualTo(candidate.outputSpecJson())
-                .isEqualTo(CANDIDATE_OUTPUT_SPEC);
+                .isEqualTo(TASK_OUTPUT_SPEC)
+                .isNotEqualTo(CANDIDATE_OUTPUT_SPEC);
     }
 
     @Test
