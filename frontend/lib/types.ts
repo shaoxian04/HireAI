@@ -242,3 +242,29 @@ export interface AgentStatsDTO {
 }
 
 export type MediaKind = "logo" | "cover" | "gallery";
+
+// ── Builder earnings ──────────────────────────────────────────────────────
+
+export interface AgentEarningsDTO {
+  agentId: string;
+  agentName: string;
+  earned: number;
+  pendingIfAccepted: number;
+  paidTaskCount: number;
+}
+
+export interface PayoutDTO {
+  taskId: string;
+  taskTitle: string;
+  agentName: string;
+  amount: number;
+  settledAt: string;
+}
+
+export interface BuilderEarningsDTO {
+  lifetimeEarned: number;
+  pendingIfAccepted: number;
+  paidTaskCount: number;
+  perAgent: AgentEarningsDTO[];
+  payouts: PayoutDTO[];
+}

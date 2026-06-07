@@ -217,6 +217,34 @@ export const handlers = [
         })
       : fail("NOT_FOUND", "Agent not found", 404),
   ),
+  http.get("*/api/builder/earnings", () =>
+    ok({
+      lifetimeEarned: 27.2,
+      pendingIfAccepted: 17.0,
+      paidTaskCount: 2,
+      perAgent: [
+        { agentId: "a-1", agentName: "Summariser", earned: 27.2, pendingIfAccepted: 17.0, paidTaskCount: 2 },
+        { agentId: "a-2", agentName: "Analyst", earned: 0, pendingIfAccepted: 0, paidTaskCount: 0 },
+      ],
+      payouts: [
+        {
+          taskId: "t-1",
+          taskTitle: "Summarize the article",
+          agentName: "Summariser",
+          amount: 10.2,
+          settledAt: "2026-06-07T04:28:39Z",
+        },
+        {
+          taskId: "t-2",
+          taskTitle: "Summarise Q2 report",
+          agentName: "Summariser",
+          amount: 17.0,
+          settledAt: "2026-06-06T10:00:00Z",
+        },
+      ],
+    }),
+  ),
+
   http.post("*/api/tasks/direct", async ({ request }) => {
     const body = (await request.json()) as { title: string; budget: number; agentId: string };
     if (body.budget < 10) return fail("VALIDATION_ERROR", "budget below agent price", 400);
