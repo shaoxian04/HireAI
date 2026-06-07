@@ -82,18 +82,26 @@ function BuilderDashboard() {
 
       {/* ── summary ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
-        {[
-          { v: stats.total, l: "registered", c: "text-fg" },
-          { v: stats.active, l: "active", c: "text-accent" },
-          { v: stats.pending, l: "pending", c: "text-amber" },
-          {
-            v: (wallet?.availableBalance ?? 0).toFixed(2),
-            l: "wallet cr",
-            c: "text-accent",
-          },
-        ].map((s) =>
-          s.l === "wallet cr" ? (
-            <Link key={s.l} href="/builder/earnings" className="bg-surface px-5 py-5 transition hover:bg-surface-2">
+        {(
+          [
+            { v: stats.total, l: "registered", c: "text-fg" },
+            { v: stats.active, l: "active", c: "text-accent" },
+            { v: stats.pending, l: "pending", c: "text-amber" },
+            {
+              v: (wallet?.availableBalance ?? 0).toFixed(2),
+              l: "wallet cr",
+              c: "text-accent",
+              href: "/builder/earnings",
+            },
+          ] as { v: string | number; l: string; c: string; href?: string }[]
+        ).map((s) =>
+          s.href ? (
+            <Link
+              key={s.l}
+              href={s.href}
+              aria-label="View earnings"
+              className="block bg-surface px-5 py-5 transition hover:bg-surface-2"
+            >
               <p className={`tabular text-3xl font-extrabold ${s.c}`}>{s.v}</p>
               <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-[0.18em] text-dim">
                 {s.l} ▸

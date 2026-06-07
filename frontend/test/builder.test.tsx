@@ -35,7 +35,7 @@ describe("builder earnings", () => {
     // From the MSW /api/wallet stub: availableBalance 950.
     expect(await screen.findByText("950.00")).toBeInTheDocument();
     expect(screen.getByText(/wallet cr/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /950\.00/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /view earnings/i })).toHaveAttribute(
       "href",
       "/builder/earnings",
     );
