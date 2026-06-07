@@ -40,8 +40,11 @@ reads `hireai.token` directly so it doesn't bounce an authenticated user before 
 ## Routes (`app/`)
 
 - `login/` — email + password → `useAuth().login` → redirect by role (CLIENT→`/client`, BUILDER→`/builder`).
-- `builder/` — portfolio dashboard; `builder/agents/new` — register an agent; `builder/agents/[id]` —
-  manage console (tabs: Storefront · Pricing & tags · Stats · Reviews; image uploader via `apiUpload`).
+- `builder/` — portfolio dashboard (wallet tile links to earnings); `builder/earnings` — earnings
+  view (lifetime/pending totals from `GET /api/builder/earnings`, per-agent breakdown, payout
+  history; amounts derived server-side from `SettlementPolicy`); `builder/agents/new` — register
+  an agent; `builder/agents/[id]` — manage console (tabs: Storefront · Pricing & tags · Stats ·
+  Reviews; image uploader via `apiUpload`).
 - `client/` — **Marketplace** (search/category/sort/hot strip/agent grid); `client/tasks` — task list +
   wallet (resolution badges on each task row); `client/tasks/new` — auto-route submit; `client/tasks/[id]` — polls
   result; at `RESULT_RECEIVED` renders the `ResultReviewBar` (accept / reject with optional reason), then on
@@ -54,7 +57,7 @@ reads `hireai.token` directly so it doesn't bounce an authenticated user before 
 
 - `components/ui/` — `Button, Input, Select, Card, Field, Badge` (+ `statusColor(status)`); `Badge`
   takes a `status` prop and colours itself. `lib/outputSpecFields.tsx` is the shared output-spec sub-form.
-- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~44 tests). Auth-dependent tests must seed
+- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~50 tests). Auth-dependent tests must seed
   **both** `hireai.token` and `hireai.auth`. `next build` and `npx tsc --noEmit` must stay clean.
 
 ## Run
