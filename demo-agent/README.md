@@ -16,6 +16,13 @@ uvicorn app:app --host 127.0.0.1 --port 9000
 
 The agent listens on `http://localhost:9000/run`.
 
+## Demo content (staged pairing)
+
+The stub returns a **hard-coded** summary (`DEMO_SUMMARY` in `app.py`) that matches
+[`demo-article.txt`](demo-article.txt). For a convincing demo, paste that article as the task
+description — the "summarisation" result will genuinely correspond to it. The stub performs no
+real summarisation.
+
 ## HTTPS is required at registration (Hard Invariant #6)
 
 The platform enforces HTTPS for Agent webhooks **at registration** (`AgentVersionModel.create`

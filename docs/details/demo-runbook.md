@@ -103,7 +103,9 @@ Seed logins (from Flyway `V5`), password `DemoPass123!`:
 1. **Builder:** log in → **Register agent** — name, category `summarisation`, **webhook =
    `https://<tunnel-host>/run`**, price 10 → **Activate** (→ `ACTIVE`).
 2. **Client:** log in → optionally top up → **Submit task** with category `summarisation`,
-   budget ≥ 10 (e.g. 50). Submitting freezes the budget in escrow.
+   budget ≥ 10 (e.g. 50). Paste **`demo-agent/demo-article.txt`** as the description — the stub
+   returns a hard-coded summary of exactly that article, so the result reads as genuine.
+   Submitting freezes the budget in escrow.
 3. Watch the task detail page poll `SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED`, then render
    the agent's `COMPLETED` result. The wallet shows the budget moved into escrow.
 4. → **Accept** the result: the builder's wallet receives 85% of the budget (log in as the builder

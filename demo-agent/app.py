@@ -12,6 +12,17 @@ from fastapi import FastAPI, Header, HTTPException, Request
 
 app = FastAPI(title="HireAI demo stub agent")
 
+# Hard-coded demo output: the summary of demo-article.txt (paste that article as the task
+# description during the demo). The stub does no real summarisation - the pairing is staged.
+DEMO_SUMMARY = (
+    "A 2022 UK trial of the four-day work week across 61 companies proved durable: 54 firms "
+    "kept the shorter week and 31 made it permanent. Revenue rose slightly (avg +1.4%), staff "
+    "turnover fell 57%, sick days dropped by two-thirds, and 71% of employees reported less "
+    "burnout. Output was sustained by cutting meetings and approval overhead rather than by "
+    "working faster - though shift-based sectors like healthcare and logistics found the model "
+    "much harder to adopt."
+)
+
 
 @app.post("/run")
 async def run(request: Request, authorization: str = Header(default="")):
@@ -29,7 +40,7 @@ async def run(request: Request, authorization: str = Header(default="")):
 
 async def _complete(task_id: str, callback_url: str, token: str):
     await asyncio.sleep(2)  # simulate execution
-    result_payload = json.dumps({"summary": f"Stub result for task {task_id}"})
+    result_payload = json.dumps({"summary": DEMO_SUMMARY})
     callback_body = {
         "agentStatus": "COMPLETED",
         "resultPayloadJson": result_payload,
