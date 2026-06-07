@@ -88,17 +88,26 @@ function BuilderDashboard() {
           { v: stats.pending, l: "pending", c: "text-amber" },
           {
             v: (wallet?.availableBalance ?? 0).toFixed(2),
-            l: "credits earned",
+            l: "wallet cr",
             c: "text-accent",
           },
-        ].map((s) => (
-          <div key={s.l} className="bg-surface px-5 py-5">
-            <p className={`tabular text-3xl font-extrabold ${s.c}`}>{s.v}</p>
-            <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-[0.18em] text-dim">
-              {s.l}
-            </p>
-          </div>
-        ))}
+        ].map((s) =>
+          s.l === "wallet cr" ? (
+            <Link key={s.l} href="/builder/earnings" className="bg-surface px-5 py-5 transition hover:bg-surface-2">
+              <p className={`tabular text-3xl font-extrabold ${s.c}`}>{s.v}</p>
+              <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-[0.18em] text-dim">
+                {s.l} ▸
+              </p>
+            </Link>
+          ) : (
+            <div key={s.l} className="bg-surface px-5 py-5">
+              <p className={`tabular text-3xl font-extrabold ${s.c}`}>{s.v}</p>
+              <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-[0.18em] text-dim">
+                {s.l}
+              </p>
+            </div>
+          ),
+        )}
       </div>
 
       {/* ── agents ───────────────────────────────────────────────────── */}

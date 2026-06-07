@@ -30,11 +30,24 @@ function renderBuilder() {
 }
 
 describe("builder earnings", () => {
-  it("shows the wallet's available credits as earnings", async () => {
+  it("shows the wallet balance tile linking to the earnings page", async () => {
     renderBuilder();
     // From the MSW /api/wallet stub: availableBalance 950.
     expect(await screen.findByText("950.00")).toBeInTheDocument();
-    expect(screen.getByText("credits earned")).toBeInTheDocument();
+    expect(screen.getByText(/wallet cr/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /950\.00/ })).toHaveAttribute(
+      "href",
+      "/builder/earnings",
+    );
+  });
+
+  it("shows builder nav links", async () => {
+    renderBuilder();
+    expect(await screen.findByRole("link", { name: "Earnings" })).toHaveAttribute(
+      "href",
+      "/builder/earnings",
+    );
+    expect(screen.getByRole("link", { name: "My agents" })).toHaveAttribute("href", "/builder");
   });
 });
 

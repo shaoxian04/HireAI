@@ -49,6 +49,22 @@ export function Nav() {
                 ))}
               </div>
             )}
+            {role === "BUILDER" && (
+              <div className="hidden items-center gap-1 md:flex">
+                {[
+                  { href: "/builder", label: "My agents" },
+                  { href: "/builder/earnings", label: "Earnings" },
+                ].map((l) => (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    className="rounded-md px-3 py-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted transition hover:text-fg"
+                  >
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+            )}
             <span className="hidden items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted sm:flex">
               <span className="size-1.5 rounded-full bg-accent dot-live text-accent" />
               online
