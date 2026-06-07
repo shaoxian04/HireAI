@@ -14,7 +14,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -70,6 +69,7 @@ class BuilderEarningsReadAppServiceImplTest {
                 row(AGENT_A, "A", "10.00", "QUEUED", null, null),
                 row(AGENT_A, "A", "12.00", "EXECUTING", null, null),
                 row(AGENT_A, "A", "20.00", "RESULT_RECEIVED", null, null),
+                row(AGENT_A, "A", "8.00", "PENDING_REVIEW", null, null),
                 row(AGENT_A, "A", "4.00", "AWAITING_CAPACITY", null, null),
                 row(AGENT_A, "A", "99.00", "RESOLVED", "ACCEPTED", Instant.now()),
                 row(AGENT_A, "A", "99.00", "TIMED_OUT", null, null)),
@@ -77,8 +77,8 @@ class BuilderEarningsReadAppServiceImplTest {
 
         Earnings e = service.earningsFor(OWNER);
 
-        // nets: 8.50 + 10.20 + 17.00 + 3.40 = 39.10 (accepted/timed-out are NOT pending)
-        assertThat(e.pendingIfAccepted()).isEqualByComparingTo("39.10");
+        // nets: 8.50 + 10.20 + 17.00 + 6.80 + 3.40 = 45.90 (accepted/timed-out are NOT pending)
+        assertThat(e.pendingIfAccepted()).isEqualByComparingTo("45.90");
     }
 
     @Test
@@ -98,10 +98,10 @@ class BuilderEarningsReadAppServiceImplTest {
     @Test
     void payoutsAreNewestFirstAndCappedAt50() {
         Instant base = Instant.parse("2026-06-01T00:00:00Z");
-        List<RoutedTaskRow> rows = new ArrayList<>(IntStream.range(0, 60)
+        List<RoutedTaskRow> rows = IntStream.range(0, 60)
                 .mapToObj(i -> row(AGENT_A, "A", "10.00", "RESOLVED", "ACCEPTED",
                         base.plusSeconds(i)))
-                .toList());
+                .toList();
         stub(rows, List.of(new OwnedAgentRow(AGENT_A, "A")));
 
         Earnings e = service.earningsFor(OWNER);

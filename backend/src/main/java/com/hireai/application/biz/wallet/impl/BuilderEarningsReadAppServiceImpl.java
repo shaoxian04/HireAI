@@ -45,12 +45,12 @@ public class BuilderEarningsReadAppServiceImpl implements BuilderEarningsReadApp
         List<RoutedTaskRow> rows = queryPort.routedTasks(userId);
         List<OwnedAgentRow> agents = queryPort.ownedAgents(userId);
 
-        Money lifetime = sumNet(rows.stream().filter(this::accepted).toList());
+        List<RoutedTaskRow> acceptedRows = rows.stream().filter(this::accepted).toList();
+        Money lifetime = sumNet(acceptedRows);
         Money pending = sumNet(rows.stream().filter(this::pending).toList());
-        int paidCount = (int) rows.stream().filter(this::accepted).count();
+        int paidCount = acceptedRows.size();
 
-        List<Payout> payouts = rows.stream()
-                .filter(this::accepted)
+        List<Payout> payouts = acceptedRows.stream()
                 .sorted(Comparator.comparing(RoutedTaskRow::resolvedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(PAYOUT_HISTORY_LIMIT)
