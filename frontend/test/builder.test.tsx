@@ -29,6 +29,15 @@ function renderBuilder() {
   );
 }
 
+describe("builder earnings", () => {
+  it("shows the wallet's available credits as earnings", async () => {
+    renderBuilder();
+    // From the MSW /api/wallet stub: availableBalance 950.
+    expect(await screen.findByText("950.00")).toBeInTheDocument();
+    expect(screen.getByText("credits earned")).toBeInTheDocument();
+  });
+});
+
 describe("builder agent list", () => {
   it("lists an agent and activates it", async () => {
     renderBuilder();

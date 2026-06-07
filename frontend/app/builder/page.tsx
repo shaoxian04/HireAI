@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
-import type { AgentDTO } from "@/lib/types";
+import type { AgentDTO, WalletDTO } from "@/lib/types";
 import { Badge, Button } from "@/components/ui";
 
 /** Best-effort host extraction so the webhook reads as an endpoint, not a wall of URL. */
@@ -19,6 +19,7 @@ function hostOf(url: string): string {
 
 function BuilderDashboard() {
   const [agents, setAgents] = useState<AgentDTO[] | null>(null);
+  const [wallet, setWallet] = useState<WalletDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activatingId, setActivatingId] = useState<string | null>(null);
 
@@ -26,6 +27,11 @@ function BuilderDashboard() {
     api<AgentDTO[]>("/agents")
       .then(setAgents)
       .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load agents"));
+    // The builder wallet is opened on the first payout — until then there is nothing to
+    // show, so a missing wallet is not an error: just leave the earnings tile at 0.
+    api<WalletDTO>("/wallet")
+      .then(setWallet)
+      .catch(() => setWallet(null));
   }, []);
 
   async function activate(id: string) {
@@ -75,11 +81,16 @@ function BuilderDashboard() {
       )}
 
       {/* ── summary ──────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-line bg-line">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
         {[
           { v: stats.total, l: "registered", c: "text-fg" },
           { v: stats.active, l: "active", c: "text-accent" },
           { v: stats.pending, l: "pending", c: "text-amber" },
+          {
+            v: (wallet?.availableBalance ?? 0).toFixed(2),
+            l: "credits earned",
+            c: "text-accent",
+          },
         ].map((s) => (
           <div key={s.l} className="bg-surface px-5 py-5">
             <p className={`tabular text-3xl font-extrabold ${s.c}`}>{s.v}</p>

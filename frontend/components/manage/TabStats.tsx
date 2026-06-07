@@ -72,7 +72,7 @@ export function TabStats({ agentId }: Props) {
       </div>
 
       <p className="font-mono text-[0.6rem] uppercase tracking-wider text-dim">
-        Earnings are escrowed amounts — settlement lands with Module 5.
+        Escrow is the value of tasks awaiting acceptance — accepted payouts land in your wallet.
       </p>
 
       {/* Sparkline */}
