@@ -19,9 +19,18 @@ function Harness() {
   );
 }
 
+function makeJwt(roles: string[]): string {
+  const b64 = (o: object) =>
+    btoa(JSON.stringify(o)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${b64({ alg: "HS256" })}.${b64({ sub: "u1", roles })}.sig`;
+}
+
 const loginOk = () =>
   new Response(
-    JSON.stringify({ success: true, code: "OK", message: "", data: { token: "jwt-123", userId: "u1", role: "CLIENT" } }),
+    JSON.stringify({
+      success: true, code: "OK", message: "",
+      data: { token: "jwt-123", userId: "u1", roles: ["CLIENT"] },
+    }),
     { status: 200 },
   );
 
@@ -67,5 +76,20 @@ describe("AuthProvider / useAuth", () => {
     render(<AuthProvider><Harness /></AuthProvider>);
     expect(screen.getByTestId("token").textContent).toBe("jwt-xyz");
     expect(screen.getByTestId("role").textContent).toBe("BUILDER");
+  });
+
+  it("loginWithToken decodes roles from a JWT", () => {
+    function H() {
+      const { loginWithToken, roles } = useAuth();
+      return (
+        <div>
+          <span data-testid="roles">{roles.join(",") || "none"}</span>
+          <button onClick={() => loginWithToken(makeJwt(["CLIENT", "BUILDER"]))}>oauth</button>
+        </div>
+      );
+    }
+    render(<AuthProvider><H /></AuthProvider>);
+    act(() => { screen.getByText("oauth").click(); });
+    expect(screen.getByTestId("roles").textContent).toBe("CLIENT,BUILDER");
   });
 });
