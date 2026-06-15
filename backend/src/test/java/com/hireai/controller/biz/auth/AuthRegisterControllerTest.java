@@ -3,6 +3,7 @@ package com.hireai.controller.biz.auth;
 import com.hireai.application.biz.auth.AuthAppService;
 import com.hireai.application.biz.auth.AuthResult;
 import com.hireai.application.biz.auth.EmailAlreadyRegisteredException;
+import com.hireai.controller.config.DevCurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AuthController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, DevCurrentUserProvider.class})
 @ActiveProfiles("test")
 class AuthRegisterControllerTest {
 
