@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Login orchestration. Looks up the user by email, verifies the BCrypt password against the stored
@@ -69,14 +70,14 @@ public class AuthAppServiceImpl implements AuthAppService {
 
     @Override
     @Transactional
-    public AuthResult becomeBuilder(java.util.UUID userId) {
+    public AuthResult becomeBuilder(UUID userId) {
         userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalStateException("Authenticated user not found: " + userId));
-        userRepository.addRole(userId, com.hireai.domain.biz.user.enums.Role.BUILDER);
+        userRepository.addRole(userId, Role.BUILDER);
 
         UserModel updated = userRepository.findById(userId).orElseThrow();
         List<String> roles = updated.roles().stream()
-                .map(com.hireai.domain.biz.user.enums.Role::name).sorted().toList();
+                .map(Role::name).sorted().toList();
         String token = jwtService.issue(userId, roles, Duration.ofSeconds(jwtTtlSeconds));
         log.info("User {} upgraded to builder (roles {})", userId, roles);
         return new AuthResult(token, userId, roles);
