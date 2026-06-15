@@ -10,6 +10,10 @@ read before changing `frontend/`.
 browser calls **same-origin** `/api/...`; Next forwards to the backend and the `Authorization` header
 passes through — so there is **no CORS config** on the backend. Set `BACKEND_URL` per environment.
 
+For Google OAuth (backend-driven), the browser must reach the backend directly. Set
+`NEXT_PUBLIC_API_ORIGIN` (default `http://localhost:8080`) — login and register pages link to
+`${NEXT_PUBLIC_API_ORIGIN}/oauth2/authorization/google` to start the OAuth dance.
+
 ## The one HTTP chokepoint — `lib/api.ts`
 
 `api<T>(path, init?)` and `apiUpload<T>(path, formData)` are the two fetch helpers. `apiUpload` sends
@@ -24,22 +28,53 @@ a `multipart/form-data` request with the same JWT header — used by the builder
   task-detail page keeps polling).
 
 API types mirroring the backend DTOs live in `lib/types.ts` (incl. `TaskStatus` / `AgentStatus` /
-`OutputFormat` string unions taken verbatim from the backend enums).
+`OutputFormat` string unions taken verbatim from the backend enums; `LoginResponse.roles: Role[]`).
 
 ## Auth — `lib/auth.tsx`
 
-`AuthProvider` + `useAuth()` expose `{ token, userId, role, login(email, password), logout() }`. Two
-localStorage keys, kept in sync:
-- **`hireai.token`** — the raw JWT (what `api()` reads);
-- **`hireai.auth`** — the session `{ userId, role }` (NOT the token).
+`AuthProvider` + `useAuth()` expose:
 
-`login` POSTs `/auth/login` and writes both keys; state rehydrates in a mount effect (avoids an SSR
-hydration mismatch). `components/RequireAuth` and `components/RoleGuard` are client guards; `RoleGuard`
-reads `hireai.token` directly so it doesn't bounce an authenticated user before context rehydrates.
+```
+{ token, userId, roles, role, hasRole, activeSurface, setActiveSurface,
+  login, register, becomeBuilder, loginWithToken, logout }
+```
+
+Three localStorage keys, kept in sync:
+- **`hireai.token`** — the raw JWT (what `api()` reads);
+- **`hireai.auth`** — the session `{ userId, roles }` (NOT the token);
+- **`hireai.surface`** — the active surface (`"CLIENT"` or `"BUILDER"`), persisted across reloads.
+
+`login` POSTs `/auth/login`; `register` POSTs `/auth/register {email, password, displayName?}`;
+`becomeBuilder` POSTs `/auth/become-builder {acceptTerms:true}` — all three write both keys and update
+state. `loginWithToken(token)` stores a JWT received from the OAuth callback (returns `false` if the
+token is unparsable or carries no roles). State rehydrates in a mount effect (avoids an SSR hydration
+mismatch). A backward-compatible `readPersisted` normalises the legacy `{role}` session shape into
+`{roles:[role]}` so old localStorage sessions still work.
+
+**`roles`** is the full `Role[]` set; **`hasRole(r)`** tests membership; **`activeSurface`** is the
+currently displayed surface (`CLIENT` or `BUILDER`), derived from the persisted `hireai.surface` key
+or defaulting to the first role; **`setActiveSurface(r)`** updates it. **`role`** is a back-compat
+alias for `activeSurface` (used by `RoleGuard`).
+
+## `lib/jwt.ts` — client-side decode
+
+`decodeJwt(token): JwtClaims | null` base64-decodes the JWT payload and extracts `{ userId, roles }`.
+This is **not a signature verification** — only for UI gating. It tolerates both the new `roles` array
+claim and the legacy `role` string claim. Returns `null` if the token is unparsable.
 
 ## Routes (`app/`)
 
 - `login/` — email + password → `useAuth().login` → redirect by role (CLIENT→`/client`, BUILDER→`/builder`).
+  Also shows a "Continue with Google" button linking to `${NEXT_PUBLIC_API_ORIGIN}/oauth2/authorization/google`.
+- `register/` — email + password + display name → `useAuth().register` → redirect to `/client`. Also
+  shows the same "Continue with Google" button.
+- `auth/callback/` — landing page for the backend OAuth success redirect
+  (`/auth/callback#token=<jwt>`). Reads the token from the URL fragment (never sent to a server),
+  calls `loginWithToken`, scrubs the fragment from history with `replaceState`, and routes by role.
+  On any `?error=` param redirects to `/login?error=oauth`.
+- `client/become-builder/` — terms acceptance page; calls `useAuth().becomeBuilder()` on confirm,
+  which adds the `BUILDER` role and re-issues the token; switches `activeSurface` to `BUILDER` and
+  routes to `/builder`.
 - `builder/` — portfolio dashboard (wallet tile links to earnings); `builder/earnings` — earnings
   view (lifetime/pending totals from `GET /api/builder/earnings`, per-agent breakdown, payout
   history; amounts derived server-side from `SettlementPolicy`); `builder/agents/new` — register
@@ -53,12 +88,24 @@ reads `hireai.token` directly so it doesn't bounce an authenticated user before 
 
 **`AgentDTO` is nested** — read `agent.currentVersion.{ capabilityCategories, price, webhookUrl }`, not the root.
 
+## Nav surface switcher
+
+`components/Nav.tsx` reads `activeSurface`, `hasRole`, and `setActiveSurface` from `useAuth()`. When the
+signed-in user holds **both** roles (`CLIENT` and `BUILDER`), a pill switcher renders inline — each
+option is a `<Link>` (routes to that surface's home) that also calls `setActiveSurface` on click. Single-
+role users see no switcher; the nav links shown depend on `activeSurface`.
+
+## Role guards
+
+`components/RequireAuth` and `components/RoleGuard` are client guards. `RoleGuard` reads `hireai.token`
+directly so it doesn't bounce an authenticated user before context rehydrates.
+
 ## UI kit & tests
 
 - `components/ui/` — `Button, Input, Select, Card, Field, Badge` (+ `statusColor(status)`); `Badge`
   takes a `status` prop and colours itself. `lib/outputSpecFields.tsx` is the shared output-spec sub-form.
-- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~50 tests). Auth-dependent tests must seed
-  **both** `hireai.token` and `hireai.auth`. `next build` and `npx tsc --noEmit` must stay clean.
+- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~59 tests). Auth-dependent tests
+  must seed **both** `hireai.token` and `hireai.auth`. `next build` and `npx tsc --noEmit` must stay clean.
 
 ## Run
 
