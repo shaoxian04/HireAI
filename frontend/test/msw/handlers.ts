@@ -39,9 +39,19 @@ export const handlers = [
     // The login endpoint reports bad credentials as a 400 (the client reserves 401 for an
     // expired session, which it handles by clearing the token and redirecting).
     if (body.password !== "pw") return fail("BAD_CREDENTIALS", "Bad credentials", 400);
-    const role = body.email.startsWith("builder") ? "BUILDER" : "CLIENT";
-    return ok({ token: "test-jwt", userId: "u-1", role });
+    const roles = body.email.startsWith("builder") ? ["BUILDER"] : ["CLIENT"];
+    return ok({ token: "test-jwt", userId: "u-1", roles });
   }),
+
+  http.post("*/api/auth/register", async ({ request }) => {
+    const body = (await request.json()) as { email: string; password: string };
+    if (body.email === "taken@test.local") return fail("EMAIL_ALREADY_REGISTERED", "Email already registered", 409);
+    return ok({ token: "test-jwt", userId: "u-new", roles: ["CLIENT"] });
+  }),
+
+  http.post("*/api/auth/become-builder", () =>
+    ok({ token: "expanded-jwt", userId: "u-1", roles: ["CLIENT", "BUILDER"] }),
+  ),
 
   http.get("*/api/agents", () =>
     ok([
