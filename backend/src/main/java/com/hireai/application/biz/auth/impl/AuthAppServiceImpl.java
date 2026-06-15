@@ -68,6 +68,21 @@ public class AuthAppServiceImpl implements AuthAppService {
     }
 
     @Override
+    @Transactional
+    public AuthResult becomeBuilder(java.util.UUID userId) {
+        userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("Authenticated user not found: " + userId));
+        userRepository.addRole(userId, com.hireai.domain.biz.user.enums.Role.BUILDER);
+
+        UserModel updated = userRepository.findById(userId).orElseThrow();
+        List<String> roles = updated.roles().stream()
+                .map(com.hireai.domain.biz.user.enums.Role::name).sorted().toList();
+        String token = jwtService.issue(userId, roles, Duration.ofSeconds(jwtTtlSeconds));
+        log.info("User {} upgraded to builder (roles {})", userId, roles);
+        return new AuthResult(token, userId, roles);
+    }
+
+    @Override
     public AuthResult login(LoginInfo loginInfo) {
         UserModel user = userRepository.findByEmail(loginInfo.email())
                 .orElseThrow(AuthenticationFailedException::new);
