@@ -1,0 +1,6 @@
+spring:
+  # Exclude OAuth2 client auto-configuration in the test profile: no Google credentials are
+  # available in test, and the empty client-id would fail Spring's registration validation.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.oauth2.client.servlet.OAuth2ClientAutoConfiguration
