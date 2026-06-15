@@ -1,0 +1,19 @@
+# OAuth profile — active only when deploying with Google sign-in (SPRING_PROFILES_ACTIVE=oauth).
+# Declaring the registration here (instead of in application.yml) keeps the default/dev/test
+# profiles free of any OAuth client, so they start cleanly with no Google credentials. Activating
+# this profile REQUIRES GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (no defaults — fail fast).
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope: openid,email,profile
+
+hireai:
+  auth:
+    oauth2:
+      # Flips on the flag-gated OAuth security chain + success handler beans.
+      enabled: true

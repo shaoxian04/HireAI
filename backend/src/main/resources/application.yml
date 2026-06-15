@@ -7,16 +7,10 @@ spring:
   # so a present .env does not affect them.
   config:
     import: "optional:file:.env[.properties]"
-  security:
-    oauth2:
-      client:
-        registration:
-          google:
-            # Empty by default → Spring's ClientsConfiguredCondition sees no client and creates
-            # no ClientRegistrationRepository, so the app starts fine without Google creds.
-            client-id: ${GOOGLE_CLIENT_ID:}
-            client-secret: ${GOOGLE_CLIENT_SECRET:}
-            scope: openid,email,profile
+  # The Google OAuth client registration is intentionally NOT declared here. Declaring it with an
+  # empty client-id makes Spring's ClientsConfiguredCondition match and then fail validation
+  # ("Client id ... must not be empty"), breaking startup whenever no creds are set. Instead it
+  # lives in application-oauth.yml, active only under the "oauth" profile. See hireai.auth.oauth2.
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/hireai}
     username: ${DB_USERNAME:hireai}
@@ -79,7 +73,10 @@ hireai:
     jwt-secret: ${AUTH_JWT_SECRET:dev-only-auth-jwt-secret-change-me-32bytes!!}
     # Access-token lifetime in seconds (default 24h). Login only; no refresh in this slice.
     jwt-ttl-seconds: ${AUTH_JWT_TTL_SECONDS:86400}
-    # Google OAuth login. Disabled by default; set OAUTH2_ENABLED=true + GOOGLE_CLIENT_ID/SECRET to enable.
+    # Google OAuth login. Disabled by default. To enable: run with the "oauth" Spring profile
+    # (SPRING_PROFILES_ACTIVE=oauth) and set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET — that profile
+    # (application-oauth.yml) declares the client registration and flips enabled=true, which gates
+    # the OAuth security chain + success handler beans.
     oauth2:
       enabled: ${OAUTH2_ENABLED:false}
       success-redirect-url: ${OAUTH2_SUCCESS_REDIRECT_URL:http://localhost:3000/auth/callback}
