@@ -12,4 +12,6 @@ import org.springframework.validation.annotation.Validated;
 public interface AuthAppService {
 
     AuthResult login(@NonNull LoginInfo loginInfo);
+
+    AuthResult register(@NonNull RegisterInfo registerInfo);
 }

@@ -3,7 +3,10 @@ package com.hireai.application.biz.auth.impl;
 import com.hireai.application.biz.auth.AuthAppService;
 import com.hireai.application.biz.auth.AuthResult;
 import com.hireai.application.biz.auth.AuthenticationFailedException;
+import com.hireai.application.biz.auth.EmailAlreadyRegisteredException;
 import com.hireai.application.biz.auth.LoginInfo;
+import com.hireai.application.biz.auth.RegisterInfo;
+import com.hireai.domain.biz.wallet.model.WalletModel;
 import com.hireai.application.port.security.JwtService;
 import com.hireai.domain.biz.user.model.UserModel;
 import com.hireai.domain.biz.user.repository.UserRepository;
@@ -43,6 +46,24 @@ public class AuthAppServiceImpl implements AuthAppService {
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
         this.jwtTtlSeconds = jwtTtlSeconds;
+    }
+
+    @Override
+    @Transactional
+    public AuthResult register(RegisterInfo info) {
+        if (userRepository.findByEmail(info.email()).isPresent()) {
+            throw new EmailAlreadyRegisteredException();
+        }
+        String hash = passwordEncoder.encode(info.password());
+        UserModel user = userRepository.create(
+                UserModel.newClient(info.email(), hash, info.displayName()));
+        walletRepository.save(WalletModel.openFor(user.id()));
+
+        List<String> roles = user.roles().stream()
+                .map(com.hireai.domain.biz.user.enums.Role::name).sorted().toList();
+        String token = jwtService.issue(user.id(), roles, Duration.ofSeconds(jwtTtlSeconds));
+        log.info("Registered new user {} (roles {})", user.id(), roles);
+        return new AuthResult(token, user.id(), roles);
     }
 
     @Override
