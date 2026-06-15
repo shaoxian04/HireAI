@@ -3,10 +3,12 @@ package com.hireai.controller.biz.auth;
 import com.hireai.application.biz.auth.AuthAppService;
 import com.hireai.application.biz.auth.AuthResult;
 import com.hireai.application.biz.auth.LoginInfo;
+import com.hireai.application.biz.auth.RegisterInfo;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.auth.dto.LoginRequest;
 import com.hireai.controller.biz.auth.dto.LoginResponse;
+import com.hireai.controller.biz.auth.dto.RegisterRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,6 +34,13 @@ public class AuthController extends BaseController {
     @PostMapping("/login")
     public WebResult<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResult result = authAppService.login(new LoginInfo(request.email(), request.password()));
+        return ok(new LoginResponse(result.token(), result.userId(), result.roles()));
+    }
+
+    @PostMapping("/register")
+    public WebResult<LoginResponse> register(@Valid @RequestBody RegisterRequest request) {
+        AuthResult result = authAppService.register(
+                new RegisterInfo(request.email(), request.password(), request.displayName()));
         return ok(new LoginResponse(result.token(), result.userId(), result.roles()));
     }
 }

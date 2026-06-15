@@ -35,6 +35,7 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/auth/login").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/auth/register").permitAll()
                         .requestMatchers("/api/agent-callbacks/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated())
