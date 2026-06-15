@@ -7,11 +7,7 @@ import jakarta.persistence.Table;
 
 import java.util.UUID;
 
-/**
- * JPA persistence entity for a user row. Separate from the domain {@code UserModel} so the domain
- * stays framework-free; the repository impl maps between the two. Read-only in this slice (no
- * setters) — users are created by Flyway seed, not by the app.
- */
+/** JPA persistence entity for a user row. Roles live in {@link UserRoleJpaEntity}. */
 @Entity
 @Table(name = "users")
 public class UserJpaEntity {
@@ -26,8 +22,8 @@ public class UserJpaEntity {
     @Column(name = "password_hash")
     private String passwordHash;
 
-    @Column(name = "role", nullable = false)
-    private String role;
+    @Column(name = "display_name")
+    private String displayName;
 
     @Column(name = "is_active", nullable = false)
     private boolean active;
@@ -35,9 +31,17 @@ public class UserJpaEntity {
     protected UserJpaEntity() {
     }
 
+    public UserJpaEntity(UUID id, String email, String passwordHash, String displayName, boolean active) {
+        this.id = id;
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.displayName = displayName;
+        this.active = active;
+    }
+
     public UUID getId() { return id; }
     public String getEmail() { return email; }
     public String getPasswordHash() { return passwordHash; }
-    public String getRole() { return role; }
+    public String getDisplayName() { return displayName; }
     public boolean isActive() { return active; }
 }

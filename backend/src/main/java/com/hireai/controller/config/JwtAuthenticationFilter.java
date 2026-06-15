@@ -15,7 +15,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
 
 /**
  * Reads {@code Authorization: Bearer <jwt>}, verifies it via {@link JwtService}, and on success sets
@@ -44,9 +43,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = header.substring(BEARER_PREFIX.length()).trim();
             try {
                 JwtPrincipal principal = jwtService.verify(token);
-                var authority = new SimpleGrantedAuthority("ROLE_" + principal.role());
+                var authorities = principal.roles().stream()
+                        .map(r -> new SimpleGrantedAuthority("ROLE_" + r))
+                        .toList();
                 var authentication = new UsernamePasswordAuthenticationToken(
-                        principal.userId(), null, List.of(authority));
+                        principal.userId(), null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (JwtInvalidException ex) {
                 log.debug("Rejected invalid auth token: {}", ex.getMessage());

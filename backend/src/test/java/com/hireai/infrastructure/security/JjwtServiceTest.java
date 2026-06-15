@@ -6,6 +6,7 @@ import com.hireai.infrastructure.security.impl.JjwtService;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -18,19 +19,19 @@ class JjwtServiceTest {
     private final JjwtService service = new JjwtService(SECRET);
 
     @Test
-    void issuesAndVerifiesRoundTrip() {
+    void issuesAndVerifiesRoundTripWithRoleSet() {
         UUID userId = UUID.randomUUID();
 
-        String token = service.issue(userId, "CLIENT", Duration.ofMinutes(5));
+        String token = service.issue(userId, List.of("CLIENT", "BUILDER"), Duration.ofMinutes(5));
         JwtPrincipal principal = service.verify(token);
 
         assertThat(principal.userId()).isEqualTo(userId);
-        assertThat(principal.role()).isEqualTo("CLIENT");
+        assertThat(principal.roles()).containsExactlyInAnyOrder("CLIENT", "BUILDER");
     }
 
     @Test
     void rejectsTamperedToken() {
-        String token = service.issue(UUID.randomUUID(), "BUILDER", Duration.ofMinutes(5));
+        String token = service.issue(UUID.randomUUID(), List.of("BUILDER"), Duration.ofMinutes(5));
         String tampered = token.substring(0, token.length() - 2)
                 + (token.endsWith("a") ? "b" : "a") + token.charAt(token.length() - 1);
 
@@ -40,7 +41,7 @@ class JjwtServiceTest {
 
     @Test
     void rejectsWrongSecret() {
-        String token = service.issue(UUID.randomUUID(), "CLIENT", Duration.ofMinutes(5));
+        String token = service.issue(UUID.randomUUID(), List.of("CLIENT"), Duration.ofMinutes(5));
         JjwtService other = new JjwtService("a-different-secret-also-at-least-32-bytes!!");
 
         assertThatThrownBy(() -> other.verify(token))
@@ -49,7 +50,7 @@ class JjwtServiceTest {
 
     @Test
     void rejectsExpiredToken() {
-        String token = service.issue(UUID.randomUUID(), "CLIENT", Duration.ofSeconds(-1));
+        String token = service.issue(UUID.randomUUID(), List.of("CLIENT"), Duration.ofSeconds(-1));
 
         assertThatThrownBy(() -> service.verify(token))
                 .isInstanceOf(JwtInvalidException.class);

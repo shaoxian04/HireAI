@@ -32,6 +32,6 @@ public class AuthController extends BaseController {
     @PostMapping("/login")
     public WebResult<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResult result = authAppService.login(new LoginInfo(request.email(), request.password()));
-        return ok(new LoginResponse(result.token(), result.userId(), result.role()));
+        return ok(new LoginResponse(result.token(), result.userId(), result.roles()));
     }
 }
