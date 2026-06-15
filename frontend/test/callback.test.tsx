@@ -15,6 +15,7 @@ function makeJwt(roles: string[]): string {
 afterEach(() => {
   localStorage.clear();
   replace.mockClear();
+  vi.unstubAllGlobals();
   window.location.hash = "";
 });
 
@@ -28,11 +29,8 @@ describe("OAuth callback", () => {
   });
 
   it("routes to /login on error", async () => {
-    window.location.hash = "";
-    Object.defineProperty(window, "location", {
-      value: { ...window.location, hash: "", search: "?error=oauth" },
-      writable: true,
-    });
+    // Stub location for this case only; vi.unstubAllGlobals() in afterEach restores it.
+    vi.stubGlobal("location", { hash: "", search: "?error=oauth", pathname: "/auth/callback" });
     render(<AuthProvider><CallbackPage /></AuthProvider>);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?error=oauth"));
   });

@@ -69,16 +69,18 @@ export function Nav() {
             {dual && (
               <div className="hidden items-center rounded-md border border-line bg-surface-2 p-0.5 md:flex">
                 {(["CLIENT", "BUILDER"] as const).map((r) => (
-                  <button
+                  // Link (not button) so toggling the surface also routes to that surface's home,
+                  // matching the expected "switch → /client or /builder" UX, without needing useRouter.
+                  <Link
                     key={r}
-                    type="button"
+                    href={r === "BUILDER" ? "/builder" : "/client"}
                     onClick={() => setActiveSurface(r)}
                     className={`rounded px-2.5 py-1 font-mono text-[0.6rem] uppercase tracking-[0.18em] transition ${
                       activeSurface === r ? "bg-accent/15 text-accent" : "text-muted hover:text-fg"
                     }`}
                   >
                     {r}
-                  </button>
+                  </Link>
                 ))}
               </div>
             )}
