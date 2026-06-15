@@ -17,21 +17,20 @@ interface RequireAuthProps {
  * redirect runs. Hard Invariant #5 is enforced server-side; this is UX-level gating only.
  */
 export function RequireAuth({ children, role }: RequireAuthProps) {
-  const { token, role: userRole } = useAuth();
+  const { token, hasRole } = useAuth();
   const router = useRouter();
 
-  const allowed = !!token && (!role || userRole === role);
+  const allowed = !!token && (!role || hasRole(role));
 
   useEffect(() => {
-    // Wait for rehydration: token is null on the very first render even when persisted.
     if (typeof window === "undefined") return;
     const persisted = localStorage.getItem("hireai.token");
     if (!persisted) {
       router.replace("/login");
       return;
     }
-    if (role && userRole && userRole !== role) router.replace("/login");
-  }, [token, userRole, role, router]);
+    if (role && token && !hasRole(role)) router.replace("/login");
+  }, [token, role, hasRole, router]);
 
   return allowed ? <>{children}</> : null;
 }
