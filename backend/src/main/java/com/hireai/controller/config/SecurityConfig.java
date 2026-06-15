@@ -1,9 +1,11 @@
 package com.hireai.controller.config;
 
 import com.hireai.application.port.security.JwtService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -27,7 +29,32 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 public class SecurityConfig {
 
+    /**
+     * Dedicated chain for the Google OAuth handshake. Higher precedence than the JWT chain; scoped to
+     * the OAuth endpoints only. Allows the session the authorization-request repository needs. Loads
+     * only when OAuth is enabled and a client is configured.
+     */
     @Bean
+    @Order(1)
+    @Profile("!test")
+    @ConditionalOnProperty(name = "hireai.auth.oauth2.enabled", havingValue = "true")
+    public SecurityFilterChain oauthFilterChain(
+            HttpSecurity http,
+            OAuth2AuthenticationSuccessHandler successHandler,
+            @org.springframework.beans.factory.annotation.Value("${hireai.auth.oauth2.failure-redirect-url}") String failureUrl)
+            throws Exception {
+        http
+                .securityMatcher("/oauth2/**", "/login/oauth2/**")
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                .oauth2Login(oauth -> oauth
+                        .successHandler(successHandler)
+                        .failureUrl(failureUrl + "?error=oauth"));
+        return http.build();
+    }
+
+    @Bean
+    @Order(2)
     @Profile("!test")
     public SecurityFilterChain securedFilterChain(HttpSecurity http, JwtService jwtService) throws Exception {
         http
