@@ -18,8 +18,8 @@ import java.io.IOException;
 
 /**
  * Reads {@code Authorization: Bearer <jwt>}, verifies it via {@link JwtService}, and on success sets
- * a {@link UsernamePasswordAuthenticationToken} whose principal is the user id (UUID) and whose single
- * authority is {@code ROLE_<role>}. A missing/blank header or an invalid token leaves the context
+ * a {@link UsernamePasswordAuthenticationToken} whose principal is the user id (UUID) and whose
+ * authorities are one {@code ROLE_<role>} per role in the token. A missing/blank header or an invalid token leaves the context
  * unauthenticated — the security chain then returns 401 on protected routes (Hard Invariant #5).
  * Never writes a response itself; it only populates the context.
  */

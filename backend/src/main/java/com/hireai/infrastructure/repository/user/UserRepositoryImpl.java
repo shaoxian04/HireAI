@@ -43,9 +43,8 @@ public class UserRepositoryImpl implements UserRepository {
 
     @Override
     public void addRole(UUID userId, Role role) {
-        if (!roleJpa.existsByUserIdAndRole(userId, role.name())) {
-            roleJpa.save(new UserRoleJpaEntity(userId, role.name()));
-        }
+        // Race-safe idempotent grant (ON CONFLICT DO NOTHING) — adding a role twice is a no-op.
+        roleJpa.insertIgnore(userId, role.name());
     }
 
     private UserModel toModel(UserJpaEntity e) {
