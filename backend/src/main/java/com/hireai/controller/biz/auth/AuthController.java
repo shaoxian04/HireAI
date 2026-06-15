@@ -17,9 +17,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Authentication HTTP surface. Thin: validate the request, delegate to the app service, wrap the
- * result. {@code POST /api/auth/login} is the only endpoint and is permitAll in the security chain
- * (you cannot have a token before you log in). Bad credentials surface as HTTP 401 via the global
- * exception handler (generic message — no user enumeration).
+ * result. {@code POST /api/auth/login} and {@code POST /api/auth/register} are permitAll in the
+ * security chain (you cannot have a token before you authenticate). Login bad-credentials surface as
+ * HTTP 401 via the global exception handler (generic message — no user enumeration); a duplicate
+ * registration surfaces as HTTP 409.
  */
 @RestController
 @RequestMapping("/api/auth")

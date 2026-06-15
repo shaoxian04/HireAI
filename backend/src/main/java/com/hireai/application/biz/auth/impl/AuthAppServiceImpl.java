@@ -6,10 +6,11 @@ import com.hireai.application.biz.auth.AuthenticationFailedException;
 import com.hireai.application.biz.auth.EmailAlreadyRegisteredException;
 import com.hireai.application.biz.auth.LoginInfo;
 import com.hireai.application.biz.auth.RegisterInfo;
-import com.hireai.domain.biz.wallet.model.WalletModel;
 import com.hireai.application.port.security.JwtService;
+import com.hireai.domain.biz.user.enums.Role;
 import com.hireai.domain.biz.user.model.UserModel;
 import com.hireai.domain.biz.user.repository.UserRepository;
+import com.hireai.domain.biz.wallet.model.WalletModel;
 import com.hireai.domain.biz.wallet.repository.WalletRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -60,7 +61,7 @@ public class AuthAppServiceImpl implements AuthAppService {
         walletRepository.save(WalletModel.openFor(user.id()));
 
         List<String> roles = user.roles().stream()
-                .map(com.hireai.domain.biz.user.enums.Role::name).sorted().toList();
+                .map(Role::name).sorted().toList();
         String token = jwtService.issue(user.id(), roles, Duration.ofSeconds(jwtTtlSeconds));
         log.info("Registered new user {} (roles {})", user.id(), roles);
         return new AuthResult(token, user.id(), roles);
@@ -78,7 +79,7 @@ public class AuthAppServiceImpl implements AuthAppService {
             throw new AuthenticationFailedException();
         }
         List<String> roles = user.roles().stream()
-                .map(com.hireai.domain.biz.user.enums.Role::name).sorted().toList();
+                .map(Role::name).sorted().toList();
         String token = jwtService.issue(user.id(), roles, Duration.ofSeconds(jwtTtlSeconds));
         log.info("User {} logged in (roles {})", user.id(), roles);
         return new AuthResult(token, user.id(), roles);
