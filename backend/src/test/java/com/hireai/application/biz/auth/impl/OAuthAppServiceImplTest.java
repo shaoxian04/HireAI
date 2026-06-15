@@ -103,4 +103,17 @@ class OAuthAppServiceImplTest {
                 .isInstanceOf(OAuthAuthenticationException.class);
         verify(userRepository, never()).create(any());
     }
+
+    @Test
+    void rejectsDisabledAccount() {
+        UUID userId = UUID.randomUUID();
+        when(identityRepository.findUserIdByProviderSubject("google", "sub-123"))
+                .thenReturn(Optional.of(userId));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(
+                new UserModel(userId, "ada@hireai.local", null, "Ada", Set.of(Role.CLIENT), false)));
+
+        assertThatThrownBy(() -> service.loginWithOAuth(google("ada@hireai.local", true)))
+                .isInstanceOf(OAuthAuthenticationException.class);
+        verify(jwtService, never()).issue(any(), anyList(), any());
+    }
 }

@@ -59,6 +59,12 @@ public class OAuthAppServiceImpl implements OAuthAppService {
                 .flatMap(userRepository::findById)
                 .orElseGet(() -> resolveByEmailOrCreate(info));
 
+        // Mirror the password-login active check: a deactivated account must not re-enter via OAuth.
+        // (Newly created accounts are always active, so this only rejects existing disabled users.)
+        if (!user.active()) {
+            throw new OAuthAuthenticationException("Account is disabled");
+        }
+
         return issue(user);
     }
 
