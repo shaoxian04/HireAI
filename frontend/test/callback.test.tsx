@@ -14,6 +14,7 @@ function makeJwt(roles: string[]): string {
 
 afterEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   replace.mockClear();
   vi.unstubAllGlobals();
   window.location.hash = "";
@@ -22,10 +23,20 @@ afterEach(() => {
 describe("OAuth callback", () => {
   it("stores the fragment token and routes to /client", async () => {
     const jwt = makeJwt(["CLIENT"]);
-    window.location.hash = `#token=${jwt}`;
+    sessionStorage.setItem("hireai.oauth.nonce", "N1");
+    window.location.hash = `#token=${jwt}&nonce=N1`;
     render(<AuthProvider><CallbackPage /></AuthProvider>);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/client"));
     expect(localStorage.getItem("hireai.token")).toBe(jwt);
+  });
+
+  it("rejects a token whose nonce does not match sessionStorage", async () => {
+    const jwt = makeJwt(["CLIENT"]);
+    sessionStorage.setItem("hireai.oauth.nonce", "N1");
+    window.location.hash = `#token=${jwt}&nonce=DIFFERENT`;
+    render(<AuthProvider><CallbackPage /></AuthProvider>);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?error=oauth"));
+    expect(localStorage.getItem("hireai.token")).toBeNull();
   });
 
   it("routes to /login on error", async () => {

@@ -6,8 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { Button, Field, Input } from "@/components/ui";
-
-const API_ORIGIN = process.env.NEXT_PUBLIC_API_ORIGIN ?? "http://localhost:8080";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 const DEMO = [
   { role: "CLIENT", email: "client@hireai.local" },
@@ -106,12 +105,7 @@ export default function LoginPage() {
               <span className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-dim">or</span>
               <span className="h-px flex-1 bg-line" />
             </div>
-            <a
-              href={`${API_ORIGIN}/oauth2/authorization/google`}
-              className="flex w-full items-center justify-center gap-2 rounded-md border border-line bg-surface px-3 py-2.5 font-mono text-xs uppercase tracking-wider text-fg transition hover:border-accent/50"
-            >
-              Continue with Google
-            </a>
+            <GoogleSignInButton />
           </div>
 
           <div className="mt-5 rounded-md border border-line bg-surface-2/60 p-4">

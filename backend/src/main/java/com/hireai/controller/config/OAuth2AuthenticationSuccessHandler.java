@@ -5,6 +5,7 @@ import com.hireai.application.biz.auth.OAuthAppService;
 import com.hireai.application.biz.auth.OAuthUserInfo;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -16,6 +17,8 @@ import org.springframework.security.web.authentication.AuthenticationSuccessHand
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 /**
  * On a successful Google handshake, resolves/links/creates the local account, mints our JWT, and
@@ -55,7 +58,16 @@ public class OAuth2AuthenticationSuccessHandler implements AuthenticationSuccess
                     user.getAttribute("name"));
 
             AuthResult result = oauthAppService.loginWithOAuth(info);
-            response.sendRedirect(successRedirectUrl + "#token=" + result.token());
+            String redirect = successRedirectUrl + "#token=" + result.token();
+            HttpSession session = request.getSession(false);
+            if (session != null) {
+                Object nonce = session.getAttribute(NonceCarryingAuthorizationRequestResolver.NONCE_SESSION_ATTR);
+                if (nonce != null) {
+                    session.removeAttribute(NonceCarryingAuthorizationRequestResolver.NONCE_SESSION_ATTR);
+                    redirect = redirect + "&nonce=" + URLEncoder.encode(nonce.toString(), StandardCharsets.UTF_8);
+                }
+            }
+            response.sendRedirect(redirect);
         } catch (Exception ex) {
             log.warn("OAuth login failed: {}", ex.getMessage());
             response.sendRedirect(failureRedirectUrl + "?error=oauth");

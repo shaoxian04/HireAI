@@ -45,6 +45,7 @@ public class SecurityConfig {
     public SecurityFilterChain oauthFilterChain(
             HttpSecurity http,
             OAuth2AuthenticationSuccessHandler successHandler,
+            NonceCarryingAuthorizationRequestResolver nonceResolver,
             @Value("${hireai.auth.oauth2.failure-redirect-url}") String failureUrl)
             throws Exception {
         http
@@ -52,6 +53,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                 .oauth2Login(oauth -> oauth
+                        .authorizationEndpoint(a -> a.authorizationRequestResolver(nonceResolver))
                         .successHandler(successHandler)
                         .failureUrl(failureUrl + "?error=oauth"));
         return http.build();

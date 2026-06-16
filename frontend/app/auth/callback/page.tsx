@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, homeFor } from "@/lib/auth";
 import { decodeJwt } from "@/lib/jwt";
+import { OAUTH_NONCE_KEY } from "@/components/GoogleSignInButton";
 
 /**
  * Lands here after the backend OAuth success redirect: `/auth/callback#token=<jwt>`. Reads the token
@@ -23,8 +24,12 @@ export default function CallbackPage() {
     }
 
     const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
-    const token = new URLSearchParams(hash).get("token");
-    if (!token || !loginWithToken(token)) {
+    const params = new URLSearchParams(hash);
+    const token = params.get("token");
+    const returnedNonce = params.get("nonce");
+    const expectedNonce = sessionStorage.getItem(OAUTH_NONCE_KEY);
+    sessionStorage.removeItem(OAUTH_NONCE_KEY);
+    if (!token || !returnedNonce || !expectedNonce || returnedNonce !== expectedNonce || !loginWithToken(token)) {
       router.replace("/login?error=oauth");
       return;
     }

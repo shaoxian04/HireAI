@@ -63,6 +63,21 @@ class OAuth2AuthenticationSuccessHandlerTest {
     }
 
     @Test
+    void echoesNonceFromSessionInFragment() throws Exception {
+        when(oauthAppService.loginWithOAuth(any(OAuthUserInfo.class)))
+                .thenReturn(new AuthResult("jwt.abc", UUID.randomUUID(), List.of("CLIENT")));
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        req.getSession().setAttribute(NonceCarryingAuthorizationRequestResolver.NONCE_SESSION_ATTR, "abc123");
+        MockHttpServletResponse res = new MockHttpServletResponse();
+
+        handler.onAuthenticationSuccess(req, res, googleToken(Map.of(
+                "sub", "sub-123", "email", "ada@hireai.local", "email_verified", true, "name", "Ada")));
+
+        assertThat(res.getRedirectedUrl())
+                .isEqualTo("http://localhost:3000/auth/callback#token=jwt.abc&nonce=abc123");
+    }
+
+    @Test
     void redirectsToFailureUrlOnException() throws Exception {
         when(oauthAppService.loginWithOAuth(any(OAuthUserInfo.class)))
                 .thenThrow(new OAuthAuthenticationException("nope"));
