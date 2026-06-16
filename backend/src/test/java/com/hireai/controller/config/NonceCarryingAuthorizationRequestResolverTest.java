@@ -47,6 +47,23 @@ class NonceCarryingAuthorizationRequestResolverTest {
     }
 
     @Test
+    void storesNothingWhenNonceAbsent() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRequestURI(AUTH_PATH);
+        request.setServletPath(AUTH_PATH);
+        request.setServerName("localhost");
+        request.setServerPort(8080);
+        // no cb_nonce parameter
+
+        OAuth2AuthorizationRequest resolved = resolver.resolve(request);
+
+        assertThat(resolved).isNotNull();
+        assertThat(request.getSession(false) == null
+                || request.getSession(false).getAttribute(NonceCarryingAuthorizationRequestResolver.NONCE_SESSION_ATTR) == null)
+                .isTrue();
+    }
+
+    @Test
     void rejectsNonceWithIllegalCharacters() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setRequestURI(AUTH_PATH);

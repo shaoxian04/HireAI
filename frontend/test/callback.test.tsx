@@ -39,6 +39,15 @@ describe("OAuth callback", () => {
     expect(localStorage.getItem("hireai.token")).toBeNull();
   });
 
+  it("rejects a crafted link with a token but no nonce in the fragment", async () => {
+    const jwt = makeJwt(["CLIENT"]);
+    sessionStorage.setItem("hireai.oauth.nonce", "N1");
+    window.location.hash = `#token=${jwt}`;
+    render(<AuthProvider><CallbackPage /></AuthProvider>);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/login?error=oauth"));
+    expect(localStorage.getItem("hireai.token")).toBeNull();
+  });
+
   it("routes to /login on error", async () => {
     // Stub location for this case only; vi.unstubAllGlobals() in afterEach restores it.
     vi.stubGlobal("location", { hash: "", search: "?error=oauth", pathname: "/auth/callback" });

@@ -75,6 +75,9 @@ class OAuth2AuthenticationSuccessHandlerTest {
 
         assertThat(res.getRedirectedUrl())
                 .isEqualTo("http://localhost:3000/auth/callback#token=jwt.abc&nonce=abc123");
+        // One-time use: the nonce is consumed from the session so it cannot be replayed.
+        assertThat(req.getSession().getAttribute(NonceCarryingAuthorizationRequestResolver.NONCE_SESSION_ATTR))
+                .isNull();
     }
 
     @Test
