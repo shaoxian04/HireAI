@@ -59,8 +59,9 @@ class AgentProfileRepositoryIntegrationTest {
     private UUID seedAgent() {
         UUID ownerId = UUID.randomUUID();
         UUID agentId = UUID.randomUUID();
-        jdbc.update("INSERT INTO users (id, email, role) VALUES (?, ?, 'BUILDER')",
+        jdbc.update("INSERT INTO users (id, email) VALUES (?, ?)",
                 ownerId, ownerId + "@test.local");
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'BUILDER')", ownerId);
         jdbc.update("INSERT INTO agents (id, owner_id, name, status, reputation_score) " +
                         "VALUES (?, ?, 'Test Agent', 'ACTIVE', 50.00)",
                 agentId, ownerId);
