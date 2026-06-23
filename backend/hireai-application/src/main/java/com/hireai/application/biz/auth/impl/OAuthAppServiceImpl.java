@@ -69,19 +69,25 @@ public class OAuthAppServiceImpl implements OAuthAppService {
     }
 
     private UserModel resolveByEmailOrCreate(OAuthUserInfo info) {
-        return userRepository.findByEmail(info.email())
-                .map(existing -> {
-                    identityRepository.link(existing.id(), info.provider(), info.subject(), info.email());
-                    return existing;
-                })
-                .orElseGet(() -> {
-                    UserModel created = userRepository.create(
-                            UserModel.newClient(info.email(), null, info.displayName()));
-                    walletRepository.save(WalletModel.openFor(created.id()));
-                    identityRepository.link(created.id(), info.provider(), info.subject(), info.email());
-                    log.info("Created OAuth user {} via {}", created.id(), info.provider());
-                    return created;
-                });
+        // SECURITY (account-takeover guard): never silently link a provider identity to a pre-existing
+        // local account just because the email matches. Local emails are not independently verified —
+        // registration does not prove ownership — so an attacker could pre-register a victim's email
+        // and have the victim's later OAuth login merged into the attacker-controlled account. If an
+        // account already exists for this email, refuse; the password owner must log in and link the
+        // provider through an explicit, re-authenticated flow.
+        if (userRepository.findByEmail(info.email()).isPresent()) {
+            log.warn("Refused to auto-link {} identity to existing local account for email (manual link required)",
+                    info.provider());
+            throw new OAuthAuthenticationException(
+                    "An account with this email already exists. Sign in with your password to link "
+                            + info.provider() + ".");
+        }
+        UserModel created = userRepository.create(
+                UserModel.newClient(info.email(), null, info.displayName()));
+        walletRepository.save(WalletModel.openFor(created.id()));
+        identityRepository.link(created.id(), info.provider(), info.subject(), info.email());
+        log.info("Created OAuth user {} via {}", created.id(), info.provider());
+        return created;
     }
 
     private AuthResult issue(UserModel user) {

@@ -29,7 +29,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** Unit tests for OAuth resolution: existing link, link-by-email, new account, unverified email. */
+/** Unit tests for OAuth resolution: existing link, email-collision rejection, new account, unverified email. */
 class OAuthAppServiceImplTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
@@ -61,19 +61,23 @@ class OAuthAppServiceImplTest {
     }
 
     @Test
-    void linksByEmailWhenAccountExistsButIdentityDoesNot() {
+    void rejectsSilentLinkWhenLocalAccountWithSameEmailExists() {
+        // Account-takeover guard: a pre-existing local account (e.g. password-registered, whose email
+        // is NOT independently verified) must never be silently linked to an OAuth identity on an email
+        // match. Otherwise an attacker who pre-registers a victim's email would capture the victim's
+        // later "Sign in with Google". Linking requires an explicit, password-authenticated flow.
         UUID userId = UUID.randomUUID();
         when(identityRepository.findUserIdByProviderSubject("google", "sub-123")).thenReturn(Optional.empty());
         when(userRepository.findByEmail("ada@hireai.local")).thenReturn(Optional.of(
                 new UserModel(userId, "ada@hireai.local", "h", "Ada", Set.of(Role.CLIENT), true)));
-        when(jwtService.issue(eq(userId), anyList(), any(Duration.class))).thenReturn("jwt");
 
-        AuthResult result = service.loginWithOAuth(google("ada@hireai.local", true));
+        assertThatThrownBy(() -> service.loginWithOAuth(google("ada@hireai.local", true)))
+                .isInstanceOf(OAuthAuthenticationException.class);
 
-        assertThat(result.userId()).isEqualTo(userId);
-        verify(identityRepository).link(userId, "google", "sub-123", "ada@hireai.local");
+        verify(identityRepository, never()).link(any(), any(), any(), any());
         verify(userRepository, never()).create(any());
         verify(walletRepository, never()).save(any());
+        verify(jwtService, never()).issue(any(), anyList(), any());
     }
 
     @Test
