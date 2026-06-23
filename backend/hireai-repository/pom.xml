@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.hireai</groupId>
+        <artifactId>hireai-backend</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>hireai-repository</artifactId>
+    <name>hireai-repository</name>
+    <description>Persistence adapter: JPA entities, Spring Data repositories, and the domain/application repository + read-query port implementations. Implements interfaces owned by domain and application.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.hireai</groupId>
+            <artifactId>hireai-application</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hireai</groupId>
+            <artifactId>hireai-domain</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hireai</groupId>
+            <artifactId>hireai-utility</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+    </dependencies>
+</project>

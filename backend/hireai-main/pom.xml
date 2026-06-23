@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.hireai</groupId>
+        <artifactId>hireai-backend</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>hireai-main</artifactId>
+    <name>hireai-main</name>
+    <description>Bootable application: @SpringBootApplication, Flyway migrations + config resources, and the full test suite. Aggregates every layer module and is the only module that produces a runnable jar.</description>
+
+    <dependencies>
+        <!-- All layer modules assembled into the runnable app -->
+        <dependency>
+            <groupId>com.hireai</groupId>
+            <artifactId>hireai-controller</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hireai</groupId>
+            <artifactId>hireai-infrastructure</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hireai</groupId>
+            <artifactId>hireai-repository</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hireai</groupId>
+            <artifactId>hireai-application</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hireai</groupId>
+            <artifactId>hireai-domain</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hireai</groupId>
+            <artifactId>hireai-utility</artifactId>
+        </dependency>
+
+        <!-- Boot the application context + bind configuration -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- Schema migration + driver (runtime) -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Tests: the whole suite lives here, against the fully-assembled context -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>rabbitmq</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Apache HttpClient 5: lets TestRestTemplate surface a 401 response on a POST with a
+             body. The JDK HttpURLConnection (SimpleClientHttpRequestFactory) instead throws
+             HttpRetryException ("cannot retry due to server authentication, in streaming mode")
+             on a 401 to a streamed POST, which would mask the assertion. Test scope only. -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.hireai.HireAiApplication</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
