@@ -33,7 +33,7 @@ class JwtAuthenticationFilterTest {
     @Test
     void setsAuthenticationForValidBearerToken() throws Exception {
         UUID userId = UUID.randomUUID();
-        when(jwtService.verify("good")).thenReturn(new JwtPrincipal(userId, "CLIENT"));
+        when(jwtService.verify("good")).thenReturn(new JwtPrincipal(userId, java.util.Set.of("CLIENT")));
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("Authorization", "Bearer good");
         FilterChain chain = mock(FilterChain.class);

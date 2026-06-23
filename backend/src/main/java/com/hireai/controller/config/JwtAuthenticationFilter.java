@@ -15,12 +15,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
 
 /**
  * Reads {@code Authorization: Bearer <jwt>}, verifies it via {@link JwtService}, and on success sets
- * a {@link UsernamePasswordAuthenticationToken} whose principal is the user id (UUID) and whose single
- * authority is {@code ROLE_<role>}. A missing/blank header or an invalid token leaves the context
+ * a {@link UsernamePasswordAuthenticationToken} whose principal is the user id (UUID) and whose
+ * authorities are one {@code ROLE_<role>} per role in the token. A missing/blank header or an invalid token leaves the context
  * unauthenticated — the security chain then returns 401 on protected routes (Hard Invariant #5).
  * Never writes a response itself; it only populates the context.
  */
@@ -44,9 +43,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = header.substring(BEARER_PREFIX.length()).trim();
             try {
                 JwtPrincipal principal = jwtService.verify(token);
-                var authority = new SimpleGrantedAuthority("ROLE_" + principal.role());
+                var authorities = principal.roles().stream()
+                        .map(r -> new SimpleGrantedAuthority("ROLE_" + r))
+                        .toList();
                 var authentication = new UsernamePasswordAuthenticationToken(
-                        principal.userId(), null, List.of(authority));
+                        principal.userId(), null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (JwtInvalidException ex) {
                 log.debug("Rejected invalid auth token: {}", ex.getMessage());

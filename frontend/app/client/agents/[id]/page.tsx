@@ -48,7 +48,7 @@ function Storefront() {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={card.coverUrl} alt="" className="size-full object-cover" />
         )}
-        <span className="absolute bottom-0 left-6 grid size-16 translate-y-1/3 place-items-center overflow-hidden rounded-lg border-2 border-accent/50 bg-base">
+        <span className="absolute bottom-0 left-6 grid size-16 translate-y-1/3 place-items-center overflow-hidden rounded-lg border-2 border-accent/50 bg-canvas">
           {card.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={card.logoUrl} alt="" className="size-full object-cover" />
@@ -82,7 +82,7 @@ function Storefront() {
           {profile.sampleOutput && (
             <section>
               <p className="eyebrow mb-2">Sample output</p>
-              <pre className="overflow-auto rounded-md border border-line bg-base p-4 font-mono text-xs leading-relaxed text-fg">
+              <pre className="overflow-auto rounded-md border border-line bg-canvas p-4 font-mono text-xs leading-relaxed text-fg">
                 {profile.sampleOutput}
               </pre>
             </section>

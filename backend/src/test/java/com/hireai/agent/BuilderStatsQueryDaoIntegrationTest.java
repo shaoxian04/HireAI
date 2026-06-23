@@ -65,8 +65,9 @@ class BuilderStatsQueryDaoIntegrationTest {
         UUID agentId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
 
-        jdbc.update("INSERT INTO users (id, email, role) VALUES (?, ?, 'BUILDER')",
+        jdbc.update("INSERT INTO users (id, email) VALUES (?, ?)",
                 ownerId, uniqueEmail("builder"));
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'BUILDER')", ownerId);
 
         jdbc.update("INSERT INTO agents (id, owner_id, name, status, current_version_id, reputation_score) " +
                         "VALUES (?, ?, ?, 'ACTIVE', ?, 50.00)",
@@ -87,8 +88,9 @@ class BuilderStatsQueryDaoIntegrationTest {
     /** Seeds a CLIENT user and returns their id. */
     private UUID seedClient() {
         UUID clientId = UUID.randomUUID();
-        jdbc.update("INSERT INTO users (id, email, role) VALUES (?, ?, 'CLIENT')",
+        jdbc.update("INSERT INTO users (id, email) VALUES (?, ?)",
                 clientId, uniqueEmail("client"));
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'CLIENT')", clientId);
         return clientId;
     }
 

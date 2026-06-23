@@ -15,12 +15,16 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Date;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * HS256 JWT issue/verify backed by io.jsonwebtoken (jjwt). The subject is the user id; a custom
- * {@code role} claim carries the role. The signing secret is a server-side env value (>= 32 bytes
+ * {@code roles} claim carries the role set. The signing secret is a server-side env value (>= 32 bytes
  * for HS256). {@code verify} throws {@link JwtInvalidException} on a bad signature, malformed token,
  * or expiry. Mirrors {@link HmacDispatchTokenService}'s config-secret + exception style.
  */
@@ -28,7 +32,7 @@ import java.util.UUID;
 @Slf4j
 public class JjwtService implements JwtService {
 
-    private static final String ROLE_CLAIM = "role";
+    private static final String ROLES_CLAIM = "roles";
 
     private final SecretKey key;
 
@@ -40,11 +44,11 @@ public class JjwtService implements JwtService {
     }
 
     @Override
-    public String issue(UUID userId, String role, Duration ttl) {
+    public String issue(UUID userId, Collection<String> roles, Duration ttl) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(userId.toString())
-                .claim(ROLE_CLAIM, role)
+                .claim(ROLES_CLAIM, List.copyOf(roles))
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(ttl)))
                 .signWith(key)
@@ -60,8 +64,12 @@ public class JjwtService implements JwtService {
                     .parseSignedClaims(token)
                     .getPayload();
             UUID userId = UUID.fromString(claims.getSubject());
-            String role = claims.get(ROLE_CLAIM, String.class);
-            return new JwtPrincipal(userId, role);
+            Object raw = claims.get(ROLES_CLAIM);
+            Set<String> roles = raw instanceof Collection<?> c
+                    ? c.stream().map(String::valueOf)
+                        .collect(Collectors.toCollection(java.util.LinkedHashSet::new))
+                    : Set.of();
+            return new JwtPrincipal(userId, roles);
         } catch (JwtException | IllegalArgumentException ex) {
             throw new JwtInvalidException("Invalid authentication token", ex);
         }

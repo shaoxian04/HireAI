@@ -1,6 +1,7 @@
 package com.hireai.controller.config;
 
 import com.hireai.application.biz.auth.AuthenticationFailedException;
+import com.hireai.application.biz.auth.EmailAlreadyRegisteredException;
 import com.hireai.controller.base.ResultCode;
 import com.hireai.controller.base.WebResult;
 import com.hireai.domain.shared.exception.DomainException;
@@ -62,6 +63,12 @@ public class GlobalExceptionConfiguration {
     public ResponseEntity<WebResult<Void>> handleAuthFailure(AuthenticationFailedException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(WebResult.error(ResultCode.VALIDATION_ERROR, ex.getMessage()));
+    }
+
+    @ExceptionHandler(EmailAlreadyRegisteredException.class)
+    public ResponseEntity<WebResult<Void>> handleEmailTaken(EmailAlreadyRegisteredException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(WebResult.error(ResultCode.EMAIL_ALREADY_REGISTERED, ex.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

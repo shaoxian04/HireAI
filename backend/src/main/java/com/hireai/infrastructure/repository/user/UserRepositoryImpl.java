@@ -6,19 +6,19 @@ import com.hireai.domain.biz.user.repository.UserRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
-/**
- * Infrastructure implementation of the domain {@link UserRepository}. Maps a {@code UserJpaEntity}
- * to the framework-free {@code UserModel}, translating the {@code role} TEXT column to the {@link Role}
- * enum.
- */
+/** Infrastructure impl of {@link UserRepository}. Composes the user row with its role grants. */
 @Repository
 public class UserRepositoryImpl implements UserRepository {
 
     private final UserJpaRepository userJpa;
+    private final UserRoleJpaRepository roleJpa;
 
-    public UserRepositoryImpl(UserJpaRepository userJpa) {
+    public UserRepositoryImpl(UserJpaRepository userJpa, UserRoleJpaRepository roleJpa) {
         this.userJpa = userJpa;
+        this.roleJpa = roleJpa;
     }
 
     @Override
@@ -26,8 +26,32 @@ public class UserRepositoryImpl implements UserRepository {
         return userJpa.findByEmail(email).map(this::toModel);
     }
 
+    @Override
+    public Optional<UserModel> findById(UUID id) {
+        return userJpa.findById(id).map(this::toModel);
+    }
+
+    @Override
+    public UserModel create(UserModel user) {
+        userJpa.save(new UserJpaEntity(user.id(), user.email(), user.passwordHash(),
+                user.displayName(), user.active()));
+        for (Role role : user.roles()) {
+            roleJpa.save(new UserRoleJpaEntity(user.id(), role.name()));
+        }
+        return user;
+    }
+
+    @Override
+    public void addRole(UUID userId, Role role) {
+        // Race-safe idempotent grant (ON CONFLICT DO NOTHING) — adding a role twice is a no-op.
+        roleJpa.insertIgnore(userId, role.name());
+    }
+
     private UserModel toModel(UserJpaEntity e) {
-        return new UserModel(e.getId(), e.getEmail(), e.getPasswordHash(),
-                Role.valueOf(e.getRole()), e.isActive());
+        var roles = roleJpa.findByUserId(e.getId()).stream()
+                .map(r -> Role.valueOf(r.getRole()))
+                .collect(Collectors.toUnmodifiableSet());
+        return new UserModel(e.getId(), e.getEmail(), e.getPasswordHash(), e.getDisplayName(),
+                roles, e.isActive());
     }
 }

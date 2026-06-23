@@ -46,10 +46,16 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  displayName?: string;
+}
+
 export interface LoginResponse {
   token: string;
   userId: string;
-  role: Role;
+  roles: Role[];
 }
 
 // ── Wallet ──

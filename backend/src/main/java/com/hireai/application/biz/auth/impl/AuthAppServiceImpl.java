@@ -3,10 +3,15 @@ package com.hireai.application.biz.auth.impl;
 import com.hireai.application.biz.auth.AuthAppService;
 import com.hireai.application.biz.auth.AuthResult;
 import com.hireai.application.biz.auth.AuthenticationFailedException;
+import com.hireai.application.biz.auth.EmailAlreadyRegisteredException;
 import com.hireai.application.biz.auth.LoginInfo;
+import com.hireai.application.biz.auth.RegisterInfo;
 import com.hireai.application.port.security.JwtService;
+import com.hireai.domain.biz.user.enums.Role;
 import com.hireai.domain.biz.user.model.UserModel;
 import com.hireai.domain.biz.user.repository.UserRepository;
+import com.hireai.domain.biz.wallet.model.WalletModel;
+import com.hireai.domain.biz.wallet.repository.WalletRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -14,13 +19,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * Login orchestration. Looks up the user by email, verifies the BCrypt password against the stored
- * hash, checks the account is active, then issues a JWT bound to the user id + role. Every failure
- * mode collapses to {@link AuthenticationFailedException} (generic 401) — no user enumeration. The
- * password check always runs against a real BCrypt verify; an unknown email returns early but the
- * timing difference is acceptable for this FYP slice (account-lockout / constant-time is out of scope).
+ * hash, checks the account is active, then issues a JWT bound to the user id + role set. Every failure
+ * mode collapses to {@link AuthenticationFailedException} (generic 401) — no user enumeration.
  */
 @Service
 @Slf4j
@@ -28,18 +33,54 @@ import java.time.Duration;
 public class AuthAppServiceImpl implements AuthAppService {
 
     private final UserRepository userRepository;
+    private final WalletRepository walletRepository;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
     private final long jwtTtlSeconds;
 
     public AuthAppServiceImpl(UserRepository userRepository,
+                              WalletRepository walletRepository,
                               JwtService jwtService,
                               PasswordEncoder passwordEncoder,
                               @Value("${hireai.auth.jwt-ttl-seconds}") long jwtTtlSeconds) {
         this.userRepository = userRepository;
+        this.walletRepository = walletRepository;
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
         this.jwtTtlSeconds = jwtTtlSeconds;
+    }
+
+    @Override
+    @Transactional
+    public AuthResult register(RegisterInfo info) {
+        if (userRepository.findByEmail(info.email()).isPresent()) {
+            throw new EmailAlreadyRegisteredException();
+        }
+        String hash = passwordEncoder.encode(info.password());
+        UserModel user = userRepository.create(
+                UserModel.newClient(info.email(), hash, info.displayName()));
+        walletRepository.save(WalletModel.openFor(user.id()));
+
+        List<String> roles = user.roles().stream()
+                .map(Role::name).sorted().toList();
+        String token = jwtService.issue(user.id(), roles, Duration.ofSeconds(jwtTtlSeconds));
+        log.info("Registered new user {} (roles {})", user.id(), roles);
+        return new AuthResult(token, user.id(), roles);
+    }
+
+    @Override
+    @Transactional
+    public AuthResult becomeBuilder(UUID userId) {
+        userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("Authenticated user not found: " + userId));
+        userRepository.addRole(userId, Role.BUILDER);
+
+        UserModel updated = userRepository.findById(userId).orElseThrow();
+        List<String> roles = updated.roles().stream()
+                .map(Role::name).sorted().toList();
+        String token = jwtService.issue(userId, roles, Duration.ofSeconds(jwtTtlSeconds));
+        log.info("User {} upgraded to builder (roles {})", userId, roles);
+        return new AuthResult(token, userId, roles);
     }
 
     @Override
@@ -53,9 +94,10 @@ public class AuthAppServiceImpl implements AuthAppService {
                 || !passwordEncoder.matches(loginInfo.password(), user.passwordHash())) {
             throw new AuthenticationFailedException();
         }
-        String role = user.role().name();
-        String token = jwtService.issue(user.id(), role, Duration.ofSeconds(jwtTtlSeconds));
-        log.info("User {} logged in (role {})", user.id(), role);
-        return new AuthResult(token, user.id(), role);
+        List<String> roles = user.roles().stream()
+                .map(Role::name).sorted().toList();
+        String token = jwtService.issue(user.id(), roles, Duration.ofSeconds(jwtTtlSeconds));
+        log.info("User {} logged in (roles {})", user.id(), roles);
+        return new AuthResult(token, user.id(), roles);
     }
 }

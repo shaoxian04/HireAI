@@ -75,8 +75,9 @@ class CatalogueQueryDaoIntegrationTest {
         UUID agentId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
 
-        jdbc.update("INSERT INTO users (id, email, role) VALUES (?, ?, 'BUILDER')",
+        jdbc.update("INSERT INTO users (id, email) VALUES (?, ?)",
                 ownerId, builderEmail);
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'BUILDER')", ownerId);
 
         jdbc.update("INSERT INTO agents (id, owner_id, name, status, current_version_id, reputation_score) " +
                         "VALUES (?, ?, ?, ?, ?, 60.00)",
@@ -228,8 +229,9 @@ class CatalogueQueryDaoIntegrationTest {
 
         // Insert a CLIENT user
         UUID clientId = UUID.randomUUID();
-        jdbc.update("INSERT INTO users (id, email, role) VALUES (?, 'reviewer@x.com', 'CLIENT')",
+        jdbc.update("INSERT INTO users (id, email) VALUES (?, 'reviewer@x.com')",
                 clientId);
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'CLIENT')", clientId);
 
         // Insert a published review
         UUID reviewId = UUID.randomUUID();
@@ -273,8 +275,9 @@ class CatalogueQueryDaoIntegrationTest {
                 "ACTIVE", "general", new BigDecimal("5.00"), true, false);
 
         UUID clientId = UUID.randomUUID();
-        jdbc.update("INSERT INTO users (id, email, role) VALUES (?, ?, 'CLIENT')",
+        jdbc.update("INSERT INTO users (id, email) VALUES (?, ?)",
                 clientId, uniqueEmail("revclient"));
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'CLIENT')", clientId);
 
         // Published review
         UUID publishedId = UUID.randomUUID();
@@ -307,8 +310,9 @@ class CatalogueQueryDaoIntegrationTest {
                 "SELECT current_version_id FROM agents WHERE id = ?", UUID.class, agentId);
 
         UUID clientId = UUID.randomUUID();
-        jdbc.update("INSERT INTO users (id, email, role) VALUES (?, ?, 'CLIENT')",
+        jdbc.update("INSERT INTO users (id, email) VALUES (?, ?)",
                 clientId, uniqueEmail("turnclient"));
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'CLIENT')", clientId);
 
         UUID taskId = UUID.randomUUID();
         jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, output_spec, " +

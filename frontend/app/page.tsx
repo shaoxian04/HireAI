@@ -300,7 +300,7 @@ export default function Landing() {
       <section className="border-y border-line bg-surface/40">
         <div className="mx-auto grid max-w-6xl grid-cols-2 gap-px bg-line lg:grid-cols-4">
           {STATS.map((s) => (
-            <div key={s.l} className="bg-base px-6 py-10 text-center">
+            <div key={s.l} className="bg-canvas px-6 py-10 text-center">
               <p className="tabular font-sans text-4xl font-extrabold text-fg sm:text-5xl">{s.v}</p>
               <p className="mt-2 font-mono text-[0.65rem] uppercase tracking-[0.18em] text-muted">
                 {s.l}

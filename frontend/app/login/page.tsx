@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { Button, Field, Input } from "@/components/ui";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 const DEMO = [
   { role: "CLIENT", email: "client@hireai.local" },
@@ -27,7 +28,7 @@ export default function LoginPage() {
     setBusy(true);
     try {
       const res = await login(email, password);
-      router.replace(res.role === "BUILDER" ? "/builder" : "/client");
+      router.replace(res.roles.includes("BUILDER") && !res.roles.includes("CLIENT") ? "/builder" : "/client");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
     } finally {
@@ -98,6 +99,13 @@ export default function LoginPage() {
                 {busy ? "Authenticating…" : "Sign in ▸"}
               </Button>
             </form>
+
+            <div className="my-4 flex items-center gap-3">
+              <span className="h-px flex-1 bg-line" />
+              <span className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-dim">or</span>
+              <span className="h-px flex-1 bg-line" />
+            </div>
+            <GoogleSignInButton />
           </div>
 
           <div className="mt-5 rounded-md border border-line bg-surface-2/60 p-4">
@@ -123,6 +131,12 @@ export default function LoginPage() {
               password: <span className="text-muted">{DEMO_PASSWORD}</span>
             </p>
           </div>
+          <p className="mt-5 text-center font-mono text-xs text-muted">
+            No account?{" "}
+            <Link href="/register" className="text-accent hover:underline">
+              Create one
+            </Link>
+          </p>
         </div>
       </div>
     </div>

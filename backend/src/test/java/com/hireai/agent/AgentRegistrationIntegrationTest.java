@@ -73,7 +73,8 @@ class AgentRegistrationIntegrationTest {
 
     private UUID newOwner() {
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO users (id, email, role) VALUES (?, ?, 'BUILDER')", id, id + "@test.local");
+        jdbc.update("INSERT INTO users (id, email) VALUES (?, ?)", id, id + "@test.local");
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'BUILDER')", id);
         return id;
     }
 

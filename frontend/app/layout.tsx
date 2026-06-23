@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${archivo.variable} ${jetbrains.variable}`}>
-      <body className="min-h-screen bg-base text-fg antialiased">
+      <body className="min-h-screen bg-canvas text-fg antialiased">
         <div className="bg-grid" aria-hidden />
         <AuthProvider>{children}</AuthProvider>
       </body>

@@ -63,10 +63,12 @@ class ReviewRepositoryIntegrationTest {
         UUID builderId = UUID.randomUUID();
         UUID agentId = UUID.randomUUID();
 
-        jdbc.update("INSERT INTO users (id, email, role) VALUES (?, ?, 'CLIENT')",
+        jdbc.update("INSERT INTO users (id, email) VALUES (?, ?)",
                 clientId, clientId + "@test.local");
-        jdbc.update("INSERT INTO users (id, email, role) VALUES (?, ?, 'BUILDER')",
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'CLIENT')", clientId);
+        jdbc.update("INSERT INTO users (id, email) VALUES (?, ?)",
                 builderId, builderId + "@test.local");
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'BUILDER')", builderId);
         jdbc.update("INSERT INTO agents (id, owner_id, name, status, reputation_score) " +
                         "VALUES (?, ?, 'Test Agent', 'ACTIVE', 50.00)",
                 agentId, builderId);

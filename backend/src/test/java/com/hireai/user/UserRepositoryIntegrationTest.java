@@ -50,16 +50,19 @@ class UserRepositoryIntegrationTest {
     @Autowired JdbcTemplate jdbc;
 
     @Test
-    void findsUserByEmail() {
+    void findsUserByEmailWithRoles() {
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO users (id, email, password_hash, role, is_active) VALUES (?, ?, ?, 'BUILDER', true)",
-                id, "repo-test@hireai.local", "$2a$10$abcdefghijklmnopqrstuv");
+        jdbc.update("INSERT INTO users (id, email, password_hash, display_name, is_active) "
+                        + "VALUES (?, ?, ?, ?, true)",
+                id, "repo-test@hireai.local", "$2a$10$abcdefghijklmnopqrstuv", "Repo Tester");
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'BUILDER')", id);
 
         Optional<UserModel> found = userRepository.findByEmail("repo-test@hireai.local");
 
         assertThat(found).isPresent();
         assertThat(found.get().id()).isEqualTo(id);
-        assertThat(found.get().role()).isEqualTo(Role.BUILDER);
+        assertThat(found.get().roles()).containsExactly(Role.BUILDER);
+        assertThat(found.get().displayName()).isEqualTo("Repo Tester");
         assertThat(found.get().passwordHash()).isEqualTo("$2a$10$abcdefghijklmnopqrstuv");
         assertThat(found.get().active()).isTrue();
     }

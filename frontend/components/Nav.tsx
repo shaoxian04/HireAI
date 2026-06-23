@@ -23,17 +23,18 @@ function Logo({ href }: { href: string }) {
  * it's the marketing nav (section links + sign-in CTAs). Identity comes from useAuth().
  */
 export function Nav() {
-  const { role, logout } = useAuth();
-  const home = role === "BUILDER" ? "/builder" : "/client";
+  const { role, activeSurface, setActiveSurface, hasRole, logout } = useAuth();
+  const dual = hasRole("CLIENT") && hasRole("BUILDER");
+  const home = activeSurface === "BUILDER" ? "/builder" : "/client";
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-base/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-line bg-canvas/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:px-6">
         <Logo href={role ? home : "/"} />
 
         {role ? (
           <div className="flex items-center gap-4">
-            {role === "CLIENT" && (
+            {activeSurface === "CLIENT" && (
               <div className="hidden items-center gap-1 md:flex">
                 {[
                   { href: "/client", label: "Marketplace" },
@@ -49,7 +50,7 @@ export function Nav() {
                 ))}
               </div>
             )}
-            {role === "BUILDER" && (
+            {activeSurface === "BUILDER" && (
               <div className="hidden items-center gap-1 md:flex">
                 {[
                   { href: "/builder", label: "My agents" },
@@ -65,12 +66,30 @@ export function Nav() {
                 ))}
               </div>
             )}
+            {dual && (
+              <div className="hidden items-center rounded-md border border-line bg-surface-2 p-0.5 md:flex">
+                {(["CLIENT", "BUILDER"] as const).map((r) => (
+                  // Link (not button) so toggling the surface also routes to that surface's home,
+                  // matching the expected "switch → /client or /builder" UX, without needing useRouter.
+                  <Link
+                    key={r}
+                    href={r === "BUILDER" ? "/builder" : "/client"}
+                    onClick={() => setActiveSurface(r)}
+                    className={`rounded px-2.5 py-1 font-mono text-[0.6rem] uppercase tracking-[0.18em] transition ${
+                      activeSurface === r ? "bg-accent/15 text-accent" : "text-muted hover:text-fg"
+                    }`}
+                  >
+                    {r}
+                  </Link>
+                ))}
+              </div>
+            )}
             <span className="hidden items-center gap-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted sm:flex">
               <span className="size-1.5 rounded-full bg-accent dot-live text-accent" />
               online
             </span>
             <span className="rounded border border-line bg-surface-2 px-2.5 py-1 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-accent">
-              {role}
+              {activeSurface ?? role}
             </span>
             <Button variant="ghost" onClick={logout}>
               Log out
