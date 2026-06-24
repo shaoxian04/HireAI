@@ -1,7 +1,7 @@
 package com.hireai.application.biz.auth.impl;
 
 import com.hireai.application.biz.auth.AuthResult;
-import com.hireai.application.biz.auth.OAuthAuthenticationException;
+import com.hireai.utility.exception.OAuthAuthenticationException;
 import com.hireai.application.biz.auth.OAuthUserInfo;
 import com.hireai.application.port.security.JwtService;
 import com.hireai.domain.biz.user.enums.Role;
@@ -12,7 +12,7 @@ import com.hireai.domain.biz.user.service.OAuthAccountLinkingDomainService;
 import com.hireai.domain.biz.user.service.impl.OAuthAccountLinkingDomainServiceImpl;
 import com.hireai.domain.biz.wallet.model.WalletModel;
 import com.hireai.domain.biz.wallet.repository.WalletRepository;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

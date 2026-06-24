@@ -21,16 +21,17 @@ No module depends on one to its left. **`hireai-domain` and `hireai-utility` car
 - **domain** — aggregate roots + child entities (`XxxModel`), value objects, enums, repository **interfaces**, domain events, and one domain service per state transition. Depends on nothing but `utility`.
 - **repository** (`hireai-repository`) — JPA repository impls (`XxxRepositoryImpl`), JPA entities, and read-side query-port impls. Implements interfaces owned by domain + application.
 - **infrastructure** (`hireai-infrastructure`) — the *non-persistence* adapters: messaging (RabbitMQ), security (JWT/dispatch tokens), and outbound clients (`XxxClient`). Implements application ports.
-- **utility** (`hireai-utility`) — cross-cutting primitives shared by every layer (`ResultCode`, shared helpers). No Spring, no internal deps.
+- **utility** (`hireai-utility`) — cross-cutting primitives shared by every layer (`ResultCode`, all exception types, shared helpers). No Spring, no internal deps.
 
 ## Package layout (package → owning module)
 
 ```
 hireai-utility        utility/result                          ResultCode, shared primitives (no Spring)
+                      utility/exception                       DomainException + all exception types (any layer may throw)
 hireai-domain         domain/biz/<aggregate>/{model,repository,service,enums,event,info}
 hireai-application    application/biz/<aggregate>             XxxReadAppService, XxxWriteAppService, OutputSpecJsonMapper
                       application/port/{messaging,security,storage,query,task}   interfaces infra implements
-hireai-repository     infrastructure/repository/<aggregate>   XxxRepositoryImpl + JPA entities + read-query ports
+hireai-repository     infrastructure/repository/<aggregate>   XxxRepositoryImpl + JPA entities (XxxDO) + read-query ports
 hireai-infrastructure infrastructure/{messaging,security,client}   RabbitMQ, JWT, AgentDispatchClient, storage
 hireai-controller     controller/base|config                  BaseController, WebResult, SecurityConfig, JwtAuthenticationFilter
                       controller/biz/<route-group>            controller + Request/DTO + converters (grouped by HTTP route)

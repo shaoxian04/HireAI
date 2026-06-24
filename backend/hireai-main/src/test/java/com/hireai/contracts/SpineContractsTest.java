@@ -2,7 +2,7 @@ package com.hireai.contracts;
 
 import com.hireai.domain.biz.agent.info.AgentCandidate;
 import com.hireai.application.port.security.DispatchTokenClaims;
-import com.hireai.application.port.security.DispatchTokenInvalidException;
+import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.domain.biz.routing.info.DispatchMessage;
 import com.hireai.domain.biz.routing.info.TaskDispatchPayload;
 import com.hireai.domain.biz.task.info.TaskRoutingView;

@@ -15,7 +15,7 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "wallets")
-public class WalletJpaEntity {
+public class WalletDO {
 
     @Id
     @Column(name = "id")
@@ -30,10 +30,10 @@ public class WalletJpaEntity {
     @Column(name = "escrow_balance", nullable = false)
     private BigDecimal escrowBalance;
 
-    protected WalletJpaEntity() {
+    protected WalletDO() {
     }
 
-    public WalletJpaEntity(UUID id, UUID userId, BigDecimal availableBalance, BigDecimal escrowBalance) {
+    public WalletDO(UUID id, UUID userId, BigDecimal availableBalance, BigDecimal escrowBalance) {
         this.id = id;
         this.userId = userId;
         this.availableBalance = availableBalance;

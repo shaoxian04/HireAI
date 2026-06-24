@@ -3,7 +3,7 @@ package com.hireai.domain.biz.agent.model;
 import com.hireai.domain.biz.agent.enums.AgentStatus;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

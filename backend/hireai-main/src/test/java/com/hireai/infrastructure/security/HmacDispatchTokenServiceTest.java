@@ -1,7 +1,7 @@
 package com.hireai.infrastructure.security;
 
 import com.hireai.application.port.security.DispatchTokenClaims;
-import com.hireai.application.port.security.DispatchTokenInvalidException;
+import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.infrastructure.security.impl.HmacDispatchTokenService;
 import org.junit.jupiter.api.Test;
 

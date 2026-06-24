@@ -37,7 +37,7 @@ public class TaskRepositoryImpl implements TaskRepository {
 
     @Override
     public TaskModel save(TaskModel task) {
-        taskJpa.save(new TaskJpaEntity(
+        taskJpa.save(new TaskDO(
                 task.id(), task.clientId(), task.title(), task.description(),
                 task.budget().value(), outputSpecJsonMapper.toJson(task.outputSpec()),
                 task.category(), task.status().name(), task.agentVersionId(), task.createdAt(),
@@ -46,7 +46,7 @@ public class TaskRepositoryImpl implements TaskRepository {
 
         TaskResultModel result = task.result();
         if (result != null && taskResultJpa.findByTaskId(result.taskId()).isEmpty()) {
-            taskResultJpa.save(new TaskResultJpaEntity(
+            taskResultJpa.save(new TaskResultDO(
                     result.id(), result.taskId(), result.resultPayloadJson(),
                     result.resultUrl(), result.agentStatus(), result.receivedAt()));
         }
@@ -72,7 +72,7 @@ public class TaskRepositoryImpl implements TaskRepository {
                 .toList();
     }
 
-    private TaskModel toModel(TaskJpaEntity entity) {
+    private TaskModel toModel(TaskDO entity) {
         TaskResultModel result = taskResultJpa.findByTaskId(entity.getId())
                 .map(this::toResultModel)
                 .orElse(null);
@@ -85,7 +85,7 @@ public class TaskRepositoryImpl implements TaskRepository {
                 entity.getResolvedAt(), entity.getRejectionReason());
     }
 
-    private TaskResultModel toResultModel(TaskResultJpaEntity entity) {
+    private TaskResultModel toResultModel(TaskResultDO entity) {
         return TaskResultModel.rehydrate(entity.getId(), entity.getTaskId(), entity.getAgentStatus(),
                 entity.getResultPayload(), entity.getResultUrl(), entity.getReceivedAt());
     }

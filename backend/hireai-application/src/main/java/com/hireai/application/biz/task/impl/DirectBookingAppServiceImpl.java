@@ -9,7 +9,7 @@ import com.hireai.domain.biz.agent.repository.AgentProfileRepository;
 import com.hireai.domain.biz.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

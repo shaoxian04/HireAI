@@ -15,7 +15,7 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "reviews")
-public class ReviewJpaEntity {
+public class ReviewDO {
 
     @Id
     @Column(name = "id")
@@ -48,10 +48,10 @@ public class ReviewJpaEntity {
     @Column(name = "gmt_modified", nullable = false)
     private Instant gmtModified;
 
-    protected ReviewJpaEntity() {
+    protected ReviewDO() {
     }
 
-    public ReviewJpaEntity(UUID id, UUID taskId, UUID clientId, UUID agentId, short rating,
+    public ReviewDO(UUID id, UUID taskId, UUID clientId, UUID agentId, short rating,
                            String reviewText, String builderResponse, boolean isPublished,
                            Instant gmtCreate, Instant gmtModified) {
         this.id = id;

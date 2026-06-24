@@ -4,7 +4,7 @@ import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.enums.TaskStatus;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import com.hireai.domain.shared.model.Money;
 import org.junit.jupiter.api.Test;
 

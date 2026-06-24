@@ -19,7 +19,7 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "agent_versions")
-public class AgentVersionJpaEntity {
+public class AgentVersionDO {
 
     @Id
     @Column(name = "id")
@@ -51,10 +51,10 @@ public class AgentVersionJpaEntity {
     @Column(name = "gmt_create", nullable = false)
     private Instant gmtCreate;
 
-    protected AgentVersionJpaEntity() {
+    protected AgentVersionDO() {
     }
 
-    public AgentVersionJpaEntity(UUID id, UUID agentId, int versionNumber, String outputSpec,
+    public AgentVersionDO(UUID id, UUID agentId, int versionNumber, String outputSpec,
                                  List<String> capabilityCategories, String webhookUrl,
                                  int maxExecutionSeconds, BigDecimal price, Instant gmtCreate) {
         this.id = id;

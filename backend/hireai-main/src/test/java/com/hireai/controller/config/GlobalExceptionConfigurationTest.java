@@ -2,7 +2,7 @@ package com.hireai.controller.config;
 
 import com.hireai.utility.result.ResultCode;
 import com.hireai.controller.base.WebResult;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

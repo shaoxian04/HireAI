@@ -3,7 +3,7 @@ package com.hireai.domain.biz.task.model;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.enums.TaskStatus;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import com.hireai.domain.shared.model.Money;
 
 import java.time.Instant;

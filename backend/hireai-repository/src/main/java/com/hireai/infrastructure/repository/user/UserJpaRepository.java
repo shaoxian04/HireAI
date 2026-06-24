@@ -6,7 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** Spring Data JPA repository for user rows. Internal to infrastructure. */
-public interface UserJpaRepository extends JpaRepository<UserJpaEntity, UUID> {
+public interface UserJpaRepository extends JpaRepository<UserDO, UUID> {
 
-    Optional<UserJpaEntity> findByEmail(String email);
+    Optional<UserDO> findByEmail(String email);
 }

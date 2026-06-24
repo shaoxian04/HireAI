@@ -6,7 +6,7 @@ import com.hireai.domain.biz.wallet.model.WalletModel;
 import com.hireai.domain.biz.wallet.repository.WalletRepository;
 import com.hireai.domain.biz.wallet.service.WalletFreezeDomainService;
 import com.hireai.domain.biz.wallet.service.WalletTopUpDomainService;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import com.hireai.domain.shared.model.Money;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

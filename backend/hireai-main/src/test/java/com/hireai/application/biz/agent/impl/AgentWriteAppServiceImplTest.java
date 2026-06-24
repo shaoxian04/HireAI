@@ -18,7 +18,7 @@ import com.hireai.domain.biz.agent.service.impl.AgentActivateDomainServiceImpl;
 import com.hireai.domain.biz.agent.service.impl.AgentRegisterDomainServiceImpl;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationEventPublisher;

@@ -19,7 +19,7 @@ import com.hireai.domain.biz.wallet.enums.LedgerEntryType;
  */
 @Entity
 @Table(name = "ledger_entries")
-public class LedgerEntryJpaEntity {
+public class LedgerEntryDO {
 
     @Id
     @Column(name = "id")
@@ -47,10 +47,10 @@ public class LedgerEntryJpaEntity {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    protected LedgerEntryJpaEntity() {
+    protected LedgerEntryDO() {
     }
 
-    public LedgerEntryJpaEntity(UUID id, UUID walletId, LedgerEntryType entryType, BigDecimal amount,
+    public LedgerEntryDO(UUID id, UUID walletId, LedgerEntryType entryType, BigDecimal amount,
                                 BigDecimal balanceAfter, UUID relatedTaskId, String correlationId,
                                 Instant createdAt) {
         this.id = id;

@@ -10,7 +10,7 @@ import com.hireai.domain.biz.agent.model.AgentProfileModel;
 import com.hireai.domain.biz.agent.repository.AgentProfileRepository;
 import com.hireai.domain.biz.review.model.ReviewModel;
 import com.hireai.domain.biz.review.repository.ReviewRepository;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

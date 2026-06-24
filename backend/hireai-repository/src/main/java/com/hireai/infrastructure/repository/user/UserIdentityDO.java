@@ -10,7 +10,7 @@ import java.util.UUID;
 /** JPA entity for one external identity link (user_identities). */
 @Entity
 @Table(name = "user_identities")
-public class UserIdentityJpaEntity {
+public class UserIdentityDO {
 
     @Id
     @Column(name = "id")
@@ -28,10 +28,10 @@ public class UserIdentityJpaEntity {
     @Column(name = "email_at_link")
     private String emailAtLink;
 
-    protected UserIdentityJpaEntity() {
+    protected UserIdentityDO() {
     }
 
-    public UserIdentityJpaEntity(UUID id, UUID userId, String provider, String providerSubject,
+    public UserIdentityDO(UUID id, UUID userId, String provider, String providerSubject,
                                  String emailAtLink) {
         this.id = id;
         this.userId = userId;

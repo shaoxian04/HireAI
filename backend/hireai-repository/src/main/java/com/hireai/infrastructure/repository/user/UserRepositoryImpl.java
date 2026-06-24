@@ -33,10 +33,10 @@ public class UserRepositoryImpl implements UserRepository {
 
     @Override
     public UserModel create(UserModel user) {
-        userJpa.save(new UserJpaEntity(user.id(), user.email(), user.passwordHash(),
+        userJpa.save(new UserDO(user.id(), user.email(), user.passwordHash(),
                 user.displayName(), user.active()));
         for (Role role : user.roles()) {
-            roleJpa.save(new UserRoleJpaEntity(user.id(), role.name()));
+            roleJpa.save(new UserRoleDO(user.id(), role.name()));
         }
         return user;
     }
@@ -47,7 +47,7 @@ public class UserRepositoryImpl implements UserRepository {
         roleJpa.insertIgnore(userId, role.name());
     }
 
-    private UserModel toModel(UserJpaEntity e) {
+    private UserModel toModel(UserDO e) {
         var roles = roleJpa.findByUserId(e.getId()).stream()
                 .map(r -> Role.valueOf(r.getRole()))
                 .collect(Collectors.toUnmodifiableSet());

@@ -1,6 +1,6 @@
 package com.hireai.infrastructure.security;
 
-import com.hireai.application.port.security.JwtInvalidException;
+import com.hireai.utility.exception.JwtInvalidException;
 import com.hireai.application.port.security.JwtPrincipal;
 import com.hireai.infrastructure.security.impl.JjwtService;
 import org.junit.jupiter.api.Test;

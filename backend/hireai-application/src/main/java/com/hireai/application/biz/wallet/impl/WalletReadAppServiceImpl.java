@@ -6,7 +6,7 @@ import com.hireai.domain.biz.wallet.model.LedgerEntryModel;
 import com.hireai.domain.biz.wallet.model.WalletModel;
 import com.hireai.domain.biz.wallet.repository.WalletLedgerQuery;
 import com.hireai.domain.biz.wallet.repository.WalletRepository;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

@@ -2,7 +2,7 @@ package com.hireai.agent;
 
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.agent.model.AgentProfileModel;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
