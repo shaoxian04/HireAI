@@ -10,7 +10,7 @@ import com.hireai.domain.biz.agent.model.AgentProfileModel;
 import com.hireai.domain.biz.agent.repository.AgentProfileRepository;
 import com.hireai.domain.biz.review.model.ReviewModel;
 import com.hireai.domain.biz.review.repository.ReviewRepository;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -69,9 +69,8 @@ public class AgentStorefrontAppServiceImpl implements AgentStorefrontAppService 
             throw new DomainException(ResultCode.VALIDATION_ERROR, "Image must be 1B-2MB");
         }
         AgentProfileModel profile = loadProfile(agentId);
-        if ("gallery".equals(kind) && profile.galleryUrls().size() >= AgentProfileModel.MAX_GALLERY) {
-            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
-                    "Gallery is full (max " + AgentProfileModel.MAX_GALLERY + " images)");
+        if ("gallery".equals(kind)) {
+            profile.assertCanAddGallery(); // domain owns the capacity rule; fail fast before the upload
         }
         String objectKey = "agents/" + agentId + "/" + kind + "-" + UUID.randomUUID() + "." + ext;
         // Tech debt: remote upload inside @Transactional holds a DB connection; acceptable at demo scale.

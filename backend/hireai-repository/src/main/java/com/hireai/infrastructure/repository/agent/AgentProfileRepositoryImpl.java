@@ -28,9 +28,9 @@ public class AgentProfileRepositoryImpl implements AgentProfileRepository {
         Instant now = Instant.now();
         // Read-before-write upsert: non-atomic, acceptable here — a profile has a single writer (its owner).
         Instant created = jpa.findById(profile.agentId())
-                .map(AgentProfileJpaEntity::getGmtCreate)
+                .map(AgentProfileDO::getGmtCreate)
                 .orElse(now);
-        jpa.save(new AgentProfileJpaEntity(
+        jpa.save(new AgentProfileDO(
                 profile.agentId(), profile.tagline(), profile.description(), profile.sampleOutput(),
                 profile.logoUrl(), profile.coverUrl(), profile.galleryUrls(),
                 profile.listed(), profile.featured(), created, now));
@@ -42,7 +42,7 @@ public class AgentProfileRepositoryImpl implements AgentProfileRepository {
         return jpa.findById(agentId).map(this::toModel);
     }
 
-    private AgentProfileModel toModel(AgentProfileJpaEntity entity) {
+    private AgentProfileModel toModel(AgentProfileDO entity) {
         List<String> gallery = entity.getGalleryUrls() != null
                 ? List.copyOf(entity.getGalleryUrls())
                 : List.of();

@@ -23,7 +23,7 @@ import com.hireai.domain.biz.agent.info.ProfileUpdateInfo;
 import com.hireai.domain.biz.agent.model.AgentModel;
 import com.hireai.domain.biz.agent.repository.AgentQuery;
 import com.hireai.domain.biz.task.model.OutputSpec;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;

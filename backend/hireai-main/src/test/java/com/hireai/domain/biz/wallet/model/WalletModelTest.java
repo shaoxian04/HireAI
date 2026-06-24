@@ -2,7 +2,7 @@ package com.hireai.domain.biz.wallet.model;
 
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.wallet.enums.LedgerEntryType;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import com.hireai.domain.shared.model.Money;
 import org.junit.jupiter.api.Test;
 

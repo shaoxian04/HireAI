@@ -1,7 +1,7 @@
 package com.hireai.domain.biz.review.model;
 
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 
 import java.time.Instant;
 import java.util.UUID;

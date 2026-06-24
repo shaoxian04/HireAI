@@ -2,7 +2,7 @@ package com.hireai.controller.biz.auth;
 
 import com.hireai.application.biz.auth.AuthAppService;
 import com.hireai.application.biz.auth.AuthResult;
-import com.hireai.application.biz.auth.EmailAlreadyRegisteredException;
+import com.hireai.utility.exception.EmailAlreadyRegisteredException;
 import com.hireai.controller.config.DevCurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
 import org.junit.jupiter.api.Test;

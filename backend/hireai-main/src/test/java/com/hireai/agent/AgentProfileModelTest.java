@@ -2,7 +2,7 @@ package com.hireai.agent;
 
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.agent.model.AgentProfileModel;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -109,5 +109,19 @@ class AgentProfileModelTest {
                 .isInstanceOf(DomainException.class)
                 .satisfies(ex -> assertThat(((DomainException) ex).resultCode())
                         .isEqualTo(ResultCode.VALIDATION_ERROR));
+    }
+
+    @Test
+    void assertCanAddGalleryThrowsOnlyWhenFull() {
+        AgentProfileModel profile = AgentProfileModel.createDefault(UUID.randomUUID());
+        profile.assertCanAddGallery(); // empty — allowed
+        for (int i = 0; i < AgentProfileModel.MAX_GALLERY; i++) {
+            profile = profile.addGalleryUrl("https://img.example.com/" + i + ".png");
+        }
+        final AgentProfileModel full = profile;
+        assertThatThrownBy(full::assertCanAddGallery)
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).resultCode())
+                        .isEqualTo(ResultCode.DOMAIN_RULE_VIOLATION));
     }
 }

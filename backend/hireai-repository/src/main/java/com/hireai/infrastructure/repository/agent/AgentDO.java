@@ -15,7 +15,7 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "agents")
-public class AgentJpaEntity {
+public class AgentDO {
 
     @Id
     @Column(name = "id")
@@ -39,10 +39,10 @@ public class AgentJpaEntity {
     @Column(name = "gmt_create", nullable = false)
     private Instant gmtCreate;
 
-    protected AgentJpaEntity() {
+    protected AgentDO() {
     }
 
-    public AgentJpaEntity(UUID id, UUID ownerId, String name, String status, UUID currentVersionId,
+    public AgentDO(UUID id, UUID ownerId, String name, String status, UUID currentVersionId,
                           BigDecimal reputationScore, Instant gmtCreate) {
         this.id = id;
         this.ownerId = ownerId;

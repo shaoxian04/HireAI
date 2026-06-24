@@ -12,11 +12,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** Spring Data JPA repository for task rows. Internal to infrastructure. */
-public interface TaskJpaRepository extends JpaRepository<TaskJpaEntity, UUID> {
+public interface TaskJpaRepository extends JpaRepository<TaskDO, UUID> {
 
-    List<TaskJpaEntity> findByClientIdOrderByGmtCreateDesc(UUID clientId, Pageable pageable);
+    List<TaskDO> findByClientIdOrderByGmtCreateDesc(UUID clientId, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select t from TaskJpaEntity t where t.id = :id")
-    Optional<TaskJpaEntity> findByIdForUpdate(@Param("id") UUID id);
+    @Query("select t from TaskDO t where t.id = :id")
+    Optional<TaskDO> findByIdForUpdate(@Param("id") UUID id);
 }

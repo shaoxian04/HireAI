@@ -14,7 +14,7 @@ import com.hireai.domain.biz.agent.repository.AgentProfileRepository;
 import com.hireai.domain.biz.agent.repository.AgentRepository;
 import com.hireai.domain.biz.agent.service.AgentActivateDomainService;
 import com.hireai.domain.biz.agent.service.AgentRegisterDomainService;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;

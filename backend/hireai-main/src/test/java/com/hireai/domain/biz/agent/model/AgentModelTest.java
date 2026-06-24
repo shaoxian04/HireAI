@@ -3,7 +3,7 @@ package com.hireai.domain.biz.agent.model;
 import com.hireai.domain.biz.agent.enums.AgentStatus;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -79,5 +79,12 @@ class AgentModelTest {
     void activateRejectsAlreadyActiveAgent() {
         AgentModel active = registered(UUID.randomUUID()).activate();
         assertThatThrownBy(active::activate).isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void isActiveOnlyWhenStatusActive() {
+        AgentModel pending = registered(UUID.randomUUID());
+        assertThat(pending.isActive()).isFalse();
+        assertThat(pending.activate().isActive()).isTrue();
     }
 }

@@ -19,11 +19,11 @@ public class UserIdentityRepositoryImpl implements UserIdentityRepository {
     @Override
     public Optional<UUID> findUserIdByProviderSubject(String provider, String subject) {
         return jpa.findByProviderAndProviderSubject(provider, subject)
-                .map(UserIdentityJpaEntity::getUserId);
+                .map(UserIdentityDO::getUserId);
     }
 
     @Override
     public void link(UUID userId, String provider, String subject, String emailAtLink) {
-        jpa.save(new UserIdentityJpaEntity(UUID.randomUUID(), userId, provider, subject, emailAtLink));
+        jpa.save(new UserIdentityDO(UUID.randomUUID(), userId, provider, subject, emailAtLink));
     }
 }

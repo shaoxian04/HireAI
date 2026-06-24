@@ -1,7 +1,7 @@
 package com.hireai.domain.biz.agent.model;
 
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;

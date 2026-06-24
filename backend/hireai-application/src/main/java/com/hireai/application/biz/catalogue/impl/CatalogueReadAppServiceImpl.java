@@ -3,7 +3,7 @@ package com.hireai.application.biz.catalogue.impl;
 import com.hireai.application.biz.catalogue.CatalogueReadAppService;
 import com.hireai.application.port.query.CatalogueQueryPort;
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

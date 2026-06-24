@@ -2,14 +2,14 @@ package com.hireai.application.biz.agentcallback.impl;
 
 import com.hireai.application.biz.agentcallback.AgentCallbackAppService;
 import com.hireai.application.port.security.DispatchTokenClaims;
-import com.hireai.application.port.security.DispatchTokenInvalidException;
+import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.application.port.security.DispatchTokenService;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.info.AgentResultInfo;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

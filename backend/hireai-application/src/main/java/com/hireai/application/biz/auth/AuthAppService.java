@@ -1,5 +1,6 @@
 package com.hireai.application.biz.auth;
 
+import com.hireai.utility.exception.AuthenticationFailedException;
 import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
 

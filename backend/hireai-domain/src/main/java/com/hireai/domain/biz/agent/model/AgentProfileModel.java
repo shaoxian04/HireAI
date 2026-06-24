@@ -1,7 +1,7 @@
 package com.hireai.domain.biz.agent.model;
 
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -70,11 +70,19 @@ public final class AgentProfileModel {
                 logoUrl, url, galleryUrls, listed, featured);
     }
 
-    public AgentProfileModel addGalleryUrl(String url) {
+    /**
+     * Gallery capacity rule — the single home for the max. Lets callers (e.g. the media-upload
+     * flow) fail fast before an expensive upload without duplicating the threshold.
+     */
+    public void assertCanAddGallery() {
         if (galleryUrls.size() >= MAX_GALLERY) {
             throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
                     "Gallery is full (max " + MAX_GALLERY + " images)");
         }
+    }
+
+    public AgentProfileModel addGalleryUrl(String url) {
+        assertCanAddGallery();
         List<String> next = new ArrayList<>(galleryUrls);
         next.add(url);
         return new AgentProfileModel(agentId, tagline, description, sampleOutput,

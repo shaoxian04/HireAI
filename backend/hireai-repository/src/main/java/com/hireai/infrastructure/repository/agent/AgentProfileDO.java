@@ -14,12 +14,12 @@ import java.util.UUID;
 /**
  * JPA persistence entity for agent_profiles (1:1 with agents). {@code gallery_urls} is a
  * Postgres TEXT[] mapped to a {@code List<String>} using the same technique as
- * {@link AgentVersionJpaEntity#getCapabilityCategories()}. Separate from the domain model so
+ * {@link AgentVersionDO#getCapabilityCategories()}. Separate from the domain model so
  * the domain stays framework-free.
  */
 @Entity
 @Table(name = "agent_profiles")
-public class AgentProfileJpaEntity {
+public class AgentProfileDO {
 
     @Id
     @Column(name = "agent_id")
@@ -56,10 +56,10 @@ public class AgentProfileJpaEntity {
     @Column(name = "gmt_modified", nullable = false)
     private Instant gmtModified;
 
-    protected AgentProfileJpaEntity() {
+    protected AgentProfileDO() {
     }
 
-    public AgentProfileJpaEntity(UUID agentId, String tagline, String description,
+    public AgentProfileDO(UUID agentId, String tagline, String description,
                                  String sampleOutput, String logoUrl, String coverUrl,
                                  List<String> galleryUrls, boolean listed, boolean featured,
                                  Instant gmtCreate, Instant gmtModified) {

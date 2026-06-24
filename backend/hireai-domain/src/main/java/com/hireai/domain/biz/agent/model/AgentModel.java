@@ -3,7 +3,7 @@ package com.hireai.domain.biz.agent.model;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.agent.enums.AgentStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -65,6 +65,11 @@ public final class AgentModel {
         }
         return new AgentModel(id, ownerId, name, AgentStatus.ACTIVE, currentVersion.id(),
                 reputationScore, currentVersion, createdAt);
+    }
+
+    /** Only an ACTIVE agent is routable / bookable. */
+    public boolean isActive() {
+        return status == AgentStatus.ACTIVE;
     }
 
     private static void requirePresent(Object value, String field) {

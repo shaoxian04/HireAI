@@ -10,9 +10,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** Spring Data JPA repository for agent-version rows. Internal to infrastructure. */
-public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionJpaEntity, UUID> {
+public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO, UUID> {
 
-    Optional<AgentVersionJpaEntity> findByAgentIdAndVersionNumber(UUID agentId, int versionNumber);
+    Optional<AgentVersionDO> findByAgentIdAndVersionNumber(UUID agentId, int versionNumber);
 
     /**
      * One row per ACTIVE agent whose current version covers the requested category and whose

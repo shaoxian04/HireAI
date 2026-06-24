@@ -9,7 +9,7 @@ import com.hireai.utility.result.ResultCode;
 import com.hireai.controller.config.SecurityConfig;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import com.hireai.application.biz.task.OutputSpecJsonMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

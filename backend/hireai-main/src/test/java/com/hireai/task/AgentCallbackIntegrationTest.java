@@ -6,7 +6,7 @@ import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.biz.wallet.WalletWriteAppService;
 import com.hireai.application.port.security.DispatchTokenClaims;
-import com.hireai.application.port.security.DispatchTokenInvalidException;
+import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.application.port.security.DispatchTokenService;
 import com.hireai.application.port.task.TaskExecutionPort;
 import com.hireai.domain.biz.task.enums.OutputFormat;

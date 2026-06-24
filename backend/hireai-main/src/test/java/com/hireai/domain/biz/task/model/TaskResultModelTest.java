@@ -1,6 +1,6 @@
 package com.hireai.domain.biz.task.model;
 
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;

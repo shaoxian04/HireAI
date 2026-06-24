@@ -1,15 +1,18 @@
 package com.hireai.application.biz.auth.impl;
 
 import com.hireai.application.biz.auth.AuthResult;
-import com.hireai.application.biz.auth.OAuthAuthenticationException;
+import com.hireai.utility.exception.OAuthAuthenticationException;
 import com.hireai.application.biz.auth.OAuthUserInfo;
 import com.hireai.application.port.security.JwtService;
 import com.hireai.domain.biz.user.enums.Role;
 import com.hireai.domain.biz.user.model.UserModel;
 import com.hireai.domain.biz.user.repository.UserIdentityRepository;
 import com.hireai.domain.biz.user.repository.UserRepository;
+import com.hireai.domain.biz.user.service.OAuthAccountLinkingDomainService;
+import com.hireai.domain.biz.user.service.impl.OAuthAccountLinkingDomainServiceImpl;
 import com.hireai.domain.biz.wallet.model.WalletModel;
 import com.hireai.domain.biz.wallet.repository.WalletRepository;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -29,15 +32,17 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** Unit tests for OAuth resolution: existing link, link-by-email, new account, unverified email. */
+/** Unit tests for OAuth resolution: existing link, email-collision rejection, new account, unverified email. */
 class OAuthAppServiceImplTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
     private final UserIdentityRepository identityRepository = mock(UserIdentityRepository.class);
     private final WalletRepository walletRepository = mock(WalletRepository.class);
     private final JwtService jwtService = mock(JwtService.class);
+    private final OAuthAccountLinkingDomainService accountLinkingDomainService =
+            new OAuthAccountLinkingDomainServiceImpl();
     private final OAuthAppServiceImpl service = new OAuthAppServiceImpl(
-            userRepository, identityRepository, walletRepository, jwtService, 86400L);
+            userRepository, identityRepository, walletRepository, accountLinkingDomainService, jwtService, 86400L);
 
     private OAuthUserInfo google(String email, boolean verified) {
         return new OAuthUserInfo("google", "sub-123", email, verified, "Ada");
@@ -61,19 +66,23 @@ class OAuthAppServiceImplTest {
     }
 
     @Test
-    void linksByEmailWhenAccountExistsButIdentityDoesNot() {
+    void rejectsSilentLinkWhenLocalAccountWithSameEmailExists() {
+        // Account-takeover guard: a pre-existing local account (e.g. password-registered, whose email
+        // is NOT independently verified) must never be silently linked to an OAuth identity on an email
+        // match. Otherwise an attacker who pre-registers a victim's email would capture the victim's
+        // later "Sign in with Google". Linking requires an explicit, password-authenticated flow.
         UUID userId = UUID.randomUUID();
         when(identityRepository.findUserIdByProviderSubject("google", "sub-123")).thenReturn(Optional.empty());
         when(userRepository.findByEmail("ada@hireai.local")).thenReturn(Optional.of(
                 new UserModel(userId, "ada@hireai.local", "h", "Ada", Set.of(Role.CLIENT), true)));
-        when(jwtService.issue(eq(userId), anyList(), any(Duration.class))).thenReturn("jwt");
 
-        AuthResult result = service.loginWithOAuth(google("ada@hireai.local", true));
+        assertThatThrownBy(() -> service.loginWithOAuth(google("ada@hireai.local", true)))
+                .isInstanceOf(DomainException.class);
 
-        assertThat(result.userId()).isEqualTo(userId);
-        verify(identityRepository).link(userId, "google", "sub-123", "ada@hireai.local");
+        verify(identityRepository, never()).link(any(), any(), any(), any());
         verify(userRepository, never()).create(any());
         verify(walletRepository, never()).save(any());
+        verify(jwtService, never()).issue(any(), anyList(), any());
     }
 
     @Test

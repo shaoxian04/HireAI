@@ -1,10 +1,10 @@
 package com.hireai.controller.config;
 
-import com.hireai.application.biz.auth.AuthenticationFailedException;
-import com.hireai.application.biz.auth.EmailAlreadyRegisteredException;
+import com.hireai.utility.exception.AuthenticationFailedException;
+import com.hireai.utility.exception.EmailAlreadyRegisteredException;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.controller.base.WebResult;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;

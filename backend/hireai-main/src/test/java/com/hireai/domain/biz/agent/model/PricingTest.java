@@ -1,6 +1,6 @@
 package com.hireai.domain.biz.agent.model;
 
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

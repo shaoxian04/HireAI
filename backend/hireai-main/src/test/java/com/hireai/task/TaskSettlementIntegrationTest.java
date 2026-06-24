@@ -15,7 +15,7 @@ import com.hireai.domain.biz.wallet.enums.LedgerEntryType;
 import com.hireai.domain.biz.wallet.model.LedgerEntryModel;
 import com.hireai.domain.biz.wallet.model.WalletModel;
 import com.hireai.domain.biz.wallet.repository.WalletLedgerQuery;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import com.hireai.domain.shared.model.Money;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;

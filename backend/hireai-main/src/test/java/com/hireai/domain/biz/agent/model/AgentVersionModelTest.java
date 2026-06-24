@@ -2,7 +2,8 @@ package com.hireai.domain.biz.agent.model;
 
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
+import com.hireai.domain.shared.model.Money;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AgentVersionModelTest {
@@ -114,6 +116,22 @@ class AgentVersionModelTest {
         AgentVersionModel v = AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
                 List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE));
         assertThatThrownBy(() -> v.updateCommercials(Pricing.of(BigDecimal.ONE), 60, List.of()))
+                .isInstanceOf(DomainException.class);
+    }
+
+    // ---- assertAffordable (pricing rule) ----
+
+    @Test
+    void assertAffordableAcceptsBudgetAtOrAbovePriceAndRejectsBelow() {
+        AgentVersionModel v = AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(new BigDecimal("5.00")));
+
+        assertThatCode(() -> {
+            v.assertAffordable(Money.of("5.00")); // equal
+            v.assertAffordable(Money.of("10.00")); // above
+        }).doesNotThrowAnyException();
+
+        assertThatThrownBy(() -> v.assertAffordable(Money.of("4.99")))
                 .isInstanceOf(DomainException.class);
     }
 }

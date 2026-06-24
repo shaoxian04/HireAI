@@ -30,12 +30,12 @@ public class WalletRepositoryImpl implements WalletRepository {
 
     @Override
     public WalletModel save(WalletModel wallet) {
-        walletJpa.save(new WalletJpaEntity(
+        walletJpa.save(new WalletDO(
                 wallet.id(), wallet.userId(),
                 wallet.available().value(), wallet.escrow().value()));
 
         for (LedgerEntryModel entry : wallet.pendingEntries()) {
-            ledgerJpa.save(new LedgerEntryJpaEntity(
+            ledgerJpa.save(new LedgerEntryDO(
                     entry.id(), wallet.id(), entry.type(),
                     entry.amount().value(), entry.balanceAfter().value(),
                     entry.relatedTaskId(), entry.correlationId(), entry.createdAt()));
@@ -63,12 +63,12 @@ public class WalletRepositoryImpl implements WalletRepository {
                 .toList();
     }
 
-    private WalletModel toModel(WalletJpaEntity e) {
+    private WalletModel toModel(WalletDO e) {
         return new WalletModel(e.getId(), e.getUserId(),
                 Money.of(e.getAvailableBalance()), Money.of(e.getEscrowBalance()));
     }
 
-    private LedgerEntryModel toModel(LedgerEntryJpaEntity e) {
+    private LedgerEntryModel toModel(LedgerEntryDO e) {
         return new LedgerEntryModel(e.getId(), e.getEntryType(),
                 Money.of(e.getAmount()), Money.of(e.getBalanceAfter()),
                 e.getRelatedTaskId(), e.getCorrelationId(), e.getCreatedAt());

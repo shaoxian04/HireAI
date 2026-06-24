@@ -5,7 +5,7 @@ import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.agent.model.AgentModel;
 import com.hireai.domain.biz.agent.repository.AgentQuery;
 import com.hireai.domain.biz.agent.repository.AgentRepository;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

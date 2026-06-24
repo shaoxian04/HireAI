@@ -2,7 +2,7 @@ package com.hireai.task;
 
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.domain.biz.task.model.TaskResultModel;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;

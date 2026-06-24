@@ -1,6 +1,6 @@
 package com.hireai.infrastructure.security.impl;
 
-import com.hireai.application.port.security.JwtInvalidException;
+import com.hireai.utility.exception.JwtInvalidException;
 import com.hireai.application.port.security.JwtPrincipal;
 import com.hireai.application.port.security.JwtService;
 import io.jsonwebtoken.Claims;
