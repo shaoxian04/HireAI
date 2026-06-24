@@ -61,6 +61,8 @@ Read the relevant file on demand — don't preload everything.
   **Read before any cross-service or infrastructure change.**
 - **`docs/details/ddd-conventions.md`** — layering (`controller → application → domain ← infrastructure`), aggregate boundaries, naming suffixes, the five rules.
   **Read before writing any Java code in `backend/`.**
+- **`docs/details/architecture-decisions.md`** — the *why* behind the backend's structural choices (COLA modules, rich aggregates, thin app layer, exceptions in `utility`, `DO` naming, OAuth no-silent-link), incl. where HireAI deliberately diverges from the COLA reference.
+  **Read before a structural/convention change, or when questioning why something is the way it is.**
 - **`docs/details/data-model.md`** — aggregates, the 3NF schema, the append-only ledger, status enums.
   **Read before changing the schema, an entity, or the settlement/reputation logic.**
 - **`docs/details/demo-runbook.md`** — stand up the full local demo stack (Postgres + RabbitMQ + stub agent + HTTPS tunnel + backend + frontend) and the seed logins.
