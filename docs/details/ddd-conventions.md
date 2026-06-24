@@ -42,7 +42,7 @@ Domain/application/repository/infrastructure are grouped **by aggregate**; contr
 
 ## Naming suffixes (apply exactly)
 
-`XxxModel` (aggregate root or child entity) · `XxxRepository` (one per root, interface in domain) · `XxxRepositoryImpl` (infra JPA) · `XxxQuery` (read/pagination) · `Verb+Noun+DomainService` (one per state transition) · `XxxDomainEvent` · `XxxInfo` (domain inbound carrier / event payload) · `XxxReadAppService` / `XxxWriteAppService` · `XxxController` · `XxxRequest` / `XxxDTO` / `XxxModel2DTOConverter` · `XxxClient`.
+`XxxModel` (aggregate root or child entity) · `XxxDO` (JPA persistence entity, in `hireai-repository`) · `XxxRepository` (one per root, interface in domain) · `XxxRepositoryImpl` (infra JPA) · `XxxQuery` (read/pagination) · `Verb+Noun+DomainService` (one per state transition) · `XxxDomainEvent` · `XxxInfo` (domain inbound carrier / event payload) · `XxxReadAppService` / `XxxWriteAppService` · `XxxController` · `XxxRequest` / `XxxDTO` / `XxxModel2DTOConverter` · `XxxClient`.
 
 ## The five rules that matter
 
