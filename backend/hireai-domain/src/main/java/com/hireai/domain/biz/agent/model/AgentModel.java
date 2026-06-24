@@ -67,6 +67,11 @@ public final class AgentModel {
                 reputationScore, currentVersion, createdAt);
     }
 
+    /** Only an ACTIVE agent is routable / bookable. */
+    public boolean isActive() {
+        return status == AgentStatus.ACTIVE;
+    }
+
     private static void requirePresent(Object value, String field) {
         if (value == null) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, field + " is required");

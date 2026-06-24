@@ -110,4 +110,18 @@ class AgentProfileModelTest {
                 .satisfies(ex -> assertThat(((DomainException) ex).resultCode())
                         .isEqualTo(ResultCode.VALIDATION_ERROR));
     }
+
+    @Test
+    void assertCanAddGalleryThrowsOnlyWhenFull() {
+        AgentProfileModel profile = AgentProfileModel.createDefault(UUID.randomUUID());
+        profile.assertCanAddGallery(); // empty — allowed
+        for (int i = 0; i < AgentProfileModel.MAX_GALLERY; i++) {
+            profile = profile.addGalleryUrl("https://img.example.com/" + i + ".png");
+        }
+        final AgentProfileModel full = profile;
+        assertThatThrownBy(full::assertCanAddGallery)
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).resultCode())
+                        .isEqualTo(ResultCode.DOMAIN_RULE_VIOLATION));
+    }
 }

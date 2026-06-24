@@ -80,4 +80,11 @@ class AgentModelTest {
         AgentModel active = registered(UUID.randomUUID()).activate();
         assertThatThrownBy(active::activate).isInstanceOf(DomainException.class);
     }
+
+    @Test
+    void isActiveOnlyWhenStatusActive() {
+        AgentModel pending = registered(UUID.randomUUID());
+        assertThat(pending.isActive()).isFalse();
+        assertThat(pending.activate().isActive()).isTrue();
+    }
 }

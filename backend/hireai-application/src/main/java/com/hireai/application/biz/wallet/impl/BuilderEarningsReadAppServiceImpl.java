@@ -15,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -27,14 +26,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class BuilderEarningsReadAppServiceImpl implements BuilderEarningsReadAppService {
-
-    /** Escrow still held and routed to one of the caller's agents — would pay out on accept. */
-    private static final Set<String> PENDING_STATUSES = Set.of(
-            TaskStatus.QUEUED.name(),
-            TaskStatus.EXECUTING.name(),
-            TaskStatus.RESULT_RECEIVED.name(),
-            TaskStatus.PENDING_REVIEW.name(),
-            TaskStatus.AWAITING_CAPACITY.name());
 
     private static final int PAYOUT_HISTORY_LIMIT = 50;
 
@@ -81,7 +72,7 @@ public class BuilderEarningsReadAppServiceImpl implements BuilderEarningsReadApp
     }
 
     private boolean pending(RoutedTaskRow row) {
-        return PENDING_STATUSES.contains(row.status());
+        return TaskStatus.valueOf(row.status()).isPendingEscrow();
     }
 
     private Money net(RoutedTaskRow row) {
