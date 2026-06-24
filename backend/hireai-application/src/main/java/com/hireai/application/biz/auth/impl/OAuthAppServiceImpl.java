@@ -9,6 +9,7 @@ import com.hireai.domain.biz.user.enums.Role;
 import com.hireai.domain.biz.user.model.UserModel;
 import com.hireai.domain.biz.user.repository.UserIdentityRepository;
 import com.hireai.domain.biz.user.repository.UserRepository;
+import com.hireai.domain.biz.user.service.OAuthAccountLinkingDomainService;
 import com.hireai.domain.biz.wallet.model.WalletModel;
 import com.hireai.domain.biz.wallet.repository.WalletRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -32,17 +34,20 @@ public class OAuthAppServiceImpl implements OAuthAppService {
     private final UserRepository userRepository;
     private final UserIdentityRepository identityRepository;
     private final WalletRepository walletRepository;
+    private final OAuthAccountLinkingDomainService accountLinkingDomainService;
     private final JwtService jwtService;
     private final long jwtTtlSeconds;
 
     public OAuthAppServiceImpl(UserRepository userRepository,
                                UserIdentityRepository identityRepository,
                                WalletRepository walletRepository,
+                               OAuthAccountLinkingDomainService accountLinkingDomainService,
                                JwtService jwtService,
                                @Value("${hireai.auth.jwt-ttl-seconds}") long jwtTtlSeconds) {
         this.userRepository = userRepository;
         this.identityRepository = identityRepository;
         this.walletRepository = walletRepository;
+        this.accountLinkingDomainService = accountLinkingDomainService;
         this.jwtService = jwtService;
         this.jwtTtlSeconds = jwtTtlSeconds;
     }
@@ -69,19 +74,19 @@ public class OAuthAppServiceImpl implements OAuthAppService {
     }
 
     private UserModel resolveByEmailOrCreate(OAuthUserInfo info) {
-        return userRepository.findByEmail(info.email())
-                .map(existing -> {
-                    identityRepository.link(existing.id(), info.provider(), info.subject(), info.email());
-                    return existing;
-                })
-                .orElseGet(() -> {
-                    UserModel created = userRepository.create(
-                            UserModel.newClient(info.email(), null, info.displayName()));
-                    walletRepository.save(WalletModel.openFor(created.id()));
-                    identityRepository.link(created.id(), info.provider(), info.subject(), info.email());
-                    log.info("Created OAuth user {} via {}", created.id(), info.provider());
-                    return created;
-                });
+        // App-layer orchestration only: read the would-be email collision (read-only query) and let the
+        // domain rule decide whether a new account may be seeded. The no-silent-link invariant (the
+        // account-takeover guard) lives in OAuthAccountLinkingDomainService so it is owned and tested in
+        // the domain, not here. Persistence below goes through the domain repository interfaces.
+        Optional<UserModel> existingByEmail = userRepository.findByEmail(info.email());
+        accountLinkingDomainService.assertNoLocalAccountForEmail(existingByEmail, info.provider());
+
+        UserModel created = userRepository.create(
+                UserModel.newClient(info.email(), null, info.displayName()));
+        walletRepository.save(WalletModel.openFor(created.id()));
+        identityRepository.link(created.id(), info.provider(), info.subject(), info.email());
+        log.info("Created OAuth user {} via {}", created.id(), info.provider());
+        return created;
     }
 
     private AuthResult issue(UserModel user) {
