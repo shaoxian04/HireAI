@@ -6,6 +6,8 @@ import com.hireai.domain.biz.agent.service.impl.AgentActivateDomainServiceImpl;
 import com.hireai.domain.biz.agent.service.impl.AgentRegisterDomainServiceImpl;
 import com.hireai.domain.biz.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.routing.service.impl.RoutingMatchDomainServiceImpl;
+import com.hireai.domain.biz.user.service.OAuthAccountLinkingDomainService;
+import com.hireai.domain.biz.user.service.impl.OAuthAccountLinkingDomainServiceImpl;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
 import com.hireai.domain.biz.task.service.impl.TaskSubmitDomainServiceImpl;
 import com.hireai.domain.biz.wallet.service.SettlementDomainService;
@@ -58,5 +60,10 @@ public class DomainServiceConfig {
     @Bean
     public SettlementDomainService settlementDomainService() {
         return new SettlementDomainServiceImpl();
+    }
+
+    @Bean
+    public OAuthAccountLinkingDomainService oAuthAccountLinkingDomainService() {
+        return new OAuthAccountLinkingDomainServiceImpl();
     }
 }

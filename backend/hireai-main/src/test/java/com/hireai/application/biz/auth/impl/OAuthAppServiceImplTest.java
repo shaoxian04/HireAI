@@ -8,8 +8,11 @@ import com.hireai.domain.biz.user.enums.Role;
 import com.hireai.domain.biz.user.model.UserModel;
 import com.hireai.domain.biz.user.repository.UserIdentityRepository;
 import com.hireai.domain.biz.user.repository.UserRepository;
+import com.hireai.domain.biz.user.service.OAuthAccountLinkingDomainService;
+import com.hireai.domain.biz.user.service.impl.OAuthAccountLinkingDomainServiceImpl;
 import com.hireai.domain.biz.wallet.model.WalletModel;
 import com.hireai.domain.biz.wallet.repository.WalletRepository;
+import com.hireai.domain.shared.exception.DomainException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -36,8 +39,10 @@ class OAuthAppServiceImplTest {
     private final UserIdentityRepository identityRepository = mock(UserIdentityRepository.class);
     private final WalletRepository walletRepository = mock(WalletRepository.class);
     private final JwtService jwtService = mock(JwtService.class);
+    private final OAuthAccountLinkingDomainService accountLinkingDomainService =
+            new OAuthAccountLinkingDomainServiceImpl();
     private final OAuthAppServiceImpl service = new OAuthAppServiceImpl(
-            userRepository, identityRepository, walletRepository, jwtService, 86400L);
+            userRepository, identityRepository, walletRepository, accountLinkingDomainService, jwtService, 86400L);
 
     private OAuthUserInfo google(String email, boolean verified) {
         return new OAuthUserInfo("google", "sub-123", email, verified, "Ada");
@@ -72,7 +77,7 @@ class OAuthAppServiceImplTest {
                 new UserModel(userId, "ada@hireai.local", "h", "Ada", Set.of(Role.CLIENT), true)));
 
         assertThatThrownBy(() -> service.loginWithOAuth(google("ada@hireai.local", true)))
-                .isInstanceOf(OAuthAuthenticationException.class);
+                .isInstanceOf(DomainException.class);
 
         verify(identityRepository, never()).link(any(), any(), any(), any());
         verify(userRepository, never()).create(any());
