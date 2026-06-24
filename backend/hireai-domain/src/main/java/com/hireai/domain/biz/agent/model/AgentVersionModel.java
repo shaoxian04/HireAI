@@ -3,6 +3,7 @@ package com.hireai.domain.biz.agent.model;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.domain.shared.model.Money;
 
 import java.time.Instant;
 import java.util.List;
@@ -99,6 +100,14 @@ public final class AgentVersionModel {
     private static void requirePresent(Object value, String field) {
         if (value == null) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, field + " is required");
+        }
+    }
+
+    /** Pricing rule: a task budget must cover this version's price. */
+    public void assertAffordable(Money budget) {
+        if (budget.value().compareTo(pricing.price()) < 0) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "Budget " + budget + " is below the agent's price " + pricing.price());
         }
     }
 

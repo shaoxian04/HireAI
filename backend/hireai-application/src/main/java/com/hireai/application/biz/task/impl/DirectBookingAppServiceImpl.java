@@ -3,7 +3,6 @@ package com.hireai.application.biz.task.impl;
 import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.biz.agent.enums.AgentStatus;
 import com.hireai.domain.biz.agent.model.AgentProfileModel;
 import com.hireai.domain.biz.agent.model.AgentModel;
 import com.hireai.domain.biz.agent.repository.AgentProfileRepository;
@@ -39,18 +38,16 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
         AgentModel agent = agentRepository.findById(info.agentId())
                 .orElseThrow(this::notFound);
 
-        // Bookable = ACTIVE + listed. Both failures surface as NOT_FOUND so unlisted agents
-        // are indistinguishable from absent ones (no existence leak — spec §6).
-        if (agent.status() != AgentStatus.ACTIVE || !isListed(agent.id())) {
+        // Bookable = ACTIVE (agent state) + listed (storefront state). Each half is its owning
+        // aggregate's own query; composing them across the two aggregates is app orchestration.
+        // Both failures surface as NOT_FOUND so unlisted agents are indistinguishable from absent
+        // ones (no existence leak — spec §6).
+        if (!agent.isActive() || !isListed(agent.id())) {
             throw notFound();
         }
 
-        // budget must be >= agent's price
-        if (info.budget().value().compareTo(agent.currentVersion().pricing().price()) < 0) {
-            throw new DomainException(ResultCode.VALIDATION_ERROR,
-                    "Budget " + info.budget() + " is below the agent's price "
-                            + agent.currentVersion().pricing().price());
-        }
+        // Pricing rule (budget >= price) is owned by the agent version.
+        agent.currentVersion().assertAffordable(info.budget());
 
         // Adopt the agent's declared output_spec as the task's binding contract (Invariant #4)
         // and its first capability category as the task category (stats/labels).
