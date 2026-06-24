@@ -9,7 +9,7 @@ import com.hireai.domain.biz.agent.repository.AgentQuery;
 import com.hireai.domain.biz.agent.repository.AgentRepository;
 import com.hireai.application.biz.task.OutputSpecJsonMapper;
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
@@ -40,13 +40,13 @@ public class AgentRepositoryImpl implements AgentRepository {
 
     @Override
     public AgentModel save(AgentModel agent) {
-        agentJpa.save(new AgentJpaEntity(
+        agentJpa.save(new AgentDO(
                 agent.id(), agent.ownerId(), agent.name(), agent.status().name(),
                 agent.currentVersionId(), agent.reputationScore(), agent.createdAt()));
 
         AgentVersionModel version = agent.currentVersion();
         if (version != null && versionJpa.findById(version.id()).isEmpty()) {
-            versionJpa.save(new AgentVersionJpaEntity(
+            versionJpa.save(new AgentVersionDO(
                     version.id(), version.agentId(), version.versionNumber(),
                     outputSpecJsonMapper.toJson(version.outputSpec()),
                     version.capabilityCategories(), version.webhookUrl(),
@@ -57,10 +57,10 @@ public class AgentRepositoryImpl implements AgentRepository {
 
     @Override
     public void updateCurrentVersion(AgentVersionModel version) {
-        AgentVersionJpaEntity existing = versionJpa.findById(version.id())
+        AgentVersionDO existing = versionJpa.findById(version.id())
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
                         "Agent version not found: " + version.id()));
-        versionJpa.save(new AgentVersionJpaEntity(
+        versionJpa.save(new AgentVersionDO(
                 existing.getId(), existing.getAgentId(), existing.getVersionNumber(),
                 outputSpecJsonMapper.toJson(version.outputSpec()),
                 version.capabilityCategories(), version.webhookUrl(),
@@ -108,7 +108,7 @@ public class AgentRepositoryImpl implements AgentRepository {
                 row.getOutputSpec());
     }
 
-    private AgentModel toModel(AgentJpaEntity entity) {
+    private AgentModel toModel(AgentDO entity) {
         AgentVersionModel version = versionJpa.findByAgentIdAndVersionNumber(entity.getId(), 1)
                 .map(this::toVersionModel)
                 .orElseThrow(() -> new DomainException(ResultCode.INTERNAL_ERROR,
@@ -119,7 +119,7 @@ public class AgentRepositoryImpl implements AgentRepository {
                 entity.getReputationScore(), version, entity.getGmtCreate());
     }
 
-    private AgentVersionModel toVersionModel(AgentVersionJpaEntity entity) {
+    private AgentVersionModel toVersionModel(AgentVersionDO entity) {
         return new AgentVersionModel(
                 entity.getId(), entity.getAgentId(), entity.getVersionNumber(),
                 outputSpecJsonMapper.fromJson(entity.getOutputSpec()),

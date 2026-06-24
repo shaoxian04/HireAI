@@ -2,7 +2,7 @@ package com.hireai.domain.biz.task.model;
 
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.enums.OutputFormat;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 
 /**
  * The binding output contract a client declares for a task (Hard Invariant #4).

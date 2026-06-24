@@ -7,10 +7,10 @@ import jakarta.persistence.Table;
 
 import java.util.UUID;
 
-/** JPA persistence entity for a user row. Roles live in {@link UserRoleJpaEntity}. */
+/** JPA persistence entity for a user row. Roles live in {@link UserRoleDO}. */
 @Entity
 @Table(name = "users")
-public class UserJpaEntity {
+public class UserDO {
 
     @Id
     @Column(name = "id")
@@ -28,10 +28,10 @@ public class UserJpaEntity {
     @Column(name = "is_active", nullable = false)
     private boolean active;
 
-    protected UserJpaEntity() {
+    protected UserDO() {
     }
 
-    public UserJpaEntity(UUID id, String email, String passwordHash, String displayName, boolean active) {
+    public UserDO(UUID id, String email, String passwordHash, String displayName, boolean active) {
         this.id = id;
         this.email = email;
         this.passwordHash = passwordHash;

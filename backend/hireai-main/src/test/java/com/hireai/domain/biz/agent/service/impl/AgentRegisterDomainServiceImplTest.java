@@ -5,7 +5,7 @@ import com.hireai.domain.biz.agent.info.AgentRegisterInfo;
 import com.hireai.domain.biz.agent.model.AgentModel;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

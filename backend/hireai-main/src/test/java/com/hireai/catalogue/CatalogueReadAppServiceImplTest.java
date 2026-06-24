@@ -3,7 +3,7 @@ package com.hireai.catalogue;
 import com.hireai.application.biz.catalogue.impl.CatalogueReadAppServiceImpl;
 import com.hireai.application.port.query.CatalogueQueryPort;
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

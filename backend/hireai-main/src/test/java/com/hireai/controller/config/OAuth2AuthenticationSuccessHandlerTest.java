@@ -2,7 +2,7 @@ package com.hireai.controller.config;
 
 import com.hireai.application.biz.auth.AuthResult;
 import com.hireai.application.biz.auth.OAuthAppService;
-import com.hireai.application.biz.auth.OAuthAuthenticationException;
+import com.hireai.utility.exception.OAuthAuthenticationException;
 import com.hireai.application.biz.auth.OAuthUserInfo;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

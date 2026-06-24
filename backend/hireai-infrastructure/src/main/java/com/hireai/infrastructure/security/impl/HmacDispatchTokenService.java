@@ -3,7 +3,7 @@ package com.hireai.infrastructure.security.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.hireai.application.port.security.DispatchTokenClaims;
-import com.hireai.application.port.security.DispatchTokenInvalidException;
+import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.application.port.security.DispatchTokenService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

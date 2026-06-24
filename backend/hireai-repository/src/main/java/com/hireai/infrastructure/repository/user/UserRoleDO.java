@@ -13,8 +13,8 @@ import java.util.UUID;
 /** JPA entity for one (user_id, role) grant. */
 @Entity
 @Table(name = "user_roles")
-@IdClass(UserRoleJpaEntity.Key.class)
-public class UserRoleJpaEntity {
+@IdClass(UserRoleDO.Key.class)
+public class UserRoleDO {
 
     @Id
     @Column(name = "user_id")
@@ -24,10 +24,10 @@ public class UserRoleJpaEntity {
     @Column(name = "role")
     private String role;
 
-    protected UserRoleJpaEntity() {
+    protected UserRoleDO() {
     }
 
-    public UserRoleJpaEntity(UUID userId, String role) {
+    public UserRoleDO(UUID userId, String role) {
         this.userId = userId;
         this.role = role;
     }

@@ -25,7 +25,7 @@ public interface OAuthAccountLinkingDomainService {
      * @param existingByEmail the local account already holding the identity's email, if any
      *                        (looked up by the application via the {@code UserRepository} read port)
      * @param provider        the OAuth provider id, used in the rejection message
-     * @throws com.hireai.domain.shared.exception.DomainException if a local account already exists
+     * @throws com.hireai.utility.exception.DomainException if a local account already exists
      */
     void assertNoLocalAccountForEmail(Optional<UserModel> existingByEmail, String provider);
 }

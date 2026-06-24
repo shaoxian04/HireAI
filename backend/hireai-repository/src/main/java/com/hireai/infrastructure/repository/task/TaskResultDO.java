@@ -16,7 +16,7 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "task_results")
-public class TaskResultJpaEntity {
+public class TaskResultDO {
 
     @Id
     @Column(name = "id")
@@ -38,10 +38,10 @@ public class TaskResultJpaEntity {
     @Column(name = "received_at", nullable = false)
     private Instant receivedAt;
 
-    protected TaskResultJpaEntity() {
+    protected TaskResultDO() {
     }
 
-    public TaskResultJpaEntity(UUID id, UUID taskId, String resultPayload, String resultUrl,
+    public TaskResultDO(UUID id, UUID taskId, String resultPayload, String resultUrl,
                                String agentStatus, Instant receivedAt) {
         this.id = id;
         this.taskId = taskId;

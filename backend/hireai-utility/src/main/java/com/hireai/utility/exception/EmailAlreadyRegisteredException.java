@@ -1,4 +1,4 @@
-package com.hireai.application.biz.auth;
+package com.hireai.utility.exception;
 
 /** Raised when registration is attempted with an email that already has an account. Maps to 409. */
 public class EmailAlreadyRegisteredException extends RuntimeException {

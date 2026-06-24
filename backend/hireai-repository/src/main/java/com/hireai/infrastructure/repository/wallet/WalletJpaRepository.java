@@ -6,7 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** Spring Data JPA repository for wallet rows. Internal to infrastructure. */
-public interface WalletJpaRepository extends JpaRepository<WalletJpaEntity, UUID> {
+public interface WalletJpaRepository extends JpaRepository<WalletDO, UUID> {
 
-    Optional<WalletJpaEntity> findByUserId(UUID userId);
+    Optional<WalletDO> findByUserId(UUID userId);
 }

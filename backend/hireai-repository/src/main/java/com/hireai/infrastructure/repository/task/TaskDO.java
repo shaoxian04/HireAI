@@ -19,7 +19,7 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "tasks")
-public class TaskJpaEntity {
+public class TaskDO {
 
     @Id
     @Column(name = "id")
@@ -62,10 +62,10 @@ public class TaskJpaEntity {
     @Column(name = "rejection_reason")
     private String rejectionReason;
 
-    protected TaskJpaEntity() {
+    protected TaskDO() {
     }
 
-    public TaskJpaEntity(UUID id, UUID clientId, String title, String description,
+    public TaskDO(UUID id, UUID clientId, String title, String description,
                          BigDecimal budget, String outputSpec, String category, String status,
                          UUID agentVersionId, Instant gmtCreate,
                          String resolution, Instant resolvedAt, String rejectionReason) {

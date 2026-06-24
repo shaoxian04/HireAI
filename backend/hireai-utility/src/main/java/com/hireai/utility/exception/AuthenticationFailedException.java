@@ -1,4 +1,4 @@
-package com.hireai.application.biz.auth;
+package com.hireai.utility.exception;
 
 /**
  * Raised on ANY login failure — unknown email, wrong password, or inactive account. Deliberately

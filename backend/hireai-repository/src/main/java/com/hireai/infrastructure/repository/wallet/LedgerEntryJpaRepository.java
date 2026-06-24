@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.UUID;
 
 /** Spring Data JPA repository for ledger rows. Insert + read only. */
-public interface LedgerEntryJpaRepository extends JpaRepository<LedgerEntryJpaEntity, UUID> {
+public interface LedgerEntryJpaRepository extends JpaRepository<LedgerEntryDO, UUID> {
 
-    List<LedgerEntryJpaEntity> findByWalletIdOrderByCreatedAtDesc(UUID walletId, Pageable pageable);
+    List<LedgerEntryDO> findByWalletIdOrderByCreatedAtDesc(UUID walletId, Pageable pageable);
 }

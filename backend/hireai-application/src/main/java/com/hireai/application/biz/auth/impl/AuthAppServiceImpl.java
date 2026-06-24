@@ -2,8 +2,8 @@ package com.hireai.application.biz.auth.impl;
 
 import com.hireai.application.biz.auth.AuthAppService;
 import com.hireai.application.biz.auth.AuthResult;
-import com.hireai.application.biz.auth.AuthenticationFailedException;
-import com.hireai.application.biz.auth.EmailAlreadyRegisteredException;
+import com.hireai.utility.exception.AuthenticationFailedException;
+import com.hireai.utility.exception.EmailAlreadyRegisteredException;
 import com.hireai.application.biz.auth.LoginInfo;
 import com.hireai.application.biz.auth.RegisterInfo;
 import com.hireai.application.port.security.JwtService;

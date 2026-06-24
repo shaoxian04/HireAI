@@ -11,7 +11,7 @@ import com.hireai.domain.biz.routing.info.DispatchMessage;
 import com.hireai.domain.biz.routing.info.TaskDispatchPayload;
 import com.hireai.domain.biz.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

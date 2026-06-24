@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.UUID;
 
 /** Spring Data JPA repository for agent rows. Internal to infrastructure. */
-public interface AgentJpaRepository extends JpaRepository<AgentJpaEntity, UUID> {
+public interface AgentJpaRepository extends JpaRepository<AgentDO, UUID> {
 
-    List<AgentJpaEntity> findByOwnerIdOrderByGmtCreateDesc(UUID ownerId, Pageable pageable);
+    List<AgentDO> findByOwnerIdOrderByGmtCreateDesc(UUID ownerId, Pageable pageable);
 }

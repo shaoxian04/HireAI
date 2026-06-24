@@ -6,7 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** Spring Data JPA repository for identity links. Internal to infrastructure. */
-public interface UserIdentityJpaRepository extends JpaRepository<UserIdentityJpaEntity, UUID> {
+public interface UserIdentityJpaRepository extends JpaRepository<UserIdentityDO, UUID> {
 
-    Optional<UserIdentityJpaEntity> findByProviderAndProviderSubject(String provider, String subject);
+    Optional<UserIdentityDO> findByProviderAndProviderSubject(String provider, String subject);
 }

@@ -2,7 +2,7 @@ package com.hireai.application.biz.auth.impl;
 
 import com.hireai.application.biz.auth.AuthResult;
 import com.hireai.application.biz.auth.OAuthAppService;
-import com.hireai.application.biz.auth.OAuthAuthenticationException;
+import com.hireai.utility.exception.OAuthAuthenticationException;
 import com.hireai.application.biz.auth.OAuthUserInfo;
 import com.hireai.application.port.security.JwtService;
 import com.hireai.domain.biz.user.enums.Role;

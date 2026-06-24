@@ -19,7 +19,7 @@ public interface CatalogueReadAppService {
     List<AgentCardRow> search(String q, String category, String sort, int page, int size);
 
     /**
-     * @throws com.hireai.domain.shared.exception.DomainException NOT_FOUND when absent/unlisted.
+     * @throws com.hireai.utility.exception.DomainException NOT_FOUND when absent/unlisted.
      */
     AgentProfileRow getProfile(UUID agentId);
 

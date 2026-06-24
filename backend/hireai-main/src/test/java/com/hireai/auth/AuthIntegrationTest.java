@@ -115,7 +115,7 @@ class AuthIntegrationTest {
         // stubbed below to throw, so the controller-local handler returns 401 — proving the
         // callback is authenticated by the dispatch token, not the JWT (invariant #6).
         when(dispatchTokenService.verify(org.mockito.ArgumentMatchers.any()))
-                .thenThrow(new com.hireai.application.port.security.DispatchTokenInvalidException("bad"));
+                .thenThrow(new com.hireai.utility.exception.DispatchTokenInvalidException("bad"));
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth("not-a-real-dispatch-token");

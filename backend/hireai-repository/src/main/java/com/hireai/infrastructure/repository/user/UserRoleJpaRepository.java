@@ -9,9 +9,9 @@ import java.util.List;
 import java.util.UUID;
 
 /** Spring Data JPA repository for role grants. Internal to infrastructure. */
-public interface UserRoleJpaRepository extends JpaRepository<UserRoleJpaEntity, UserRoleJpaEntity.Key> {
+public interface UserRoleJpaRepository extends JpaRepository<UserRoleDO, UserRoleDO.Key> {
 
-    List<UserRoleJpaEntity> findByUserId(UUID userId);
+    List<UserRoleDO> findByUserId(UUID userId);
 
     /**
      * Idempotent, race-safe grant of a (user_id, role). {@code ON CONFLICT DO NOTHING} makes a

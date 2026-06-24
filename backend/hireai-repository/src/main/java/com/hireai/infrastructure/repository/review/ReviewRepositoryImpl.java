@@ -29,9 +29,9 @@ public class ReviewRepositoryImpl implements ReviewRepository {
         Instant now = Instant.now();
         // Read-before-write upsert: non-atomic, acceptable here — a review has a single writer per flow.
         Instant created = jpa.findById(review.id())
-                .map(ReviewJpaEntity::getGmtCreate)
+                .map(ReviewDO::getGmtCreate)
                 .orElse(now);
-        jpa.save(new ReviewJpaEntity(
+        jpa.save(new ReviewDO(
                 review.id(), review.taskId(), review.clientId(), review.agentId(),
                 (short) review.rating(), review.reviewText(), review.builderResponse(),
                 review.published(), created, now));
@@ -51,7 +51,7 @@ public class ReviewRepositoryImpl implements ReviewRepository {
                 .toList();
     }
 
-    private ReviewModel toModel(ReviewJpaEntity entity) {
+    private ReviewModel toModel(ReviewDO entity) {
         return new ReviewModel(
                 entity.getId(), entity.getTaskId(), entity.getClientId(), entity.getAgentId(),
                 (int) entity.getRating(), entity.getReviewText(), entity.getBuilderResponse(),

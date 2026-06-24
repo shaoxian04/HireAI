@@ -2,7 +2,7 @@ package com.hireai.application.biz.task;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hireai.domain.biz.task.model.OutputSpec;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 import org.springframework.stereotype.Component;
 

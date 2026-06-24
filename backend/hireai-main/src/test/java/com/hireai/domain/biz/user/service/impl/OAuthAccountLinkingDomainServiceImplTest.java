@@ -2,7 +2,7 @@ package com.hireai.domain.biz.user.service.impl;
 
 import com.hireai.domain.biz.user.enums.Role;
 import com.hireai.domain.biz.user.model.UserModel;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;

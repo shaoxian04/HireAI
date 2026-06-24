@@ -12,7 +12,7 @@ import com.hireai.domain.biz.wallet.info.SettlementBreakdown;
 import com.hireai.domain.biz.wallet.model.WalletModel;
 import com.hireai.domain.biz.wallet.repository.WalletRepository;
 import com.hireai.domain.biz.wallet.service.SettlementDomainService;
-import com.hireai.domain.shared.exception.DomainException;
+import com.hireai.utility.exception.DomainException;
 import com.hireai.domain.shared.model.Money;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
