@@ -26,6 +26,7 @@ function BookingForm() {
   useEffect(() => {
     if (!id) return;
     // Reset so navigating between agents never flashes a previous agent.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional reset-on-navigation so a new :id never flashes stale data
     setProfile(null);
     setProfileError(null);
     api<AgentProfileDTO>(`/catalogue/agents/${id}`)
