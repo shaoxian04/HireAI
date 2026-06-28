@@ -1,6 +1,6 @@
 package com.hireai.controller.biz.wallet;
 
-import com.hireai.application.biz.wallet.BuilderEarningsReadAppService;
+import com.hireai.application.biz.ledger.wallet.BuilderEarningsReadAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.wallet.dto.BuilderEarningsDTO;

@@ -10,12 +10,12 @@ import com.hireai.domain.biz.identity.service.OAuthAccountLinkingDomainService;
 import com.hireai.domain.biz.identity.service.impl.OAuthAccountLinkingDomainServiceImpl;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
 import com.hireai.domain.biz.task.service.impl.TaskSubmitDomainServiceImpl;
-import com.hireai.domain.biz.wallet.service.SettlementDomainService;
-import com.hireai.domain.biz.wallet.service.WalletFreezeDomainService;
-import com.hireai.domain.biz.wallet.service.WalletTopUpDomainService;
-import com.hireai.domain.biz.wallet.service.impl.SettlementDomainServiceImpl;
-import com.hireai.domain.biz.wallet.service.impl.WalletFreezeDomainServiceImpl;
-import com.hireai.domain.biz.wallet.service.impl.WalletTopUpDomainServiceImpl;
+import com.hireai.domain.biz.ledger.wallet.service.SettlementDomainService;
+import com.hireai.domain.biz.ledger.wallet.service.WalletFreezeDomainService;
+import com.hireai.domain.biz.ledger.wallet.service.WalletTopUpDomainService;
+import com.hireai.domain.biz.ledger.wallet.service.impl.SettlementDomainServiceImpl;
+import com.hireai.domain.biz.ledger.wallet.service.impl.WalletFreezeDomainServiceImpl;
+import com.hireai.domain.biz.ledger.wallet.service.impl.WalletTopUpDomainServiceImpl;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 

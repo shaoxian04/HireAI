@@ -1,6 +1,6 @@
 package com.hireai.application.biz.task.impl;
 
-import com.hireai.application.biz.wallet.WalletWriteAppService;
+import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;

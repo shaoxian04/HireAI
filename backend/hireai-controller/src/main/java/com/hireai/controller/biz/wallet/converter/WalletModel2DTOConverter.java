@@ -2,8 +2,8 @@ package com.hireai.controller.biz.wallet.converter;
 
 import com.hireai.controller.biz.wallet.dto.LedgerEntryDTO;
 import com.hireai.controller.biz.wallet.dto.WalletDTO;
-import com.hireai.domain.biz.wallet.model.LedgerEntryModel;
-import com.hireai.domain.biz.wallet.model.WalletModel;
+import com.hireai.domain.biz.ledger.wallet.model.LedgerEntryModel;
+import com.hireai.domain.biz.ledger.wallet.model.WalletModel;
 
 /**
  * Explicit, hand-written converter from domain models to outbound DTOs.

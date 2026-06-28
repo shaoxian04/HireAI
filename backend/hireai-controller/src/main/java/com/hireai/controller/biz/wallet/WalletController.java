@@ -1,7 +1,7 @@
 package com.hireai.controller.biz.wallet;
 
-import com.hireai.application.biz.wallet.WalletReadAppService;
-import com.hireai.application.biz.wallet.WalletWriteAppService;
+import com.hireai.application.biz.ledger.wallet.WalletReadAppService;
+import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.wallet.converter.WalletModel2DTOConverter;
@@ -9,7 +9,7 @@ import com.hireai.controller.biz.wallet.dto.LedgerEntryDTO;
 import com.hireai.controller.biz.wallet.dto.TopUpRequest;
 import com.hireai.controller.biz.wallet.dto.WalletDTO;
 import com.hireai.controller.config.CurrentUserProvider;
-import com.hireai.domain.biz.wallet.repository.WalletLedgerQuery;
+import com.hireai.domain.biz.ledger.wallet.repository.WalletLedgerQuery;
 import com.hireai.domain.shared.model.Money;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;

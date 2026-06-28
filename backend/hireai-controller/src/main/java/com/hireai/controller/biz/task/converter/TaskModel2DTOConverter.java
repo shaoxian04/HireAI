@@ -4,7 +4,7 @@ import com.hireai.controller.biz.task.dto.TaskDTO;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
-import com.hireai.domain.biz.wallet.service.SettlementPolicy;
+import com.hireai.domain.biz.ledger.wallet.service.SettlementPolicy;
 
 import java.math.BigDecimal;
 

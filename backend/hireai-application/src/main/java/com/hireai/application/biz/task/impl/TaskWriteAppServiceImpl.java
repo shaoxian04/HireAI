@@ -1,7 +1,7 @@
 package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.task.TaskWriteAppService;
-import com.hireai.application.biz.wallet.WalletWriteAppService;
+import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.event.TaskSubmittedDomainEvent;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;

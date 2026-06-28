@@ -6,7 +6,7 @@ import com.hireai.domain.biz.identity.enums.Role;
 import com.hireai.domain.biz.identity.model.Credential;
 import com.hireai.domain.biz.identity.model.UserModel;
 import com.hireai.domain.biz.identity.repository.UserRepository;
-import com.hireai.domain.biz.wallet.repository.WalletRepository;
+import com.hireai.domain.biz.ledger.wallet.repository.WalletRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
