@@ -5,7 +5,6 @@ import com.hireai.application.biz.offering.agent.AgentWriteAppService;
 import com.hireai.domain.biz.offering.agent.enums.AgentStatus;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
-import com.hireai.domain.biz.offering.agent.info.PricingUpdateInfo;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.offering.agent.repository.AgentProfileRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
@@ -34,12 +33,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Boots Spring against a real Postgres (Testcontainers) so Flyway applies V1+V2+V3.
+ * Boots Spring against a real Postgres (Testcontainers) so Flyway applies V1+...+V15.
  * Verifies the Agent registration slice end-to-end: register (PENDING_VERIFICATION + v1),
  * activate (-> ACTIVE + current_version_id), owner-scoped get/list, the JSONB + TEXT[]
  * round-trip, and the routing candidate read (category overlap, budget filter, reputation
  * tie-break ordering). Each test creates its own owner so the shared container carries no
- * cross-test state.
+ * cross-test state. Supersession (publish-new-version) is covered by the dedicated
+ * AgentVersionSupersessionIntegrationTest.
  */
 @SpringBootTest
 @Testcontainers
@@ -129,34 +129,6 @@ class AgentRegistrationIntegrationTest {
         List<AgentModel> mine = agentReadAppService.listForOwner(owner, AgentQuery.firstPage());
         assertThat(mine).hasSize(2);
         assertThat(mine).allMatch(a -> a.ownerId().equals(owner));
-    }
-
-    @Test
-    void updatePricingPersistsNewCommercialsWithSameVersionIdentity() {
-        UUID owner = newOwner();
-        UUID agentId = agentWriteAppService.register(info(owner, "summarisation", "5.00"));
-
-        // capture original version id and outputSpec before update
-        AgentModel before = agentReadAppService.getForOwner(agentId, owner);
-        UUID originalVersionId = before.currentVersion().id();
-        int originalVersionNumber = before.currentVersion().versionNumber();
-        String originalOutputSpecFormat = before.currentVersion().outputSpec().format().name();
-
-        // perform the commercial update
-        agentWriteAppService.updatePricing(agentId, owner,
-                new PricingUpdateInfo(new BigDecimal("99.50"), 120, List.of("Translation ")));
-
-        // reload and verify
-        AgentModel after = agentReadAppService.getForOwner(agentId, owner);
-        assertThat(after.currentVersion().pricing().price())
-                .isEqualByComparingTo("99.50");
-        assertThat(after.currentVersion().maxExecutionSeconds()).isEqualTo(120);
-        // categories normalised to lowercase + trimmed
-        assertThat(after.currentVersion().capabilityCategories()).containsExactly("translation");
-        // identity fields unchanged
-        assertThat(after.currentVersion().id()).isEqualTo(originalVersionId);
-        assertThat(after.currentVersion().versionNumber()).isEqualTo(originalVersionNumber);
-        assertThat(after.currentVersion().outputSpec().format().name()).isEqualTo(originalOutputSpecFormat);
     }
 
     @Test

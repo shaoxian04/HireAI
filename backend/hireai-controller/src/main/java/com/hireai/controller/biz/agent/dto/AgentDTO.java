@@ -24,7 +24,8 @@ public record AgentDTO(
             List<String> capabilityCategories,
             String webhookUrl,
             int maxExecutionSeconds,
-            BigDecimal price
+            BigDecimal price,
+            String status
     ) {
     }
 

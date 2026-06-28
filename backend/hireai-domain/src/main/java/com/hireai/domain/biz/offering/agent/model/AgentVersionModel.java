@@ -1,6 +1,7 @@
 package com.hireai.domain.biz.offering.agent.model;
 
 import com.hireai.utility.result.ResultCode;
+import com.hireai.domain.biz.offering.agent.enums.AgentVersionStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.domain.shared.model.Money;
@@ -10,9 +11,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Child entity of the {@link AgentModel} aggregate: one immutable, versioned snapshot of
- * the routable contract an Agent exposes — its output spec, the capability categories it
- * serves, the HTTPS webhook it is dispatched to, an execution-time ceiling, and pricing.
+ * Child entity of the {@link AgentModel} aggregate: one immutable, versioned snapshot of the
+ * routable contract an Agent exposes — its output spec, the capability categories it serves, the
+ * HTTPS webhook, an execution-time ceiling, pricing, and a lifecycle {@link AgentVersionStatus}.
  * Persisted only through the root. The HTTPS rule enforces Hard Invariant #6.
  */
 public final class AgentVersionModel {
@@ -25,11 +26,13 @@ public final class AgentVersionModel {
     private final String webhookUrl;
     private final int maxExecutionSeconds;
     private final Pricing pricing;
+    private final AgentVersionStatus status;
     private final Instant createdAt;
 
     public AgentVersionModel(UUID id, UUID agentId, int versionNumber, OutputSpec outputSpec,
                              List<String> capabilityCategories, String webhookUrl,
-                             int maxExecutionSeconds, Pricing pricing, Instant createdAt) {
+                             int maxExecutionSeconds, Pricing pricing,
+                             AgentVersionStatus status, Instant createdAt) {
         this.id = id;
         this.agentId = agentId;
         this.versionNumber = versionNumber;
@@ -38,10 +41,11 @@ public final class AgentVersionModel {
         this.webhookUrl = webhookUrl;
         this.maxExecutionSeconds = maxExecutionSeconds;
         this.pricing = pricing;
+        this.status = status;
         this.createdAt = createdAt;
     }
 
-    /** Factory: validates the contract and builds a fresh version snapshot. */
+    /** Factory: validates the contract and builds a fresh ACTIVE version snapshot. */
     public static AgentVersionModel create(UUID agentId, int versionNumber, OutputSpec outputSpec,
                                            List<String> capabilityCategories, String webhookUrl,
                                            int maxExecutionSeconds, Pricing pricing) {
@@ -54,7 +58,8 @@ public final class AgentVersionModel {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "maxExecutionSeconds must be positive");
         }
         return new AgentVersionModel(UUID.randomUUID(), agentId, versionNumber, outputSpec,
-                normalisedCategories, webhookUrl.trim(), maxExecutionSeconds, pricing, Instant.now());
+                normalisedCategories, webhookUrl.trim(), maxExecutionSeconds, pricing,
+                AgentVersionStatus.ACTIVE, Instant.now());
     }
 
     private static List<String> normaliseCategories(List<String> categories) {
@@ -81,20 +86,22 @@ public final class AgentVersionModel {
     }
 
     /**
-     * In-place commercial update for this slice (spec §9: no version history yet).
-     * Returns a new snapshot with the updated price, maxExecutionSeconds, and normalised
-     * categories; webhookUrl, outputSpec, id, agentId, versionNumber and createdAt are
-     * preserved so no in-flight contract is invalidated.
+     * Supersession: produce the NEXT version (versionNumber + 1, fresh id + createdAt, status
+     * ACTIVE) carrying over this version's immutable contract (outputSpec, webhookUrl) with new
+     * commercials. The CALLER demotes this version to DEPRECATED in the same transaction. Replaces
+     * the old in-place updateCommercials mutation: in-flight tasks keep referencing the prior (now
+     * DEPRECATED) version id, so no live contract is invalidated (Invariant #4).
      */
-    public AgentVersionModel updateCommercials(Pricing pricing, int maxExecutionSeconds,
-                                               List<String> capabilityCategories) {
+    public AgentVersionModel supersededBy(Pricing pricing, int maxExecutionSeconds,
+                                          List<String> capabilityCategories) {
         requirePresent(pricing, "pricing");
         List<String> normalised = normaliseCategories(capabilityCategories);
         if (maxExecutionSeconds <= 0) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "maxExecutionSeconds must be positive");
         }
-        return new AgentVersionModel(id, agentId, versionNumber, outputSpec, normalised,
-                webhookUrl, maxExecutionSeconds, pricing, createdAt);
+        return new AgentVersionModel(UUID.randomUUID(), agentId, versionNumber + 1, outputSpec,
+                normalised, webhookUrl, maxExecutionSeconds, pricing,
+                AgentVersionStatus.ACTIVE, Instant.now());
     }
 
     private static void requirePresent(Object value, String field) {
@@ -119,5 +126,6 @@ public final class AgentVersionModel {
     public String webhookUrl() { return webhookUrl; }
     public int maxExecutionSeconds() { return maxExecutionSeconds; }
     public Pricing pricing() { return pricing; }
+    public AgentVersionStatus status() { return status; }
     public Instant createdAt() { return createdAt; }
 }

@@ -2,7 +2,6 @@ package com.hireai.domain.biz.offering.agent.repository;
 
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
-import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -21,12 +20,11 @@ public interface AgentRepository {
     AgentModel save(AgentModel agent);
 
     /**
-     * Overwrites the persisted agent-version row identified by {@code version.id()}.
-     * Used for in-place commercial updates (price / maxExecutionSeconds / categories).
-     * Throws {@code DomainException(NOT_FOUND)} if the row does not already exist —
-     * updating a version that was never persisted is a programming error.
+     * Persists a publish-new-version supersession atomically: demote the agent's prior ACTIVE
+     * version to DEPRECATED, insert {@code agent.currentVersion()} as the new ACTIVE version, and
+     * update the agent row (current_version_id). The prior version is retained as history.
      */
-    void updateCurrentVersion(AgentVersionModel version);
+    void publishNewVersion(AgentModel agent);
 
     Optional<AgentModel> findById(UUID agentId);
 

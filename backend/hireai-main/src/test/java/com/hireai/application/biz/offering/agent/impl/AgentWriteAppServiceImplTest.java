@@ -7,7 +7,7 @@ import com.hireai.domain.biz.offering.agent.event.AgentActivatedDomainEvent;
 import com.hireai.domain.biz.offering.agent.event.AgentRegisteredDomainEvent;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
-import com.hireai.domain.biz.offering.agent.info.PricingUpdateInfo;
+import com.hireai.domain.biz.offering.agent.info.PublishVersionInfo;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.offering.agent.model.AgentProfileModel;
 import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AgentWriteAppServiceImplTest {
 
-    /** In-memory fake of the Agent repository, including updateCurrentVersion. */
+    /** In-memory fake of the Agent repository, including publishNewVersion. */
     static class FakeAgentRepository implements AgentRepository {
         final Map<UUID, AgentModel> store = new HashMap<>();
         /** version-id -> persisted version snapshot (mirrors what the JPA impl does). */
@@ -50,23 +50,11 @@ class AgentWriteAppServiceImplTest {
             return agent;
         }
 
-        @Override public void updateCurrentVersion(AgentVersionModel version) {
-            if (!versionStore.containsKey(version.id())) {
-                throw new DomainException(ResultCode.NOT_FOUND,
-                        "Agent version not found: " + version.id());
+        @Override public void publishNewVersion(AgentModel agent) {
+            store.put(agent.id(), agent);
+            if (agent.currentVersion() != null) {
+                versionStore.put(agent.currentVersion().id(), agent.currentVersion());
             }
-            versionStore.put(version.id(), version);
-            // rebuild the stored AgentModel so findById reflects the update
-            AgentModel existing = store.values().stream()
-                    .filter(a -> a.currentVersion() != null
-                            && a.currentVersion().id().equals(version.id()))
-                    .findFirst()
-                    .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
-                            "Agent for version not found: " + version.id()));
-            AgentModel updated = new AgentModel(existing.id(), existing.ownerId(), existing.name(),
-                    existing.status(), existing.currentVersionId(), existing.reputationScore(),
-                    version, existing.createdAt());
-            store.put(updated.id(), updated);
         }
 
         @Override public Optional<AgentModel> findById(UUID agentId) { return Optional.ofNullable(store.get(agentId)); }
@@ -161,42 +149,39 @@ class AgentWriteAppServiceImplTest {
                 .isInstanceOf(DomainException.class);
     }
 
-    // ---- updatePricing tests ----
+    // ---- publishNewVersion tests ----
 
     @Test
-    void updatePricingPersistsNewCommercialsAndReturnsRefreshedModel() {
+    void publishNewVersionCreatesIncrementedActiveVersionAndReturnsRefreshedModel() {
         UUID ownerId = UUID.randomUUID();
         UUID agentId = service.register(info(ownerId));
+        UUID v1Id = repository.findById(agentId).orElseThrow().currentVersion().id();
 
-        PricingUpdateInfo updateInfo = new PricingUpdateInfo(
-                new BigDecimal("99.50"), 120, List.of("Translation "));
-        AgentModel result = service.updatePricing(agentId, ownerId, updateInfo);
+        AgentModel result = service.publishNewVersion(agentId, ownerId,
+                new PublishVersionInfo(new BigDecimal("99.50"), 120, List.of("Translation ")));
 
-        assertThat(result.currentVersion().pricing().price())
-                .isEqualByComparingTo("99.50");
-        assertThat(result.currentVersion().maxExecutionSeconds()).isEqualTo(120);
+        assertThat(result.currentVersion().versionNumber()).isEqualTo(2);
+        assertThat(result.currentVersion().pricing().price()).isEqualByComparingTo("99.50");
         assertThat(result.currentVersion().capabilityCategories()).containsExactly("translation");
-        // identity fields must be unchanged
-        AgentModel original = repository.findById(agentId).orElseThrow();
-        assertThat(result.currentVersion().id()).isEqualTo(original.currentVersion().id());
-        assertThat(result.currentVersion().versionNumber()).isEqualTo(1);
+        assertThat(result.currentVersion().status())
+                .isEqualTo(com.hireai.domain.biz.offering.agent.enums.AgentVersionStatus.ACTIVE);
+        assertThat(result.currentVersion().id()).isNotEqualTo(v1Id);
         assertThat(result.currentVersion().outputSpec()).isNotNull();
     }
 
     @Test
-    void updatePricingRejectsForeignOwner() {
+    void publishNewVersionRejectsForeignOwner() {
         UUID ownerId = UUID.randomUUID();
         UUID agentId = service.register(info(ownerId));
-
-        assertThatThrownBy(() -> service.updatePricing(agentId, UUID.randomUUID(),
-                new PricingUpdateInfo(new BigDecimal("10.00"), 60, List.of("summarisation"))))
+        assertThatThrownBy(() -> service.publishNewVersion(agentId, UUID.randomUUID(),
+                new PublishVersionInfo(new BigDecimal("10.00"), 60, List.of("summarisation"))))
                 .isInstanceOf(DomainException.class);
     }
 
     @Test
-    void updatePricingRejectsUnknownAgent() {
-        assertThatThrownBy(() -> service.updatePricing(UUID.randomUUID(), UUID.randomUUID(),
-                new PricingUpdateInfo(new BigDecimal("10.00"), 60, List.of("summarisation"))))
+    void publishNewVersionRejectsUnknownAgent() {
+        assertThatThrownBy(() -> service.publishNewVersion(UUID.randomUUID(), UUID.randomUUID(),
+                new PublishVersionInfo(new BigDecimal("10.00"), 60, List.of("summarisation"))))
                 .isInstanceOf(DomainException.class);
     }
 }

@@ -12,8 +12,8 @@ import java.util.UUID;
 
 /**
  * Agent aggregate root. An Agent is a registered third-party executor owned by a Builder.
- * It owns a single {@link AgentVersionModel} (v1 in this slice) carrying the routable
- * contract. Behaviour lives here, not in setters; transitions are immutable (each returns
+ * It owns the current routable version (ACTIVE); prior versions are retained as DEPRECATED
+ * history. Behaviour lives here, not in setters; transitions are immutable (each returns
  * a new copy). Only ACTIVE agents are routable. Default reputation is 50.00.
  */
 public final class AgentModel {
@@ -65,6 +65,25 @@ public final class AgentModel {
         }
         return new AgentModel(id, ownerId, name, AgentStatus.ACTIVE, currentVersion.id(),
                 reputationScore, currentVersion, createdAt);
+    }
+
+    /**
+     * Publish-new-version (supersession): produce a copy whose currentVersion is the NEXT version
+     * (status ACTIVE, versionNumber + 1), carrying over the current version's outputSpec + webhookUrl
+     * with new commercials. The repository demotes the prior ACTIVE version to DEPRECATED in the same
+     * transaction. current_version_id advances to the new version only when the agent is ACTIVE
+     * (a PENDING_VERIFICATION agent keeps null until activation, mirroring register()).
+     */
+    public AgentModel publishNewVersion(Pricing pricing, int maxExecutionSeconds,
+                                        List<String> capabilityCategories) {
+        if (currentVersion == null) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Agent has no current version to supersede");
+        }
+        AgentVersionModel next = currentVersion.supersededBy(pricing, maxExecutionSeconds, capabilityCategories);
+        UUID newCurrentVersionId = status == AgentStatus.ACTIVE ? next.id() : currentVersionId;
+        return new AgentModel(id, ownerId, name, status, newCurrentVersionId,
+                reputationScore, next, createdAt);
     }
 
     /** Only an ACTIVE agent is routable / bookable. */

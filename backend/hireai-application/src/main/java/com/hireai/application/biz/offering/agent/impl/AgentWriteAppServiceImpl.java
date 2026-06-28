@@ -5,10 +5,9 @@ import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.event.AgentActivatedDomainEvent;
 import com.hireai.domain.biz.offering.agent.event.AgentRegisteredDomainEvent;
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
-import com.hireai.domain.biz.offering.agent.info.PricingUpdateInfo;
+import com.hireai.domain.biz.offering.agent.info.PublishVersionInfo;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.offering.agent.model.AgentProfileModel;
-import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
 import com.hireai.domain.biz.offering.agent.model.Pricing;
 import com.hireai.domain.biz.offering.agent.repository.AgentProfileRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
@@ -49,11 +48,7 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
 
     @Override
     public void activate(UUID agentId, UUID ownerId) {
-        AgentModel agent = agentRepository.findById(agentId)
-                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Agent not found: " + agentId));
-        if (!agent.ownerId().equals(ownerId)) {
-            throw new DomainException(ResultCode.NOT_FOUND, "Agent not found: " + agentId);
-        }
+        AgentModel agent = loadOwned(agentId, ownerId);
         AgentModel active = activateDomainService.activate(agent);
         agentRepository.save(active);
         eventPublisher.publishEvent(new AgentActivatedDomainEvent(
@@ -62,30 +57,30 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
     }
 
     /**
-     * In-place commercial update for the current version (spec §9 — no version history).
-     * Mirrors activate()'s ownership check exactly: load agent, compare ownerId, throw
-     * NOT_FOUND on mismatch (existence not leaked).
-     *
-     * Note: pricing edits are permitted even for PENDING_VERIFICATION agents — the version
-     * model exists from registration regardless of activation status, so currentVersion()
-     * is always non-null after register().
+     * Publish-new-version. Pricing edits are permitted on PENDING_VERIFICATION agents too — the
+     * version model exists from registration, so currentVersion() is always non-null after register().
      */
     @Override
-    public AgentModel updatePricing(UUID agentId, UUID ownerId, PricingUpdateInfo info) {
+    public AgentModel publishNewVersion(UUID agentId, UUID ownerId, PublishVersionInfo info) {
+        AgentModel agent = loadOwned(agentId, ownerId);
+        AgentModel updated = agent.publishNewVersion(Pricing.of(info.price()),
+                info.maxExecutionSeconds(), info.capabilityCategories());
+        agentRepository.publishNewVersion(updated);
+        log.info("Agent {} published version {} by owner {} (price={}, maxExec={})",
+                agentId, updated.currentVersion().versionNumber(), ownerId,
+                info.price(), info.maxExecutionSeconds());
+        return agentRepository.findById(agentId)
+                .orElseThrow(() -> new DomainException(ResultCode.INTERNAL_ERROR,
+                        "Agent disappeared after publishing a version: " + agentId));
+    }
+
+    /** Load + owner check (Invariant #5): a foreign agent is indistinguishable from a missing one. */
+    private AgentModel loadOwned(UUID agentId, UUID ownerId) {
         AgentModel agent = agentRepository.findById(agentId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Agent not found: " + agentId));
         if (!agent.ownerId().equals(ownerId)) {
             throw new DomainException(ResultCode.NOT_FOUND, "Agent not found: " + agentId);
         }
-        AgentVersionModel updated = agent.currentVersion()
-                .updateCommercials(Pricing.of(info.price()), info.maxExecutionSeconds(),
-                        info.capabilityCategories());
-        // Non-atomic write-then-read; concurrent edits are last-writer-wins — acceptable for this slice.
-        agentRepository.updateCurrentVersion(updated);
-        log.info("Agent {} pricing updated by owner {} (price={}, maxExec={})",
-                agentId, ownerId, info.price(), info.maxExecutionSeconds());
-        return agentRepository.findById(agentId)
-                .orElseThrow(() -> new DomainException(ResultCode.INTERNAL_ERROR,
-                        "Agent disappeared after pricing update: " + agentId));
+        return agent;
     }
 }

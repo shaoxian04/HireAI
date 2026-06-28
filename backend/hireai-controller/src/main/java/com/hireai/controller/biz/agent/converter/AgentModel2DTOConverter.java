@@ -24,7 +24,8 @@ public final class AgentModel2DTOConverter {
                 version.capabilityCategories(),
                 version.webhookUrl(),
                 version.maxExecutionSeconds(),
-                version.pricing().price());
+                version.pricing().price(),
+                version.status().name());
         return new AgentDTO(
                 agent.id(),
                 agent.ownerId(),

@@ -1,6 +1,7 @@
 package com.hireai.infrastructure.repository.offering.agent;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -12,7 +13,18 @@ import java.util.UUID;
 /** Spring Data JPA repository for agent-version rows. Internal to infrastructure. */
 public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO, UUID> {
 
-    Optional<AgentVersionDO> findByAgentIdAndVersionNumber(UUID agentId, int versionNumber);
+    /** Loads the current ACTIVE version of an agent (the routable contract). */
+    Optional<AgentVersionDO> findByAgentIdAndStatus(UUID agentId, String status);
+
+    /**
+     * Bulk status transition (e.g. demote ACTIVE -> DEPRECATED) for one agent. Direct SQL UPDATE:
+     * executes synchronously at call time, so during publish the prior ACTIVE row is DEPRECATED in
+     * the DB BEFORE the new ACTIVE row is inserted — the partial-unique index never sees two ACTIVE
+     * rows. flushAutomatically/clearAutomatically keep the persistence context consistent.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE AgentVersionDO v SET v.status = :to WHERE v.agentId = :agentId AND v.status = :from")
+    int updateStatus(@Param("agentId") UUID agentId, @Param("from") String from, @Param("to") String to);
 
     /**
      * One row per ACTIVE agent whose current version covers the requested category and whose

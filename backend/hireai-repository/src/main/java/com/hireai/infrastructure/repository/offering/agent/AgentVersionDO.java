@@ -48,6 +48,9 @@ public class AgentVersionDO {
     @Column(name = "price", nullable = false)
     private BigDecimal price;
 
+    @Column(name = "status", nullable = false)
+    private String status;
+
     @Column(name = "gmt_create", nullable = false)
     private Instant gmtCreate;
 
@@ -56,7 +59,7 @@ public class AgentVersionDO {
 
     public AgentVersionDO(UUID id, UUID agentId, int versionNumber, String outputSpec,
                                  List<String> capabilityCategories, String webhookUrl,
-                                 int maxExecutionSeconds, BigDecimal price, Instant gmtCreate) {
+                                 int maxExecutionSeconds, BigDecimal price, String status, Instant gmtCreate) {
         this.id = id;
         this.agentId = agentId;
         this.versionNumber = versionNumber;
@@ -65,6 +68,7 @@ public class AgentVersionDO {
         this.webhookUrl = webhookUrl;
         this.maxExecutionSeconds = maxExecutionSeconds;
         this.price = price;
+        this.status = status;
         this.gmtCreate = gmtCreate;
     }
 
@@ -76,5 +80,6 @@ public class AgentVersionDO {
     public String getWebhookUrl() { return webhookUrl; }
     public int getMaxExecutionSeconds() { return maxExecutionSeconds; }
     public BigDecimal getPrice() { return price; }
+    public String getStatus() { return status; }
     public Instant getGmtCreate() { return gmtCreate; }
 }

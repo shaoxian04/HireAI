@@ -10,15 +10,15 @@ import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.controller.biz.agent.dto.AgentDTO;
 import com.hireai.controller.biz.agent.dto.AgentProfileViewDTO;
 import com.hireai.controller.biz.agent.dto.AgentStatsDTO;
+import com.hireai.controller.biz.agent.dto.PublishVersionRequest;
 import com.hireai.controller.biz.agent.dto.RegisterAgentRequest;
 import com.hireai.controller.biz.agent.dto.RespondReviewRequest;
 import com.hireai.controller.biz.agent.dto.ReviewDTO;
-import com.hireai.controller.biz.agent.dto.UpdatePricingRequest;
 import com.hireai.controller.biz.agent.dto.UpdateProfileRequest;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
-import com.hireai.domain.biz.offering.agent.info.PricingUpdateInfo;
+import com.hireai.domain.biz.offering.agent.info.PublishVersionInfo;
 import com.hireai.domain.biz.offering.agent.info.ProfileUpdateInfo;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
@@ -90,12 +90,12 @@ public class AgentController extends BaseController {
         return ok(dto);
     }
 
-    @PutMapping("/{agentId}/pricing")
-    public WebResult<AgentDTO> updatePricing(@PathVariable("agentId") UUID agentId,
-                                             @Valid @RequestBody UpdatePricingRequest request) {
+    @PostMapping("/{agentId}/versions")
+    public WebResult<AgentDTO> publishVersion(@PathVariable("agentId") UUID agentId,
+                                              @Valid @RequestBody PublishVersionRequest request) {
         UUID ownerId = currentUser.currentUserId();
-        AgentModel updated = writeAppService.updatePricing(agentId, ownerId,
-                new PricingUpdateInfo(request.price(), request.maxExecutionSeconds(),
+        AgentModel updated = writeAppService.publishNewVersion(agentId, ownerId,
+                new PublishVersionInfo(request.price(), request.maxExecutionSeconds(),
                         request.capabilityCategories()));
         return ok(AgentModel2DTOConverter.toDTO(updated));
     }

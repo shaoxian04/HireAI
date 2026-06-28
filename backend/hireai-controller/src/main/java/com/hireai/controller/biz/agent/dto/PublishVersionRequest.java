@@ -10,11 +10,11 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * Request body for PUT /api/agents/{agentId}/pricing.
- * Updates price, maxExecutionSeconds and capabilityCategories of the current version in place.
- * outputSpec and webhookUrl are deliberately excluded (not editable in this slice, spec §9).
+ * Request body for POST /api/agents/{agentId}/versions — publishes a NEW agent version that
+ * supersedes the current one. outputSpec + webhookUrl carry over from the current version; only
+ * the commercials (price / maxExecutionSeconds / capabilityCategories) are re-declared.
  */
-public record UpdatePricingRequest(
+public record PublishVersionRequest(
         @NotNull @DecimalMin("0.00")
         @Digits(integer = 12, fraction = 2) BigDecimal price,
         @Min(1) int maxExecutionSeconds,

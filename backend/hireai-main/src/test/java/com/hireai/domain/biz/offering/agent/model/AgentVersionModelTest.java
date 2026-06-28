@@ -1,5 +1,6 @@
 package com.hireai.domain.biz.offering.agent.model;
 
+import com.hireai.domain.biz.offering.agent.enums.AgentVersionStatus;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.utility.exception.DomainException;
@@ -34,6 +35,7 @@ class AgentVersionModelTest {
         assertThat(v.webhookUrl()).isEqualTo("https://agent.example.com/hook");
         assertThat(v.maxExecutionSeconds()).isEqualTo(120);
         assertThat(v.pricing().price()).isEqualByComparingTo("5.00");
+        assertThat(v.status()).isEqualTo(AgentVersionStatus.ACTIVE);
     }
 
     @Test
@@ -78,44 +80,44 @@ class AgentVersionModelTest {
                 .isInstanceOf(DomainException.class);
     }
 
-    // ---- updateCommercials tests ----
+    // ---- supersededBy (publish-new-version) tests ----
 
     @Test
-    void updateCommercialsReturnsCopyWithNewPriceMaxExecAndCategories() {
+    void supersededByCreatesNextActiveVersionCarryingTheContract() {
         UUID agentId = UUID.randomUUID();
         AgentVersionModel original = AgentVersionModel.create(agentId, 1, spec(),
                 List.of("summarisation"), "https://agent.example.com/hook",
                 120, Pricing.of(new BigDecimal("5.00")));
 
-        AgentVersionModel updated = original.updateCommercials(
+        AgentVersionModel next = original.supersededBy(
                 Pricing.of(new BigDecimal("99.50")), 300, List.of(" Translation "));
 
-        // new commercials
-        assertThat(updated.pricing().price()).isEqualByComparingTo("99.50");
-        assertThat(updated.maxExecutionSeconds()).isEqualTo(300);
-        assertThat(updated.capabilityCategories()).containsExactly("translation");
-
-        // identity fields preserved
-        assertThat(updated.id()).isEqualTo(original.id());
-        assertThat(updated.versionNumber()).isEqualTo(original.versionNumber());
-        assertThat(updated.webhookUrl()).isEqualTo(original.webhookUrl());
-        assertThat(updated.outputSpec()).isEqualTo(original.outputSpec());
-        assertThat(updated.createdAt()).isEqualTo(original.createdAt());
+        // new commercials + incremented version number
+        assertThat(next.pricing().price()).isEqualByComparingTo("99.50");
+        assertThat(next.maxExecutionSeconds()).isEqualTo(300);
+        assertThat(next.capabilityCategories()).containsExactly("translation");
+        assertThat(next.versionNumber()).isEqualTo(original.versionNumber() + 1);
+        assertThat(next.status()).isEqualTo(AgentVersionStatus.ACTIVE);
+        // contract carried over
+        assertThat(next.webhookUrl()).isEqualTo(original.webhookUrl());
+        assertThat(next.outputSpec()).isEqualTo(original.outputSpec());
+        // it is a NEW version (distinct identity), not an in-place edit
+        assertThat(next.id()).isNotEqualTo(original.id());
     }
 
     @Test
-    void updateCommercialsRejectsZeroMaxExecutionSeconds() {
+    void supersededByRejectsZeroMaxExecutionSeconds() {
         AgentVersionModel v = AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
                 List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE));
-        assertThatThrownBy(() -> v.updateCommercials(Pricing.of(BigDecimal.ONE), 0, List.of("summarisation")))
+        assertThatThrownBy(() -> v.supersededBy(Pricing.of(BigDecimal.ONE), 0, List.of("summarisation")))
                 .isInstanceOf(DomainException.class);
     }
 
     @Test
-    void updateCommercialsRejectsEmptyCategories() {
+    void supersededByRejectsEmptyCategories() {
         AgentVersionModel v = AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
                 List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE));
-        assertThatThrownBy(() -> v.updateCommercials(Pricing.of(BigDecimal.ONE), 60, List.of()))
+        assertThatThrownBy(() -> v.supersededBy(Pricing.of(BigDecimal.ONE), 60, List.of()))
                 .isInstanceOf(DomainException.class);
     }
 

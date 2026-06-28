@@ -4,6 +4,7 @@ import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.biz.task.impl.DirectBookingAppServiceImpl;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.enums.AgentStatus;
+import com.hireai.domain.biz.offering.agent.enums.AgentVersionStatus;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.offering.agent.model.AgentProfileModel;
 import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
@@ -56,7 +57,8 @@ class DirectBookingAppServiceTest {
         UUID versionId = UUID.randomUUID();
         return new AgentVersionModel(
                 versionId, agentId, 1, AGENT_SPEC, List.of(CATEGORY),
-                "https://agent.example.com/hook", 120, Pricing.of(AGENT_PRICE), Instant.now());
+                "https://agent.example.com/hook", 120, Pricing.of(AGENT_PRICE),
+                AgentVersionStatus.ACTIVE, Instant.now());
     }
 
     /** Builds an ACTIVE agent with the given version (currentVersionId = version.id()). */
