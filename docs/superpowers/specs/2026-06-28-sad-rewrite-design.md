@@ -66,7 +66,7 @@
 | 4.1 State machines | arch doc §3.1–3.7 (translate to EN) |
 | 4.2 Sequence diagrams | arch doc §4.1–4.3 (translate to EN) |
 | 5. Data model | `docs/details/data-model.md` |
-| 6. Modules | CLAUDE.md + `data-model.md`; arch doc per-domain content |
+| 6. Modules | CLAUDE.md + `data-model.md`; arch doc per-domain content; `docs/task-matching-design.md` (§6.3 matching: multi-factor ranking, per-channel shortlist/auto-route) |
 | 7.1 Invariants | CLAUDE.md "Hard invariants" |
 | 7.2 Auth/security | `docs/details/identity-and-authz.md` |
 
