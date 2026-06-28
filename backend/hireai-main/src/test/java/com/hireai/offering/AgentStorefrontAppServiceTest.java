@@ -5,9 +5,9 @@ import com.hireai.application.biz.offering.agent.impl.AgentStorefrontAppServiceI
 import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.application.port.storage.MediaStoragePort;
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.biz.offering.agent.info.ProfileUpdateInfo;
-import com.hireai.domain.biz.offering.agent.model.AgentProfileModel;
-import com.hireai.domain.biz.offering.agent.repository.AgentProfileRepository;
+import com.hireai.domain.biz.offering.storefront.info.ProfileUpdateInfo;
+import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
+import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
 import com.hireai.domain.biz.review.model.ReviewModel;
 import com.hireai.domain.biz.review.repository.ReviewRepository;
 import com.hireai.utility.exception.DomainException;
@@ -37,7 +37,7 @@ import static org.mockito.Mockito.when;
 class AgentStorefrontAppServiceTest {
 
     private final AgentReadAppService agentReadAppService = mock(AgentReadAppService.class);
-    private final AgentProfileRepository profileRepository = mock(AgentProfileRepository.class);
+    private final StorefrontRepository profileRepository = mock(StorefrontRepository.class);
     private final MediaStoragePort mediaStoragePort = mock(MediaStoragePort.class);
     private final ReviewRepository reviewRepository = mock(ReviewRepository.class);
     private final BuilderStatsQueryPort builderStatsQueryPort = mock(BuilderStatsQueryPort.class);
@@ -48,8 +48,8 @@ class AgentStorefrontAppServiceTest {
 
     // ---- helpers ----
 
-    private AgentProfileModel defaultProfile(UUID agentId) {
-        return AgentProfileModel.createDefault(agentId);
+    private StorefrontModel defaultProfile(UUID agentId) {
+        return StorefrontModel.createDefault(agentId);
     }
 
     private ReviewModel reviewFor(UUID agentId) {
@@ -63,21 +63,21 @@ class AgentStorefrontAppServiceTest {
     void updateProfile_happyPath_ownerGateVerifiedAndSaved() {
         UUID agentId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
-        AgentProfileModel existing = defaultProfile(agentId);
+        StorefrontModel existing = defaultProfile(agentId);
 
         when(profileRepository.findByAgentId(agentId)).thenReturn(Optional.of(existing));
         when(profileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ProfileUpdateInfo info = new ProfileUpdateInfo("My tagline", "desc", "sample", true);
-        AgentProfileModel result = service.updateProfile(agentId, ownerId, info);
+        StorefrontModel result = service.updateProfile(agentId, ownerId, info);
 
         // Ownership gate must fire
         verify(agentReadAppService).getForOwner(agentId, ownerId);
 
         // Saved model has correct tagline and listed flag
-        ArgumentCaptor<AgentProfileModel> captor = ArgumentCaptor.forClass(AgentProfileModel.class);
+        ArgumentCaptor<StorefrontModel> captor = ArgumentCaptor.forClass(StorefrontModel.class);
         verify(profileRepository).save(captor.capture());
-        AgentProfileModel saved = captor.getValue();
+        StorefrontModel saved = captor.getValue();
         assertThat(saved.tagline()).isEqualTo("My tagline");
         assertThat(saved.listed()).isTrue();
         assertThat(result.tagline()).isEqualTo("My tagline");
@@ -114,7 +114,7 @@ class AgentStorefrontAppServiceTest {
         when(mediaStoragePort.upload(any(), any(), any())).thenReturn(returnedUrl);
         when(profileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        AgentProfileModel result = service.uploadMedia(agentId, ownerId, "logo", "image/jpeg", 1024, bytes);
+        StorefrontModel result = service.uploadMedia(agentId, ownerId, "logo", "image/jpeg", 1024, bytes);
 
         verify(agentReadAppService).getForOwner(agentId, ownerId);
 
@@ -182,13 +182,13 @@ class AgentStorefrontAppServiceTest {
         byte[] bytes = new byte[512];
 
         // Build a profile already at MAX_GALLERY
-        AgentProfileModel fullProfile = defaultProfile(agentId);
-        for (int i = 0; i < AgentProfileModel.MAX_GALLERY; i++) {
+        StorefrontModel fullProfile = defaultProfile(agentId);
+        for (int i = 0; i < StorefrontModel.MAX_GALLERY; i++) {
             fullProfile = fullProfile.addGalleryUrl("https://img.example.com/" + i + ".png");
         }
         when(profileRepository.findByAgentId(agentId)).thenReturn(Optional.of(fullProfile));
 
-        final AgentProfileModel finalFull = fullProfile;
+        final StorefrontModel finalFull = fullProfile;
         assertThatThrownBy(() ->
                 service.uploadMedia(agentId, ownerId, "gallery", "image/png", 512, bytes))
                 .isInstanceOf(DomainException.class)

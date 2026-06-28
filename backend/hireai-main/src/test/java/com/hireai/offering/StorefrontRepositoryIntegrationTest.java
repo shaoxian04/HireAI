@@ -1,7 +1,7 @@
 package com.hireai.offering;
 
-import com.hireai.domain.biz.offering.agent.model.AgentProfileModel;
-import com.hireai.domain.biz.offering.agent.repository.AgentProfileRepository;
+import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
+import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Testcontainers
 @ActiveProfiles("test")
 @EnabledIf("dockerAvailable")
-class AgentProfileRepositoryIntegrationTest {
+class StorefrontRepositoryIntegrationTest {
 
     static boolean dockerAvailable() {
         try {
@@ -52,7 +52,7 @@ class AgentProfileRepositoryIntegrationTest {
         registry.add("spring.datasource.password", postgres::getPassword);
     }
 
-    @Autowired AgentProfileRepository agentProfileRepository;
+    @Autowired StorefrontRepository agentProfileRepository;
     @Autowired JdbcTemplate jdbc;
 
     /** Insert a BUILDER user and an ACTIVE agent; return the agent id. */
@@ -72,7 +72,7 @@ class AgentProfileRepositoryIntegrationTest {
     void savesAndRoundTripsProfileIncludingGalleryArray() {
         UUID agentId = seedAgent();
 
-        AgentProfileModel profile = AgentProfileModel.createDefault(agentId)
+        StorefrontModel profile = StorefrontModel.createDefault(agentId)
                 .updateContent("Fast summaries", "Does summarisation", "{\"sample\":1}", true)
                 .withLogo("https://cdn.example.com/logo.png")
                 .addGalleryUrl("https://cdn.example.com/g1.png")
@@ -80,9 +80,9 @@ class AgentProfileRepositoryIntegrationTest {
 
         agentProfileRepository.save(profile);
 
-        Optional<AgentProfileModel> loaded = agentProfileRepository.findByAgentId(agentId);
+        Optional<StorefrontModel> loaded = agentProfileRepository.findByAgentId(agentId);
         assertThat(loaded).isPresent();
-        AgentProfileModel result = loaded.get();
+        StorefrontModel result = loaded.get();
 
         assertThat(result.agentId()).isEqualTo(agentId);
         assertThat(result.tagline()).isEqualTo("Fast summaries");
@@ -100,7 +100,7 @@ class AgentProfileRepositoryIntegrationTest {
         UUID agentId = seedAgent();
 
         // First save: default (unlisted, no tagline)
-        agentProfileRepository.save(AgentProfileModel.createDefault(agentId));
+        agentProfileRepository.save(StorefrontModel.createDefault(agentId));
 
         // Capture gmt_create after first write
         java.sql.Timestamp gmtCreateBefore = jdbc.queryForObject(
@@ -108,7 +108,7 @@ class AgentProfileRepositoryIntegrationTest {
                 java.sql.Timestamp.class, agentId);
 
         // Second save: updated content
-        agentProfileRepository.save(AgentProfileModel.createDefault(agentId)
+        agentProfileRepository.save(StorefrontModel.createDefault(agentId)
                 .updateContent("Updated", null, null, true));
 
         // gmt_create must be unchanged across the upsert
@@ -124,7 +124,7 @@ class AgentProfileRepositoryIntegrationTest {
         assertThat(gmtModified).isAfterOrEqualTo(gmtCreateAfter);
 
         // Reload and assert only one row + updated tagline
-        Optional<AgentProfileModel> loaded = agentProfileRepository.findByAgentId(agentId);
+        Optional<StorefrontModel> loaded = agentProfileRepository.findByAgentId(agentId);
         assertThat(loaded).isPresent();
         assertThat(loaded.get().tagline()).isEqualTo("Updated");
         assertThat(loaded.get().listed()).isTrue();

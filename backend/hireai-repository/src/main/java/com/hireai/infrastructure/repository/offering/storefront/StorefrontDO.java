@@ -1,4 +1,4 @@
-package com.hireai.infrastructure.repository.offering.agent;
+package com.hireai.infrastructure.repository.offering.storefront;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -12,14 +12,13 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * JPA persistence entity for agent_profiles (1:1 with agents). {@code gallery_urls} is a
- * Postgres TEXT[] mapped to a {@code List<String>} using the same technique as
- * {@link AgentVersionDO#getCapabilityCategories()}. Separate from the domain model so
- * the domain stays framework-free.
+ * JPA persistence entity for agent_profiles (1:1 with agents). {@code gallery_urls} is a Postgres
+ * TEXT[] mapped to a {@code List<String>}. Separate from the domain {@link com.hireai.domain.biz.offering.storefront.model.StorefrontModel}
+ * so the domain stays framework-free.
  */
 @Entity
 @Table(name = "agent_profiles")
-public class AgentProfileDO {
+public class StorefrontDO {
 
     @Id
     @Column(name = "agent_id")
@@ -56,13 +55,13 @@ public class AgentProfileDO {
     @Column(name = "gmt_modified", nullable = false)
     private Instant gmtModified;
 
-    protected AgentProfileDO() {
+    protected StorefrontDO() {
     }
 
-    public AgentProfileDO(UUID agentId, String tagline, String description,
-                                 String sampleOutput, String logoUrl, String coverUrl,
-                                 List<String> galleryUrls, boolean listed, boolean featured,
-                                 Instant gmtCreate, Instant gmtModified) {
+    public StorefrontDO(UUID agentId, String tagline, String description,
+                        String sampleOutput, String logoUrl, String coverUrl,
+                        List<String> galleryUrls, boolean listed, boolean featured,
+                        Instant gmtCreate, Instant gmtModified) {
         this.agentId = agentId;
         this.tagline = tagline;
         this.description = description;

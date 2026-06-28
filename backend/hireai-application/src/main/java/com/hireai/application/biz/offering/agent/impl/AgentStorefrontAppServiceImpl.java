@@ -5,9 +5,9 @@ import com.hireai.application.biz.offering.agent.AgentStorefrontAppService;
 import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.application.port.storage.MediaStoragePort;
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.biz.offering.agent.info.ProfileUpdateInfo;
-import com.hireai.domain.biz.offering.agent.model.AgentProfileModel;
-import com.hireai.domain.biz.offering.agent.repository.AgentProfileRepository;
+import com.hireai.domain.biz.offering.storefront.info.ProfileUpdateInfo;
+import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
+import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
 import com.hireai.domain.biz.review.model.ReviewModel;
 import com.hireai.domain.biz.review.repository.ReviewRepository;
 import com.hireai.utility.exception.DomainException;
@@ -33,28 +33,28 @@ public class AgentStorefrontAppServiceImpl implements AgentStorefrontAppService 
     private static final int REVIEWS_LIMIT = 50;
 
     private final AgentReadAppService agentReadAppService;
-    private final AgentProfileRepository profileRepository;
+    private final StorefrontRepository profileRepository;
     private final MediaStoragePort mediaStoragePort;
     private final ReviewRepository reviewRepository;
     private final BuilderStatsQueryPort builderStatsQueryPort;
 
     @Override
     @Transactional(readOnly = true)
-    public AgentProfileModel getProfile(UUID agentId, UUID ownerId) {
+    public StorefrontModel getProfile(UUID agentId, UUID ownerId) {
         agentReadAppService.getForOwner(agentId, ownerId); // throws NOT_FOUND when not owner
         return loadProfile(agentId);
     }
 
     @Override
-    public AgentProfileModel updateProfile(UUID agentId, UUID ownerId, ProfileUpdateInfo info) {
+    public StorefrontModel updateProfile(UUID agentId, UUID ownerId, ProfileUpdateInfo info) {
         agentReadAppService.getForOwner(agentId, ownerId);
-        AgentProfileModel updated = loadProfile(agentId)
+        StorefrontModel updated = loadProfile(agentId)
                 .updateContent(info.tagline(), info.description(), info.sampleOutput(), info.listed());
         return profileRepository.save(updated);
     }
 
     @Override
-    public AgentProfileModel uploadMedia(UUID agentId, UUID ownerId, String kind,
+    public StorefrontModel uploadMedia(UUID agentId, UUID ownerId, String kind,
                                          String contentType, long sizeBytes, byte[] bytes) {
         agentReadAppService.getForOwner(agentId, ownerId);
         if (!KINDS.contains(kind)) {
@@ -68,14 +68,14 @@ public class AgentStorefrontAppServiceImpl implements AgentStorefrontAppService 
         if (sizeBytes <= 0 || sizeBytes > MAX_IMAGE_BYTES) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "Image must be 1B-2MB");
         }
-        AgentProfileModel profile = loadProfile(agentId);
+        StorefrontModel profile = loadProfile(agentId);
         if ("gallery".equals(kind)) {
             profile.assertCanAddGallery(); // domain owns the capacity rule; fail fast before the upload
         }
         String objectKey = "agents/" + agentId + "/" + kind + "-" + UUID.randomUUID() + "." + ext;
         // Tech debt: remote upload inside @Transactional holds a DB connection; acceptable at demo scale.
         String url = mediaStoragePort.upload(objectKey, contentType, bytes);
-        AgentProfileModel updated = switch (kind) {
+        StorefrontModel updated = switch (kind) {
             case "logo" -> profile.withLogo(url);
             case "cover" -> profile.withCover(url);
             default -> profile.addGalleryUrl(url);
@@ -84,9 +84,9 @@ public class AgentStorefrontAppServiceImpl implements AgentStorefrontAppService 
     }
 
     @Override
-    public AgentProfileModel removeMedia(UUID agentId, UUID ownerId, String kind, String url) {
+    public StorefrontModel removeMedia(UUID agentId, UUID ownerId, String kind, String url) {
         agentReadAppService.getForOwner(agentId, ownerId);
-        AgentProfileModel updated = loadProfile(agentId).removeMedia(kind, url);
+        StorefrontModel updated = loadProfile(agentId).removeMedia(kind, url);
         // Best-effort delete before save: if save then fails, the URL dangles but a retry re-converges; storage drift is acceptable at demo scale.
         mediaStoragePort.deleteByUrl(url);
         return profileRepository.save(updated);
@@ -119,8 +119,8 @@ public class AgentStorefrontAppServiceImpl implements AgentStorefrontAppService 
                 builderStatsQueryPort.recentTasks(agentId, 10));
     }
 
-    private AgentProfileModel loadProfile(UUID agentId) {
+    private StorefrontModel loadProfile(UUID agentId) {
         return profileRepository.findByAgentId(agentId)
-                .orElseGet(() -> AgentProfileModel.createDefault(agentId)); // pre-V6 agents
+                .orElseGet(() -> StorefrontModel.createDefault(agentId)); // pre-V6 agents
     }
 }

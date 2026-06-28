@@ -6,7 +6,7 @@ import com.hireai.domain.biz.offering.agent.enums.AgentStatus;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
-import com.hireai.domain.biz.offering.agent.repository.AgentProfileRepository;
+import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
@@ -68,7 +68,7 @@ class AgentRegistrationIntegrationTest {
     @Autowired AgentWriteAppService agentWriteAppService;
     @Autowired AgentReadAppService agentReadAppService;
     @Autowired AgentRepository agentRepository;
-    @Autowired AgentProfileRepository agentProfileRepository;
+    @Autowired StorefrontRepository agentProfileRepository;
     @Autowired JdbcTemplate jdbc;
 
     private UUID newOwner() {

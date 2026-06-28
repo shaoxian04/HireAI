@@ -7,9 +7,9 @@ import com.hireai.domain.biz.offering.agent.event.AgentRegisteredDomainEvent;
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
 import com.hireai.domain.biz.offering.agent.info.PublishVersionInfo;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
-import com.hireai.domain.biz.offering.agent.model.AgentProfileModel;
+import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
 import com.hireai.domain.biz.offering.agent.model.Pricing;
-import com.hireai.domain.biz.offering.agent.repository.AgentProfileRepository;
+import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.offering.agent.service.AgentActivateDomainService;
 import com.hireai.domain.biz.offering.agent.service.AgentRegisterDomainService;
@@ -30,7 +30,7 @@ import java.util.UUID;
 public class AgentWriteAppServiceImpl implements AgentWriteAppService {
 
     private final AgentRepository agentRepository;
-    private final AgentProfileRepository agentProfileRepository;
+    private final StorefrontRepository agentProfileRepository;
     private final AgentRegisterDomainService registerDomainService;
     private final AgentActivateDomainService activateDomainService;
     private final ApplicationEventPublisher eventPublisher;
@@ -39,7 +39,7 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
     public UUID register(AgentRegisterInfo registerInfo) {
         AgentModel agent = registerDomainService.register(registerInfo);
         UUID agentId = agentRepository.save(agent).id();
-        agentProfileRepository.save(AgentProfileModel.createDefault(agentId));
+        agentProfileRepository.save(StorefrontModel.createDefault(agentId));
         eventPublisher.publishEvent(new AgentRegisteredDomainEvent(
                 agentId, agent.ownerId(), agent.currentVersion().id(), Instant.now()));
         log.info("Agent {} registered by owner {} (PENDING_VERIFICATION)", agentId, agent.ownerId());

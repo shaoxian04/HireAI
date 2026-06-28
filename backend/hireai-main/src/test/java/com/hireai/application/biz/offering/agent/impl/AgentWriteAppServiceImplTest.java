@@ -9,9 +9,9 @@ import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
 import com.hireai.domain.biz.offering.agent.info.PublishVersionInfo;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
-import com.hireai.domain.biz.offering.agent.model.AgentProfileModel;
+import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
 import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
-import com.hireai.domain.biz.offering.agent.repository.AgentProfileRepository;
+import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentActivateDomainServiceImpl;
@@ -77,14 +77,14 @@ class AgentWriteAppServiceImplTest {
     }
 
     /** In-memory fake of the AgentProfile repository. */
-    static class FakeAgentProfileRepository implements AgentProfileRepository {
-        final Map<UUID, AgentProfileModel> store = new HashMap<>();
+    static class FakeStorefrontRepository implements StorefrontRepository {
+        final Map<UUID, StorefrontModel> store = new HashMap<>();
 
-        @Override public AgentProfileModel save(AgentProfileModel profile) {
+        @Override public StorefrontModel save(StorefrontModel profile) {
             store.put(profile.agentId(), profile);
             return profile;
         }
-        @Override public Optional<AgentProfileModel> findByAgentId(UUID agentId) {
+        @Override public Optional<StorefrontModel> findByAgentId(UUID agentId) {
             return Optional.ofNullable(store.get(agentId));
         }
     }
@@ -97,7 +97,7 @@ class AgentWriteAppServiceImplTest {
     }
 
     private final FakeAgentRepository repository = new FakeAgentRepository();
-    private final FakeAgentProfileRepository profileRepository = new FakeAgentProfileRepository();
+    private final FakeStorefrontRepository profileRepository = new FakeStorefrontRepository();
     private final RecordingPublisher publisher = new RecordingPublisher();
     private final AgentWriteAppService service = new AgentWriteAppServiceImpl(
             repository, profileRepository, new AgentRegisterDomainServiceImpl(),

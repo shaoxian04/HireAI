@@ -10,7 +10,7 @@ import com.hireai.controller.config.SecurityConfig;
 import com.hireai.domain.biz.offering.agent.enums.AgentStatus;
 import com.hireai.domain.biz.offering.agent.enums.AgentVersionStatus;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
-import com.hireai.domain.biz.offering.agent.model.AgentProfileModel;
+import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
 import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
 import com.hireai.domain.biz.offering.agent.model.Pricing;
 import com.hireai.domain.biz.review.model.ReviewModel;
@@ -69,8 +69,8 @@ class AgentControllerStorefrontTest {
     private static final UUID OWNER_ID = UUID.randomUUID();
     private static final UUID AGENT_ID = UUID.randomUUID();
 
-    private AgentProfileModel listedProfile() {
-        return AgentProfileModel.createDefault(AGENT_ID)
+    private StorefrontModel listedProfile() {
+        return StorefrontModel.createDefault(AGENT_ID)
                 .updateContent("Fast summaries", "Great agent", "sample", true);
     }
 

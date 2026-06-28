@@ -10,8 +10,8 @@ import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.port.messaging.TaskDispatchPublisher;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
-import com.hireai.domain.biz.offering.agent.model.AgentProfileModel;
-import com.hireai.domain.biz.offering.agent.repository.AgentProfileRepository;
+import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
+import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.routing.info.DispatchMessage;
 import com.hireai.domain.biz.task.enums.OutputFormat;
@@ -87,7 +87,7 @@ class DirectBookingIntegrationTest {
     @Autowired RoutingAppService routingAppService;
     @Autowired AgentWriteAppService agentWriteAppService;
     @Autowired AgentRepository agentRepository;
-    @Autowired AgentProfileRepository agentProfileRepository;
+    @Autowired StorefrontRepository agentProfileRepository;
     @Autowired WalletWriteAppService walletWriteAppService;
     @Autowired WalletReadAppService walletReadAppService;
     @Autowired JdbcTemplate jdbc;
@@ -122,7 +122,7 @@ class DirectBookingIntegrationTest {
         agentWriteAppService.activate(agentId, ownerId);
 
         // Mark the profile as listed
-        AgentProfileModel profile = agentProfileRepository.findByAgentId(agentId)
+        StorefrontModel profile = agentProfileRepository.findByAgentId(agentId)
                 .orElseThrow(() -> new IllegalStateException("Profile not created by register"));
         agentProfileRepository.save(profile.updateContent("tagline", "desc", "sample", true));
 

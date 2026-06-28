@@ -19,7 +19,7 @@ import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
 import com.hireai.domain.biz.offering.agent.info.PublishVersionInfo;
-import com.hireai.domain.biz.offering.agent.info.ProfileUpdateInfo;
+import com.hireai.domain.biz.offering.storefront.info.ProfileUpdateInfo;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
 import com.hireai.domain.biz.task.model.OutputSpec;

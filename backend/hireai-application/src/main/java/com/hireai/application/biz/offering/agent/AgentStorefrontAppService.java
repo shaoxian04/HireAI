@@ -1,8 +1,8 @@
 package com.hireai.application.biz.offering.agent;
 
 import com.hireai.application.port.query.BuilderStatsQueryPort;
-import com.hireai.domain.biz.offering.agent.info.ProfileUpdateInfo;
-import com.hireai.domain.biz.offering.agent.model.AgentProfileModel;
+import com.hireai.domain.biz.offering.storefront.info.ProfileUpdateInfo;
+import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
 import com.hireai.domain.biz.review.model.ReviewModel;
 import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
@@ -17,16 +17,16 @@ import java.util.UUID;
 @Validated
 public interface AgentStorefrontAppService {
 
-    AgentProfileModel getProfile(@NonNull UUID agentId, @NonNull UUID ownerId);
+    StorefrontModel getProfile(@NonNull UUID agentId, @NonNull UUID ownerId);
 
-    AgentProfileModel updateProfile(@NonNull UUID agentId, @NonNull UUID ownerId,
+    StorefrontModel updateProfile(@NonNull UUID agentId, @NonNull UUID ownerId,
                                     @NonNull ProfileUpdateInfo info);
 
-    AgentProfileModel uploadMedia(@NonNull UUID agentId, @NonNull UUID ownerId,
+    StorefrontModel uploadMedia(@NonNull UUID agentId, @NonNull UUID ownerId,
                                   @NonNull String kind, @NonNull String contentType,
                                   long sizeBytes, byte @NonNull [] bytes);
 
-    AgentProfileModel removeMedia(@NonNull UUID agentId, @NonNull UUID ownerId,
+    StorefrontModel removeMedia(@NonNull UUID agentId, @NonNull UUID ownerId,
                                   @NonNull String kind, @NonNull String url);
 
     List<ReviewModel> reviews(@NonNull UUID agentId, @NonNull UUID ownerId);
