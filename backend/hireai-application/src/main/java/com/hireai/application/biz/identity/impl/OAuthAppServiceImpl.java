@@ -6,6 +6,7 @@ import com.hireai.utility.exception.OAuthAuthenticationException;
 import com.hireai.application.biz.identity.OAuthUserInfo;
 import com.hireai.application.port.security.JwtService;
 import com.hireai.domain.biz.identity.enums.Role;
+import com.hireai.domain.biz.identity.model.Credential;
 import com.hireai.domain.biz.identity.model.UserModel;
 import com.hireai.domain.biz.identity.repository.UserIdentityRepository;
 import com.hireai.domain.biz.identity.repository.UserRepository;
@@ -82,7 +83,7 @@ public class OAuthAppServiceImpl implements OAuthAppService {
         accountLinkingDomainService.assertNoLocalAccountForEmail(existingByEmail, info.provider());
 
         UserModel created = userRepository.create(
-                UserModel.newClient(info.email(), null, info.displayName()));
+                UserModel.newClient(info.email(), Credential.NONE, info.displayName()));
         walletRepository.save(WalletModel.openFor(created.id()));
         identityRepository.link(created.id(), info.provider(), info.subject(), info.email());
         log.info("Created OAuth user {} via {}", created.id(), info.provider());

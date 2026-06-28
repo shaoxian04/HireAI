@@ -1,6 +1,7 @@
 package com.hireai.identity;
 
 import com.hireai.domain.biz.identity.enums.Role;
+import com.hireai.domain.biz.identity.model.Credential;
 import com.hireai.domain.biz.identity.model.UserModel;
 import com.hireai.domain.biz.identity.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -63,7 +64,7 @@ class UserRepositoryIntegrationTest {
         assertThat(found.get().id()).isEqualTo(id);
         assertThat(found.get().roles()).containsExactly(Role.BUILDER);
         assertThat(found.get().displayName()).isEqualTo("Repo Tester");
-        assertThat(found.get().passwordHash()).isEqualTo("$2a$10$abcdefghijklmnopqrstuv");
+        assertThat(found.get().credential().secretHash()).isEqualTo("$2a$10$abcdefghijklmnopqrstuv");
         assertThat(found.get().active()).isTrue();
     }
 

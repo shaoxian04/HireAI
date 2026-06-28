@@ -3,6 +3,7 @@ package com.hireai.application.biz.identity.impl;
 import com.hireai.application.biz.identity.AuthResult;
 import com.hireai.application.port.security.JwtService;
 import com.hireai.domain.biz.identity.enums.Role;
+import com.hireai.domain.biz.identity.model.Credential;
 import com.hireai.domain.biz.identity.model.UserModel;
 import com.hireai.domain.biz.identity.repository.UserRepository;
 import com.hireai.domain.biz.wallet.repository.WalletRepository;
@@ -36,8 +37,8 @@ class AuthAppServiceBecomeBuilderTest {
         UUID userId = UUID.randomUUID();
         // First load: CLIENT only. After addRole, the reload returns CLIENT + BUILDER.
         when(userRepository.findById(userId))
-                .thenReturn(Optional.of(new UserModel(userId, "ada@hireai.local", "h", "Ada", Set.of(Role.CLIENT), true)))
-                .thenReturn(Optional.of(new UserModel(userId, "ada@hireai.local", "h", "Ada", Set.of(Role.CLIENT, Role.BUILDER), true)));
+                .thenReturn(Optional.of(new UserModel(userId, "ada@hireai.local", Credential.ofHash("h"), "Ada", Set.of(Role.CLIENT), true)))
+                .thenReturn(Optional.of(new UserModel(userId, "ada@hireai.local", Credential.ofHash("h"), "Ada", Set.of(Role.CLIENT, Role.BUILDER), true)));
         when(jwtService.issue(eq(userId), eq(List.of("BUILDER", "CLIENT")), any(Duration.class)))
                 .thenReturn("expanded.jwt");
 

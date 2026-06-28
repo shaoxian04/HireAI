@@ -1,6 +1,7 @@
 package com.hireai.infrastructure.repository.identity;
 
 import com.hireai.domain.biz.identity.enums.Role;
+import com.hireai.domain.biz.identity.model.Credential;
 import com.hireai.domain.biz.identity.model.UserModel;
 import com.hireai.domain.biz.identity.repository.UserRepository;
 import org.springframework.stereotype.Repository;
@@ -33,7 +34,7 @@ public class UserRepositoryImpl implements UserRepository {
 
     @Override
     public UserModel create(UserModel user) {
-        userJpa.save(new UserDO(user.id(), user.email(), user.passwordHash(),
+        userJpa.save(new UserDO(user.id(), user.email(), user.credential().secretHash(),
                 user.displayName(), user.active()));
         for (Role role : user.roles()) {
             roleJpa.save(new UserRoleDO(user.id(), role.name()));
@@ -51,7 +52,7 @@ public class UserRepositoryImpl implements UserRepository {
         var roles = roleJpa.findByUserId(e.getId()).stream()
                 .map(r -> Role.valueOf(r.getRole()))
                 .collect(Collectors.toUnmodifiableSet());
-        return new UserModel(e.getId(), e.getEmail(), e.getPasswordHash(), e.getDisplayName(),
-                roles, e.isActive());
+        return new UserModel(e.getId(), e.getEmail(), Credential.ofHash(e.getPasswordHash()),
+                e.getDisplayName(), roles, e.isActive());
     }
 }

@@ -8,6 +8,7 @@ import com.hireai.application.biz.identity.LoginInfo;
 import com.hireai.application.biz.identity.RegisterInfo;
 import com.hireai.application.port.security.JwtService;
 import com.hireai.domain.biz.identity.enums.Role;
+import com.hireai.domain.biz.identity.model.Credential;
 import com.hireai.domain.biz.identity.model.UserModel;
 import com.hireai.domain.biz.identity.repository.UserRepository;
 import com.hireai.domain.biz.wallet.model.WalletModel;
@@ -58,7 +59,7 @@ public class AuthAppServiceImpl implements AuthAppService {
         }
         String hash = passwordEncoder.encode(info.password());
         UserModel user = userRepository.create(
-                UserModel.newClient(info.email(), hash, info.displayName()));
+                UserModel.newClient(info.email(), Credential.ofHash(hash), info.displayName()));
         walletRepository.save(WalletModel.openFor(user.id()));
 
         List<String> roles = user.roles().stream()
@@ -90,8 +91,8 @@ public class AuthAppServiceImpl implements AuthAppService {
         if (!user.active()) {
             throw new AuthenticationFailedException();
         }
-        if (user.passwordHash() == null
-                || !passwordEncoder.matches(loginInfo.password(), user.passwordHash())) {
+        if (user.credential().isAbsent()
+                || !passwordEncoder.matches(loginInfo.password(), user.credential().secretHash())) {
             throw new AuthenticationFailedException();
         }
         List<String> roles = user.roles().stream()

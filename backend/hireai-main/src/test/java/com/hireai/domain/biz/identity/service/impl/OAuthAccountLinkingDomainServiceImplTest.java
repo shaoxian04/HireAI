@@ -1,6 +1,7 @@
 package com.hireai.domain.biz.identity.service.impl;
 
 import com.hireai.domain.biz.identity.enums.Role;
+import com.hireai.domain.biz.identity.model.Credential;
 import com.hireai.domain.biz.identity.model.UserModel;
 import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,7 @@ class OAuthAccountLinkingDomainServiceImplTest {
     @Test
     void rejectsWhenLocalAccountAlreadyExistsForEmail() {
         UserModel existing = new UserModel(
-                UUID.randomUUID(), "ada@hireai.local", "h", "Ada", Set.of(Role.CLIENT), true);
+                UUID.randomUUID(), "ada@hireai.local", Credential.ofHash("h"), "Ada", Set.of(Role.CLIENT), true);
 
         assertThatThrownBy(() -> service.assertNoLocalAccountForEmail(Optional.of(existing), "google"))
                 .isInstanceOf(DomainException.class);

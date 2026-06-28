@@ -4,6 +4,7 @@ import com.hireai.application.biz.identity.AuthResult;
 import com.hireai.utility.exception.EmailAlreadyRegisteredException;
 import com.hireai.application.biz.identity.RegisterInfo;
 import com.hireai.application.port.security.JwtService;
+import com.hireai.domain.biz.identity.model.Credential;
 import com.hireai.domain.biz.identity.model.UserModel;
 import com.hireai.domain.biz.identity.repository.UserRepository;
 import com.hireai.domain.biz.wallet.model.WalletModel;
@@ -55,7 +56,7 @@ class AuthAppServiceRegisterTest {
         UserModel created = userCaptor.getValue();
         assertThat(created.email()).isEqualTo("new@hireai.local");
         assertThat(created.displayName()).isEqualTo("Newbie");
-        assertThat(encoder.matches("Sup3rSecret!", created.passwordHash())).isTrue();
+        assertThat(encoder.matches("Sup3rSecret!", created.credential().secretHash())).isTrue();
 
         ArgumentCaptor<WalletModel> walletCaptor = ArgumentCaptor.forClass(WalletModel.class);
         verify(walletRepository).save(walletCaptor.capture());
@@ -66,7 +67,7 @@ class AuthAppServiceRegisterTest {
     @Test
     void rejectsDuplicateEmailAndProvisionsNothing() {
         when(userRepository.findByEmail("taken@hireai.local")).thenReturn(
-                Optional.of(UserModel.newClient("taken@hireai.local", "h", "T")));
+                Optional.of(UserModel.newClient("taken@hireai.local", Credential.ofHash("h"), "T")));
 
         assertThatThrownBy(() -> service.register(new RegisterInfo("taken@hireai.local", "whatever1!", null)))
                 .isInstanceOf(EmailAlreadyRegisteredException.class);

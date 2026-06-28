@@ -5,6 +5,7 @@ import com.hireai.utility.exception.AuthenticationFailedException;
 import com.hireai.application.biz.identity.LoginInfo;
 import com.hireai.application.port.security.JwtService;
 import com.hireai.domain.biz.identity.enums.Role;
+import com.hireai.domain.biz.identity.model.Credential;
 import com.hireai.domain.biz.identity.model.UserModel;
 import com.hireai.domain.biz.identity.repository.UserRepository;
 import com.hireai.domain.biz.wallet.repository.WalletRepository;
@@ -39,7 +40,7 @@ class AuthAppServiceImplTest {
         UUID userId = UUID.randomUUID();
         String hash = encoder.encode("correct-horse");
         when(userRepository.findByEmail("a@hireai.local"))
-                .thenReturn(Optional.of(new UserModel(userId, "a@hireai.local", hash, "A", java.util.Set.of(Role.CLIENT), true)));
+                .thenReturn(Optional.of(new UserModel(userId, "a@hireai.local", Credential.ofHash(hash), "A", java.util.Set.of(Role.CLIENT), true)));
         when(jwtService.issue(org.mockito.ArgumentMatchers.eq(userId),
                 org.mockito.ArgumentMatchers.eq(java.util.List.of("CLIENT")), any(Duration.class)))
                 .thenReturn("signed.jwt.token");
@@ -56,7 +57,7 @@ class AuthAppServiceImplTest {
         UUID userId = UUID.randomUUID();
         String hash = encoder.encode("correct-horse");
         when(userRepository.findByEmail("a@hireai.local"))
-                .thenReturn(Optional.of(new UserModel(userId, "a@hireai.local", hash, "A", java.util.Set.of(Role.CLIENT), true)));
+                .thenReturn(Optional.of(new UserModel(userId, "a@hireai.local", Credential.ofHash(hash), "A", java.util.Set.of(Role.CLIENT), true)));
 
         assertThatThrownBy(() -> service.login(new LoginInfo("a@hireai.local", "wrong")))
                 .isInstanceOf(AuthenticationFailedException.class);
@@ -75,7 +76,7 @@ class AuthAppServiceImplTest {
         UUID userId = UUID.randomUUID();
         String hash = encoder.encode("correct-horse");
         when(userRepository.findByEmail("a@hireai.local"))
-                .thenReturn(Optional.of(new UserModel(userId, "a@hireai.local", hash, "A", java.util.Set.of(Role.CLIENT), false)));
+                .thenReturn(Optional.of(new UserModel(userId, "a@hireai.local", Credential.ofHash(hash), "A", java.util.Set.of(Role.CLIENT), false)));
 
         assertThatThrownBy(() -> service.login(new LoginInfo("a@hireai.local", "correct-horse")))
                 .isInstanceOf(AuthenticationFailedException.class);

@@ -5,6 +5,7 @@ import com.hireai.utility.exception.OAuthAuthenticationException;
 import com.hireai.application.biz.identity.OAuthUserInfo;
 import com.hireai.application.port.security.JwtService;
 import com.hireai.domain.biz.identity.enums.Role;
+import com.hireai.domain.biz.identity.model.Credential;
 import com.hireai.domain.biz.identity.model.UserModel;
 import com.hireai.domain.biz.identity.repository.UserIdentityRepository;
 import com.hireai.domain.biz.identity.repository.UserRepository;
@@ -54,7 +55,7 @@ class OAuthAppServiceImplTest {
         when(identityRepository.findUserIdByProviderSubject("google", "sub-123"))
                 .thenReturn(Optional.of(userId));
         when(userRepository.findById(userId)).thenReturn(Optional.of(
-                new UserModel(userId, "ada@hireai.local", null, "Ada", Set.of(Role.CLIENT, Role.BUILDER), true)));
+                new UserModel(userId, "ada@hireai.local", Credential.NONE, "Ada", Set.of(Role.CLIENT, Role.BUILDER), true)));
         when(jwtService.issue(eq(userId), anyList(), any(Duration.class))).thenReturn("jwt");
 
         AuthResult result = service.loginWithOAuth(google("ada@hireai.local", true));
@@ -74,7 +75,7 @@ class OAuthAppServiceImplTest {
         UUID userId = UUID.randomUUID();
         when(identityRepository.findUserIdByProviderSubject("google", "sub-123")).thenReturn(Optional.empty());
         when(userRepository.findByEmail("ada@hireai.local")).thenReturn(Optional.of(
-                new UserModel(userId, "ada@hireai.local", "h", "Ada", Set.of(Role.CLIENT), true)));
+                new UserModel(userId, "ada@hireai.local", Credential.ofHash("h"), "Ada", Set.of(Role.CLIENT), true)));
 
         assertThatThrownBy(() -> service.loginWithOAuth(google("ada@hireai.local", true)))
                 .isInstanceOf(DomainException.class);
@@ -97,7 +98,7 @@ class OAuthAppServiceImplTest {
         assertThat(result.roles()).containsExactly("CLIENT");
         ArgumentCaptor<UserModel> userCaptor = ArgumentCaptor.forClass(UserModel.class);
         verify(userRepository).create(userCaptor.capture());
-        assertThat(userCaptor.getValue().passwordHash()).isNull();
+        assertThat(userCaptor.getValue().credential().isAbsent()).isTrue();
         assertThat(userCaptor.getValue().displayName()).isEqualTo("Ada");
 
         ArgumentCaptor<WalletModel> walletCaptor = ArgumentCaptor.forClass(WalletModel.class);
@@ -119,7 +120,7 @@ class OAuthAppServiceImplTest {
         when(identityRepository.findUserIdByProviderSubject("google", "sub-123"))
                 .thenReturn(Optional.of(userId));
         when(userRepository.findById(userId)).thenReturn(Optional.of(
-                new UserModel(userId, "ada@hireai.local", null, "Ada", Set.of(Role.CLIENT), false)));
+                new UserModel(userId, "ada@hireai.local", Credential.NONE, "Ada", Set.of(Role.CLIENT), false)));
 
         assertThatThrownBy(() -> service.loginWithOAuth(google("ada@hireai.local", true)))
                 .isInstanceOf(OAuthAuthenticationException.class);
