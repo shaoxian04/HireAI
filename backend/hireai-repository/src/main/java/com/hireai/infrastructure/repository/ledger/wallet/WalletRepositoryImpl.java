@@ -30,9 +30,18 @@ public class WalletRepositoryImpl implements WalletRepository {
 
     @Override
     public WalletModel save(WalletModel wallet) {
-        walletJpa.save(new WalletDO(
-                wallet.id(), wallet.userId(),
-                wallet.available().value(), wallet.escrow().value()));
+        // Load-then-mutate the managed row so JPA's @Version optimistic check fires on
+        // concurrent updates; insert a fresh row for a brand-new wallet.
+        WalletDO entity = walletJpa.findById(wallet.id())
+                .map(existing -> {
+                    existing.setAvailableBalance(wallet.available().value());
+                    existing.setEscrowBalance(wallet.escrow().value());
+                    return existing;
+                })
+                .orElseGet(() -> new WalletDO(
+                        wallet.id(), wallet.userId(),
+                        wallet.available().value(), wallet.escrow().value()));
+        walletJpa.save(entity);
 
         for (LedgerEntryModel entry : wallet.pendingEntries()) {
             ledgerJpa.save(new LedgerEntryDO(

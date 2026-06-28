@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -30,6 +31,10 @@ public class WalletDO {
     @Column(name = "escrow_balance", nullable = false)
     private BigDecimal escrowBalance;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private long version;
+
     protected WalletDO() {
     }
 
@@ -47,4 +52,6 @@ public class WalletDO {
 
     public void setAvailableBalance(BigDecimal availableBalance) { this.availableBalance = availableBalance; }
     public void setEscrowBalance(BigDecimal escrowBalance) { this.escrowBalance = escrowBalance; }
+
+    public long getVersion() { return version; }
 }
