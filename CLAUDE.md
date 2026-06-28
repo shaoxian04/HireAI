@@ -6,7 +6,7 @@ Keep this file short — it's an index, not documentation. Put depth in `docs/de
 
 HireAI is a **task-driven AI Agent distribution and execution platform** — a neutral marketplace broker. Clients submit well-defined tasks in natural language and pay in virtual credits held in escrow; third-party **AI Agents** (self-hosted, registered by **Agent Builders**) execute them via webhook and earn credits on accepted, spec-conformant work. The platform provides the registry, routing, output-contract validation, tiered dispute resolution, reputation, and escrow settlement — it hosts no Agents itself.
 
-Six functional modules: (1) Task Submission, (2) Agent Registration, (3) Routing & Execution, (4) Quality Validation & Dispute Resolution, (5) Reputation & Virtual Settlement, (6) Discovery & Builder Dashboard. This is a solo Final Year Project on a ~18-week build window; Module 6 is the stretch deliverable.
+Six functional modules: (1) Task Submission, (2) Agent Registration, (3) Routing & Execution, (4) Quality Validation & Dispute Resolution, (5) Reputation & Virtual Settlement, (6) Discovery & Builder Dashboard. This is a solo Final Year Project; Module 6 is the stretch deliverable.
 
 ## Repository status
 
@@ -75,6 +75,6 @@ Read the relevant file on demand — don't preload everything.
 ## Source-of-truth & conflict resolution
 
 - **PRD** (product scope, business rules): https://app.notion.com/p/35b2193af50f819d91f2dba13c739a80
-- **SAD** (architecture, domain model, schema — authoritative technical reference): https://app.notion.com/p/3752193af50f8111914bfdfb53b42135
+- **SAD** (architecture, domain model, schema — authoritative technical reference): https://app.notion.com/p/38d2193af50f81a197f6da6b1e41a6f1 — the lean English rewrite (2026-06-28); blueprint in `docs/superpowers/specs/2026-06-28-sad-rewrite-design.md`. Note: §6.3 reliability (sweeper/outbox/retry) and any *target* design it describes are the planned backend refactor, not necessarily what's built today — CLAUDE.md's build status is the source of truth for built-vs-pending.
 
 The **SAD wins on technical matters** (architecture, schema, domain design); the **PRD wins on product scope** (what's in/out of the MVP). The local `docs/details/*` files distill these for fast access — when they disagree with Notion, Notion is authoritative; update the local file.
