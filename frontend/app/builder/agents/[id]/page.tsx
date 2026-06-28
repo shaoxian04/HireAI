@@ -8,6 +8,7 @@ import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import type { AgentDTO, AgentProfileViewDTO } from "@/lib/types";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { TabStorefront } from "@/components/manage/TabStorefront";
 import { TabPricing } from "@/components/manage/TabPricing";
 import { TabStats } from "@/components/manage/TabStats";
@@ -33,6 +34,20 @@ function ManageAgentPage() {
   const [activeTab, setActiveTab] = useState<Tab>("storefront");
   const [statsLoaded, setStatsLoaded] = useState(false);
   const [reviewsLoaded, setReviewsLoaded] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
+
+  async function transition(verb: "suspend" | "reactivate" | "deactivate") {
+    setTransitioning(true);
+    setLoadError(null);
+    try {
+      const updated = await api<AgentDTO>(`/agents/${id}/${verb}`, { method: "POST" });
+      setAgent(updated);
+    } catch (e) {
+      setLoadError(e instanceof ApiError ? e.message : "Action failed");
+    } finally {
+      setTransitioning(false);
+    }
+  }
 
   // Load agent + profile in parallel on mount
   useEffect(() => {
@@ -78,6 +93,23 @@ function ManageAgentPage() {
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <h1 className="text-3xl font-extrabold tracking-tight">{agent.name}</h1>
           <Badge status={agent.status}>{agent.status}</Badge>
+          <div className="ml-auto flex gap-2">
+            {agent.status === "ACTIVE" && (
+              <Button variant="secondary" disabled={transitioning} onClick={() => transition("suspend")}>
+                Suspend
+              </Button>
+            )}
+            {agent.status === "SUSPENDED" && (
+              <Button variant="secondary" disabled={transitioning} onClick={() => transition("reactivate")}>
+                Reactivate
+              </Button>
+            )}
+            {(agent.status === "ACTIVE" || agent.status === "SUSPENDED") && (
+              <Button variant="secondary" disabled={transitioning} onClick={() => transition("deactivate")}>
+                Deactivate
+              </Button>
+            )}
+          </div>
         </div>
         <p className="mt-1 font-mono text-[0.65rem] text-dim">
           public page ▸{" "}

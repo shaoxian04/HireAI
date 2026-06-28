@@ -357,7 +357,7 @@ export const manageHandlers = [
     return ok(profileState);
   }),
 
-  http.put("*/api/agents/:id/pricing", async ({ params, request }) => {
+  http.post("*/api/agents/:id/versions", async ({ params, request }) => {
     const body = (await request.json()) as { price: number; maxExecutionSeconds: number; capabilityCategories: string[] };
     return ok({
       ...AGENT_DTO_A1,
@@ -365,6 +365,16 @@ export const manageHandlers = [
       currentVersion: { ...AGENT_DTO_A1.currentVersion, price: body.price },
     });
   }),
+
+  http.post("*/api/agents/:id/suspend", ({ params }) =>
+    ok({ ...AGENT_DTO_A1, id: params.id as string, status: "SUSPENDED" }),
+  ),
+  http.post("*/api/agents/:id/reactivate", ({ params }) =>
+    ok({ ...AGENT_DTO_A1, id: params.id as string, status: "ACTIVE" }),
+  ),
+  http.post("*/api/agents/:id/deactivate", ({ params }) =>
+    ok({ ...AGENT_DTO_A1, id: params.id as string, status: "DEACTIVATED" }),
+  ),
 
   http.get("*/api/agents/:id/stats", () =>
     ok({

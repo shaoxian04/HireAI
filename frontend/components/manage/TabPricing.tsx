@@ -28,8 +28,8 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const updated = await api<AgentDTO>(`/agents/${agentId}/pricing`, {
-        method: "PUT",
+      const updated = await api<AgentDTO>(`/agents/${agentId}/versions`, {
+        method: "POST",
         body: JSON.stringify({
           price,
           maxExecutionSeconds: maxExec,
@@ -43,7 +43,7 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Save failed");
+      setError(e instanceof ApiError ? e.message : "Publish failed");
     } finally {
       setSaving(false);
     }
@@ -52,7 +52,8 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
   return (
     <div className="space-y-6">
       <p className="font-mono text-[0.65rem] text-amber">
-        Edits apply to the live version immediately — no version history in this slice.
+        Publishing creates a new version and retires the current one — in-flight tasks keep the
+        version they were dispatched with.
       </p>
 
       <div className="grid grid-cols-2 gap-4">
@@ -95,11 +96,11 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
 
       <div className="flex items-center gap-4">
         <Button onClick={handleSave} disabled={saving}>
-          {saving ? "Saving…" : "Save ▸"}
+          {saving ? "Publishing…" : "Publish version ▸"}
         </Button>
         {saved && (
           <p role="status" className="font-mono text-xs text-accent">
-            Saved
+            Published
           </p>
         )}
       </div>

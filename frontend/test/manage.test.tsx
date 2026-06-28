@@ -93,7 +93,7 @@ describe("manage agent console", () => {
     expect(await screen.findByText(/thanks — glad it helped/i)).toBeInTheDocument();
   });
 
-  it("pricing tab saves", async () => {
+  it("pricing tab publishes a new version", async () => {
     renderBuilder();
 
     // Wait for initial load then switch to Pricing tab
@@ -108,11 +108,18 @@ describe("manage agent console", () => {
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "12");
 
-    // Click Save ▸
-    await userEvent.click(screen.getByRole("button", { name: /save/i }));
+    // Click Publish version ▸
+    await userEvent.click(screen.getByRole("button", { name: /publish/i }));
 
-    // Expect "Saved" status message
+    // Expect "Published" status message
     const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent(/saved/i);
+    expect(status).toHaveTextContent(/published/i);
+  });
+
+  it("suspends an active agent from the header", async () => {
+    renderBuilder();
+    await screen.findByRole("textbox", { name: /tagline/i }); // page loaded (agent is ACTIVE)
+    await userEvent.click(screen.getByRole("button", { name: /^suspend$/i }));
+    expect(await screen.findByText("SUSPENDED")).toBeInTheDocument();
   });
 });

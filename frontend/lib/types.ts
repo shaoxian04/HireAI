@@ -225,7 +225,7 @@ export interface UpdateProfileRequest {
   isListed: boolean;
 }
 
-export interface UpdatePricingRequest {
+export interface PublishVersionRequest {
   price: number;
   maxExecutionSeconds: number;
   capabilityCategories: string[];
