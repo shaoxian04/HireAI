@@ -3,7 +3,7 @@ package com.hireai.application.biz.task.impl;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.biz.agent.repository.AgentRepository;
+import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.biz.ledger.settlement.info.SettlementBreakdown;

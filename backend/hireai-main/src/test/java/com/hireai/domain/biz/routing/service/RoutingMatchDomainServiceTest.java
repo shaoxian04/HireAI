@@ -1,6 +1,6 @@
 package com.hireai.domain.biz.routing.service;
 
-import com.hireai.domain.biz.agent.info.AgentCandidate;
+import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.routing.service.impl.RoutingMatchDomainServiceImpl;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import org.junit.jupiter.api.Test;

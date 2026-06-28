@@ -1,6 +1,6 @@
 package com.hireai.controller.biz.agent.dto;
 
-import com.hireai.domain.biz.agent.model.AgentProfileModel;
+import com.hireai.domain.biz.offering.agent.model.AgentProfileModel;
 
 import java.util.List;
 

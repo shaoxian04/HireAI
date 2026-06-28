@@ -1,8 +1,8 @@
 package com.hireai.controller.biz.agent;
 
-import com.hireai.application.biz.agent.AgentReadAppService;
-import com.hireai.application.biz.agent.AgentStorefrontAppService;
-import com.hireai.application.biz.agent.AgentWriteAppService;
+import com.hireai.application.biz.offering.agent.AgentReadAppService;
+import com.hireai.application.biz.offering.agent.AgentStorefrontAppService;
+import com.hireai.application.biz.offering.agent.AgentWriteAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.agent.converter.AgentModel2DTOConverter;
@@ -17,11 +17,11 @@ import com.hireai.controller.biz.agent.dto.UpdatePricingRequest;
 import com.hireai.controller.biz.agent.dto.UpdateProfileRequest;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.biz.agent.info.AgentRegisterInfo;
-import com.hireai.domain.biz.agent.info.PricingUpdateInfo;
-import com.hireai.domain.biz.agent.info.ProfileUpdateInfo;
-import com.hireai.domain.biz.agent.model.AgentModel;
-import com.hireai.domain.biz.agent.repository.AgentQuery;
+import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
+import com.hireai.domain.biz.offering.agent.info.PricingUpdateInfo;
+import com.hireai.domain.biz.offering.agent.info.ProfileUpdateInfo;
+import com.hireai.domain.biz.offering.agent.model.AgentModel;
+import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.utility.exception.DomainException;
 import jakarta.validation.Valid;

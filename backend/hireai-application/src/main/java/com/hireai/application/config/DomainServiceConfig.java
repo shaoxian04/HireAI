@@ -1,9 +1,9 @@
 package com.hireai.application.config;
 
-import com.hireai.domain.biz.agent.service.AgentActivateDomainService;
-import com.hireai.domain.biz.agent.service.AgentRegisterDomainService;
-import com.hireai.domain.biz.agent.service.impl.AgentActivateDomainServiceImpl;
-import com.hireai.domain.biz.agent.service.impl.AgentRegisterDomainServiceImpl;
+import com.hireai.domain.biz.offering.agent.service.AgentActivateDomainService;
+import com.hireai.domain.biz.offering.agent.service.AgentRegisterDomainService;
+import com.hireai.domain.biz.offering.agent.service.impl.AgentActivateDomainServiceImpl;
+import com.hireai.domain.biz.offering.agent.service.impl.AgentRegisterDomainServiceImpl;
 import com.hireai.domain.biz.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.routing.service.impl.RoutingMatchDomainServiceImpl;
 import com.hireai.domain.biz.identity.service.OAuthAccountLinkingDomainService;

@@ -2,7 +2,7 @@ package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.biz.agent.repository.AgentRepository;
+import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;

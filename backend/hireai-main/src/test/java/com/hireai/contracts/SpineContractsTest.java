@@ -1,6 +1,6 @@
 package com.hireai.contracts;
 
-import com.hireai.domain.biz.agent.info.AgentCandidate;
+import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.application.port.security.DispatchTokenClaims;
 import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.domain.biz.routing.info.DispatchMessage;

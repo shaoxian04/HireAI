@@ -1,6 +1,6 @@
 package com.hireai.controller.biz.catalogue;
 
-import com.hireai.application.biz.catalogue.CatalogueReadAppService;
+import com.hireai.application.biz.offering.catalogue.CatalogueReadAppService;
 import com.hireai.application.port.query.CatalogueQueryPort.AgentCardRow;
 import com.hireai.application.port.query.CatalogueQueryPort.AgentProfileRow;
 import com.hireai.controller.base.BaseController;

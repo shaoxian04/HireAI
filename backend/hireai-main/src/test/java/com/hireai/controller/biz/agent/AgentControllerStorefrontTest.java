@@ -1,17 +1,17 @@
 package com.hireai.controller.biz.agent;
 
-import com.hireai.application.biz.agent.AgentReadAppService;
-import com.hireai.application.biz.agent.AgentStorefrontAppService;
-import com.hireai.application.biz.agent.AgentWriteAppService;
+import com.hireai.application.biz.offering.agent.AgentReadAppService;
+import com.hireai.application.biz.offering.agent.AgentStorefrontAppService;
+import com.hireai.application.biz.offering.agent.AgentWriteAppService;
 import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
-import com.hireai.domain.biz.agent.enums.AgentStatus;
-import com.hireai.domain.biz.agent.model.AgentModel;
-import com.hireai.domain.biz.agent.model.AgentProfileModel;
-import com.hireai.domain.biz.agent.model.AgentVersionModel;
-import com.hireai.domain.biz.agent.model.Pricing;
+import com.hireai.domain.biz.offering.agent.enums.AgentStatus;
+import com.hireai.domain.biz.offering.agent.model.AgentModel;
+import com.hireai.domain.biz.offering.agent.model.AgentProfileModel;
+import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
+import com.hireai.domain.biz.offering.agent.model.Pricing;
 import com.hireai.domain.biz.review.model.ReviewModel;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
