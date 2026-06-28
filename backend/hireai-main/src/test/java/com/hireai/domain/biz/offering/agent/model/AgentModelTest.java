@@ -87,4 +87,36 @@ class AgentModelTest {
         assertThat(pending.isActive()).isFalse();
         assertThat(pending.activate().isActive()).isTrue();
     }
+
+    @Test
+    void suspendThenReactivateRoundTrips() {
+        AgentModel active = registered(UUID.randomUUID()).activate();
+        AgentModel suspended = active.suspend();
+        assertThat(suspended.status()).isEqualTo(AgentStatus.SUSPENDED);
+        assertThat(suspended.reactivate().status()).isEqualTo(AgentStatus.ACTIVE);
+    }
+
+    @Test
+    void suspendRejectsNonActiveAgent() {
+        AgentModel pending = registered(UUID.randomUUID());
+        assertThatThrownBy(pending::suspend).isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void reactivateRejectsNonSuspendedAgent() {
+        AgentModel active = registered(UUID.randomUUID()).activate();
+        assertThatThrownBy(active::reactivate).isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void deactivateIsTerminalFromActiveOrSuspended() {
+        AgentModel active = registered(UUID.randomUUID()).activate();
+        assertThat(active.deactivate().status()).isEqualTo(AgentStatus.DEACTIVATED);
+        assertThat(active.suspend().deactivate().status()).isEqualTo(AgentStatus.DEACTIVATED);
+        // terminal: cannot deactivate a pending agent, nor reactivate a deactivated one
+        assertThatThrownBy(() -> registered(UUID.randomUUID()).deactivate())
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> active.deactivate().reactivate())
+                .isInstanceOf(DomainException.class);
+    }
 }

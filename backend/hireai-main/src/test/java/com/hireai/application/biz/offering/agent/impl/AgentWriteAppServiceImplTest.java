@@ -15,7 +15,10 @@ import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository
 import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentActivateDomainServiceImpl;
+import com.hireai.domain.biz.offering.agent.service.impl.AgentDeactivateDomainServiceImpl;
+import com.hireai.domain.biz.offering.agent.service.impl.AgentReactivateDomainServiceImpl;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentRegisterDomainServiceImpl;
+import com.hireai.domain.biz.offering.agent.service.impl.AgentSuspendDomainServiceImpl;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.utility.exception.DomainException;
@@ -101,7 +104,8 @@ class AgentWriteAppServiceImplTest {
     private final RecordingPublisher publisher = new RecordingPublisher();
     private final AgentWriteAppService service = new AgentWriteAppServiceImpl(
             repository, profileRepository, new AgentRegisterDomainServiceImpl(),
-            new AgentActivateDomainServiceImpl(), publisher);
+            new AgentActivateDomainServiceImpl(), new AgentSuspendDomainServiceImpl(),
+            new AgentReactivateDomainServiceImpl(), new AgentDeactivateDomainServiceImpl(), publisher);
 
     private AgentRegisterInfo info(UUID ownerId) {
         return new AgentRegisterInfo(ownerId, "Summariser Bot",
@@ -182,6 +186,36 @@ class AgentWriteAppServiceImplTest {
     void publishNewVersionRejectsUnknownAgent() {
         assertThatThrownBy(() -> service.publishNewVersion(UUID.randomUUID(), UUID.randomUUID(),
                 new PublishVersionInfo(new BigDecimal("10.00"), 60, List.of("summarisation"))))
+                .isInstanceOf(DomainException.class);
+    }
+
+    // ---- suspend / reactivate / deactivate tests ----
+
+    @Test
+    void suspendReactivateDeactivateTransitionOwnedAgent() {
+        UUID ownerId = UUID.randomUUID();
+        UUID agentId = service.register(info(ownerId));
+        service.activate(agentId, ownerId);
+
+        service.suspend(agentId, ownerId);
+        assertThat(repository.findById(agentId).orElseThrow().status())
+                .isEqualTo(AgentStatus.SUSPENDED);
+
+        service.reactivate(agentId, ownerId);
+        assertThat(repository.findById(agentId).orElseThrow().status())
+                .isEqualTo(AgentStatus.ACTIVE);
+
+        service.deactivate(agentId, ownerId);
+        assertThat(repository.findById(agentId).orElseThrow().status())
+                .isEqualTo(AgentStatus.DEACTIVATED);
+    }
+
+    @Test
+    void suspendRejectsForeignOwner() {
+        UUID ownerId = UUID.randomUUID();
+        UUID agentId = service.register(info(ownerId));
+        service.activate(agentId, ownerId);
+        assertThatThrownBy(() -> service.suspend(agentId, UUID.randomUUID()))
                 .isInstanceOf(DomainException.class);
     }
 }

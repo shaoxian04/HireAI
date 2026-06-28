@@ -90,6 +90,27 @@ public class AgentController extends BaseController {
         return ok(dto);
     }
 
+    @PostMapping("/{agentId}/suspend")
+    public WebResult<AgentDTO> suspend(@PathVariable("agentId") UUID agentId) {
+        UUID ownerId = currentUser.currentUserId();
+        writeAppService.suspend(agentId, ownerId);
+        return ok(AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId)));
+    }
+
+    @PostMapping("/{agentId}/reactivate")
+    public WebResult<AgentDTO> reactivate(@PathVariable("agentId") UUID agentId) {
+        UUID ownerId = currentUser.currentUserId();
+        writeAppService.reactivate(agentId, ownerId);
+        return ok(AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId)));
+    }
+
+    @PostMapping("/{agentId}/deactivate")
+    public WebResult<AgentDTO> deactivate(@PathVariable("agentId") UUID agentId) {
+        UUID ownerId = currentUser.currentUserId();
+        writeAppService.deactivate(agentId, ownerId);
+        return ok(AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId)));
+    }
+
     @PostMapping("/{agentId}/versions")
     public WebResult<AgentDTO> publishVersion(@PathVariable("agentId") UUID agentId,
                                               @Valid @RequestBody PublishVersionRequest request) {

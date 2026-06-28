@@ -301,4 +301,30 @@ class AgentControllerStorefrontTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
     }
+
+    // ---- suspend / reactivate / deactivate endpoint tests ----
+
+    @Test
+    void postSuspend_happyPath_returns200WithSuspendedStatus() throws Exception {
+        when(currentUserProvider.currentUserId()).thenReturn(OWNER_ID);
+        when(readAppService.getForOwner(AGENT_ID, OWNER_ID))
+                .thenReturn(versionedAgentModel(new BigDecimal("10.00"), 60, List.of("summarisation")).suspend());
+
+        mockMvc.perform(post("/api/agents/{id}/suspend", AGENT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("SUSPENDED"));
+    }
+
+    @Test
+    void postDeactivate_foreignOwner_returns404() throws Exception {
+        UUID foreignId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(foreignId);
+        org.mockito.Mockito.doThrow(new DomainException(ResultCode.NOT_FOUND, "Agent not found: " + AGENT_ID))
+                .when(writeAppService).deactivate(AGENT_ID, foreignId);
+
+        mockMvc.perform(post("/api/agents/{id}/deactivate", AGENT_ID))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
 }

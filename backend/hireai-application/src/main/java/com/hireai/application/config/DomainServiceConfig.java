@@ -1,9 +1,15 @@
 package com.hireai.application.config;
 
 import com.hireai.domain.biz.offering.agent.service.AgentActivateDomainService;
+import com.hireai.domain.biz.offering.agent.service.AgentDeactivateDomainService;
+import com.hireai.domain.biz.offering.agent.service.AgentReactivateDomainService;
 import com.hireai.domain.biz.offering.agent.service.AgentRegisterDomainService;
+import com.hireai.domain.biz.offering.agent.service.AgentSuspendDomainService;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentActivateDomainServiceImpl;
+import com.hireai.domain.biz.offering.agent.service.impl.AgentDeactivateDomainServiceImpl;
+import com.hireai.domain.biz.offering.agent.service.impl.AgentReactivateDomainServiceImpl;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentRegisterDomainServiceImpl;
+import com.hireai.domain.biz.offering.agent.service.impl.AgentSuspendDomainServiceImpl;
 import com.hireai.domain.biz.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.routing.service.impl.RoutingMatchDomainServiceImpl;
 import com.hireai.domain.biz.identity.service.OAuthAccountLinkingDomainService;
@@ -55,6 +61,21 @@ public class DomainServiceConfig {
     @Bean
     public AgentActivateDomainService agentActivateDomainService() {
         return new AgentActivateDomainServiceImpl();
+    }
+
+    @Bean
+    public AgentSuspendDomainService agentSuspendDomainService() {
+        return new AgentSuspendDomainServiceImpl();
+    }
+
+    @Bean
+    public AgentReactivateDomainService agentReactivateDomainService() {
+        return new AgentReactivateDomainServiceImpl();
+    }
+
+    @Bean
+    public AgentDeactivateDomainService agentDeactivateDomainService() {
+        return new AgentDeactivateDomainServiceImpl();
     }
 
     @Bean

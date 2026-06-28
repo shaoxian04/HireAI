@@ -86,6 +86,36 @@ public final class AgentModel {
                 reputationScore, next, createdAt);
     }
 
+    /** ACTIVE -> SUSPENDED: pause routing/booking; reversible via reactivate(). */
+    public AgentModel suspend() {
+        if (status != AgentStatus.ACTIVE) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Only an ACTIVE agent can be suspended; was " + status);
+        }
+        return new AgentModel(id, ownerId, name, AgentStatus.SUSPENDED, currentVersionId,
+                reputationScore, currentVersion, createdAt);
+    }
+
+    /** SUSPENDED -> ACTIVE: resume routing/booking. */
+    public AgentModel reactivate() {
+        if (status != AgentStatus.SUSPENDED) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Only a SUSPENDED agent can be reactivated; was " + status);
+        }
+        return new AgentModel(id, ownerId, name, AgentStatus.ACTIVE, currentVersionId,
+                reputationScore, currentVersion, createdAt);
+    }
+
+    /** ACTIVE or SUSPENDED -> DEACTIVATED: terminal retirement (no return). */
+    public AgentModel deactivate() {
+        if (status != AgentStatus.ACTIVE && status != AgentStatus.SUSPENDED) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Only an ACTIVE or SUSPENDED agent can be deactivated; was " + status);
+        }
+        return new AgentModel(id, ownerId, name, AgentStatus.DEACTIVATED, currentVersionId,
+                reputationScore, currentVersion, createdAt);
+    }
+
     /** Only an ACTIVE agent is routable / bookable. */
     public boolean isActive() {
         return status == AgentStatus.ACTIVE;

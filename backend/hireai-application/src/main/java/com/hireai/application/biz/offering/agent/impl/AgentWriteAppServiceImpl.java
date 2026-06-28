@@ -12,7 +12,10 @@ import com.hireai.domain.biz.offering.agent.model.Pricing;
 import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.offering.agent.service.AgentActivateDomainService;
+import com.hireai.domain.biz.offering.agent.service.AgentDeactivateDomainService;
+import com.hireai.domain.biz.offering.agent.service.AgentReactivateDomainService;
 import com.hireai.domain.biz.offering.agent.service.AgentRegisterDomainService;
+import com.hireai.domain.biz.offering.agent.service.AgentSuspendDomainService;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +36,9 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
     private final StorefrontRepository agentProfileRepository;
     private final AgentRegisterDomainService registerDomainService;
     private final AgentActivateDomainService activateDomainService;
+    private final AgentSuspendDomainService suspendDomainService;
+    private final AgentReactivateDomainService reactivateDomainService;
+    private final AgentDeactivateDomainService deactivateDomainService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -72,6 +78,27 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
         return agentRepository.findById(agentId)
                 .orElseThrow(() -> new DomainException(ResultCode.INTERNAL_ERROR,
                         "Agent disappeared after publishing a version: " + agentId));
+    }
+
+    @Override
+    public void suspend(UUID agentId, UUID ownerId) {
+        AgentModel agent = loadOwned(agentId, ownerId);
+        agentRepository.save(suspendDomainService.suspend(agent));
+        log.info("Agent {} suspended by owner {}", agentId, ownerId);
+    }
+
+    @Override
+    public void reactivate(UUID agentId, UUID ownerId) {
+        AgentModel agent = loadOwned(agentId, ownerId);
+        agentRepository.save(reactivateDomainService.reactivate(agent));
+        log.info("Agent {} reactivated by owner {}", agentId, ownerId);
+    }
+
+    @Override
+    public void deactivate(UUID agentId, UUID ownerId) {
+        AgentModel agent = loadOwned(agentId, ownerId);
+        agentRepository.save(deactivateDomainService.deactivate(agent));
+        log.info("Agent {} deactivated by owner {}", agentId, ownerId);
     }
 
     /** Load + owner check (Invariant #5): a foreign agent is indistinguishable from a missing one. */

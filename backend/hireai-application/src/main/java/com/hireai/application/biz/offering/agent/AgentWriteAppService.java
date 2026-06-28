@@ -22,6 +22,12 @@ public interface AgentWriteAppService {
 
     void activate(@NonNull UUID agentId, @NonNull UUID ownerId);
 
+    void suspend(@NonNull UUID agentId, @NonNull UUID ownerId);
+
+    void reactivate(@NonNull UUID agentId, @NonNull UUID ownerId);
+
+    void deactivate(@NonNull UUID agentId, @NonNull UUID ownerId);
+
     /**
      * Publishes a NEW version of the agent's contract (supersedes the prior ACTIVE version, which is
      * retained as DEPRECATED history). The new version carries over the current version's outputSpec +
