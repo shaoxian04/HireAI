@@ -1,10 +1,10 @@
-package com.hireai.domain.biz.ledger.wallet.service.impl;
+package com.hireai.domain.biz.ledger.settlement.service.impl;
 
 import com.hireai.domain.biz.ledger.wallet.enums.LedgerEntryType;
-import com.hireai.domain.biz.ledger.wallet.info.SettlementBreakdown;
+import com.hireai.domain.biz.ledger.settlement.info.SettlementBreakdown;
 import com.hireai.domain.biz.ledger.wallet.model.WalletModel;
-import com.hireai.domain.biz.ledger.wallet.service.SettlementDomainService;
-import com.hireai.domain.biz.ledger.wallet.service.SettlementPolicy;
+import com.hireai.domain.biz.ledger.settlement.service.SettlementDomainService;
+import com.hireai.domain.biz.ledger.settlement.service.SettlementPolicy;
 import com.hireai.domain.shared.model.Money;
 
 import java.util.UUID;

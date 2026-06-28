@@ -1,4 +1,4 @@
-package com.hireai.domain.biz.ledger.wallet.info;
+package com.hireai.domain.biz.ledger.settlement.info;
 
 import com.hireai.domain.shared.model.Money;
 

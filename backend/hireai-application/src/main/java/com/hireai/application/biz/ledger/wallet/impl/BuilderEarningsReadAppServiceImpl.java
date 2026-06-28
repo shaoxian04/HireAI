@@ -6,7 +6,7 @@ import com.hireai.application.port.query.BuilderEarningsQueryPort.OwnedAgentRow;
 import com.hireai.application.port.query.BuilderEarningsQueryPort.RoutedTaskRow;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.enums.TaskStatus;
-import com.hireai.domain.biz.ledger.wallet.service.SettlementPolicy;
+import com.hireai.domain.biz.ledger.settlement.service.SettlementPolicy;
 import com.hireai.domain.shared.model.Money;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

@@ -1,6 +1,6 @@
-package com.hireai.domain.biz.ledger.wallet.service;
+package com.hireai.domain.biz.ledger.settlement.service;
 
-import com.hireai.domain.biz.ledger.wallet.info.SettlementBreakdown;
+import com.hireai.domain.biz.ledger.settlement.info.SettlementBreakdown;
 import com.hireai.domain.biz.ledger.wallet.model.WalletModel;
 import com.hireai.domain.shared.model.Money;
 
