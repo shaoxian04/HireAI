@@ -8,7 +8,8 @@ import com.hireai.application.port.security.JwtService;
 import com.hireai.domain.biz.identity.enums.Role;
 import com.hireai.domain.biz.identity.model.Credential;
 import com.hireai.domain.biz.identity.model.UserModel;
-import com.hireai.domain.biz.identity.repository.UserIdentityRepository;
+import com.hireai.domain.biz.identity.model.OAuthIdentity;
+import com.hireai.domain.biz.identity.repository.OAuthIdentityRepository;
 import com.hireai.domain.biz.identity.repository.UserRepository;
 import com.hireai.domain.biz.identity.service.OAuthAccountLinkingDomainService;
 import com.hireai.domain.biz.wallet.model.WalletModel;
@@ -33,14 +34,14 @@ import java.util.UUID;
 public class OAuthAppServiceImpl implements OAuthAppService {
 
     private final UserRepository userRepository;
-    private final UserIdentityRepository identityRepository;
+    private final OAuthIdentityRepository identityRepository;
     private final WalletRepository walletRepository;
     private final OAuthAccountLinkingDomainService accountLinkingDomainService;
     private final JwtService jwtService;
     private final long jwtTtlSeconds;
 
     public OAuthAppServiceImpl(UserRepository userRepository,
-                               UserIdentityRepository identityRepository,
+                               OAuthIdentityRepository identityRepository,
                                WalletRepository walletRepository,
                                OAuthAccountLinkingDomainService accountLinkingDomainService,
                                JwtService jwtService,
@@ -85,7 +86,8 @@ public class OAuthAppServiceImpl implements OAuthAppService {
         UserModel created = userRepository.create(
                 UserModel.newClient(info.email(), Credential.NONE, info.displayName()));
         walletRepository.save(WalletModel.openFor(created.id()));
-        identityRepository.link(created.id(), info.provider(), info.subject(), info.email());
+        identityRepository.save(
+                OAuthIdentity.link(created.id(), info.provider(), info.subject(), info.email()));
         log.info("Created OAuth user {} via {}", created.id(), info.provider());
         return created;
     }

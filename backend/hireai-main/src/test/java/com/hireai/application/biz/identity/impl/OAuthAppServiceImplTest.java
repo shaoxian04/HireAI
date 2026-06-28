@@ -7,7 +7,8 @@ import com.hireai.application.port.security.JwtService;
 import com.hireai.domain.biz.identity.enums.Role;
 import com.hireai.domain.biz.identity.model.Credential;
 import com.hireai.domain.biz.identity.model.UserModel;
-import com.hireai.domain.biz.identity.repository.UserIdentityRepository;
+import com.hireai.domain.biz.identity.model.OAuthIdentity;
+import com.hireai.domain.biz.identity.repository.OAuthIdentityRepository;
 import com.hireai.domain.biz.identity.repository.UserRepository;
 import com.hireai.domain.biz.identity.service.OAuthAccountLinkingDomainService;
 import com.hireai.domain.biz.identity.service.impl.OAuthAccountLinkingDomainServiceImpl;
@@ -37,7 +38,7 @@ import static org.mockito.Mockito.when;
 class OAuthAppServiceImplTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final UserIdentityRepository identityRepository = mock(UserIdentityRepository.class);
+    private final OAuthIdentityRepository identityRepository = mock(OAuthIdentityRepository.class);
     private final WalletRepository walletRepository = mock(WalletRepository.class);
     private final JwtService jwtService = mock(JwtService.class);
     private final OAuthAccountLinkingDomainService accountLinkingDomainService =
@@ -63,7 +64,7 @@ class OAuthAppServiceImplTest {
         assertThat(result.token()).isEqualTo("jwt");
         assertThat(result.roles()).containsExactlyInAnyOrder("CLIENT", "BUILDER");
         verify(userRepository, never()).create(any());
-        verify(identityRepository, never()).link(any(), any(), any(), any());
+        verify(identityRepository, never()).save(any());
     }
 
     @Test
@@ -80,7 +81,7 @@ class OAuthAppServiceImplTest {
         assertThatThrownBy(() -> service.loginWithOAuth(google("ada@hireai.local", true)))
                 .isInstanceOf(DomainException.class);
 
-        verify(identityRepository, never()).link(any(), any(), any(), any());
+        verify(identityRepository, never()).save(any());
         verify(userRepository, never()).create(any());
         verify(walletRepository, never()).save(any());
         verify(jwtService, never()).issue(any(), anyList(), any());
@@ -104,7 +105,12 @@ class OAuthAppServiceImplTest {
         ArgumentCaptor<WalletModel> walletCaptor = ArgumentCaptor.forClass(WalletModel.class);
         verify(walletRepository).save(walletCaptor.capture());
         assertThat(walletCaptor.getValue().userId()).isEqualTo(userCaptor.getValue().id());
-        verify(identityRepository).link(eq(userCaptor.getValue().id()), eq("google"), eq("sub-123"), eq("ada@hireai.local"));
+        ArgumentCaptor<OAuthIdentity> identityCaptor = ArgumentCaptor.forClass(OAuthIdentity.class);
+        verify(identityRepository).save(identityCaptor.capture());
+        assertThat(identityCaptor.getValue().userId()).isEqualTo(userCaptor.getValue().id());
+        assertThat(identityCaptor.getValue().provider()).isEqualTo("google");
+        assertThat(identityCaptor.getValue().subject()).isEqualTo("sub-123");
+        assertThat(identityCaptor.getValue().emailAtLink()).isEqualTo("ada@hireai.local");
     }
 
     @Test
