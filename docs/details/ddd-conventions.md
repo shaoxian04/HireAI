@@ -4,37 +4,45 @@ Distilled from the `scaffolding-ddd-spring-boot` skill and SAD §2.4. **Invoke t
 
 ## The one rule
 
-Dependencies point inward, never back:
+Dependencies point inward, never back. Since the COLA refactor each layer is its own **Maven module**, so this is now **compiler-enforced** — a wrong-way import won't even resolve:
 
 ```
-controller → application → domain ← infrastructure
+controller ┐
+infrastructure ┼─→ application ─→ domain ─→ utility      (hireai-main sits on top, wires all)
+repository ┘
 ```
 
-No layer imports a layer to its left. **The domain layer has zero framework/infrastructure imports.**
+No module depends on one to its left. **`hireai-domain` and `hireai-utility` carry zero Spring on their classpath** — proven at build time, not just by review. Package names did **not** change in the split (repository code is still `com.hireai.infrastructure.repository.*`); only the owning Maven module did.
 
 ## Layer responsibilities
 
 - **controller** — validate the request, call exactly one app service, wrap the result in `WebResult`. No business logic, no direct repository access. Request→`XxxInfo` mapping is done by the *app service*, not the controller.
 - **application** — orchestrate use cases, CQRS-split: `XxxReadAppService` (returns DTOs directly) and `XxxWriteAppService` (`@Transactional`, returns only the aggregate ID; caller re-reads). **Outbound clients are invoked here**, never in the domain — fetch external data (webhook result, LLM ruling) and pass the *result* into a domain service as a plain `XxxInfo`.
-- **domain** — aggregate roots + child entities (`XxxModel`), value objects, enums, repository **interfaces**, domain events, and one domain service per state transition. Depends on nothing.
-- **infrastructure** — JPA repository impls (`XxxRepositoryImpl`) and outbound clients (`XxxClient`). Depends inward on domain interfaces.
+- **domain** — aggregate roots + child entities (`XxxModel`), value objects, enums, repository **interfaces**, domain events, and one domain service per state transition. Depends on nothing but `utility`.
+- **repository** (`hireai-repository`) — JPA repository impls (`XxxRepositoryImpl`), JPA entities, and read-side query-port impls. Implements interfaces owned by domain + application.
+- **infrastructure** (`hireai-infrastructure`) — the *non-persistence* adapters: messaging (RabbitMQ), security (JWT/dispatch tokens), and outbound clients (`XxxClient`). Implements application ports.
+- **utility** (`hireai-utility`) — cross-cutting primitives shared by every layer (`ResultCode`, all exception types, shared helpers). No Spring, no internal deps.
 
-## Package layout
+## Package layout (package → owning module)
 
 ```
-controller/base|config              BaseController, WebResult, ResultCode, SecurityConfig, AuthInterceptor
-controller/biz/<route-group>        controller + Request/DTO + converters (grouped by HTTP route, not aggregate)
-application/biz/<aggregate>         XxxReadAppService, XxxWriteAppService
-domain/biz/<aggregate>/{model,repository,service,enums,event,info}
-infrastructure/repository/<aggregate>   XxxRepositoryImpl (JPA)
-infrastructure/client                   AgentWebhookClient, ArbitrationClient
+hireai-utility        utility/result                          ResultCode, shared primitives (no Spring)
+                      utility/exception                       DomainException + all exception types (any layer may throw)
+hireai-domain         domain/biz/<aggregate>/{model,repository,service,enums,event,info}
+hireai-application    application/biz/<aggregate>             XxxReadAppService, XxxWriteAppService, OutputSpecJsonMapper
+                      application/port/{messaging,security,storage,query,task}   interfaces infra implements
+hireai-repository     infrastructure/repository/<aggregate>   XxxRepositoryImpl + JPA entities (XxxDO) + read-query ports
+hireai-infrastructure infrastructure/{messaging,security,client}   RabbitMQ, JWT, AgentDispatchClient, storage
+hireai-controller     controller/base|config                  BaseController, WebResult, SecurityConfig, JwtAuthenticationFilter
+                      controller/biz/<route-group>            controller + Request/DTO + converters (grouped by HTTP route)
+hireai-main           HireAiApplication, application.yml, db/migration/V*, the whole test suite
 ```
 
-Domain/application/infrastructure are grouped **by aggregate**; controllers are grouped **by HTTP route group**.
+Domain/application/repository/infrastructure are grouped **by aggregate**; controllers are grouped **by HTTP route group**. `ResultCode` lives in `hireai-utility` (shared by every layer); `WebResult`/`BaseController` stay in `hireai-controller`.
 
 ## Naming suffixes (apply exactly)
 
-`XxxModel` (aggregate root or child entity) · `XxxRepository` (one per root, interface in domain) · `XxxRepositoryImpl` (infra JPA) · `XxxQuery` (read/pagination) · `Verb+Noun+DomainService` (one per state transition) · `XxxDomainEvent` · `XxxInfo` (domain inbound carrier / event payload) · `XxxReadAppService` / `XxxWriteAppService` · `XxxController` · `XxxRequest` / `XxxDTO` / `XxxModel2DTOConverter` · `XxxClient`.
+`XxxModel` (aggregate root or child entity) · `XxxDO` (JPA persistence entity, in `hireai-repository`) · `XxxRepository` (one per root, interface in domain) · `XxxRepositoryImpl` (infra JPA) · `XxxQuery` (read/pagination) · `Verb+Noun+DomainService` (one per state transition) · `XxxDomainEvent` · `XxxInfo` (domain inbound carrier / event payload) · `XxxReadAppService` / `XxxWriteAppService` · `XxxController` · `XxxRequest` / `XxxDTO` / `XxxModel2DTOConverter` · `XxxClient`.
 
 ## The five rules that matter
 

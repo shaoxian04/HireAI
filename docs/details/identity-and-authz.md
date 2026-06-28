@@ -89,8 +89,12 @@ fails fast if the creds are missing rather than starting silently broken.
 **Account-resolution logic** (in `OAuthAppServiceImpl.loginWithOAuth`):
 - Requires `email_verified`; rejects unverified emails immediately.
 - Existing identity link (`user_identities` row for this `provider`/`subject`) → load and log in.
-- Existing account with the same verified email → link the identity and log in.
-- Neither → create a new `CLIENT` + wallet + identity link atomically (one transaction).
+- A pre-existing **local account with the same email but no link → REFUSE** (no silent linking).
+  Account-takeover guard: local emails are **not** independently verified (registration does not prove
+  ownership), so silently linking would let an attacker who pre-registered a victim's email capture the
+  victim's later Google sign-in. The rule lives in the framework-free `OAuthAccountLinkingDomainService`;
+  the user must sign in with their password first (an explicit, re-authenticated link flow is a follow-up).
+- No link and no account for the email → create a new `CLIENT` + wallet + identity link atomically.
 - Inactive account → reject (`Account is disabled`).
 
 **New environment variables for OAuth:**
