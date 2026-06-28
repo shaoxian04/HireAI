@@ -35,10 +35,9 @@ class AuthAppServiceBecomeBuilderTest {
     @Test
     void addsBuilderRoleAndReissuesToken() {
         UUID userId = UUID.randomUUID();
-        // First load: CLIENT only. After addRole, the reload returns CLIENT + BUILDER.
+        // Single load: CLIENT only. grant(BUILDER) derives the upgraded role set without a DB re-read.
         when(userRepository.findById(userId))
-                .thenReturn(Optional.of(new UserModel(userId, "ada@hireai.local", Credential.ofHash("h"), "Ada", Set.of(Role.CLIENT), true)))
-                .thenReturn(Optional.of(new UserModel(userId, "ada@hireai.local", Credential.ofHash("h"), "Ada", Set.of(Role.CLIENT, Role.BUILDER), true)));
+                .thenReturn(Optional.of(new UserModel(userId, "ada@hireai.local", Credential.ofHash("h"), "Ada", Set.of(Role.CLIENT), true)));
         when(jwtService.issue(eq(userId), eq(List.of("BUILDER", "CLIENT")), any(Duration.class)))
                 .thenReturn("expanded.jwt");
 

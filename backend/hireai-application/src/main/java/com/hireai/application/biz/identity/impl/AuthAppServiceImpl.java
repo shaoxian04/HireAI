@@ -72,13 +72,12 @@ public class AuthAppServiceImpl implements AuthAppService {
     @Override
     @Transactional
     public AuthResult becomeBuilder(UUID userId) {
-        userRepository.findById(userId)
+        UserModel user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalStateException("Authenticated user not found: " + userId));
+        UserModel upgraded = user.grant(Role.BUILDER);
         userRepository.addRole(userId, Role.BUILDER);
 
-        UserModel updated = userRepository.findById(userId).orElseThrow();
-        List<String> roles = updated.roles().stream()
-                .map(Role::name).sorted().toList();
+        List<String> roles = upgraded.roles().stream().map(Role::name).sorted().toList();
         String token = jwtService.issue(userId, roles, Duration.ofSeconds(jwtTtlSeconds));
         log.info("User {} upgraded to builder (roles {})", userId, roles);
         return new AuthResult(token, userId, roles);
