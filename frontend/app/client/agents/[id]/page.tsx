@@ -19,6 +19,7 @@ function Storefront() {
   useEffect(() => {
     if (!id) return;
     // Reset so navigating between storefronts never flashes the previous agent.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional reset-on-navigation so a new :id never flashes stale data
     setProfile(null);
     setError(null);
     api<AgentProfileDTO>(`/catalogue/agents/${id}`)
