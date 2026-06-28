@@ -1,9 +1,9 @@
 package com.hireai.controller.biz.auth;
 
-import com.hireai.application.biz.auth.AuthAppService;
-import com.hireai.application.biz.auth.AuthResult;
-import com.hireai.application.biz.auth.LoginInfo;
-import com.hireai.application.biz.auth.RegisterInfo;
+import com.hireai.application.biz.identity.AuthAppService;
+import com.hireai.application.biz.identity.AuthResult;
+import com.hireai.application.biz.identity.LoginInfo;
+import com.hireai.application.biz.identity.RegisterInfo;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.auth.dto.BecomeBuilderRequest;

@@ -1,8 +1,8 @@
 package com.hireai.controller.config;
 
-import com.hireai.application.biz.auth.AuthResult;
-import com.hireai.application.biz.auth.OAuthAppService;
-import com.hireai.application.biz.auth.OAuthUserInfo;
+import com.hireai.application.biz.identity.AuthResult;
+import com.hireai.application.biz.identity.OAuthAppService;
+import com.hireai.application.biz.identity.OAuthUserInfo;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
