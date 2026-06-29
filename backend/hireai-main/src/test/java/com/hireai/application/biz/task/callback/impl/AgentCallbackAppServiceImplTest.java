@@ -1,4 +1,4 @@
-package com.hireai.application.biz.agentcallback.impl;
+package com.hireai.application.biz.task.callback.impl;
 
 import com.hireai.application.port.security.DispatchTokenClaims;
 import com.hireai.utility.exception.DispatchTokenInvalidException;

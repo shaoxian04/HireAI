@@ -1,13 +1,13 @@
-package com.hireai.routing;
+package com.hireai.task.routing;
 
-import com.hireai.application.biz.routing.impl.RoutingAppServiceImpl;
+import com.hireai.application.biz.task.routing.impl.RoutingAppServiceImpl;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.port.messaging.TaskDispatchPublisher;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
-import com.hireai.domain.biz.routing.info.DispatchMessage;
-import com.hireai.domain.biz.routing.service.RoutingMatchDomainService;
+import com.hireai.domain.biz.task.routing.info.DispatchMessage;
+import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;

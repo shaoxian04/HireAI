@@ -1,4 +1,4 @@
-package com.hireai.routing;
+package com.hireai.task.routing;
 
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.domain.biz.task.enums.OutputFormat;

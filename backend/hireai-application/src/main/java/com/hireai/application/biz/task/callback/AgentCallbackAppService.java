@@ -1,4 +1,4 @@
-package com.hireai.application.biz.agentcallback;
+package com.hireai.application.biz.task.callback;
 
 import com.hireai.domain.biz.task.info.AgentResultInfo;
 import org.jspecify.annotations.NonNull;

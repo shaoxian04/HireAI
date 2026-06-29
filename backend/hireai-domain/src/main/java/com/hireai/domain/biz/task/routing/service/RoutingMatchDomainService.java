@@ -1,4 +1,4 @@
-package com.hireai.domain.biz.routing.service;
+package com.hireai.domain.biz.task.routing.service;
 
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.task.info.TaskRoutingView;

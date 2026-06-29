@@ -1,6 +1,6 @@
 package com.hireai.controller.biz.agentcallback;
 
-import com.hireai.application.biz.agentcallback.AgentCallbackAppService;
+import com.hireai.application.biz.task.callback.AgentCallbackAppService;
 import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.controller.base.BaseController;
 import com.hireai.utility.result.ResultCode;

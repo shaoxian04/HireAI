@@ -1,4 +1,4 @@
-package com.hireai.application.biz.routing;
+package com.hireai.application.biz.task.routing;
 
 import com.hireai.domain.biz.task.event.TaskSubmittedDomainEvent;
 import com.hireai.domain.shared.model.Money;

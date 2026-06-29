@@ -1,4 +1,4 @@
-package com.hireai.domain.biz.routing.info;
+package com.hireai.domain.biz.task.routing.info;
 
 /**
  * The task content carried to an agent for execution. Framework-free. JSON-bearing

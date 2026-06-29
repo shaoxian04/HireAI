@@ -2,7 +2,7 @@ package com.hireai.infrastructure.messaging;
 
 import com.hireai.application.port.security.DispatchTokenService;
 import com.hireai.application.port.task.TaskExecutionPort;
-import com.hireai.domain.biz.routing.info.DispatchMessage;
+import com.hireai.domain.biz.task.routing.info.DispatchMessage;
 import com.hireai.infrastructure.client.AgentDispatchClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

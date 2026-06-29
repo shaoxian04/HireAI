@@ -1,15 +1,15 @@
-package com.hireai.application.biz.routing.impl;
+package com.hireai.application.biz.task.routing.impl;
 
-import com.hireai.application.biz.routing.RoutingAppService;
+import com.hireai.application.biz.task.routing.RoutingAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.port.messaging.TaskDispatchPublisher;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
-import com.hireai.domain.biz.routing.info.DispatchMessage;
-import com.hireai.domain.biz.routing.info.TaskDispatchPayload;
-import com.hireai.domain.biz.routing.service.RoutingMatchDomainService;
+import com.hireai.domain.biz.task.routing.info.DispatchMessage;
+import com.hireai.domain.biz.task.routing.info.TaskDispatchPayload;
+import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;

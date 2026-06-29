@@ -1,7 +1,7 @@
 package com.hireai.infrastructure.messaging.impl;
 
 import com.hireai.application.port.messaging.TaskDispatchPublisher;
-import com.hireai.domain.biz.routing.info.DispatchMessage;
+import com.hireai.domain.biz.task.routing.info.DispatchMessage;
 import com.hireai.infrastructure.messaging.DispatchQueues;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;

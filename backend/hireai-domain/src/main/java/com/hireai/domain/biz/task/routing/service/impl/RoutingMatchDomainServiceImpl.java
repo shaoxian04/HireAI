@@ -1,7 +1,7 @@
-package com.hireai.domain.biz.routing.service.impl;
+package com.hireai.domain.biz.task.routing.service.impl;
 
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
-import com.hireai.domain.biz.routing.service.RoutingMatchDomainService;
+import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 
 import java.util.Comparator;

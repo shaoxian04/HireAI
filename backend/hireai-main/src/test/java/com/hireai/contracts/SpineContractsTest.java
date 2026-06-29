@@ -3,8 +3,8 @@ package com.hireai.contracts;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.application.port.security.DispatchTokenClaims;
 import com.hireai.utility.exception.DispatchTokenInvalidException;
-import com.hireai.domain.biz.routing.info.DispatchMessage;
-import com.hireai.domain.biz.routing.info.TaskDispatchPayload;
+import com.hireai.domain.biz.task.routing.info.DispatchMessage;
+import com.hireai.domain.biz.task.routing.info.TaskDispatchPayload;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import org.junit.jupiter.api.Test;
 

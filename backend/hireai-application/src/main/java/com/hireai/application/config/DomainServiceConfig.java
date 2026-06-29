@@ -10,8 +10,8 @@ import com.hireai.domain.biz.offering.agent.service.impl.AgentDeactivateDomainSe
 import com.hireai.domain.biz.offering.agent.service.impl.AgentReactivateDomainServiceImpl;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentRegisterDomainServiceImpl;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentSuspendDomainServiceImpl;
-import com.hireai.domain.biz.routing.service.RoutingMatchDomainService;
-import com.hireai.domain.biz.routing.service.impl.RoutingMatchDomainServiceImpl;
+import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
+import com.hireai.domain.biz.task.routing.service.impl.RoutingMatchDomainServiceImpl;
 import com.hireai.domain.biz.identity.service.OAuthAccountLinkingDomainService;
 import com.hireai.domain.biz.identity.service.impl.OAuthAccountLinkingDomainServiceImpl;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;

@@ -1,4 +1,4 @@
-package com.hireai.application.biz.routing;
+package com.hireai.application.biz.task.routing;
 
 import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
