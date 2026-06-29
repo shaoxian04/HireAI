@@ -950,19 +950,19 @@ In `TaskModel.java`, add two methods next to `recordResult` (mirror its `require
 
 ```java
 public TaskModel passValidation() {
-    requireStatus(TaskStatus.RESULT_RECEIVED);
-    return copyWith(TaskStatus.PENDING_REVIEW);
+    requireStatus(TaskStatus.RESULT_RECEIVED, "passValidation");
+    return copyWith(TaskStatus.PENDING_REVIEW, this.agentVersionId, this.result);
 }
 
 public TaskModel failValidation() {
-    requireStatus(TaskStatus.RESULT_RECEIVED);
-    return copyWith(TaskStatus.SPEC_VIOLATION);
+    requireStatus(TaskStatus.RESULT_RECEIVED, "failValidation");
+    return copyWith(TaskStatus.SPEC_VIOLATION, this.agentVersionId, this.result);
 }
 ```
 
-Then change the guards in `accept()` and `reject(...)` from `requireStatus(TaskStatus.RESULT_RECEIVED)` to `requireStatus(TaskStatus.PENDING_REVIEW)`.
+Then change the guards in `accept()` and `reject(...)` from `requireStatus(TaskStatus.RESULT_RECEIVED, "accept")` / `requireStatus(TaskStatus.RESULT_RECEIVED, "reject")` to `requireStatus(TaskStatus.PENDING_REVIEW, "accept")` / `requireStatus(TaskStatus.PENDING_REVIEW, "reject")`.
 
-> Use the exact `copyWith`/resolved-helper signatures already in the file (the explorer confirmed `copyWith()` at line 161 and a private resolved helper at line 155). For `accept()`/`reject()` keep the existing resolution-setting logic; only the status guard changes.
+> Confirmed real signatures (TaskModel.java): `copyWith(TaskStatus, UUID, TaskResultModel)`, `requireStatus(TaskStatus, String)`, `resolved(TaskResolution, String)`. For `accept()`/`reject()` keep the existing resolution logic; only the status guard changes.
 
 - [ ] **Step 4: Run the test, verify it passes**
 
@@ -1115,7 +1115,7 @@ public class ValidationAppServiceImpl implements ValidationAppService {
 }
 ```
 
-> **Implementer note:** confirm the exact accessors on `TaskModel` for the frozen spec and the recorded result (the explorer showed `recordResult(TaskResultModel)` and accessors at lines 184–197). If the getters are named differently than `outputSpec()` / `result()`, use the real names. If `TaskModel` does not expose the `TaskResultModel`, pass the result the callback just built into `validateAndGate(task, result)` instead — adjust the signature consistently across this task and Task 8.
+> **Confirmed:** `TaskModel` exposes `outputSpec()` and `result()` (TaskModel.java:189,193), so `validateAndGate(TaskModel)` reads both directly — no signature change. In the callback, capture `TaskModel recorded = task.recordResult(resultModel)` (in-memory; carries the result + `RESULT_RECEIVED`), `taskRepository.save(recorded)`, then `validateAndGate(recorded)`.
 
 - [ ] **Step 5: Wire the domain service bean**
 
@@ -1212,4 +1212,4 @@ git commit -m "test(adjudication): end-to-end validation gate"
 
 **Placeholder scan:** the two `resultReceivedTask()` fixtures and `AbstractPostgresIntegrationTest` are intentional pointers to existing project fixtures (named, with implementer notes), not hidden TODOs.
 
-**Type consistency:** `validate(OutputSpec, TaskResultModel, int)`, `validateAndGate(TaskModel)`, `settleRejected(UUID,UUID,Money)`, `findByTaskIdAndAttemptNo(UUID,int)`, `Verdict{PASS,FAIL}`, `CheckResult(rule,passed,detail)` are used consistently across tasks. The one open item flagged for the implementer: confirm `TaskModel`'s accessors for the frozen `OutputSpec` and recorded `TaskResultModel`; if absent, thread the result through `validateAndGate(task, result)` (adjust Tasks 7 & 8 together).
+**Type consistency:** `validate(OutputSpec, TaskResultModel, int)`, `validateAndGate(TaskModel)`, `settleRejected(UUID,UUID,Money)`, `findByTaskIdAndAttemptNo(UUID,int)`, `Verdict{PASS,FAIL}`, `CheckResult(rule,passed,detail)` are used consistently across tasks. Resolved at pre-flight: `TaskModel` exposes `outputSpec()`/`result()` (TaskModel.java:189,193), and the real transition helpers are `requireStatus(TaskStatus,String)` + `copyWith(TaskStatus,UUID,TaskResultModel)` — Task 6's snippets use these exact arities.
