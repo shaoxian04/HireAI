@@ -1,18 +1,19 @@
 package com.hireai.controller.biz.agent;
 
-import com.hireai.application.biz.agent.AgentReadAppService;
-import com.hireai.application.biz.agent.AgentStorefrontAppService;
-import com.hireai.application.biz.agent.AgentWriteAppService;
+import com.hireai.application.biz.offering.agent.AgentReadAppService;
+import com.hireai.application.biz.offering.agent.AgentStorefrontAppService;
+import com.hireai.application.biz.offering.agent.AgentWriteAppService;
 import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
-import com.hireai.domain.biz.agent.enums.AgentStatus;
-import com.hireai.domain.biz.agent.model.AgentModel;
-import com.hireai.domain.biz.agent.model.AgentProfileModel;
-import com.hireai.domain.biz.agent.model.AgentVersionModel;
-import com.hireai.domain.biz.agent.model.Pricing;
-import com.hireai.domain.biz.review.model.ReviewModel;
+import com.hireai.domain.biz.offering.agent.enums.AgentStatus;
+import com.hireai.domain.biz.offering.agent.enums.AgentVersionStatus;
+import com.hireai.domain.biz.offering.agent.model.AgentModel;
+import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
+import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
+import com.hireai.domain.biz.offering.agent.model.Pricing;
+import com.hireai.domain.biz.reputation.model.ReviewModel;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.utility.exception.DomainException;
@@ -42,6 +43,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -67,8 +69,8 @@ class AgentControllerStorefrontTest {
     private static final UUID OWNER_ID = UUID.randomUUID();
     private static final UUID AGENT_ID = UUID.randomUUID();
 
-    private AgentProfileModel listedProfile() {
-        return AgentProfileModel.createDefault(AGENT_ID)
+    private StorefrontModel listedProfile() {
+        return StorefrontModel.createDefault(AGENT_ID)
                 .updateContent("Fast summaries", "Great agent", "sample", true);
     }
 
@@ -175,26 +177,26 @@ class AgentControllerStorefrontTest {
                 .andExpect(status().isBadRequest());
     }
 
-    // ---- PUT /{agentId}/pricing tests ----
+    // ---- POST /{agentId}/versions tests ----
 
-    private AgentModel updatedPricingModel(BigDecimal price, int maxExec, List<String> categories) {
+    private AgentModel versionedAgentModel(BigDecimal price, int maxExec, List<String> categories) {
         AgentVersionModel version = new AgentVersionModel(
-                UUID.randomUUID(), AGENT_ID, 1,
+                UUID.randomUUID(), AGENT_ID, 2,
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
                 categories, "https://agent.example.com/hook", maxExec,
-                Pricing.of(price), Instant.now());
+                Pricing.of(price), AgentVersionStatus.ACTIVE, Instant.now());
         return new AgentModel(AGENT_ID, OWNER_ID, "Test Agent",
                 AgentStatus.ACTIVE, version.id(), new BigDecimal("50.00"), version, Instant.now());
     }
 
     @Test
-    void putPricing_happyPath_returns200WithUpdatedPrice() throws Exception {
-        AgentModel updated = updatedPricingModel(new BigDecimal("99.50"), 120, List.of("translation"));
+    void postVersion_happyPath_returns200WithUpdatedPrice() throws Exception {
+        AgentModel updated = versionedAgentModel(new BigDecimal("99.50"), 120, List.of("translation"));
         when(currentUserProvider.currentUserId()).thenReturn(OWNER_ID);
-        when(writeAppService.updatePricing(eq(AGENT_ID), eq(OWNER_ID), any()))
+        when(writeAppService.publishNewVersion(eq(AGENT_ID), eq(OWNER_ID), any()))
                 .thenReturn(updated);
 
-        mockMvc.perform(put("/api/agents/{id}/pricing", AGENT_ID)
+        mockMvc.perform(post("/api/agents/{id}/versions", AGENT_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -209,37 +211,28 @@ class AgentControllerStorefrontTest {
     }
 
     @Test
-    void putPricing_foreignOwner_returns404() throws Exception {
+    void postVersion_foreignOwner_returns404() throws Exception {
         UUID foreignId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(foreignId);
-        when(writeAppService.updatePricing(eq(AGENT_ID), eq(foreignId), any()))
+        when(writeAppService.publishNewVersion(eq(AGENT_ID), eq(foreignId), any()))
                 .thenThrow(new DomainException(ResultCode.NOT_FOUND, "Agent not found: " + AGENT_ID));
 
-        mockMvc.perform(put("/api/agents/{id}/pricing", AGENT_ID)
+        mockMvc.perform(post("/api/agents/{id}/versions", AGENT_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {
-                                  "price": 10.00,
-                                  "maxExecutionSeconds": 60,
-                                  "capabilityCategories": ["summarisation"]
-                                }
+                                {"price": 10.00, "maxExecutionSeconds": 60, "capabilityCategories": ["summarisation"]}
                                 """))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
     }
 
     @Test
-    void putPricing_emptyCategories_returns400() throws Exception {
+    void postVersion_emptyCategories_returns400() throws Exception {
         when(currentUserProvider.currentUserId()).thenReturn(OWNER_ID);
-
-        mockMvc.perform(put("/api/agents/{id}/pricing", AGENT_ID)
+        mockMvc.perform(post("/api/agents/{id}/versions", AGENT_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {
-                                  "price": 10.00,
-                                  "maxExecutionSeconds": 60,
-                                  "capabilityCategories": []
-                                }
+                                {"price": 10.00, "maxExecutionSeconds": 60, "capabilityCategories": []}
                                 """))
                 .andExpect(status().isBadRequest());
     }
@@ -305,6 +298,32 @@ class AgentControllerStorefrontTest {
                 .thenThrow(new DomainException(ResultCode.NOT_FOUND, "Agent not found: " + AGENT_ID));
 
         mockMvc.perform(get("/api/agents/{id}/stats", AGENT_ID))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
+
+    // ---- suspend / reactivate / deactivate endpoint tests ----
+
+    @Test
+    void postSuspend_happyPath_returns200WithSuspendedStatus() throws Exception {
+        when(currentUserProvider.currentUserId()).thenReturn(OWNER_ID);
+        when(readAppService.getForOwner(AGENT_ID, OWNER_ID))
+                .thenReturn(versionedAgentModel(new BigDecimal("10.00"), 60, List.of("summarisation")).suspend());
+
+        mockMvc.perform(post("/api/agents/{id}/suspend", AGENT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("SUSPENDED"));
+    }
+
+    @Test
+    void postDeactivate_foreignOwner_returns404() throws Exception {
+        UUID foreignId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(foreignId);
+        org.mockito.Mockito.doThrow(new DomainException(ResultCode.NOT_FOUND, "Agent not found: " + AGENT_ID))
+                .when(writeAppService).deactivate(AGENT_ID, foreignId);
+
+        mockMvc.perform(post("/api/agents/{id}/deactivate", AGENT_ID))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
     }

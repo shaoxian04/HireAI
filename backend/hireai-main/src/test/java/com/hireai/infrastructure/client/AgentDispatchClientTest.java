@@ -1,8 +1,8 @@
 package com.hireai.infrastructure.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hireai.domain.biz.routing.info.DispatchMessage;
-import com.hireai.domain.biz.routing.info.TaskDispatchPayload;
+import com.hireai.domain.biz.task.routing.info.DispatchMessage;
+import com.hireai.domain.biz.task.routing.info.TaskDispatchPayload;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;

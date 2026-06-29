@@ -1,9 +1,9 @@
 package com.hireai.controller.config;
 
-import com.hireai.application.biz.auth.AuthResult;
-import com.hireai.application.biz.auth.OAuthAppService;
+import com.hireai.application.biz.identity.AuthResult;
+import com.hireai.application.biz.identity.OAuthAppService;
 import com.hireai.utility.exception.OAuthAuthenticationException;
-import com.hireai.application.biz.auth.OAuthUserInfo;
+import com.hireai.application.biz.identity.OAuthUserInfo;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.mock.web.MockHttpServletRequest;

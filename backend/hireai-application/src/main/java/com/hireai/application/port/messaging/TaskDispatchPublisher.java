@@ -1,6 +1,6 @@
 package com.hireai.application.port.messaging;
 
-import com.hireai.domain.biz.routing.info.DispatchMessage;
+import com.hireai.domain.biz.task.routing.info.DispatchMessage;
 
 /**
  * Application port for publishing a task dispatch onto the messaging fabric. The

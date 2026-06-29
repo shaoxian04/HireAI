@@ -2,8 +2,8 @@ package com.hireai.dispatch;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hireai.application.port.messaging.TaskDispatchPublisher;
-import com.hireai.domain.biz.routing.info.DispatchMessage;
-import com.hireai.domain.biz.routing.info.TaskDispatchPayload;
+import com.hireai.domain.biz.task.routing.info.DispatchMessage;
+import com.hireai.domain.biz.task.routing.info.TaskDispatchPayload;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;

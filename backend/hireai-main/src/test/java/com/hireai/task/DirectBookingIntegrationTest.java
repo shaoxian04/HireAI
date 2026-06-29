@@ -2,18 +2,18 @@ package com.hireai.task;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hireai.application.biz.agent.AgentWriteAppService;
-import com.hireai.application.biz.routing.RoutingAppService;
+import com.hireai.application.biz.offering.agent.AgentWriteAppService;
+import com.hireai.application.biz.task.routing.RoutingAppService;
 import com.hireai.application.biz.task.DirectBookingAppService;
-import com.hireai.application.biz.wallet.WalletReadAppService;
-import com.hireai.application.biz.wallet.WalletWriteAppService;
+import com.hireai.application.biz.ledger.wallet.WalletReadAppService;
+import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.port.messaging.TaskDispatchPublisher;
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.biz.agent.info.AgentRegisterInfo;
-import com.hireai.domain.biz.agent.model.AgentProfileModel;
-import com.hireai.domain.biz.agent.repository.AgentProfileRepository;
-import com.hireai.domain.biz.agent.repository.AgentRepository;
-import com.hireai.domain.biz.routing.info.DispatchMessage;
+import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
+import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
+import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
+import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
+import com.hireai.domain.biz.task.routing.info.DispatchMessage;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -87,7 +87,7 @@ class DirectBookingIntegrationTest {
     @Autowired RoutingAppService routingAppService;
     @Autowired AgentWriteAppService agentWriteAppService;
     @Autowired AgentRepository agentRepository;
-    @Autowired AgentProfileRepository agentProfileRepository;
+    @Autowired StorefrontRepository agentProfileRepository;
     @Autowired WalletWriteAppService walletWriteAppService;
     @Autowired WalletReadAppService walletReadAppService;
     @Autowired JdbcTemplate jdbc;
@@ -122,7 +122,7 @@ class DirectBookingIntegrationTest {
         agentWriteAppService.activate(agentId, ownerId);
 
         // Mark the profile as listed
-        AgentProfileModel profile = agentProfileRepository.findByAgentId(agentId)
+        StorefrontModel profile = agentProfileRepository.findByAgentId(agentId)
                 .orElseThrow(() -> new IllegalStateException("Profile not created by register"));
         agentProfileRepository.save(profile.updateContent("tagline", "desc", "sample", true));
 

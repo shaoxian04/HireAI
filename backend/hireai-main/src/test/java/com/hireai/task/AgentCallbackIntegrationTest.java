@@ -1,10 +1,10 @@
 package com.hireai.task;
 
-import com.hireai.application.biz.agentcallback.AgentCallbackAppService;
-import com.hireai.application.biz.routing.RoutingAppService;
+import com.hireai.application.biz.task.callback.AgentCallbackAppService;
+import com.hireai.application.biz.task.routing.RoutingAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
-import com.hireai.application.biz.wallet.WalletWriteAppService;
+import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.port.security.DispatchTokenClaims;
 import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.application.port.security.DispatchTokenService;

@@ -3,10 +3,10 @@ package com.hireai.application.biz.task.impl;
 import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.biz.agent.model.AgentProfileModel;
-import com.hireai.domain.biz.agent.model.AgentModel;
-import com.hireai.domain.biz.agent.repository.AgentProfileRepository;
-import com.hireai.domain.biz.agent.repository.AgentRepository;
+import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
+import com.hireai.domain.biz.offering.agent.model.AgentModel;
+import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
+import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.utility.exception.DomainException;
@@ -30,7 +30,7 @@ import java.util.UUID;
 public class DirectBookingAppServiceImpl implements DirectBookingAppService {
 
     private final AgentRepository agentRepository;
-    private final AgentProfileRepository agentProfileRepository;
+    private final StorefrontRepository agentProfileRepository;
     private final TaskWriteAppService taskWriteAppService;
 
     @Override
@@ -65,7 +65,7 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
 
     private boolean isListed(UUID agentId) {
         return agentProfileRepository.findByAgentId(agentId)
-                .map(AgentProfileModel::listed)
+                .map(StorefrontModel::listed)
                 .orElse(false);
     }
 

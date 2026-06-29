@@ -1,9 +1,9 @@
 package com.hireai.controller.biz.wallet;
 
-import com.hireai.application.biz.wallet.BuilderEarningsReadAppService;
-import com.hireai.application.biz.wallet.BuilderEarningsReadAppService.AgentEarnings;
-import com.hireai.application.biz.wallet.BuilderEarningsReadAppService.Earnings;
-import com.hireai.application.biz.wallet.BuilderEarningsReadAppService.Payout;
+import com.hireai.application.biz.ledger.wallet.BuilderEarningsReadAppService;
+import com.hireai.application.biz.ledger.wallet.BuilderEarningsReadAppService.AgentEarnings;
+import com.hireai.application.biz.ledger.wallet.BuilderEarningsReadAppService.Earnings;
+import com.hireai.application.biz.ledger.wallet.BuilderEarningsReadAppService.Payout;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
 import org.junit.jupiter.api.Test;

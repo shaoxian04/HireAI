@@ -1,7 +1,7 @@
 package com.hireai.controller.biz.agentcallback;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hireai.application.biz.agentcallback.AgentCallbackAppService;
+import com.hireai.application.biz.task.callback.AgentCallbackAppService;
 import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.controller.biz.agentcallback.dto.AgentResultCallbackRequest;
 import com.hireai.controller.config.SecurityConfig;

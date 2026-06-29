@@ -2,7 +2,7 @@ package com.hireai.auth;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hireai.application.biz.routing.RoutingAppService;
+import com.hireai.application.biz.task.routing.RoutingAppService;
 import com.hireai.application.port.security.DispatchTokenService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;

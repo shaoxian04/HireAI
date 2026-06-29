@@ -3,13 +3,14 @@ package com.hireai.task;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.biz.task.impl.DirectBookingAppServiceImpl;
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.biz.agent.enums.AgentStatus;
-import com.hireai.domain.biz.agent.model.AgentModel;
-import com.hireai.domain.biz.agent.model.AgentProfileModel;
-import com.hireai.domain.biz.agent.model.AgentVersionModel;
-import com.hireai.domain.biz.agent.model.Pricing;
-import com.hireai.domain.biz.agent.repository.AgentProfileRepository;
-import com.hireai.domain.biz.agent.repository.AgentRepository;
+import com.hireai.domain.biz.offering.agent.enums.AgentStatus;
+import com.hireai.domain.biz.offering.agent.enums.AgentVersionStatus;
+import com.hireai.domain.biz.offering.agent.model.AgentModel;
+import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
+import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
+import com.hireai.domain.biz.offering.agent.model.Pricing;
+import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
+import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
@@ -40,7 +41,7 @@ import static org.mockito.Mockito.when;
 class DirectBookingAppServiceTest {
 
     private final AgentRepository agentRepository = mock(AgentRepository.class);
-    private final AgentProfileRepository agentProfileRepository = mock(AgentProfileRepository.class);
+    private final StorefrontRepository agentProfileRepository = mock(StorefrontRepository.class);
     private final TaskWriteAppService taskWriteAppService = mock(TaskWriteAppService.class);
 
     private final DirectBookingAppServiceImpl service = new DirectBookingAppServiceImpl(
@@ -56,7 +57,8 @@ class DirectBookingAppServiceTest {
         UUID versionId = UUID.randomUUID();
         return new AgentVersionModel(
                 versionId, agentId, 1, AGENT_SPEC, List.of(CATEGORY),
-                "https://agent.example.com/hook", 120, Pricing.of(AGENT_PRICE), Instant.now());
+                "https://agent.example.com/hook", 120, Pricing.of(AGENT_PRICE),
+                AgentVersionStatus.ACTIVE, Instant.now());
     }
 
     /** Builds an ACTIVE agent with the given version (currentVersionId = version.id()). */
@@ -75,13 +77,13 @@ class DirectBookingAppServiceTest {
                 AgentStatus.PENDING_VERIFICATION, null, new BigDecimal("50.00"), ver, Instant.now());
     }
 
-    private AgentProfileModel listedProfile(UUID agentId) {
-        AgentProfileModel base = AgentProfileModel.createDefault(agentId);
+    private StorefrontModel listedProfile(UUID agentId) {
+        StorefrontModel base = StorefrontModel.createDefault(agentId);
         return base.updateContent("tagline", "desc", "sample", true);
     }
 
-    private AgentProfileModel unlistedProfile(UUID agentId) {
-        return AgentProfileModel.createDefault(agentId); // listed = false
+    private StorefrontModel unlistedProfile(UUID agentId) {
+        return StorefrontModel.createDefault(agentId); // listed = false
     }
 
     private DirectBookingInfo info(UUID clientId, UUID agentId, String budget) {

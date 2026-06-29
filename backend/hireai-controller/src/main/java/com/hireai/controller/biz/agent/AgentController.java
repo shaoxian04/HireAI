@@ -1,8 +1,8 @@
 package com.hireai.controller.biz.agent;
 
-import com.hireai.application.biz.agent.AgentReadAppService;
-import com.hireai.application.biz.agent.AgentStorefrontAppService;
-import com.hireai.application.biz.agent.AgentWriteAppService;
+import com.hireai.application.biz.offering.agent.AgentReadAppService;
+import com.hireai.application.biz.offering.agent.AgentStorefrontAppService;
+import com.hireai.application.biz.offering.agent.AgentWriteAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.agent.converter.AgentModel2DTOConverter;
@@ -10,18 +10,18 @@ import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.controller.biz.agent.dto.AgentDTO;
 import com.hireai.controller.biz.agent.dto.AgentProfileViewDTO;
 import com.hireai.controller.biz.agent.dto.AgentStatsDTO;
+import com.hireai.controller.biz.agent.dto.PublishVersionRequest;
 import com.hireai.controller.biz.agent.dto.RegisterAgentRequest;
 import com.hireai.controller.biz.agent.dto.RespondReviewRequest;
 import com.hireai.controller.biz.agent.dto.ReviewDTO;
-import com.hireai.controller.biz.agent.dto.UpdatePricingRequest;
 import com.hireai.controller.biz.agent.dto.UpdateProfileRequest;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.biz.agent.info.AgentRegisterInfo;
-import com.hireai.domain.biz.agent.info.PricingUpdateInfo;
-import com.hireai.domain.biz.agent.info.ProfileUpdateInfo;
-import com.hireai.domain.biz.agent.model.AgentModel;
-import com.hireai.domain.biz.agent.repository.AgentQuery;
+import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
+import com.hireai.domain.biz.offering.agent.info.PublishVersionInfo;
+import com.hireai.domain.biz.offering.storefront.info.ProfileUpdateInfo;
+import com.hireai.domain.biz.offering.agent.model.AgentModel;
+import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.utility.exception.DomainException;
 import jakarta.validation.Valid;
@@ -90,12 +90,33 @@ public class AgentController extends BaseController {
         return ok(dto);
     }
 
-    @PutMapping("/{agentId}/pricing")
-    public WebResult<AgentDTO> updatePricing(@PathVariable("agentId") UUID agentId,
-                                             @Valid @RequestBody UpdatePricingRequest request) {
+    @PostMapping("/{agentId}/suspend")
+    public WebResult<AgentDTO> suspend(@PathVariable("agentId") UUID agentId) {
         UUID ownerId = currentUser.currentUserId();
-        AgentModel updated = writeAppService.updatePricing(agentId, ownerId,
-                new PricingUpdateInfo(request.price(), request.maxExecutionSeconds(),
+        writeAppService.suspend(agentId, ownerId);
+        return ok(AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId)));
+    }
+
+    @PostMapping("/{agentId}/reactivate")
+    public WebResult<AgentDTO> reactivate(@PathVariable("agentId") UUID agentId) {
+        UUID ownerId = currentUser.currentUserId();
+        writeAppService.reactivate(agentId, ownerId);
+        return ok(AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId)));
+    }
+
+    @PostMapping("/{agentId}/deactivate")
+    public WebResult<AgentDTO> deactivate(@PathVariable("agentId") UUID agentId) {
+        UUID ownerId = currentUser.currentUserId();
+        writeAppService.deactivate(agentId, ownerId);
+        return ok(AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId)));
+    }
+
+    @PostMapping("/{agentId}/versions")
+    public WebResult<AgentDTO> publishVersion(@PathVariable("agentId") UUID agentId,
+                                              @Valid @RequestBody PublishVersionRequest request) {
+        UUID ownerId = currentUser.currentUserId();
+        AgentModel updated = writeAppService.publishNewVersion(agentId, ownerId,
+                new PublishVersionInfo(request.price(), request.maxExecutionSeconds(),
                         request.capabilityCategories()));
         return ok(AgentModel2DTOConverter.toDTO(updated));
     }

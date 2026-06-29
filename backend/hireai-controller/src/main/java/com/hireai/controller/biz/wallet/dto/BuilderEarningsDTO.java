@@ -1,6 +1,6 @@
 package com.hireai.controller.biz.wallet.dto;
 
-import com.hireai.application.biz.wallet.BuilderEarningsReadAppService;
+import com.hireai.application.biz.ledger.wallet.BuilderEarningsReadAppService;
 
 import java.math.BigDecimal;
 import java.time.Instant;

@@ -1,8 +1,8 @@
 package com.hireai.controller.biz.agent.converter;
 
 import com.hireai.controller.biz.agent.dto.AgentDTO;
-import com.hireai.domain.biz.agent.model.AgentModel;
-import com.hireai.domain.biz.agent.model.AgentVersionModel;
+import com.hireai.domain.biz.offering.agent.model.AgentModel;
+import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
 import com.hireai.domain.biz.task.model.OutputSpec;
 
 /**
@@ -24,7 +24,8 @@ public final class AgentModel2DTOConverter {
                 version.capabilityCategories(),
                 version.webhookUrl(),
                 version.maxExecutionSeconds(),
-                version.pricing().price());
+                version.pricing().price(),
+                version.status().name());
         return new AgentDTO(
                 agent.id(),
                 agent.ownerId(),
