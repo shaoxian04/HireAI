@@ -1,5 +1,7 @@
 package com.hireai.application.biz.task.callback.impl;
 
+import com.hireai.application.biz.adjudication.validation.ValidationAppService;
+import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.task.callback.AgentCallbackAppService;
 import com.hireai.application.port.security.DispatchTokenClaims;
 import com.hireai.utility.exception.DispatchTokenInvalidException;
@@ -33,6 +35,8 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
 
     private final TaskRepository taskRepository;
     private final DispatchTokenService dispatchTokenService;
+    private final ValidationAppService validationAppService;
+    private final SettlementWriteAppService settlementWriteAppService;
 
     @Override
     public void recordResult(UUID taskId, String bearerToken, AgentResultInfo result) {
@@ -59,7 +63,18 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
         }
         TaskResultModel resultModel = TaskResultModel.record(
                 taskId, result.agentStatus(), result.resultPayloadJson(), result.resultUrl());
-        taskRepository.save(task.recordResult(resultModel));
+        // Non-COMPLETED MUST branch first: markFailed() requires EXECUTING; recordResult() moves
+        // the task to RESULT_RECEIVED, making markFailed() illegal if called afterwards.
+        if (!"COMPLETED".equalsIgnoreCase(result.agentStatus())) {
+            TaskModel failed = task.markFailed();
+            taskRepository.save(failed);
+            settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
+            log.info("Task {} agent reported {} -> FAILED (refunded)", taskId, result.agentStatus());
+            return;
+        }
+        TaskModel recorded = task.recordResult(resultModel);
+        taskRepository.save(recorded);
+        validationAppService.validateAndGate(recorded);
         log.info("Task {} recorded result with agent status {}", taskId, result.agentStatus());
     }
 }

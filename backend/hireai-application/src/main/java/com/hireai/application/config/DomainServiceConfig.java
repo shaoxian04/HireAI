@@ -12,6 +12,9 @@ import com.hireai.domain.biz.offering.agent.service.impl.AgentRegisterDomainServ
 import com.hireai.domain.biz.offering.agent.service.impl.AgentSuspendDomainServiceImpl;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.task.routing.service.impl.RoutingMatchDomainServiceImpl;
+import com.hireai.domain.biz.adjudication.service.SchemaValidator;
+import com.hireai.domain.biz.adjudication.service.ValidationDomainService;
+import com.hireai.domain.biz.adjudication.service.impl.ValidationDomainServiceImpl;
 import com.hireai.domain.biz.identity.service.OAuthAccountLinkingDomainService;
 import com.hireai.domain.biz.identity.service.impl.OAuthAccountLinkingDomainServiceImpl;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
@@ -86,5 +89,10 @@ public class DomainServiceConfig {
     @Bean
     public OAuthAccountLinkingDomainService oAuthAccountLinkingDomainService() {
         return new OAuthAccountLinkingDomainServiceImpl();
+    }
+
+    @Bean
+    public ValidationDomainService validationDomainService(SchemaValidator schemaValidator) {
+        return new ValidationDomainServiceImpl(schemaValidator);
     }
 }

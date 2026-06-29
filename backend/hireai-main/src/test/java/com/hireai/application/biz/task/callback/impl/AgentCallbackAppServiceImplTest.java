@@ -1,5 +1,7 @@
 package com.hireai.application.biz.task.callback.impl;
 
+import com.hireai.application.biz.adjudication.validation.ValidationAppService;
+import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.port.security.DispatchTokenClaims;
 import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.application.port.security.DispatchTokenService;
@@ -34,9 +36,12 @@ class AgentCallbackAppServiceImplTest {
 
     @Mock TaskRepository taskRepository;
     @Mock DispatchTokenService dispatchTokenService;
+    @Mock ValidationAppService validationAppService;
+    @Mock SettlementWriteAppService settlementWriteAppService;
 
     private AgentCallbackAppServiceImpl service() {
-        return new AgentCallbackAppServiceImpl(taskRepository, dispatchTokenService);
+        return new AgentCallbackAppServiceImpl(taskRepository, dispatchTokenService,
+                validationAppService, settlementWriteAppService);
     }
 
     private TaskModel executingTask() {
@@ -66,6 +71,7 @@ class AgentCallbackAppServiceImplTest {
         assertThat(captor.getValue().result()).isNotNull();
         assertThat(captor.getValue().result().agentStatus()).isEqualTo("COMPLETED");
         assertThat(captor.getValue().result().resultPayloadJson()).isEqualTo("{\"k\":\"v\"}");
+        verify(validationAppService).validateAndGate(captor.getValue());
     }
 
     @Test
@@ -142,5 +148,25 @@ class AgentCallbackAppServiceImplTest {
 
         // No state change: taskRepository.save() is never called; first result preserved.
         verify(taskRepository, never()).save(any());
+    }
+
+    @Test
+    void nonCompletedAgentStatusMovesToFailedAndRefunds() {
+        TaskModel task = executingTask();
+        UUID agentVersionId = task.agentVersionId();
+        AgentResultInfo failedResult = new AgentResultInfo("FAILED", "{}", null, "error");
+        when(dispatchTokenService.verify("tok"))
+                .thenReturn(new DispatchTokenClaims(task.id(), agentVersionId, Instant.now().plusSeconds(60)));
+        when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service().recordResult(task.id(), "tok", failedResult);
+
+        ArgumentCaptor<TaskModel> captor = ArgumentCaptor.forClass(TaskModel.class);
+        verify(taskRepository).save(captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(TaskStatus.FAILED);
+        verify(settlementWriteAppService).settleRejected(
+                task.id(), task.clientId(), task.budget());
+        verify(validationAppService, never()).validateAndGate(any());
     }
 }

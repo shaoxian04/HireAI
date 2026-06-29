@@ -28,7 +28,7 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
     @Override
     public UUID accept(UUID taskId, UUID clientId) {
         TaskModel task = loadOwned(taskId, clientId);
-        TaskModel resolved = task.accept(); // state guard: only RESULT_RECEIVED; exactly-once
+        TaskModel resolved = task.accept(); // state guard: PENDING_REVIEW (caller passed the validation gate); exactly-once
 
         UUID builderId = agentRepository.findOwnerByVersionId(task.agentVersionId())
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
@@ -46,7 +46,7 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
     @Override
     public UUID reject(UUID taskId, UUID clientId, String reason) {
         TaskModel task = loadOwned(taskId, clientId);
-        TaskModel resolved = task.reject(reason); // state guard: only RESULT_RECEIVED
+        TaskModel resolved = task.reject(reason); // state guard: PENDING_REVIEW (caller passed the validation gate)
 
         settlementWriteAppService.settleRejected(taskId, clientId, task.budget());
 
