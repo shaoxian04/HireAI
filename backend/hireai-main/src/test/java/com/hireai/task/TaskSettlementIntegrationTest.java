@@ -108,9 +108,11 @@ class TaskSettlementIntegrationTest {
     }
 
     /**
-     * A RESULT_RECEIVED task with its budget already frozen in the client's wallet.
+     * A PENDING_REVIEW task with its budget already frozen in the client's wallet.
      * The task row is built purely from domain transitions (no separate submit app-service
      * call) to avoid triggering RabbitMQ routing — there is no broker in this IT.
+     * passValidation() is applied so the task is in PENDING_REVIEW, which accept/reject now require
+     * (the validation gate moved the contract from RESULT_RECEIVED to PENDING_REVIEW).
      */
     private TaskModel seedReviewableTask(UUID clientId, UUID versionId, String budget) {
         TaskModel task = TaskModel.submit(clientId, "settle me", "desc",
@@ -118,7 +120,8 @@ class TaskSettlementIntegrationTest {
                 .assignAndQueue(versionId)
                 .markExecuting();
         task = task.recordResult(TaskResultModel.rehydrate(
-                UUID.randomUUID(), task.id(), "COMPLETED", "{\"summary\":\"ok\"}", null, Instant.now()));
+                UUID.randomUUID(), task.id(), "COMPLETED", "{\"summary\":\"ok\"}", null, Instant.now()))
+                .passValidation();
         taskRepository.save(task);
         walletWrite.topUp(clientId, Money.of("100.00"), "setup-topup-" + task.id());
         walletWrite.freeze(clientId, Money.of(budget), task.id(), "setup-freeze-" + task.id());

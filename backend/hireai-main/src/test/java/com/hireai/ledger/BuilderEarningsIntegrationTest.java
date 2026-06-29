@@ -87,14 +87,16 @@ class BuilderEarningsIntegrationTest {
         return versionId;
     }
 
-    /** A RESULT_RECEIVED task with its budget frozen — built from domain transitions (no broker). */
+    /** A PENDING_REVIEW task with its budget frozen — built from domain transitions (no broker).
+     *  passValidation() applied so accept/reject are legal (gate contract: RESULT_RECEIVED → PENDING_REVIEW). */
     private TaskModel seedReviewableTask(UUID clientId, UUID versionId, String budget) {
         TaskModel task = TaskModel.submit(clientId, "earn from me", "desc",
                         Money.of(budget), new OutputSpec(OutputFormat.TEXT, null, null), "summarisation")
                 .assignAndQueue(versionId)
                 .markExecuting();
         task = task.recordResult(TaskResultModel.rehydrate(
-                UUID.randomUUID(), task.id(), "COMPLETED", "{\"summary\":\"ok\"}", null, Instant.now()));
+                UUID.randomUUID(), task.id(), "COMPLETED", "{\"summary\":\"ok\"}", null, Instant.now()))
+                .passValidation();
         taskRepository.save(task);
         walletWrite.topUp(clientId, Money.of("100.00"), "setup-topup-" + task.id());
         walletWrite.freeze(clientId, Money.of(budget), task.id(), "setup-freeze-" + task.id());
@@ -110,7 +112,7 @@ class BuilderEarningsIntegrationTest {
 
         TaskModel acceptedTask = seedReviewableTask(client, versionA, "12.00");
         TaskModel rejectedTask = seedReviewableTask(client, versionA, "20.00");
-        seedReviewableTask(client, versionB, "20.00"); // stays RESULT_RECEIVED (pending)
+        seedReviewableTask(client, versionB, "20.00"); // stays PENDING_REVIEW (pending review)
         reviewAppService.accept(acceptedTask.id(), client);
         reviewAppService.reject(rejectedTask.id(), client, "not good enough");
 
