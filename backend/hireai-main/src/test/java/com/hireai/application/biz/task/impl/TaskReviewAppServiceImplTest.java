@@ -50,17 +50,19 @@ class TaskReviewAppServiceImplTest {
                 taskRepository, agentRepository, settlementWriteAppService);
     }
 
-    private TaskModel resultReceivedTask() {
+    /** Build a task in PENDING_REVIEW (passed the validation gate) so accept/reject are legal. */
+    private TaskModel pendingReviewTask() {
         TaskModel t = TaskModel.submit(clientId, "t", "d", Money.of("20.00"),
                         new OutputSpec(OutputFormat.TEXT, null, null), "c")
                 .assignAndQueue(versionId).markExecuting();
-        return t.recordResult(TaskResultModel.rehydrate(
+        TaskModel received = t.recordResult(TaskResultModel.rehydrate(
                 UUID.randomUUID(), t.id(), "COMPLETED", "{}", null, Instant.now()));
+        return received.passValidation();
     }
 
     @Test
     void acceptSettlesAndSavesTask() {
-        TaskModel task = resultReceivedTask();
+        TaskModel task = pendingReviewTask();
         when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
         when(agentRepository.findOwnerByVersionId(versionId)).thenReturn(Optional.of(builderId));
         when(settlementWriteAppService.settleAccepted(eq(task.id()), eq(clientId), eq(builderId),
@@ -79,7 +81,7 @@ class TaskReviewAppServiceImplTest {
 
     @Test
     void rejectRefundsAndNeverTouchesTheBuilder() {
-        TaskModel task = resultReceivedTask();
+        TaskModel task = pendingReviewTask();
         when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -94,7 +96,7 @@ class TaskReviewAppServiceImplTest {
 
     @Test
     void nonOwnerGetsNotFound() {
-        TaskModel task = resultReceivedTask();
+        TaskModel task = pendingReviewTask();
         when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
 
         assertThatThrownBy(() -> service.accept(task.id(), UUID.randomUUID()))

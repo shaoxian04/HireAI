@@ -192,7 +192,8 @@ class TaskControllerTest {
                         new OutputSpec(OutputFormat.TEXT, null, null), "summarisation")
                 .assignAndQueue(UUID.randomUUID()).markExecuting();
         t = t.recordResult(TaskResultModel.rehydrate(
-                UUID.randomUUID(), t.id(), "COMPLETED", "{}", null, Instant.now()));
+                UUID.randomUUID(), t.id(), "COMPLETED", "{}", null, Instant.now()))
+                .passValidation(); // validation gate must pass before client review
         return accepted ? t.accept() : t.reject("not what I asked");
     }
 

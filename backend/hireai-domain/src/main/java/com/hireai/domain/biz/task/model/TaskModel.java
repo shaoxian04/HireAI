@@ -117,6 +117,18 @@ public final class TaskModel {
         return copyWith(TaskStatus.RESULT_RECEIVED, this.agentVersionId, result);
     }
 
+    /** RESULT_RECEIVED → PENDING_REVIEW: automated validation passed; awaits client review. */
+    public TaskModel passValidation() {
+        requireStatus(TaskStatus.RESULT_RECEIVED, "passValidation");
+        return copyWith(TaskStatus.PENDING_REVIEW, this.agentVersionId, this.result);
+    }
+
+    /** RESULT_RECEIVED → SPEC_VIOLATION: automated validation failed; result is rejected by the gate. */
+    public TaskModel failValidation() {
+        requireStatus(TaskStatus.RESULT_RECEIVED, "failValidation");
+        return copyWith(TaskStatus.SPEC_VIOLATION, this.agentVersionId, this.result);
+    }
+
     /** SUBMITTED → AWAITING_CAPACITY: no eligible active agent was found. */
     public TaskModel markAwaitingCapacity() {
         requireStatus(TaskStatus.SUBMITTED, "markAwaitingCapacity");
@@ -135,15 +147,15 @@ public final class TaskModel {
         return copyWith(TaskStatus.FAILED, this.agentVersionId, this.result);
     }
 
-    /** RESULT_RECEIVED → RESOLVED (ACCEPTED): the client accepted the result. */
+    /** PENDING_REVIEW → RESOLVED (ACCEPTED): the client accepted the result. */
     public TaskModel accept() {
-        requireStatus(TaskStatus.RESULT_RECEIVED, "accept");
+        requireStatus(TaskStatus.PENDING_REVIEW, "accept");
         return resolved(TaskResolution.ACCEPTED, null);
     }
 
-    /** RESULT_RECEIVED → RESOLVED (REJECTED): the client rejected the result. Reason optional, ≤500 chars. */
+    /** PENDING_REVIEW → RESOLVED (REJECTED): the client rejected the result. Reason optional, ≤500 chars. */
     public TaskModel reject(String reason) {
-        requireStatus(TaskStatus.RESULT_RECEIVED, "reject");
+        requireStatus(TaskStatus.PENDING_REVIEW, "reject");
         String trimmed = (reason == null || reason.isBlank()) ? null : reason.trim();
         if (trimmed != null && trimmed.length() > MAX_REASON_LENGTH) {
             throw new DomainException(ResultCode.VALIDATION_ERROR,
