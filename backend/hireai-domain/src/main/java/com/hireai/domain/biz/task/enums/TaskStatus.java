@@ -5,12 +5,12 @@ import java.util.Set;
 
 /**
  * Full task lifecycle, per the SAD (see docs/details/data-model.md).
- * All routing and settlement states are now live. The implemented happy path is
- * SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED → RESOLVED (client accept/reject);
- * off-path outcomes: AWAITING_CAPACITY (no eligible agent matched), TIMED_OUT, FAILED.
- * Deferred to future modules: PENDING_REVIEW and SPEC_VIOLATION (Module 4 validation
- * gate); CANCELLED is reserved. PENDING_REVIEW is included in {@link #PENDING_ESCROW}
- * for forward-compatibility with the planned validation gate.
+ * The implemented happy path is SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED →
+ * PENDING_REVIEW → RESOLVED (client accept/reject). Off-path outcomes: AWAITING_CAPACITY
+ * (no eligible agent matched), TIMED_OUT, FAILED, SPEC_VIOLATION.
+ * PENDING_REVIEW (validation passed) and SPEC_VIOLATION (validation failed → auto-refund)
+ * are produced by the Module 4 validation gate in the agent callback.
+ * CANCELLED is reserved. PENDING_REVIEW is included in {@link #PENDING_ESCROW}.
  */
 public enum TaskStatus {
     SUBMITTED,

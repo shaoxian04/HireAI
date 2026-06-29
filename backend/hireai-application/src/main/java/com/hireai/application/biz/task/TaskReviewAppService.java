@@ -6,7 +6,7 @@ import org.springframework.validation.annotation.Validated;
 import java.util.UUID;
 
 /**
- * Client review of a RESULT_RECEIVED task: accept (escrow -> builder payout net of
+ * Client review of a PENDING_REVIEW task: accept (escrow -> builder payout net of
  * commission) or reject (escrow -> full refund). Settlement is synchronous and atomic
  * with the task transition; the TaskModel state guard makes it exactly-once.
  */

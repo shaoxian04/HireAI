@@ -1,6 +1,5 @@
 package com.hireai.adjudication;
 
-import com.hireai.application.biz.adjudication.validation.ValidationAppService;
 import com.hireai.application.biz.task.callback.AgentCallbackAppService;
 import com.hireai.application.biz.task.routing.RoutingAppService;
 import com.hireai.application.biz.task.TaskReadAppService;

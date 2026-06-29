@@ -22,10 +22,12 @@ import java.util.UUID;
 
 /**
  * Verifies the dispatch token, confirms it authorises THIS task, then records the agent's
- * result through the Task aggregate ({@code EXECUTING → RESULT_RECEIVED}) and persists the
- * task_results child via the repository root. A duplicate callback (task already past
- * EXECUTING) is treated as a first-result-wins no-op: the service returns without
- * re-processing and the caller receives 200 — the first result is never overwritten.
+ * result. For a COMPLETED result: moves task EXECUTING → RESULT_RECEIVED, persists the
+ * task_results child, and invokes the Module 4 validation gate (→ PENDING_REVIEW on pass,
+ * SPEC_VIOLATION + auto-refund on fail). For a non-COMPLETED agentStatus: marks task FAILED
+ * and refunds the client's escrow. A duplicate callback (task already past EXECUTING) is
+ * treated as a first-result-wins no-op: the service returns without re-processing and the
+ * caller receives 200 — the first result is never overwritten.
  */
 @Service
 @Slf4j

@@ -14,7 +14,7 @@ import java.util.UUID;
  * Orchestrates task READ use cases. Enforces Hard Invariant #5 (server-side identity +
  * ownership): a task is only returned to the client that owns it; otherwise NOT_FOUND,
  * so existence is not leaked across clients. {@link #getResult} additionally returns NOT_FOUND
- * when an owned task has no result yet (it is not RESULT_RECEIVED), which the UI reads as
+ * when an owned task has no result yet (it is not PENDING_REVIEW), which the UI reads as
  * "pending, keep polling". {@link #getRoutingView} is an internal, non-owner-scoped read used by
  * the routing module (no client identity is involved in routing).
  */
