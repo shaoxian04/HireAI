@@ -109,6 +109,31 @@ class AgentModelTest {
     }
 
     @Test
+    void publishNewVersionOnActiveAgentAdvancesCurrentVersionPointer() {
+        AgentModel active = registered(UUID.randomUUID()).activate();
+        UUID priorVersionId = active.currentVersionId();
+
+        AgentModel updated = active.publishNewVersion(
+                Pricing.of(new BigDecimal("10.00")), 180, List.of("summarisation"));
+
+        assertThat(updated.currentVersionId()).isNotEqualTo(priorVersionId);
+        assertThat(updated.currentVersionId()).isEqualTo(updated.currentVersion().id());
+    }
+
+    @Test
+    void publishNewVersionOnSuspendedAgentAdvancesCurrentVersionPointer() {
+        AgentModel active = registered(UUID.randomUUID()).activate();
+        UUID priorVersionId = active.currentVersionId();
+        AgentModel suspended = active.suspend();
+
+        AgentModel updated = suspended.publishNewVersion(
+                Pricing.of(new BigDecimal("10.00")), 180, List.of("summarisation"));
+
+        assertThat(updated.currentVersionId()).isNotEqualTo(priorVersionId);
+        assertThat(updated.currentVersionId()).isEqualTo(updated.currentVersion().id());
+    }
+
+    @Test
     void deactivateIsTerminalFromActiveOrSuspended() {
         AgentModel active = registered(UUID.randomUUID()).activate();
         assertThat(active.deactivate().status()).isEqualTo(AgentStatus.DEACTIVATED);

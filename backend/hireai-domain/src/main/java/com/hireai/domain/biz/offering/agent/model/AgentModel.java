@@ -81,7 +81,7 @@ public final class AgentModel {
                     "Agent has no current version to supersede");
         }
         AgentVersionModel next = currentVersion.supersededBy(pricing, maxExecutionSeconds, capabilityCategories);
-        UUID newCurrentVersionId = status == AgentStatus.ACTIVE ? next.id() : currentVersionId;
+        UUID newCurrentVersionId = currentVersionId != null ? next.id() : currentVersionId;
         return new AgentModel(id, ownerId, name, status, newCurrentVersionId,
                 reputationScore, next, createdAt);
     }
