@@ -1,6 +1,8 @@
 package com.hireai.domain.biz.adjudication.model;
 
 import com.hireai.domain.biz.adjudication.enums.Verdict;
+import com.hireai.utility.exception.DomainException;
+import com.hireai.utility.result.ResultCode;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.UUID;
@@ -30,6 +32,16 @@ class ValidationReportModelTest {
     @Test
     void requiresAtLeastOneCheck() {
         assertThatThrownBy(() -> ValidationReportModel.of(taskId, 1, List.of()))
-            .isInstanceOf(RuntimeException.class);
+            .isInstanceOf(DomainException.class)
+            .satisfies(ex -> assertThat(((DomainException) ex).resultCode())
+                .isEqualTo(ResultCode.VALIDATION_ERROR));
+    }
+
+    @Test
+    void requiresNonNullChecks() {
+        assertThatThrownBy(() -> ValidationReportModel.of(taskId, 1, null))
+            .isInstanceOf(DomainException.class)
+            .satisfies(ex -> assertThat(((DomainException) ex).resultCode())
+                .isEqualTo(ResultCode.VALIDATION_ERROR));
     }
 }
