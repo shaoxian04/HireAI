@@ -1131,21 +1131,23 @@ public ValidationDomainService validationDomainService(
 
 - [ ] **Step 6: Call the gate from the callback**
 
-In `AgentCallbackAppServiceImpl.recordResult(...)`, after the line that saves the recorded result, add the gate. Inject `ValidationAppService` and the precondition:
+In `AgentCallbackAppServiceImpl.recordResult(...)`, AFTER the token + first-result-wins guards (task is `EXECUTING`) and **BEFORE** recording the result, branch on the agent status. Inject `ValidationAppService` + `SettlementWriteAppService`:
 
 ```java
 // after: TaskModel recorded = taskRepository.save(task.recordResult(resultModel));
 if (!"COMPLETED".equalsIgnoreCase(result.agentStatus())) {
-    TaskModel failed = recorded.markFailed();
+    TaskModel failed = task.markFailed();                 // EXECUTING -> FAILED (valid guard)
     taskRepository.save(failed);
-    settlementWriteAppService.settleRejected(failed.id(), failed.clientId(), failed.budget());
+    settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
     log.info("Task {} agent reported {} -> FAILED (refunded)", taskId, result.agentStatus());
     return;
 }
+TaskModel recorded = task.recordResult(resultModel);     // EXECUTING -> RESULT_RECEIVED
+taskRepository.save(recorded);
 validationAppService.validateAndGate(recorded);
 ```
 
-> Add `ValidationAppService validationAppService` and `SettlementWriteAppService settlementWriteAppService` to the constructor (the class is `@RequiredArgsConstructor` per the explorer — add the fields). Ensure `task.recordResult(...)`'s return is captured as `recorded` (a `TaskModel` carrying the result) so the gate can read it; if `save` returns void, re-load or use the in-memory `task.recordResult(resultModel)` value.
+> **Order matters:** `markFailed()` requires `QUEUED`/`EXECUTING`, so the non-`COMPLETED` branch MUST run before `recordResult()` (which moves the task to `RESULT_RECEIVED`). Add `ValidationAppService validationAppService` + `SettlementWriteAppService settlementWriteAppService` as constructor fields (`@RequiredArgsConstructor`). `task.recordResult(resultModel)` returns the in-memory `RESULT_RECEIVED` task carrying the result — pass it to `validateAndGate`. (The stale `\ after:` comment line above is a leftover — drop it.) Also fix the now-wrong comment in `TaskReviewAppServiceImpl` ("state guard: only RESULT_RECEIVED" → "PENDING_REVIEW (caller passed the validation gate)").
 
 - [ ] **Step 7: Run the unit test, verify it passes**
 
