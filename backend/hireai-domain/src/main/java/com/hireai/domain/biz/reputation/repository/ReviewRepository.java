@@ -1,6 +1,6 @@
-package com.hireai.domain.biz.review.repository;
+package com.hireai.domain.biz.reputation.repository;
 
-import com.hireai.domain.biz.review.model.ReviewModel;
+import com.hireai.domain.biz.reputation.model.ReviewModel;
 
 import java.util.List;
 import java.util.Optional;

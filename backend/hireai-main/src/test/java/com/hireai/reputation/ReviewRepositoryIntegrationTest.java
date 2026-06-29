@@ -1,7 +1,7 @@
-package com.hireai.review;
+package com.hireai.reputation;
 
-import com.hireai.domain.biz.review.model.ReviewModel;
-import com.hireai.domain.biz.review.repository.ReviewRepository;
+import com.hireai.domain.biz.reputation.model.ReviewModel;
+import com.hireai.domain.biz.reputation.repository.ReviewRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;

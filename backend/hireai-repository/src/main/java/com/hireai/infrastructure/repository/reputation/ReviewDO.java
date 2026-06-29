@@ -1,4 +1,4 @@
-package com.hireai.infrastructure.repository.review;
+package com.hireai.infrastructure.repository.reputation;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

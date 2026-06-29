@@ -13,7 +13,7 @@ import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
 import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
 import com.hireai.domain.biz.offering.agent.model.Pricing;
-import com.hireai.domain.biz.review.model.ReviewModel;
+import com.hireai.domain.biz.reputation.model.ReviewModel;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.utility.exception.DomainException;

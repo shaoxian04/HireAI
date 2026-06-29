@@ -3,7 +3,7 @@ package com.hireai.application.biz.offering.agent;
 import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.domain.biz.offering.storefront.info.ProfileUpdateInfo;
 import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
-import com.hireai.domain.biz.review.model.ReviewModel;
+import com.hireai.domain.biz.reputation.model.ReviewModel;
 import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
 

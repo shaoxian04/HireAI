@@ -1,4 +1,4 @@
-package com.hireai.domain.biz.review.model;
+package com.hireai.domain.biz.reputation.model;
 
 import com.hireai.utility.result.ResultCode;
 import com.hireai.utility.exception.DomainException;

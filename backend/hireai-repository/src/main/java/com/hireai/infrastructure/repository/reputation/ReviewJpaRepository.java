@@ -1,4 +1,4 @@
-package com.hireai.infrastructure.repository.review;
+package com.hireai.infrastructure.repository.reputation;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

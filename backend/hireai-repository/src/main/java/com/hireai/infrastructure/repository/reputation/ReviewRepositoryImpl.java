@@ -1,7 +1,7 @@
-package com.hireai.infrastructure.repository.review;
+package com.hireai.infrastructure.repository.reputation;
 
-import com.hireai.domain.biz.review.model.ReviewModel;
-import com.hireai.domain.biz.review.repository.ReviewRepository;
+import com.hireai.domain.biz.reputation.model.ReviewModel;
+import com.hireai.domain.biz.reputation.repository.ReviewRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 

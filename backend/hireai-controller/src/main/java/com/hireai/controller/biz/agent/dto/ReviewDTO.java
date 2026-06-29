@@ -1,6 +1,6 @@
 package com.hireai.controller.biz.agent.dto;
 
-import com.hireai.domain.biz.review.model.ReviewModel;
+import com.hireai.domain.biz.reputation.model.ReviewModel;
 
 import java.time.Instant;
 import java.util.UUID;

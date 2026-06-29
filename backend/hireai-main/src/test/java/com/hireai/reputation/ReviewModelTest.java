@@ -1,7 +1,7 @@
-package com.hireai.review;
+package com.hireai.reputation;
 
 import com.hireai.utility.result.ResultCode;
-import com.hireai.domain.biz.review.model.ReviewModel;
+import com.hireai.domain.biz.reputation.model.ReviewModel;
 import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 
