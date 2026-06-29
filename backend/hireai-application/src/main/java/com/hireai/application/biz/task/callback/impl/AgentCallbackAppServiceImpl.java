@@ -9,6 +9,7 @@ import com.hireai.domain.biz.task.info.AgentResultInfo;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
+import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +21,9 @@ import java.util.UUID;
 /**
  * Verifies the dispatch token, confirms it authorises THIS task, then records the agent's
  * result through the Task aggregate ({@code EXECUTING → RESULT_RECEIVED}) and persists the
- * task_results child via the repository root.
+ * task_results child via the repository root. A duplicate callback (task already past
+ * EXECUTING) is treated as a first-result-wins no-op: the service returns without
+ * re-processing and the caller receives 200 — the first result is never overwritten.
  */
 @Service
 @Slf4j
@@ -44,6 +47,15 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
             throw new DispatchTokenInvalidException(
                     "Dispatch token agent version " + claims.agentVersionId()
                             + " does not match task " + taskId + " assignment " + task.agentVersionId());
+        }
+        // First-result-wins idempotency: if the task is no longer EXECUTING, the first callback
+        // has already been processed (task is RESULT_RECEIVED or beyond). Return without
+        // re-processing — no second insert into task_results, so the UNIQUE constraint is never
+        // triggered. The first result is preserved unchanged.
+        if (task.status() != TaskStatus.EXECUTING) {
+            log.info("Task {} is already in status {} (not EXECUTING); treating duplicate callback as " +
+                     "no-op — first result wins", taskId, task.status());
+            return;
         }
         TaskResultModel resultModel = TaskResultModel.record(
                 taskId, result.agentStatus(), result.resultPayloadJson(), result.resultUrl());

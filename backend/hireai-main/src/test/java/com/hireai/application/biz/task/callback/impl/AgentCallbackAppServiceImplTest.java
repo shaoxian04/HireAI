@@ -8,6 +8,7 @@ import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.info.AgentResultInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
+import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.domain.shared.model.Money;
@@ -117,5 +118,29 @@ class AgentCallbackAppServiceImplTest {
 
         assertThatThrownBy(() -> service().recordResult(taskId, "good", result()))
                 .isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void duplicateCallbackAfterResultReceivedIsNoOp() {
+        // Build a task already in RESULT_RECEIVED — the first callback has already been processed.
+        UUID agentVersionId = UUID.randomUUID();
+        TaskModel executing = TaskModel.submit(
+                        UUID.randomUUID(), "title", "desc", Money.of("10.00"),
+                        new OutputSpec(OutputFormat.TEXT, null, "summary"), "general")
+                .assignAndQueue(agentVersionId)
+                .markExecuting();
+        TaskModel resultReceived = executing.recordResult(
+                TaskResultModel.record(executing.id(), "COMPLETED", "{\"first\":true}", null));
+
+        when(dispatchTokenService.verify("dup"))
+                .thenReturn(new DispatchTokenClaims(resultReceived.id(), agentVersionId,
+                        Instant.now().plusSeconds(60)));
+        when(taskRepository.findById(resultReceived.id())).thenReturn(Optional.of(resultReceived));
+
+        // Duplicate callback: must be a silent no-op (first result wins), not throw.
+        service().recordResult(resultReceived.id(), "dup", result());
+
+        // No state change: taskRepository.save() is never called; first result preserved.
+        verify(taskRepository, never()).save(any());
     }
 }
