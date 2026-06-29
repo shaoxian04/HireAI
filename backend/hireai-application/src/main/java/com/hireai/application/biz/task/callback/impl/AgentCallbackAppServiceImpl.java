@@ -61,8 +61,6 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
                      "no-op — first result wins", taskId, task.status());
             return;
         }
-        TaskResultModel resultModel = TaskResultModel.record(
-                taskId, result.agentStatus(), result.resultPayloadJson(), result.resultUrl());
         // Non-COMPLETED MUST branch first: markFailed() requires EXECUTING; recordResult() moves
         // the task to RESULT_RECEIVED, making markFailed() illegal if called afterwards.
         if (!"COMPLETED".equalsIgnoreCase(result.agentStatus())) {
@@ -72,9 +70,11 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
             log.info("Task {} agent reported {} -> FAILED (refunded)", taskId, result.agentStatus());
             return;
         }
+        TaskResultModel resultModel = TaskResultModel.record(
+                taskId, result.agentStatus(), result.resultPayloadJson(), result.resultUrl());
         TaskModel recorded = task.recordResult(resultModel);
         taskRepository.save(recorded);
+        log.info("Task {} result recorded; invoking validation gate (agentStatus={})", taskId, result.agentStatus());
         validationAppService.validateAndGate(recorded);
-        log.info("Task {} recorded result with agent status {}", taskId, result.agentStatus());
     }
 }
