@@ -70,6 +70,7 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/auth/register").permitAll()
                         .requestMatchers("/api/agent-callbacks/**").permitAll()
+                        .requestMatchers("/api/arbitration-callbacks/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
