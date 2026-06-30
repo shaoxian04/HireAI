@@ -65,9 +65,12 @@ Every task's requirements implicitly include this section.
 - [ ] **Step 1: Write the migration.** Create `V21__dispute_rulings.sql`:
 
 ```sql
--- V21: replace the single inline ruling slot on `disputes` with an append-only `dispute_rulings`
--- child table (ruling history). Lays the seam for a future tier-2 Administrator override stored
--- SEPARATELY from the arbitrator ruling (Invariant #2). Only ARBITRATOR/FALLBACK write today.
+-- V21: add an append-only `dispute_rulings` child table (ruling history) and migrate any existing
+-- inline ruling into it. The inline `disputes.ruling_*` columns are left in place here and dropped
+-- in V22 (Task 3) AFTER the entity stops mapping them — keeping the schema and `DisputeDO` in step
+-- so `ddl-auto: validate` never breaks mid-sequence. Lays the seam for a future tier-2 Administrator
+-- override stored SEPARATELY from the arbitrator ruling (Invariant #2). Only ARBITRATOR/FALLBACK
+-- write today. Hibernate `validate` tolerates the now-redundant inline columns until V22 removes them.
 CREATE TABLE dispute_rulings (
     id          UUID PRIMARY KEY,
     dispute_id  UUID NOT NULL REFERENCES disputes (id),
@@ -103,14 +106,9 @@ SELECT gen_random_uuid(), id, COALESCE(ruling_tier, 1), decided_by, ruling_categ
        COALESCE(resolved_at, gmt_create), gmt_create
 FROM disputes
 WHERE ruling_category IS NOT NULL;
-
--- Drop the inline ruling columns; `disputes` keeps status + resolved_at. Effective ruling = highest tier.
-ALTER TABLE disputes
-    DROP COLUMN ruling_category,
-    DROP COLUMN ruling_rationale,
-    DROP COLUMN ruling_tier,
-    DROP COLUMN decided_by;
 ```
+
+> The inline `ruling_*` columns are intentionally NOT dropped here — V22 (Task 3) drops them once `DisputeDO` no longer maps them. This keeps every task's build green.
 
 - [ ] **Step 2: Write the JPA entity.** Create `DisputeRulingDO.java` (package `com.hireai.infrastructure.repository.adjudication`), mirroring the style of `DisputeDO`:
 
@@ -213,9 +211,7 @@ Expected (no Docker): SKIPPED. Expected (Docker up): the three assertions pass o
 - [ ] **Step 5: Run the full module build.**
 
 Run: `mvn -f backend/pom.xml -B -ntp package`
-Expected: BUILD SUCCESS (new migration applies; no existing test references the dropped columns yet — Task 3 updates the repository mapping. If the build fails here because `DisputeRepositoryImpl`/`DisputeDO` still reference dropped columns at *runtime* in a context-loading test, that is expected and is fixed in Task 3; if so, note it and proceed — Tasks 1–3 form one schema migration and are reviewed together). 
-
-> **Sequencing note for the controller:** Tasks 1–3 together migrate the schema and the persistence mapping. If running the full suite between Task 1 and Task 3 red-fails on the dropped columns, that is acceptable mid-sequence; the suite must be green after Task 3.
+Expected: BUILD SUCCESS. This task is **purely additive** — a new table (plus a no-op migrate on a fresh DB), a new entity, a new repository. Nothing existing changes, so the full suite stays green (dispute/arbitration ITs skip without Docker). The inline `ruling_*` columns still exist and `DisputeDO` still maps them, so `ddl-auto: validate` is satisfied.
 
 - [ ] **Step 6: Commit.**
 
@@ -227,20 +223,27 @@ git add backend/hireai-main/src/main/resources/db/migration/V21__dispute_rulings
 git commit -m "feat(adjudication): append-only dispute_rulings table + persistence entity (V21)"
 ```
 
-### Task 2: Domain — ruling history on `DisputeModel`, `Ruling.decidedAt`, `RulingDecidedBy.ADMINISTRATOR`
+### Task 2: Domain ruling history + persistence cutover (one atomic change — ends green)
+
+This is the cutover: the domain switches from a single ruling to a history, and persistence moves from the inline `disputes.ruling_*` columns to the `dispute_rulings` child table — together, so the build is green after this task. The inline columns are left in the DB (now unmapped by `DisputeDO`; `ddl-auto: validate` tolerates extra columns) and physically dropped in Task 3.
 
 **Files:**
 - Modify: `backend/hireai-domain/src/main/java/com/hireai/domain/biz/adjudication/enums/RulingDecidedBy.java`
 - Modify: `backend/hireai-domain/src/main/java/com/hireai/domain/biz/adjudication/model/Ruling.java`
 - Modify: `backend/hireai-domain/src/main/java/com/hireai/domain/biz/adjudication/model/DisputeModel.java`
+- Modify: `backend/hireai-application/src/main/java/com/hireai/application/biz/adjudication/dispute/impl/DisputeAppServiceImpl.java`
+- Modify: `backend/hireai-repository/src/main/java/com/hireai/infrastructure/repository/adjudication/DisputeDO.java`
+- Modify: `backend/hireai-repository/src/main/java/com/hireai/infrastructure/repository/adjudication/DisputeRepositoryImpl.java`
 - Test: `backend/hireai-domain/src/test/java/com/hireai/domain/biz/adjudication/model/DisputeModelTest.java` (extend if present; else create)
+- Test: `backend/hireai-main/src/test/java/com/hireai/infrastructure/repository/adjudication/DisputeRepositoryIntegrationTest.java` (extend)
 
 **Interfaces:**
-- Consumes: `RulingCategory`, `RejectReason`, `DisputeStatus` (unchanged).
+- Consumes: `RulingCategory`, `RejectReason`, `DisputeStatus` (unchanged); `DisputeRulingJpaRepository` (Task 1).
 - Produces:
   - `RulingDecidedBy` = `{ARBITRATOR, ADMINISTRATOR, FALLBACK}`.
   - `Ruling(int tier, RulingCategory category, String rationale, RulingDecidedBy decidedBy, Instant decidedAt)` — 5-arg record (was 4-arg).
   - `DisputeModel`: now holds `List<Ruling> rulings` (was a single `Ruling`); methods `List<Ruling> rulings()`, `Optional<Ruling> effectiveRuling()`, `recordRuling(Ruling)` (appends → RULED), `resolveByFallback(Ruling)` (appends → RESOLVED), `resolve()` (RULED → RESOLVED). `rehydrate(...)` now takes `List<Ruling> rulings`.
+  - `DisputeRepositoryImpl` persists the parent `disputes` row WITHOUT ruling columns and appends only new (tail) rulings to `dispute_rulings`; `toModel` reconstructs the full history. `DisputeDO` no longer maps the inline ruling columns.
 
 - [ ] **Step 1: Add the `ADMINISTRATOR` enum value.** Edit `RulingDecidedBy.java`:
 
@@ -413,7 +416,7 @@ public final class DisputeModel {
 
 > Preserve any existing transition logic or messages from the current `DisputeModel` that this rewrite omits — read the current file first and fold in anything not covered (e.g. exact exception messages other code/tests assert on). The behavioral change is only: single ruling → history list, `Ruling` gains `decidedAt`.
 
-- [ ] **Step 4: Write/extend the failing unit test.** In `DisputeModelTest.java` add:
+- [ ] **Step 4: Write/extend the domain unit test.** In `DisputeModelTest.java` add:
 
 ```java
 @Test
@@ -446,30 +449,11 @@ void fallbackAppendsRulingAndResolves() {
 ```
 
 Run: `mvn -f backend/pom.xml -B -ntp -pl hireai-domain test -Dtest=DisputeModelTest`
-Expected: FAIL to compile until Steps 1–3 land, then PASS. (`hireai-domain` has no Docker dependency — these run everywhere.)
+Expected: FAIL to compile until Steps 1–3 land, then PASS. (`hireai-domain` has no Docker dependency.) NOTE: the wider reactor will not compile yet — Steps 5–7 fix the app + repository callers of the changed `Ruling`/`DisputeModel` API.
 
-- [ ] **Step 5: Commit.**
+- [ ] **Step 5: Update `DisputeAppServiceImpl` for the 5-arg `Ruling`.** The two `new Ruling(...)` constructions must pass `decidedAt`. In `settleAndResolve`, change `new Ruling(TIER_1, info.category(), info.rationale(), decidedBy)` → `new Ruling(TIER_1, info.category(), info.rationale(), decidedBy, Instant.now())`. In `resolveByFallback`, change `new Ruling(TIER_1, RulingCategory.NOT_FULFILLED, "arbitration unavailable; refunded by platform fallback", RulingDecidedBy.FALLBACK)` → add `, Instant.now()`. Add `import java.time.Instant;`. **No other logic changes** — settlement still `switch`es on `info.category()` (Inv #3).
 
-```bash
-git add backend/hireai-domain/src/main/java/com/hireai/domain/biz/adjudication/enums/RulingDecidedBy.java \
-        backend/hireai-domain/src/main/java/com/hireai/domain/biz/adjudication/model/Ruling.java \
-        backend/hireai-domain/src/main/java/com/hireai/domain/biz/adjudication/model/DisputeModel.java \
-        backend/hireai-domain/src/test/java/com/hireai/domain/biz/adjudication/model/DisputeModelTest.java
-git commit -m "feat(adjudication): ruling history on DisputeModel + Ruling.decidedAt + ADMINISTRATOR seam"
-```
-
-### Task 3: Persistence wiring — drop inline ruling columns, append-only child writes
-
-**Files:**
-- Modify: `backend/hireai-repository/src/main/java/com/hireai/infrastructure/repository/adjudication/DisputeDO.java`
-- Modify: `backend/hireai-repository/src/main/java/com/hireai/infrastructure/repository/adjudication/DisputeRepositoryImpl.java`
-- Test: `backend/hireai-main/src/test/java/com/hireai/infrastructure/repository/adjudication/DisputeRepositoryIntegrationTest.java` (extend)
-
-**Interfaces:**
-- Consumes: `DisputeRulingJpaRepository` (Task 1), `DisputeModel.rulings()`/`rehydrate(List)` (Task 2), `Ruling(...,decidedAt)`.
-- Produces: `DisputeRepositoryImpl` persists the parent `disputes` row WITHOUT ruling columns and appends only the new (tail) ruling rows to `dispute_rulings`; `toModel` reconstructs the full ruling history.
-
-- [ ] **Step 1: Strip the inline ruling columns from `DisputeDO`.** Edit `DisputeDO.java`: remove the four fields `rulingCategory`, `rulingRationale`, `rulingTier`, `decidedBy`, their `@Column` annotations, the matching constructor parameters, and their getters. The resulting constructor is:
+- [ ] **Step 6: Strip the inline ruling columns from `DisputeDO`.** Remove the four fields `rulingCategory`, `rulingRationale`, `rulingTier`, `decidedBy`, their `@Column` annotations, the matching constructor parameters, and their getters. The resulting constructor is:
 
 ```java
 public DisputeDO(UUID id, UUID taskId, UUID raisedBy, String reasonCategory, String status,
@@ -485,9 +469,9 @@ public DisputeDO(UUID id, UUID taskId, UUID raisedBy, String reasonCategory, Str
 }
 ```
 
-Keep the remaining fields/columns (`id`, `task_id` unique, `raised_by`, `reason_category`, `status`, `correlation_id`, `resolved_at`, `gmt_create`) exactly as-is.
+Keep the remaining fields/columns (`id`, `task_id` unique, `raised_by`, `reason_category`, `status`, `correlation_id`, `resolved_at`, `gmt_create`) exactly as-is. The DB still has the `ruling_*` columns — that is fine; `ddl-auto: validate` only checks that *mapped* columns exist.
 
-- [ ] **Step 2: Rewrite `DisputeRepositoryImpl`.** Inject `DisputeRulingJpaRepository` alongside the existing `DisputeJpaRepository`. The full target:
+- [ ] **Step 7: Rewrite `DisputeRepositoryImpl` to read/write the child table.** Inject `DisputeRulingJpaRepository` alongside `DisputeJpaRepository`:
 
 ```java
 package com.hireai.infrastructure.repository.adjudication;
@@ -559,24 +543,63 @@ public class DisputeRepositoryImpl implements DisputeRepository {
 }
 ```
 
-- [ ] **Step 3: Extend the dispute repository IT.** In `DisputeRepositoryIntegrationTest.java` add a round-trip that saves an OPEN dispute, then `recordRuling(...).resolve()`, saves again, and asserts `findByTaskId(...)` returns a dispute whose `effectiveRuling()` matches the recorded ruling (category, tier, decidedBy, rationale) and whose `rulings()` has exactly one row — proving the append-tail logic inserts once and reads back. Match the existing test's Testcontainers/`@EnabledIf("dockerAvailable")` setup.
+- [ ] **Step 8: Extend the dispute repository IT.** In `DisputeRepositoryIntegrationTest.java` add a round-trip that saves an OPEN dispute, then `recordRuling(...).resolve()`, saves again, and asserts `findByTaskId(...)` returns a dispute whose `effectiveRuling()` matches the recorded ruling (category, tier, decidedBy, rationale) and whose `rulings()` has exactly one row — proving the append-tail logic inserts once and reads back from the child table. Match the existing test's Testcontainers/`@EnabledIf("dockerAvailable")` setup.
 
-Run: `mvn -f backend/pom.xml -B -ntp -pl hireai-main test -Dtest=DisputeRepositoryIntegrationTest`
-Expected: SKIPPED without Docker; PASS with Docker.
-
-- [ ] **Step 4: Run the full backend build and fix any remaining call sites.** Search for any remaining references to the dropped `DisputeDO` getters/constructor args or the old 4-arg `Ruling`/single-ruling `rehydrate` across `backend/` (Phase-3a tests, fixtures). Update each to the new signatures. Then:
+- [ ] **Step 9: Fix remaining call sites + full green build.** Search `backend/` for any remaining references to the old 4-arg `Ruling`, the single-ruling `rehydrate`, `dispute.ruling()`, or the dropped `DisputeDO` getters/constructor args (Phase-3a tests, fixtures). Update each to the new signatures.
 
 Run: `mvn -f backend/pom.xml -B -ntp package`
-Expected: BUILD SUCCESS. Without Docker, dispute/arbitration ITs skip; with Docker they run. If any non-Docker context-loading test now fails on the schema, fix before committing.
+Expected: BUILD SUCCESS. Without Docker, dispute/arbitration ITs skip; with Docker they run (and exercise the new child-table path).
 
-- [ ] **Step 5: Commit.**
+- [ ] **Step 10: Commit.**
 
 ```bash
-git add backend/hireai-repository/src/main/java/com/hireai/infrastructure/repository/adjudication/DisputeDO.java \
+git add backend/hireai-domain/src/main/java/com/hireai/domain/biz/adjudication/enums/RulingDecidedBy.java \
+        backend/hireai-domain/src/main/java/com/hireai/domain/biz/adjudication/model/Ruling.java \
+        backend/hireai-domain/src/main/java/com/hireai/domain/biz/adjudication/model/DisputeModel.java \
+        backend/hireai-domain/src/test/java/com/hireai/domain/biz/adjudication/model/DisputeModelTest.java \
+        backend/hireai-application/src/main/java/com/hireai/application/biz/adjudication/dispute/impl/DisputeAppServiceImpl.java \
+        backend/hireai-repository/src/main/java/com/hireai/infrastructure/repository/adjudication/DisputeDO.java \
         backend/hireai-repository/src/main/java/com/hireai/infrastructure/repository/adjudication/DisputeRepositoryImpl.java \
         backend/hireai-main/src/test/java/com/hireai/infrastructure/repository/adjudication/DisputeRepositoryIntegrationTest.java
-# add any other files the compiler-fix in Step 4 touched (list them explicitly; do NOT git add -A)
-git commit -m "refactor(adjudication): persist rulings to append-only child table; drop inline columns"
+# add any other files the Step-9 compiler-fix touched (list them explicitly; do NOT git add -A)
+git commit -m "refactor(adjudication): ruling history — domain + persist to append-only child table"
+```
+
+### Task 3: Migration `V22` — drop the now-dead inline ruling columns
+
+After Task 2, `DisputeDO` no longer maps `disputes.ruling_category / ruling_rationale / ruling_tier / decided_by`; the child table is the source of truth. This task physically removes the dead columns. It is independently reviewable: confirm it drops ONLY the four dead columns and nothing else.
+
+**Files:**
+- Create: `backend/hireai-main/src/main/resources/db/migration/V22__drop_inline_dispute_ruling_columns.sql`
+
+**Interfaces:**
+- Consumes: Task 1 (`dispute_rulings` already holds the migrated history), Task 2 (`DisputeDO` no longer maps these columns).
+- Produces: a `disputes` table with no inline ruling columns (keeps `status` + `resolved_at`).
+
+- [ ] **Step 1: Write the migration.** Create `V22__drop_inline_dispute_ruling_columns.sql`:
+
+```sql
+-- V22: drop the inline ruling columns from `disputes`. Their data was copied into the append-only
+-- `dispute_rulings` child table in V21, and `DisputeDO` stopped mapping them in the Phase-3b cutover,
+-- so they are dead. `disputes` keeps `status` + `resolved_at`; the effective ruling is the
+-- highest-tier `dispute_rulings` row.
+ALTER TABLE disputes
+    DROP COLUMN ruling_category,
+    DROP COLUMN ruling_rationale,
+    DROP COLUMN ruling_tier,
+    DROP COLUMN decided_by;
+```
+
+- [ ] **Step 2: Run the full build.** With Docker, the migration applies on the Testcontainers DB and `ddl-auto: validate` confirms `DisputeDO` still matches the (now-narrower) schema; the dispute/arbitration ITs exercise the child-table path end-to-end.
+
+Run: `mvn -f backend/pom.xml -B -ntp package`
+Expected: BUILD SUCCESS. (Without Docker the ITs skip, but the migration is still parsed/loaded by Flyway's classpath scan; the build stays green.)
+
+- [ ] **Step 3: Commit.**
+
+```bash
+git add backend/hireai-main/src/main/resources/db/migration/V22__drop_inline_dispute_ruling_columns.sql
+git commit -m "refactor(adjudication): drop dead inline dispute ruling columns (V22)"
 ```
 
 ### Task 4: Transparency read — `GET /api/disputes/by-task/{taskId}`
