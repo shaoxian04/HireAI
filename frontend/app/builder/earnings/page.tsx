@@ -1,21 +1,66 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, isPendingError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { StatTile } from "@/components/StatTile";
-import type { BuilderEarningsDTO } from "@/lib/types";
+import { DisputeOutcomePanel } from "@/components/DisputeOutcomePanel";
+import type { BuilderEarningsDTO, DisputeOutcomeDTO } from "@/lib/types";
+
+// ── per-payout dispute state ──────────────────────────────────────────────────
+// Limitation: disputes that resolved to a FULL REFUND produce no payout row, so
+// they are not discoverable here. A builder dispute-list endpoint would surface
+// them — that is deferred to a future task.
+type DisputeEntry =
+  | { phase: "loading" }
+  | { phase: "found"; outcome: DisputeOutcomeDTO }
+  | { phase: "none" } // 404 — task was never disputed
+  | { phase: "error"; msg: string };
 
 function EarningsView() {
   const [earnings, setEarnings] = useState<BuilderEarningsDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Cached dispute results keyed by taskId
+  const [disputes, setDisputes] = useState<Record<string, DisputeEntry>>({});
+  // Which payout rows are currently expanded
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     api<BuilderEarningsDTO>("/builder/earnings")
       .then(setEarnings)
       .catch((e) => setError(e instanceof ApiError ? e.message : "Failed to load earnings"));
   }, []);
+
+  // Fetch is lazy — triggered by the user expanding a row, not on mount.
+  // This avoids N API calls on page load and is clear of react-hooks/set-state-in-effect.
+  function handleToggle(taskId: string) {
+    const isOpen = expanded[taskId] ?? false;
+    setExpanded((prev) => ({ ...prev, [taskId]: !isOpen }));
+
+    // Only fetch on first expand; subsequent toggles reuse the cached result
+    if (!isOpen && !disputes[taskId]) {
+      setDisputes((prev) => ({ ...prev, [taskId]: { phase: "loading" } }));
+      api<DisputeOutcomeDTO>(`/disputes/by-task/${taskId}`)
+        .then((outcome) =>
+          setDisputes((prev) => ({ ...prev, [taskId]: { phase: "found", outcome } })),
+        )
+        .catch((e) => {
+          if (isPendingError(e)) {
+            // 404 → no dispute opened on this task; most settled payouts land here
+            setDisputes((prev) => ({ ...prev, [taskId]: { phase: "none" } }));
+          } else {
+            setDisputes((prev) => ({
+              ...prev,
+              [taskId]: {
+                phase: "error",
+                msg: e instanceof ApiError ? e.message : "Failed to load dispute",
+              },
+            }));
+          }
+        });
+    }
+  }
 
   if (error) {
     return (
@@ -91,22 +136,54 @@ function EarningsView() {
           </div>
         ) : (
           <ul className="space-y-2">
-            {earnings.payouts.map((p) => (
-              <li
-                key={p.taskId}
-                className="flex items-center justify-between gap-3 rounded-md border border-line bg-surface-2 px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm text-fg">{p.taskTitle}</p>
-                  <p className="mt-0.5 font-mono text-[0.65rem] text-dim">
-                    {p.agentName} · {new Date(p.settledAt).toLocaleDateString()}
-                  </p>
-                </div>
-                <span className="tabular shrink-0 font-mono text-sm font-semibold text-accent">
-                  +{p.amount.toFixed(2)} cr
-                </span>
-              </li>
-            ))}
+            {earnings.payouts.map((p) => {
+              const disputeEntry = disputes[p.taskId];
+              const isOpen = expanded[p.taskId] ?? false;
+              return (
+                <li
+                  key={p.taskId}
+                  className="overflow-hidden rounded-md border border-line bg-surface-2"
+                >
+                  {/* ── row header ─────────────────────────────────── */}
+                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-fg">{p.taskTitle}</p>
+                      <p className="mt-0.5 font-mono text-[0.65rem] text-dim">
+                        {p.agentName} · {new Date(p.settledAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <button
+                        onClick={() => handleToggle(p.taskId)}
+                        className="font-mono text-[0.65rem] text-dim transition-colors hover:text-fg"
+                        aria-expanded={isOpen}
+                      >
+                        {isOpen ? "▲" : "▼"} Arbitration outcome
+                      </button>
+                      <span className="tabular font-mono text-sm font-semibold text-accent">
+                        +{p.amount.toFixed(2)} cr
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* ── expandable dispute panel ────────────────────── */}
+                  {isOpen && (
+                    <div className="border-t border-line px-4 pb-3 pt-2">
+                      {disputeEntry?.phase === "loading" && (
+                        <p className="font-mono text-xs text-dim">Loading…</p>
+                      )}
+                      {disputeEntry?.phase === "found" && (
+                        <DisputeOutcomePanel outcome={disputeEntry.outcome} />
+                      )}
+                      {/* phase "none" (404) → task was never disputed; show nothing */}
+                      {disputeEntry?.phase === "error" && (
+                        <p className="font-mono text-xs text-red">{disputeEntry.msg}</p>
+                      )}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
