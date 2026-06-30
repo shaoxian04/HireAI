@@ -222,7 +222,7 @@ class TaskControllerTest {
         UUID clientId = UUID.randomUUID();
         UUID taskId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
-        when(taskReviewAppService.reject(eq(taskId), eq(clientId), any(RejectReason.class), eq("not what I asked"))).thenReturn(taskId);
+        when(taskReviewAppService.reject(eq(taskId), eq(clientId), eq(RejectReason.A_MISMATCH), eq("not what I asked"))).thenReturn(taskId);
         when(taskReadAppService.getForClient(eq(taskId), eq(clientId)))
                 .thenReturn(resolvedTask(clientId, false));
 
