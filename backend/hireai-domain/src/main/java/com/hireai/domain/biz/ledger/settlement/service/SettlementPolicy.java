@@ -24,4 +24,12 @@ public final class SettlementPolicy {
     public static Money netOf(Money budget) {
         return budget.subtract(commissionOn(budget));
     }
+
+    /** A PARTIALLY_FULFILLED ruling settles half the budget; the rest is refunded. */
+    public static final BigDecimal PARTIAL_BUILDER_FRACTION = new BigDecimal("0.50");
+
+    /** The builder's gross share under a partial-fulfilment split (half the budget, half-up to 2dp). */
+    public static Money builderShareOnSplit(Money budget) {
+        return budget.percentage(PARTIAL_BUILDER_FRACTION);
+    }
 }

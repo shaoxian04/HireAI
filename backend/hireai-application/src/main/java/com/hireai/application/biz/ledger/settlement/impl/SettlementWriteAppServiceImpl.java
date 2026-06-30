@@ -51,6 +51,24 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
         settlementRepository.save(SettlementModel.rejected(taskId));
     }
 
+    @Override
+    public SettlementBreakdown settleSplit(UUID taskId, UUID clientId, UUID builderId, Money budget) {
+        WalletModel clientWallet = requireWallet(clientId);
+        boolean selfSettle = clientId.equals(builderId);
+        WalletModel builderWallet = selfSettle ? clientWallet : loadOrOpen(builderId);
+
+        String correlationId = "settle-" + taskId;
+        SettlementBreakdown breakdown = settlementDomainService.settleSplit(
+                clientWallet, builderWallet, budget, taskId, correlationId);
+
+        walletRepository.save(clientWallet);
+        if (!selfSettle) {
+            walletRepository.save(builderWallet);
+        }
+        settlementRepository.save(SettlementModel.split(taskId, breakdown.net(), breakdown.commission()));
+        return breakdown;
+    }
+
     private WalletModel requireWallet(UUID userId) {
         return walletRepository.findByUserId(userId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "No wallet for user " + userId));

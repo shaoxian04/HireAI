@@ -13,4 +13,7 @@ public interface SettlementWriteAppService {
 
     /** Reject: full refund to the client; records a REJECT settlement. */
     void settleRejected(UUID taskId, UUID clientId, Money budget);
+
+    /** Partial fulfilment: pay the builder 85/15 on half the budget; refund the other half. Records a SPLIT settlement. */
+    SettlementBreakdown settleSplit(UUID taskId, UUID clientId, UUID builderId, Money budget);
 }

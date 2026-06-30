@@ -33,4 +33,12 @@ public interface SettlementDomainService {
      * passing a smaller value silently strands the residual escrow with no compensating entry.
      */
     void settleRejection(WalletModel clientWallet, Money budget, UUID taskId, String correlationId);
+
+    /**
+     * Partial fulfilment (Module 4 SPLIT): the builder is paid 85/15 on HALF the budget; the other
+     * half is refunded to the client. clientRefund is computed by subtraction so net+commission+refund
+     * reconciles to the budget exactly. clientWallet and builderWallet MAY be the same instance.
+     */
+    SettlementBreakdown settleSplit(WalletModel clientWallet, WalletModel builderWallet,
+                                    Money budget, UUID taskId, String correlationId);
 }
