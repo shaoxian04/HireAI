@@ -48,15 +48,18 @@ def settings():
 
 async def test_acks_after_successful_callback(settings, monkeypatch):
     import app.consumer as consumer
-
     monkeypatch.setattr(consumer, "run_arbitration", _ok_arbitrate)
+    msg = FakeMessage(GOLDEN)
+    calls = []
 
     async def _ok(*a, **k):
+        assert msg.acked is False, "ack must not fire before post_ruling completes"
+        calls.append("post_ruling")
         return 200
 
     monkeypatch.setattr(consumer, "post_ruling", _ok)
-    msg = FakeMessage(GOLDEN)
     await handle_message(msg, settings=settings, graph=StubGraph())
+    assert calls == ["post_ruling"]   # callback actually ran
     assert msg.acked is True
     assert msg.nacked_requeue is None
 
@@ -89,5 +92,22 @@ async def test_nacks_to_dlq_when_callback_unauthorized(settings, monkeypatch):
     monkeypatch.setattr(consumer, "post_ruling", _401)
     msg = FakeMessage(GOLDEN)
     await handle_message(msg, settings=settings, graph=StubGraph())
+    assert msg.acked is False
+    assert msg.nacked_requeue is False
+
+
+async def test_does_not_retry_permanent_4xx_callback(settings, monkeypatch):
+    import app.consumer as consumer
+    monkeypatch.setattr(consumer, "run_arbitration", _ok_arbitrate)
+    calls = []
+
+    async def _401(*a, **k):
+        calls.append("post_ruling")
+        raise httpx.HTTPStatusError("401", request=None, response=httpx.Response(401))
+
+    monkeypatch.setattr(consumer, "post_ruling", _401)
+    msg = FakeMessage(GOLDEN)
+    await handle_message(msg, settings=settings, graph=StubGraph())
+    assert calls == ["post_ruling"]      # called once, not retried
     assert msg.acked is False
     assert msg.nacked_requeue is False

@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 import aio_pika
+import httpx
 
 from app.callback import post_ruling
 from app.graph.build import run_arbitration
@@ -22,6 +23,14 @@ async def _arbitrate_with_retry(graph, request, settings):
                 settings.arbitration_callback_secret, result,
                 timeout=settings.callback_timeout_seconds)
             return status
+        except httpx.HTTPStatusError as e:
+            if e.response is not None and 400 <= e.response.status_code < 500:
+                raise  # permanent (bad secret/category/unknown dispute) — straight to DLQ, no retry
+            if attempt == _MAX_ATTEMPTS:
+                raise
+            log.warning("arbitration attempt %d failed (%s); retrying", attempt, e)
+            await asyncio.sleep(delay)
+            delay *= 2
         except Exception as e:  # noqa: BLE001 - retry transient, give up after the cap
             if attempt == _MAX_ATTEMPTS:
                 raise
