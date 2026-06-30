@@ -1,9 +1,11 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
+import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
@@ -37,6 +39,7 @@ class TaskReviewAppServiceImplTest {
     @Mock TaskRepository taskRepository;
     @Mock AgentRepository agentRepository;
     @Mock SettlementWriteAppService settlementWriteAppService;
+    @Mock DisputeAppService disputeAppService;
 
     TaskReviewAppServiceImpl service;
 
@@ -47,7 +50,7 @@ class TaskReviewAppServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new TaskReviewAppServiceImpl(
-                taskRepository, agentRepository, settlementWriteAppService);
+                taskRepository, agentRepository, settlementWriteAppService, disputeAppService);
     }
 
     /** Build a task in PENDING_REVIEW (passed the validation gate) so accept/reject are legal. */
@@ -79,19 +82,28 @@ class TaskReviewAppServiceImplTest {
                 eq(Money.of("20.00")));
     }
 
+    /**
+     * A_MISMATCH reject: task transitions to DISPUTED and openDispute is called.
+     * No direct settleRejected call is made (settlement happens when the ruling lands).
+     * The service does not look up the builder for A/B/C rejections.
+     *
+     * <p>OLD behaviour: reject → settleRejected immediately (full refund).
+     * NEW behaviour: A_MISMATCH → dispute → settlement on ruling; D_CHANGED_MIND → charge.
+     */
     @Test
-    void rejectRefundsAndNeverTouchesTheBuilder() {
+    void mismatchRejectOpensDisputeAndNeverTouchesSettlementDirectly() {
         TaskModel task = pendingReviewTask();
         when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        service.reject(task.id(), clientId, "not good");
+        service.reject(task.id(), clientId, RejectReason.A_MISMATCH, "not good");
 
-        verify(settlementWriteAppService).settleRejected(eq(task.id()), eq(clientId), eq(Money.of("20.00")));
+        verify(disputeAppService).openDispute(any(TaskModel.class), eq(clientId), eq(RejectReason.A_MISMATCH));
+        verify(settlementWriteAppService, never()).settleRejected(any(), any(), any());
         verify(agentRepository, never()).findOwnerByVersionId(any());
         ArgumentCaptor<TaskModel> saved = ArgumentCaptor.forClass(TaskModel.class);
         verify(taskRepository).save(saved.capture());
-        assertThat(saved.getValue().rejectionReason()).isEqualTo("not good");
+        assertThat(saved.getValue().status()).isEqualTo(TaskStatus.DISPUTED);
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.hireai.application.biz.ledger.wallet.BuilderEarningsReadAppService;
 import com.hireai.application.biz.ledger.wallet.BuilderEarningsReadAppService.Earnings;
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.domain.biz.task.enums.OutputFormat;
+import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
@@ -114,7 +115,8 @@ class BuilderEarningsIntegrationTest {
         TaskModel rejectedTask = seedReviewableTask(client, versionA, "20.00");
         seedReviewableTask(client, versionB, "20.00"); // stays PENDING_REVIEW (pending review)
         reviewAppService.accept(acceptedTask.id(), client);
-        reviewAppService.reject(rejectedTask.id(), client, "not good enough");
+        // A_MISMATCH → dispute → StubArbitrationClient → NOT_FULFILLED → refund; builder earns nothing.
+        reviewAppService.reject(rejectedTask.id(), client, RejectReason.A_MISMATCH, "not good enough");
 
         Earnings e = earningsService.earningsFor(builder);
 

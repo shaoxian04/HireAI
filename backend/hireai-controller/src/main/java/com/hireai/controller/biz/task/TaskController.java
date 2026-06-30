@@ -118,9 +118,9 @@ public class TaskController extends BaseController {
 
     @PostMapping("/{id}/reject")
     public WebResult<TaskDTO> reject(@PathVariable("id") UUID id,
-                                     @Valid @RequestBody(required = false) RejectTaskRequest request) {
+                                     @Valid @RequestBody RejectTaskRequest request) {
         UUID clientId = currentUser.currentUserId();
-        reviewAppService.reject(id, clientId, request == null ? null : request.reason());
+        reviewAppService.reject(id, clientId, request.reasonCategory(), request.reason());
         return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
     }
 }

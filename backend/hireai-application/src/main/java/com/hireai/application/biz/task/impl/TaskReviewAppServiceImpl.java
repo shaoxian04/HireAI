@@ -1,13 +1,15 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
-import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
+import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.biz.ledger.settlement.info.SettlementBreakdown;
 import com.hireai.utility.exception.DomainException;
+import com.hireai.utility.result.ResultCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,7 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
     private final TaskRepository taskRepository;
     private final AgentRepository agentRepository;
     private final SettlementWriteAppService settlementWriteAppService;
+    private final DisputeAppService disputeAppService;
 
     @Override
     public UUID accept(UUID taskId, UUID clientId) {
@@ -44,14 +47,26 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
     }
 
     @Override
-    public UUID reject(UUID taskId, UUID clientId, String reason) {
+    public UUID reject(UUID taskId, UUID clientId, RejectReason reasonCategory, String reason) {
+        if (reasonCategory == null) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "A reject reason category is required");
+        }
         TaskModel task = loadOwned(taskId, clientId);
-        TaskModel resolved = task.reject(reason); // state guard: PENDING_REVIEW (caller passed the validation gate)
 
-        settlementWriteAppService.settleRejected(taskId, clientId, task.budget());
+        if (reasonCategory == RejectReason.D_CHANGED_MIND) {
+            // Buyer's remorse on conformant work → charge 85/15, no dispute.
+            UUID builderId = agentRepository.findOwnerByVersionId(task.agentVersionId())
+                    .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
+                            "No builder for agent version " + task.agentVersionId()));
+            settlementWriteAppService.settleAccepted(taskId, clientId, builderId, task.budget());
+            taskRepository.save(task.chargeChangedMind(reason));
+            return taskId;
+        }
 
-        taskRepository.save(resolved);
-        log.info("Task {} rejected by client {}; budget {} refunded", taskId, clientId, task.budget());
+        // A/B/C → open a dispute; settlement happens when the ruling lands.
+        TaskModel disputed = task.dispute(reasonCategory, reason);
+        taskRepository.save(disputed);
+        disputeAppService.openDispute(disputed, clientId, reasonCategory);
         return taskId;
     }
 

@@ -5,6 +5,7 @@ import com.hireai.application.biz.ledger.wallet.WalletReadAppService;
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.enums.OutputFormat;
+import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -158,11 +159,14 @@ class TaskSettlementIntegrationTest {
 
     @Test
     void rejectRefundsTheFullBudgetAndStoresTheReason() {
+        // A_MISMATCH → dispute → StubArbitrationClient → NOT_FULFILLED → full refund synchronously.
+        // OLD: reject(reason) → direct settleRejected (unconditional refund).
+        // NEW: A_MISMATCH → openDispute → stub ruling → settleRejected (same money, via dispute path).
         UUID client = newUser("CLIENT");
         UUID builder = newUser("BUILDER");
         TaskModel task = seedReviewableTask(client, newAgentVersion(builder), "20.00");
 
-        reviewAppService.reject(task.id(), client, "wrong format");
+        reviewAppService.reject(task.id(), client, RejectReason.A_MISMATCH, "wrong format");
 
         WalletModel clientWallet = walletRead.getByUserId(client);
         assertThat(clientWallet.available()).isEqualTo(Money.of("100.00"));
@@ -183,7 +187,7 @@ class TaskSettlementIntegrationTest {
                 .isInstanceOf(DomainException.class)
                 .satisfies(e -> assertThat(((DomainException) e).resultCode())
                         .isEqualTo(ResultCode.DOMAIN_RULE_VIOLATION));
-        assertThatThrownBy(() -> reviewAppService.reject(task.id(), client, null))
+        assertThatThrownBy(() -> reviewAppService.reject(task.id(), client, RejectReason.A_MISMATCH, null))
                 .isInstanceOf(DomainException.class);
 
         // money moved exactly once
