@@ -95,7 +95,7 @@ public class DisputeAppServiceImpl implements DisputeAppService {
             case PARTIALLY_FULFILLED -> {
                 UUID builderId = requireBuilder(task);
                 settlementWriteAppService.settleSplit(task.id(), task.clientId(), builderId, task.budget());
-                taskRepository.save(task.resolveDispute(TaskResolution.ACCEPTED));
+                taskRepository.save(task.resolveDispute(TaskResolution.PARTIALLY_ACCEPTED));
             }
             case NOT_FULFILLED -> {
                 settlementWriteAppService.settleRejected(task.id(), task.clientId(), task.budget());

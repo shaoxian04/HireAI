@@ -11,6 +11,7 @@ import com.hireai.domain.biz.ledger.wallet.model.WalletModel;
 import com.hireai.domain.biz.ledger.wallet.repository.WalletRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.RejectReason;
+import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
@@ -181,6 +182,10 @@ class DisputeFlowIntegrationTest {
 
         WalletModel builder = walletRepository.findByUserId(f.builderId()).orElseThrow();
         assertThat(builder.available()).isEqualTo(Money.of("42.50")); // 50.00 × (1 − 0.15) = 42.50
+
+        // task must self-describe the split outcome
+        TaskModel task = taskRepository.findById(f.taskId()).orElseThrow();
+        assertThat(task.resolution()).isEqualTo(TaskResolution.PARTIALLY_ACCEPTED);
     }
 
     /**

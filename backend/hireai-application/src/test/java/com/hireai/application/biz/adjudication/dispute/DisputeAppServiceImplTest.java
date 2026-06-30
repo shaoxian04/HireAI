@@ -13,6 +13,7 @@ import com.hireai.domain.biz.adjudication.repository.DisputeRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.RejectReason;
+import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
@@ -91,6 +92,10 @@ class DisputeAppServiceImplTest {
                 .thenReturn(Optional.of(new RulingInfo(RulingCategory.PARTIALLY_FULFILLED, "half")));
         service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
         verify(settlement).settleSplit(eq(disputedTask.id()), eq(clientId), eq(builderId), eq(Money.of("100.00")));
+        // task must be labelled PARTIALLY_ACCEPTED, not ACCEPTED
+        ArgumentCaptor<TaskModel> tcap = ArgumentCaptor.forClass(TaskModel.class);
+        verify(taskRepository, atLeastOnce()).save(tcap.capture());
+        assertThat(tcap.getValue().resolution()).isEqualTo(TaskResolution.PARTIALLY_ACCEPTED);
     }
 
     @Test
