@@ -260,6 +260,13 @@ class ArbitrationTransportIntegrationTest {
         int settlementCount = jdbc.queryForObject(
                 "SELECT count(*) FROM settlements WHERE task_id = ?", Integer.class, f.taskId());
 
+        // Guard: verify the first ruling actually settled before checking idempotency;
+        // without these, the later "unchanged" comparison can pass vacuously if the first callback silently failed.
+        assertThat(afterFirst.available()).isEqualTo(Money.of("100.00")); // fully refunded by first ruling
+        assertThat(settlementCount).isEqualTo(1); // exactly one settlement row created by first ruling
+        assertThat(disputeRepository.findByTaskId(f.taskId()).orElseThrow().status())
+                .isEqualTo(DisputeStatus.RESOLVED); // dispute resolved before duplicate callback
+
         // Second ruling on the now-RESOLVED dispute
         ResponseEntity<String> second = postRuling(dispute.id(), "NOT_FULFILLED", CALLBACK_SECRET);
         assertThat(second.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -347,5 +354,9 @@ class ArbitrationTransportIntegrationTest {
         WalletModel refunded = walletRepository.findByUserId(f.clientId()).orElseThrow();
         assertThat(refunded.available()).isEqualTo(Money.of("100.00"));
         assertThat(refunded.escrow()).isEqualTo(Money.ZERO);
+
+        // Assert task reached its terminal status (mirrors scenario 1 after NOT_FULFILLED ruling)
+        TaskModel dlqTask = taskRepository.findById(f.taskId()).orElseThrow();
+        assertThat(dlqTask.status()).isEqualTo(TaskStatus.RESOLVED);
     }
 }
