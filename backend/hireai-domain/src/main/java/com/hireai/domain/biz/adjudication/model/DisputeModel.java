@@ -1,4 +1,3 @@
-// DisputeModel.java
 package com.hireai.domain.biz.adjudication.model;
 
 import com.hireai.domain.biz.adjudication.enums.DisputeStatus;

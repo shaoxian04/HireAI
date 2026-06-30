@@ -1,4 +1,3 @@
-// RulingInfo.java
 package com.hireai.application.biz.adjudication.port;
 
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;

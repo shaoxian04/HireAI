@@ -49,6 +49,8 @@ class AuthIntegrationTest {
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    // Intentionally no RabbitMQ container: @Profile("!test") arbitration beans (RabbitArbitrationClient,
+    // ArbitrationDlqListener) are active but safe here because no test opens a dispute, so nothing publishes.
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

@@ -86,6 +86,19 @@ class ArbitrationCallbackControllerTest {
     }
 
     @Test
+    void returns401WhenBearerTokenIsBlank() throws Exception {
+        UUID disputeId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/arbitration-callbacks/{disputeId}/ruling", disputeId)
+                        .header("Authorization", "Bearer ")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validBody()))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(disputeAppService);
+    }
+
+    @Test
     void returns400WhenCategoryIsUnknown() throws Exception {
         UUID disputeId = UUID.randomUUID();
         String body = objectMapper.writeValueAsString(new ArbitrationRulingRequest("BOGUS", "rationale"));
@@ -124,5 +137,7 @@ class ArbitrationCallbackControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validBody()))
                 .andExpect(status().isNotFound());
+
+        verify(disputeAppService).applyRuling(eq(disputeId), any());
     }
 }

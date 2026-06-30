@@ -1,4 +1,3 @@
-// RabbitArbitrationClientTest.java
 package com.hireai.infrastructure.adjudication;
 
 import com.hireai.application.biz.adjudication.port.ArbitrationRequestMessage;
@@ -49,6 +48,7 @@ class RabbitArbitrationClientTest {
         assertThat(msg.taskId()).isEqualTo(task.id());
         assertThat(msg.correlationId()).isEqualTo(dispute.correlationId());
         assertThat(msg.format()).isEqualTo("JSON");
+        assertThat(msg.schema()).isEqualTo("{\"type\":\"object\"}");
         assertThat(msg.acceptanceCriteria()).isEqualTo("be correct"); // arbitrator sees the subjective criteria
         assertThat(msg.resultPayloadJson()).isEqualTo("{\"a\":1}");
         assertThat(msg.reasonCategory()).isEqualTo("A_MISMATCH");

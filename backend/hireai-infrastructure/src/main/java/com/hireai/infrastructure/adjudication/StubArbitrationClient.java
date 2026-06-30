@@ -1,4 +1,3 @@
-// StubArbitrationClient.java
 package com.hireai.infrastructure.adjudication;
 
 import com.hireai.application.biz.adjudication.port.ArbitrationGateway;

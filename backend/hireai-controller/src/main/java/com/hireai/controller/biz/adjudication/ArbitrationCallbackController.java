@@ -53,7 +53,12 @@ public class ArbitrationCallbackController extends BaseController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody ArbitrationRulingRequest request) {
         verifySecret(authorization);
-        RulingCategory category = RulingCategory.valueOf(request.category());
+        RulingCategory category;
+        try {
+            category = RulingCategory.valueOf(request.category());
+        } catch (IllegalArgumentException e) {
+            throw new InvalidRulingCategoryException(request.category());
+        }
         disputeAppService.applyRuling(disputeId, new RulingInfo(category, request.rationale()));
         return ok();
     }
@@ -81,8 +86,8 @@ public class ArbitrationCallbackController extends BaseController {
     }
 
     /** Maps an unrecognised {@link RulingCategory} name from the request body to HTTP 400. */
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<WebResult<Void>> handleIllegalArgument(IllegalArgumentException ex) {
+    @ExceptionHandler(InvalidRulingCategoryException.class)
+    public ResponseEntity<WebResult<Void>> handleInvalidRulingCategory(InvalidRulingCategoryException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(WebResult.error(ResultCode.VALIDATION_ERROR, "Invalid ruling category: " + ex.getMessage()));
     }
