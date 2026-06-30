@@ -6,19 +6,18 @@ import com.hireai.application.biz.adjudication.port.RulingInfo;
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
 import com.hireai.domain.biz.adjudication.model.DisputeModel;
 import com.hireai.domain.biz.task.model.TaskModel;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
 
 /**
- * Synchronous deterministic arbitration adapter for Phase 2 (before the Python service exists).
- * The reason→category mapping is an arbitrary-but-fixed test fixture chosen so all three settlement
- * branches are reachable; the real LLM ruling arrives via {@code RabbitArbitrationClient} in Phase 3.
- * Active only when no other {@link ArbitrationGateway} bean (the Rabbit adapter) is present.
+ * Synchronous deterministic arbitration adapter for tests. Active in the {@code test} profile only;
+ * production uses {@code RabbitArbitrationClient} (async). The reason→category mapping is an
+ * arbitrary-but-fixed fixture so all three settlement branches are reachable in integration tests.
  */
 @Component
-@ConditionalOnMissingBean(name = "rabbitArbitrationClient")
+@Profile("test")
 public class StubArbitrationClient implements ArbitrationGateway {
 
     @Override
