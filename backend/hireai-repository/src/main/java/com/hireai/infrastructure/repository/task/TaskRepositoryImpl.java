@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.repository.task;
 
+import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.TaskModel;
@@ -42,7 +43,8 @@ public class TaskRepositoryImpl implements TaskRepository {
                 task.budget().value(), outputSpecJsonMapper.toJson(task.outputSpec()),
                 task.category(), task.status().name(), task.agentVersionId(), task.createdAt(),
                 task.resolution() == null ? null : task.resolution().name(),
-                task.resolvedAt(), task.rejectionReason()));
+                task.resolvedAt(), task.rejectionReason(),
+                task.rejectReasonCategory() == null ? null : task.rejectReasonCategory().name()));
 
         TaskResultModel result = task.result();
         if (result != null && taskResultJpa.findByTaskId(result.taskId()).isEmpty()) {
@@ -82,7 +84,8 @@ public class TaskRepositoryImpl implements TaskRepository {
                 entity.getCategory(), TaskStatus.valueOf(entity.getStatus()),
                 entity.getAgentVersionId(), result, entity.getGmtCreate(),
                 entity.getResolution() == null ? null : TaskResolution.valueOf(entity.getResolution()),
-                entity.getResolvedAt(), entity.getRejectionReason());
+                entity.getResolvedAt(), entity.getRejectionReason(),
+                entity.getRejectReasonCategory() == null ? null : RejectReason.valueOf(entity.getRejectReasonCategory()));
     }
 
     private TaskResultModel toResultModel(TaskResultDO entity) {

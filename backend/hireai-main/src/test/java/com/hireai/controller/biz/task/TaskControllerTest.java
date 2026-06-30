@@ -8,6 +8,7 @@ import com.hireai.utility.result.ResultCode;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
 import com.hireai.domain.biz.task.enums.OutputFormat;
+import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
@@ -192,7 +193,8 @@ class TaskControllerTest {
                         new OutputSpec(OutputFormat.TEXT, null, null), "summarisation")
                 .assignAndQueue(UUID.randomUUID()).markExecuting();
         t = t.recordResult(TaskResultModel.rehydrate(
-                UUID.randomUUID(), t.id(), "COMPLETED", "{}", null, Instant.now()));
+                UUID.randomUUID(), t.id(), "COMPLETED", "{}", null, Instant.now()))
+                .passValidation(); // validation gate must pass before client review
         return accepted ? t.accept() : t.reject("not what I asked");
     }
 
@@ -220,13 +222,13 @@ class TaskControllerTest {
         UUID clientId = UUID.randomUUID();
         UUID taskId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
-        when(taskReviewAppService.reject(eq(taskId), eq(clientId), eq("not what I asked"))).thenReturn(taskId);
+        when(taskReviewAppService.reject(eq(taskId), eq(clientId), eq(RejectReason.A_MISMATCH), eq("not what I asked"))).thenReturn(taskId);
         when(taskReadAppService.getForClient(eq(taskId), eq(clientId)))
                 .thenReturn(resolvedTask(clientId, false));
 
         mockMvc.perform(post("/api/tasks/{id}/reject", taskId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reason\":\"not what I asked\"}"))
+                        .content("{\"reasonCategory\":\"A_MISMATCH\",\"reason\":\"not what I asked\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.resolution").value("REJECTED"))
                 .andExpect(jsonPath("$.data.refundAmount").value(20.00))
@@ -234,16 +236,14 @@ class TaskControllerTest {
     }
 
     @Test
-    void rejectWithoutBodyIsAccepted() throws Exception {
+    void rejectWithoutBodyReturns400() throws Exception {
+        // reasonCategory is now @NotNull — missing body → 400 VALIDATION_ERROR.
+        // OLD: no body was optional (required=false). NEW: body with reasonCategory is mandatory.
         UUID clientId = UUID.randomUUID();
-        UUID taskId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
-        when(taskReviewAppService.reject(eq(taskId), eq(clientId), eq(null))).thenReturn(taskId);
-        when(taskReadAppService.getForClient(eq(taskId), eq(clientId)))
-                .thenReturn(resolvedTask(clientId, false));
 
-        mockMvc.perform(post("/api/tasks/{id}/reject", taskId))
-                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/tasks/{id}/reject", UUID.randomUUID()))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -267,7 +267,7 @@ class TaskControllerTest {
 
         mockMvc.perform(post("/api/tasks/{id}/reject", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reason\":\"" + "x".repeat(501) + "\"}"))
+                        .content("{\"reasonCategory\":\"A_MISMATCH\",\"reason\":\"" + "x".repeat(501) + "\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }

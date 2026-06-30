@@ -40,10 +40,10 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 /**
- * Boots Spring against a real Postgres (Testcontainers) so Flyway applies V1–V4. Drives the
+ * Boots Spring against a real Postgres (Testcontainers) so Flyway applies V1–V16. Drives the
  * Task-side routing/execution flow: submit → assignAndQueue → markExecuting → token-verified
- * callback → RESULT_RECEIVED + persisted task_results; plus the bad-token rejection path.
- * The {@link DispatchTokenService} port is mocked (Track B owns the real HMAC impl).
+ * callback → validation gate → PENDING_REVIEW + persisted task_results; plus the bad-token
+ * rejection path. The {@link DispatchTokenService} port is mocked (Track B owns the real HMAC impl).
  */
 @SpringBootTest
 @Testcontainers
@@ -116,7 +116,9 @@ class AgentCallbackIntegrationTest {
                 new AgentResultInfo("COMPLETED", "{\"summary\":\"ok\"}", "https://x/y", "done"));
 
         TaskModel task = taskReadAppService.getForClient(taskId, client);
-        assertThat(task.status()).isEqualTo(TaskStatus.RESULT_RECEIVED);
+        // The gate runs synchronously inside the callback transaction:
+        // EXECUTING → RESULT_RECEIVED → PENDING_REVIEW (valid JSON passes the JSON format check).
+        assertThat(task.status()).isEqualTo(TaskStatus.PENDING_REVIEW);
         assertThat(task.result()).isNotNull();
         assertThat(task.result().agentStatus()).isEqualTo("COMPLETED");
 

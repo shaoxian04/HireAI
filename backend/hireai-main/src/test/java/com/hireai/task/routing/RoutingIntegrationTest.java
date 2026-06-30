@@ -31,8 +31,8 @@ import static org.awaitility.Awaitility.await;
 /**
  * End-to-end marketplace spine: submit a task, let routing match it to a seeded ACTIVE
  * agent, dispatch over RabbitMQ to an in-JVM stub agent, and observe the token-authenticated
- * callback drive the task to RESULT_RECEIVED with a persisted task_results row. Also asserts
- * the no-match path lands on AWAITING_CAPACITY. Boots a real Postgres (Flyway V1-V4) and a
+ * callback + validation gate drive the task to PENDING_REVIEW with a persisted task_results row.
+ * Also asserts the no-match path lands on AWAITING_CAPACITY. Boots a real Postgres (Flyway V1-V16) and a
  * real RabbitMQ; auto-skips without Docker. Runs under the 'dev' profile so the localhost
  * stub webhook is allowed (spec invariant #6 local-demo exception); the signed dispatch
  * token is still enforced.
@@ -218,9 +218,11 @@ class RoutingIntegrationTest {
 
         UUID taskId = taskWriteAppService.submit(info(client, "summarisation", "30.00"));
 
+        // The gate runs synchronously in the callback transaction: valid JSON payload passes the JSON
+        // format check (no schema declared) → PENDING_REVIEW. RESULT_RECEIVED is a fleeting in-tx state.
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
             String status = jdbc.queryForObject("SELECT status FROM tasks WHERE id = ?", String.class, taskId);
-            assertThat(status).isEqualTo("RESULT_RECEIVED");
+            assertThat(status).isEqualTo("PENDING_REVIEW");
         });
 
         UUID assignedVersion = jdbc.queryForObject(

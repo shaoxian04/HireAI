@@ -1,5 +1,7 @@
 package com.hireai.application.biz.task.callback.impl;
 
+import com.hireai.application.biz.adjudication.validation.ValidationAppService;
+import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.task.callback.AgentCallbackAppService;
 import com.hireai.application.port.security.DispatchTokenClaims;
 import com.hireai.utility.exception.DispatchTokenInvalidException;
@@ -20,10 +22,12 @@ import java.util.UUID;
 
 /**
  * Verifies the dispatch token, confirms it authorises THIS task, then records the agent's
- * result through the Task aggregate ({@code EXECUTING → RESULT_RECEIVED}) and persists the
- * task_results child via the repository root. A duplicate callback (task already past
- * EXECUTING) is treated as a first-result-wins no-op: the service returns without
- * re-processing and the caller receives 200 — the first result is never overwritten.
+ * result. For a COMPLETED result: moves task EXECUTING → RESULT_RECEIVED, persists the
+ * task_results child, and invokes the Module 4 validation gate (→ PENDING_REVIEW on pass,
+ * SPEC_VIOLATION + auto-refund on fail). For a non-COMPLETED agentStatus: marks task FAILED
+ * and refunds the client's escrow. A duplicate callback (task already past EXECUTING) is
+ * treated as a first-result-wins no-op: the service returns without re-processing and the
+ * caller receives 200 — the first result is never overwritten.
  */
 @Service
 @Slf4j
@@ -33,6 +37,8 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
 
     private final TaskRepository taskRepository;
     private final DispatchTokenService dispatchTokenService;
+    private final ValidationAppService validationAppService;
+    private final SettlementWriteAppService settlementWriteAppService;
 
     @Override
     public void recordResult(UUID taskId, String bearerToken, AgentResultInfo result) {
@@ -57,9 +63,20 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
                      "no-op — first result wins", taskId, task.status());
             return;
         }
+        // Non-COMPLETED MUST branch first: markFailed() requires EXECUTING; recordResult() moves
+        // the task to RESULT_RECEIVED, making markFailed() illegal if called afterwards.
+        if (!"COMPLETED".equalsIgnoreCase(result.agentStatus())) {
+            TaskModel failed = task.markFailed();
+            taskRepository.save(failed);
+            settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
+            log.info("Task {} agent reported {} -> FAILED (refunded)", taskId, result.agentStatus());
+            return;
+        }
         TaskResultModel resultModel = TaskResultModel.record(
                 taskId, result.agentStatus(), result.resultPayloadJson(), result.resultUrl());
-        taskRepository.save(task.recordResult(resultModel));
-        log.info("Task {} recorded result with agent status {}", taskId, result.agentStatus());
+        TaskModel recorded = task.recordResult(resultModel);
+        taskRepository.save(recorded);
+        log.info("Task {} result recorded; invoking validation gate (agentStatus={})", taskId, result.agentStatus());
+        validationAppService.validateAndGate(recorded);
     }
 }

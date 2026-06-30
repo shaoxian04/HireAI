@@ -32,8 +32,12 @@ class JjwtServiceTest {
     @Test
     void rejectsTamperedToken() {
         String token = service.issue(UUID.randomUUID(), List.of("BUILDER"), Duration.ofMinutes(5));
-        String tampered = token.substring(0, token.length() - 2)
-                + (token.endsWith("a") ? "b" : "a") + token.charAt(token.length() - 1);
+        // Flip a fully-significant char in the signature segment. Choose the replacement
+        // relative to the char being replaced so the tamper is never a no-op (the random
+        // signature would otherwise occasionally already hold the replacement char → flaky).
+        int i = token.length() - 2;
+        char replacement = token.charAt(i) == 'a' ? 'b' : 'a';
+        String tampered = token.substring(0, i) + replacement + token.charAt(token.length() - 1);
 
         assertThatThrownBy(() -> service.verify(tampered))
                 .isInstanceOf(JwtInvalidException.class);

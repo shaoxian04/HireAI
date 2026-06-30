@@ -5,6 +5,7 @@ import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.ledger.settlement.service.SettlementPolicy;
+import com.hireai.domain.shared.model.Money;
 
 import java.math.BigDecimal;
 
@@ -27,6 +28,12 @@ public final class TaskModel2DTOConverter {
         if (task.resolution() == TaskResolution.ACCEPTED) {
             payout = SettlementPolicy.netOf(task.budget()).value();
             commission = SettlementPolicy.commissionOn(task.budget()).value();
+        } else if (task.resolution() == TaskResolution.PARTIALLY_ACCEPTED) {
+            Money builderShare = SettlementPolicy.builderShareOnSplit(task.budget());        // 50.00 of 100
+            Money splitCommission = SettlementPolicy.commissionOn(builderShare);              // 7.50
+            payout = builderShare.subtract(splitCommission).value();                         // 42.50
+            commission = splitCommission.value();                                            // 7.50
+            refund = task.budget().subtract(builderShare).value();                           // 50.00
         } else if (task.resolution() == TaskResolution.REJECTED) {
             refund = task.budget().value();
         }

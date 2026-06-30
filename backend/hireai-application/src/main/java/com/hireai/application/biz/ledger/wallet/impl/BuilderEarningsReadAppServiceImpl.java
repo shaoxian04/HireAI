@@ -68,7 +68,8 @@ public class BuilderEarningsReadAppServiceImpl implements BuilderEarningsReadApp
 
     private boolean accepted(RoutedTaskRow row) {
         return TaskStatus.RESOLVED.name().equals(row.status())
-                && TaskResolution.ACCEPTED.name().equals(row.resolution());
+                && (TaskResolution.ACCEPTED.name().equals(row.resolution())
+                    || TaskResolution.PARTIALLY_ACCEPTED.name().equals(row.resolution()));
     }
 
     private boolean pending(RoutedTaskRow row) {
@@ -76,7 +77,12 @@ public class BuilderEarningsReadAppServiceImpl implements BuilderEarningsReadApp
     }
 
     private Money net(RoutedTaskRow row) {
-        return SettlementPolicy.netOf(Money.of(row.budget()));
+        Money budget = Money.of(row.budget());
+        if (TaskResolution.PARTIALLY_ACCEPTED.name().equals(row.resolution())) {
+            Money builderShare = SettlementPolicy.builderShareOnSplit(budget);
+            return builderShare.subtract(SettlementPolicy.commissionOn(builderShare));   // 42.50
+        }
+        return SettlementPolicy.netOf(budget);                                            // full accept
     }
 
     private Money sumNet(List<RoutedTaskRow> rows) {

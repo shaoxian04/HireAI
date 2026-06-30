@@ -81,6 +81,11 @@ hireai:
       enabled: ${OAUTH2_ENABLED:false}
       success-redirect-url: ${OAUTH2_SUCCESS_REDIRECT_URL:http://localhost:3000/auth/callback}
       failure-redirect-url: ${OAUTH2_FAILURE_REDIRECT_URL:http://localhost:3000/login}
+  arbitration:
+    # Shared secret for the arbitration ruling callback (Hard Invariant #6). MUST be overridden
+    # in real deploys. The worker POSTs rulings to /api/arbitration-callbacks/{disputeId}/ruling
+    # and authenticates with this secret as a bearer token.
+    callback-secret: ${ARBITRATION_CALLBACK_SECRET:dev-only-arbitration-callback-secret-change-me}
   storage:
     # Supabase Storage (public-read bucket; uploads happen ONLY server-side with the service key).
     supabase-url: ${SUPABASE_URL:}

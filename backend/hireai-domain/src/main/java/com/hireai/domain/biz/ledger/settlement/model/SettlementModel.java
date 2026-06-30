@@ -21,4 +21,8 @@ public record SettlementModel(UUID id, UUID taskId, SettlementType type,
     public static SettlementModel rejected(UUID taskId) {
         return new SettlementModel(UUID.randomUUID(), taskId, SettlementType.REJECT, Money.ZERO, Money.ZERO, Instant.now());
     }
+
+    public static SettlementModel split(UUID taskId, Money net, Money commission) {
+        return new SettlementModel(UUID.randomUUID(), taskId, SettlementType.SPLIT, net, commission, Instant.now());
+    }
 }

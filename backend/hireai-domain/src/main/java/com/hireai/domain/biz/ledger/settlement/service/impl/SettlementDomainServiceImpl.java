@@ -30,4 +30,23 @@ public class SettlementDomainServiceImpl implements SettlementDomainService {
     public void settleRejection(WalletModel clientWallet, Money budget, UUID taskId, String correlationId) {
         clientWallet.refund(budget, taskId, correlationId);
     }
+
+    @Override
+    public SettlementBreakdown settleSplit(WalletModel clientWallet, WalletModel builderWallet,
+                                           Money budget, UUID taskId, String correlationId) {
+        Money builderShare = SettlementPolicy.builderShareOnSplit(budget);
+        Money commission = SettlementPolicy.commissionOn(builderShare);
+        Money net = builderShare.subtract(commission);
+        Money clientRefund = budget.subtract(builderShare); // by subtraction → exact reconciliation
+
+        clientWallet.release(net, taskId, LedgerEntryType.SPLIT, correlationId);
+        if (commission.isPositive()) {
+            clientWallet.release(commission, taskId, LedgerEntryType.COMMISSION, correlationId);
+        }
+        if (clientRefund.isPositive()) {
+            clientWallet.refund(clientRefund, taskId, correlationId);
+        }
+        builderWallet.credit(net, taskId, LedgerEntryType.SPLIT, correlationId);
+        return new SettlementBreakdown(net, commission);
+    }
 }
