@@ -13,8 +13,9 @@ import java.util.UUID;
  * SettlementPolicy — never by summing ledger rows, because PAYOUT entries exist on both
  * wallets of a settlement and are ambiguous in the legal self-settle case (a client
  * accepting their own agent's work). Equal to the ledger credit by construction: settlement
- * computed the credit as netOf(budget) from the same task row. Display amounts only —
- * amounts of record live in the ledger.
+ * computed the same net from the same task row — netOf(budget) for a full ACCEPT, or the
+ * split net netOf(builderShareOnSplit(budget)) for a PARTIALLY_ACCEPTED dispute outcome.
+ * Display amounts only — amounts of record live in the ledger.
  */
 @Validated
 public interface BuilderEarningsReadAppService {
