@@ -4,15 +4,15 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 import java.util.UUID;
 
 /**
  * JPA persistence entity for the single result an Agent posts back for a task. Written and
- * read only through the Task aggregate root. {@code result_payload} is stored as JSONB.
+ * read only through the Task aggregate root. {@code result_payload} is stored as TEXT: it is
+ * untrusted agent output that may be malformed, and the validation gate (not the DB) judges
+ * whether it is well-formed JSON. A jsonb column would reject invalid JSON before the gate runs.
  */
 @Entity
 @Table(name = "task_results")
@@ -25,8 +25,7 @@ public class TaskResultDO {
     @Column(name = "task_id", nullable = false)
     private UUID taskId;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "result_payload", columnDefinition = "jsonb", nullable = false)
+    @Column(name = "result_payload", columnDefinition = "text", nullable = false)
     private String resultPayload;
 
     @Column(name = "result_url")
