@@ -19,6 +19,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,16 +66,37 @@ class DisputeRepositoryIntegrationTest {
         DisputeModel open = DisputeModel.open(taskId, UUID.randomUUID(), RejectReason.B_FACTUAL, "corr-x");
         disputeRepository.save(open);
 
-        DisputeModel ruled = open
-                .recordRuling(new Ruling(1, RulingCategory.PARTIALLY_FULFILLED, "half", RulingDecidedBy.ARBITRATOR))
-                .resolve();
+        Ruling ruling = new Ruling(1, RulingCategory.PARTIALLY_FULFILLED, "half",
+                RulingDecidedBy.ARBITRATOR, Instant.parse("2026-07-01T00:00:00Z"));
+        DisputeModel ruled = open.recordRuling(ruling).resolve();
         disputeRepository.save(ruled);
 
         DisputeModel found = disputeRepository.findByTaskId(taskId).orElseThrow();
         assertThat(found.status()).isEqualTo(DisputeStatus.RESOLVED);
         assertThat(found.reasonCategory()).isEqualTo(RejectReason.B_FACTUAL);
-        assertThat(found.ruling().category()).isEqualTo(RulingCategory.PARTIALLY_FULFILLED);
-        assertThat(found.ruling().rationale()).isEqualTo("half");
+        assertThat(found.effectiveRuling().get().category()).isEqualTo(RulingCategory.PARTIALLY_FULFILLED);
+        assertThat(found.effectiveRuling().get().rationale()).isEqualTo("half");
         assertThat(found.resolvedAt()).isNotNull();
+    }
+
+    @Test
+    void rulingHistoryRoundTrip() {
+        UUID taskId = UUID.randomUUID();
+        DisputeModel open = DisputeModel.open(taskId, UUID.randomUUID(), RejectReason.A_MISMATCH, "corr-hist");
+        disputeRepository.save(open);
+
+        Ruling tier1 = new Ruling(1, RulingCategory.NOT_FULFILLED, "spec not met",
+                RulingDecidedBy.ARBITRATOR, Instant.parse("2026-07-01T00:00:00Z"));
+        DisputeModel resolved = open.recordRuling(tier1).resolve();
+        disputeRepository.save(resolved);
+
+        DisputeModel found = disputeRepository.findByTaskId(taskId).orElseThrow();
+        assertThat(found.rulings()).hasSize(1);
+        assertThat(found.effectiveRuling()).isPresent();
+        assertThat(found.effectiveRuling().get().category()).isEqualTo(RulingCategory.NOT_FULFILLED);
+        assertThat(found.effectiveRuling().get().tier()).isEqualTo(1);
+        assertThat(found.effectiveRuling().get().decidedBy()).isEqualTo(RulingDecidedBy.ARBITRATOR);
+        assertThat(found.effectiveRuling().get().rationale()).isEqualTo("spec not met");
+        assertThat(found.status()).isEqualTo(DisputeStatus.RESOLVED);
     }
 }
