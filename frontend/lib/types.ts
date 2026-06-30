@@ -19,8 +19,7 @@ export type TaskStatus =
   | "SPEC_VIOLATION"
   | "FAILED"
   | "CANCELLED"
-  | "DISPUTED"
-  | "PARTIALLY_ACCEPTED";
+  | "DISPUTED";
 
 /** Agent lifecycle (agent/enums/AgentStatus.java). */
 export type AgentStatus =

@@ -15,20 +15,24 @@ ruling back to the Spring backend via a shared-secret callback.
 
 ### Outbound callback
 
-`POST {BACKEND_BASE_URL}/api/internal/disputes/{disputeId}/ruling`
+`POST {BACKEND_BASE_URL}/api/arbitration-callbacks/{disputeId}/ruling`
 
 Headers:
-- `X-Arbitration-Secret: <ARBITRATION_CALLBACK_SECRET>`
+- `Authorization: Bearer <ARBITRATION_CALLBACK_SECRET>`
 - `Content-Type: application/json`
 
 Body (JSON):
 ```json
 {
-  "ruling": "REFUND_FULL | RELEASE_PAYMENT | SPLIT",
-  "reason": "...",
-  "confidence": 0.0-1.0
+  "category": "FULFILLED | PARTIALLY_FULFILLED | NOT_FULFILLED",
+  "rationale": "..."
 }
 ```
+
+The arbitrator returns **only** a category and a rationale string. All credit
+movement (settlement, refunds, splits) is computed deterministically by the Java
+domain layer from the ruling category — the arbitrator never touches money
+(Invariant #3).
 
 ## Environment variables
 
