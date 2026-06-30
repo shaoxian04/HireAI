@@ -32,6 +32,9 @@ const STATUS_CLASSES: Record<string, string> = {
   ACTIVE: ACCENT,
   SUSPENDED: RED,
   DEACTIVATED: DIM,
+  // dispute / arbitration
+  DISPUTED: AMBER,
+  PARTIALLY_ACCEPTED: VIOLET,
 };
 
 /** Tailwind classes for a lifecycle status badge. Falls back to neutral for unknown values. */

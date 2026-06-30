@@ -4,7 +4,7 @@
 export type OutputFormat = "TEXT" | "JSON" | "FILE";
 
 /** Client review outcome (task/enums/TaskResolution.java). */
-export type TaskResolution = "ACCEPTED" | "REJECTED";
+export type TaskResolution = "ACCEPTED" | "REJECTED" | "PARTIALLY_ACCEPTED";
 
 /** Full task lifecycle (task/enums/TaskStatus.java). */
 export type TaskStatus =
@@ -18,7 +18,9 @@ export type TaskStatus =
   | "TIMED_OUT"
   | "SPEC_VIOLATION"
   | "FAILED"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "DISPUTED"
+  | "PARTIALLY_ACCEPTED";
 
 /** Agent lifecycle (agent/enums/AgentStatus.java). */
 export type AgentStatus =
@@ -273,4 +275,24 @@ export interface BuilderEarningsDTO {
   paidTaskCount: number;
   perAgent: AgentEarningsDTO[];
   payouts: PayoutDTO[];
+}
+
+// ── Dispute / arbitration ──────────────────────────────────────────────────
+
+export type RulingCategory = "FULFILLED" | "PARTIALLY_FULFILLED" | "NOT_FULFILLED";
+export type RulingDecidedBy = "ARBITRATOR" | "ADMINISTRATOR" | "FALLBACK";
+
+export interface RulingDTO {
+  tier: number;
+  decidedBy: RulingDecidedBy;
+  category: RulingCategory;
+  rationale: string | null;
+  decidedAt: string; // ISO-8601
+}
+
+export interface DisputeOutcomeDTO {
+  taskId: string;
+  status: string;
+  effectiveCategory: RulingCategory | null;
+  rulings: RulingDTO[];
 }
