@@ -83,6 +83,9 @@ def validate_against_schema(payload: str, schema: str | None) -> dict:
         schema_obj = json.loads(schema)
     except (json.JSONDecodeError, TypeError):
         return {"valid": False, "errors": ["declared schema is not valid JSON"]}
-    validator = Draft202012Validator(schema_obj)
-    errors = [e.message for e in validator.iter_errors(data)]
+    try:
+        validator = Draft202012Validator(schema_obj)
+        errors = [e.message for e in validator.iter_errors(data)]
+    except Exception as exc:  # noqa: BLE001 - schema may have unresolvable $ref / be invalid; never raise
+        return {"valid": False, "errors": [f"schema evaluation error: {exc}"]}
     return {"valid": not errors, "errors": errors}

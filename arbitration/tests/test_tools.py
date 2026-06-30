@@ -40,3 +40,9 @@ def test_validate_against_schema_reports_errors():
 def test_validate_handles_malformed_json():
     res = validate_against_schema("not json", '{"type":"object"}')
     assert res["valid"] is False
+
+
+def test_validate_handles_unresolvable_ref():
+    res = validate_against_schema('{}', '{"$ref": "https://unresolvable.example.test/schema.json"}')
+    assert res["valid"] is False
+    assert res["errors"]
