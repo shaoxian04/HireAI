@@ -24,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -119,7 +120,7 @@ class DisputeAppServiceImplTest {
     @Test
     void applyRulingIsNoOpWhenDisputeAlreadyResolved() {
         DisputeModel resolved = DisputeModel.open(disputedTask.id(), clientId, RejectReason.A_MISMATCH, "c")
-                .recordRuling(new Ruling(1, RulingCategory.FULFILLED, "x", RulingDecidedBy.ARBITRATOR))
+                .recordRuling(new Ruling(1, RulingCategory.FULFILLED, "x", RulingDecidedBy.ARBITRATOR, Instant.parse("2026-07-01T00:00:00Z")))
                 .resolve();
         when(disputeRepository.findById(resolved.id())).thenReturn(Optional.of(resolved));
 

@@ -1,23 +1,22 @@
-// Ruling.java
 package com.hireai.domain.biz.adjudication.model;
 
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
 import com.hireai.domain.biz.adjudication.enums.RulingDecidedBy;
-import com.hireai.utility.exception.DomainException;
-import com.hireai.utility.result.ResultCode;
+
+import java.time.Instant;
+import java.util.Objects;
 
 /**
- * Immutable ruling VO. The arbitrator supplies only {@code category} + {@code rationale};
- * {@code tier} (1 in tier-1) and {@code decidedBy} are set platform-side. No money lives here (Inv #3).
+ * A single ruling in a dispute's append-only history: the tier, the verdict category, the
+ * human-readable rationale, who decided it, and when. Money is computed from {@code category}
+ * at apply-time (Invariant #3) — the rationale is never in the money path.
  */
-public record Ruling(int tier, RulingCategory category, String rationale, RulingDecidedBy decidedBy) {
+public record Ruling(int tier, RulingCategory category, String rationale,
+                     RulingDecidedBy decidedBy, Instant decidedAt) {
 
     public Ruling {
-        if (category == null) {
-            throw new DomainException(ResultCode.VALIDATION_ERROR, "ruling category is required");
-        }
-        if (decidedBy == null) {
-            throw new DomainException(ResultCode.VALIDATION_ERROR, "ruling decidedBy is required");
-        }
+        Objects.requireNonNull(category, "category");
+        Objects.requireNonNull(decidedBy, "decidedBy");
+        Objects.requireNonNull(decidedAt, "decidedAt");
     }
 }

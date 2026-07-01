@@ -6,41 +6,50 @@ import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Dispute aggregate root (one per task). Immutable: each transition returns a new copy; an illegal
- * transition throws {@link DomainException}. State machine: OPEN → ARBITRATING → RULED → RESOLVED,
- * with a RESOLVED-via-fallback path from OPEN/ARBITRATING. ESCALATED is a reserved tier-2 seam.
+ * Dispute aggregate root. Holds an append-only ruling HISTORY (a future Administrator override is
+ * appended above the arbitrator's tier-1 ruling, never replacing it — Invariant #2). The effective
+ * ruling is the highest-tier entry. Settlement is computed at apply-time from the incoming category,
+ * not from this model (Invariant #3) — this aggregate only records what was decided.
+ *
+ * State machine: OPEN → ARBITRATING → RULED → RESOLVED,
+ * with a RESOLVED-via-fallback path from OPEN/ARBITRATING.
  */
 public final class DisputeModel {
 
     private final UUID id;
     private final UUID taskId;
     private final UUID raisedBy;
-    private final RejectReason reasonCategory;  // always a dispute reason (A/B/C)
+    private final RejectReason reasonCategory;
     private final DisputeStatus status;
-    private final Ruling ruling;                // nullable until RULED/RESOLVED
+    private final List<Ruling> rulings;
     private final String correlationId;
     private final Instant createdAt;
-    private final Instant resolvedAt;           // nullable until RESOLVED
+    private final Instant resolvedAt;
 
     private DisputeModel(UUID id, UUID taskId, UUID raisedBy, RejectReason reasonCategory,
-                         DisputeStatus status, Ruling ruling, String correlationId,
+                         DisputeStatus status, List<Ruling> rulings, String correlationId,
                          Instant createdAt, Instant resolvedAt) {
         this.id = id;
         this.taskId = taskId;
         this.raisedBy = raisedBy;
         this.reasonCategory = reasonCategory;
         this.status = status;
-        this.ruling = ruling;
+        this.rulings = List.copyOf(rulings);
         this.correlationId = correlationId;
         this.createdAt = createdAt;
         this.resolvedAt = resolvedAt;
     }
 
     /** Open a new dispute for a disputable rejection (A/B/C only). */
-    public static DisputeModel open(UUID taskId, UUID raisedBy, RejectReason reasonCategory, String correlationId) {
+    public static DisputeModel open(UUID taskId, UUID raisedBy, RejectReason reasonCategory,
+                                    String correlationId) {
         if (taskId == null || raisedBy == null) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "taskId and raisedBy are required");
         }
@@ -49,65 +58,79 @@ public final class DisputeModel {
                     "Dispute reason must be A/B/C; got " + reasonCategory);
         }
         return new DisputeModel(UUID.randomUUID(), taskId, raisedBy, reasonCategory,
-                DisputeStatus.OPEN, null, correlationId, Instant.now(), null);
+                DisputeStatus.OPEN, List.of(), correlationId, Instant.now(), null);
     }
 
-    /** Rebuild from a persisted row (no validation). */
-    public static DisputeModel rehydrate(UUID id, UUID taskId, UUID raisedBy, RejectReason reasonCategory,
-                                         DisputeStatus status, Ruling ruling, String correlationId,
+    /** Rebuild from persisted rows (no validation). */
+    public static DisputeModel rehydrate(UUID id, UUID taskId, UUID raisedBy,
+                                         RejectReason reasonCategory, DisputeStatus status,
+                                         List<Ruling> rulings, String correlationId,
                                          Instant createdAt, Instant resolvedAt) {
-        return new DisputeModel(id, taskId, raisedBy, reasonCategory, status, ruling,
+        return new DisputeModel(id, taskId, raisedBy, reasonCategory, status, rulings,
                 correlationId, createdAt, resolvedAt);
     }
 
-    /** OPEN → ARBITRATING: the request was handed to the arbitrator (async transport). */
+    /** OPEN → ARBITRATING (handed off for async arbitration). */
     public DisputeModel startArbitrating() {
-        requireStatusIn("startArbitrating", DisputeStatus.OPEN);
-        return copyWith(DisputeStatus.ARBITRATING, this.ruling, this.resolvedAt);
+        requireStatus(DisputeStatus.OPEN, "startArbitrating");
+        return new DisputeModel(id, taskId, raisedBy, reasonCategory, DisputeStatus.ARBITRATING,
+                rulings, correlationId, createdAt, resolvedAt);
     }
 
-    /** OPEN|ARBITRATING → RULED: a ruling arrived (first-ruling-wins; later rulings are rejected by the guard). */
+    /** OPEN|ARBITRATING → RULED: append a ruling to the history. */
     public DisputeModel recordRuling(Ruling ruling) {
-        requireStatusIn("recordRuling", DisputeStatus.OPEN, DisputeStatus.ARBITRATING);
+        if (status != DisputeStatus.OPEN && status != DisputeStatus.ARBITRATING) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "recordRuling requires OPEN|ARBITRATING; was " + status);
+        }
         if (ruling == null) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "ruling is required");
         }
-        return copyWith(DisputeStatus.RULED, ruling, this.resolvedAt);
+        return new DisputeModel(id, taskId, raisedBy, reasonCategory, DisputeStatus.RULED,
+                append(ruling), correlationId, createdAt, resolvedAt);
     }
 
-    /** RULED → RESOLVED: the ruling has been settled. */
+    /** RULED → RESOLVED. */
     public DisputeModel resolve() {
-        requireStatusIn("resolve", DisputeStatus.RULED);
-        return copyWith(DisputeStatus.RESOLVED, this.ruling, Instant.now());
+        requireStatus(DisputeStatus.RULED, "resolve");
+        return new DisputeModel(id, taskId, raisedBy, reasonCategory, DisputeStatus.RESOLVED,
+                rulings, correlationId, createdAt, Instant.now());
     }
 
-    /** OPEN|ARBITRATING → RESOLVED via the platform refund fallback (DLQ 兜底). */
+    /** OPEN|ARBITRATING → RESOLVED via DLQ fallback: append the fallback ruling. */
     public DisputeModel resolveByFallback(Ruling fallbackRuling) {
-        requireStatusIn("resolveByFallback", DisputeStatus.OPEN, DisputeStatus.ARBITRATING);
+        if (status != DisputeStatus.OPEN && status != DisputeStatus.ARBITRATING) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "resolveByFallback requires OPEN|ARBITRATING; was " + status);
+        }
         if (fallbackRuling == null) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "fallback ruling is required");
         }
-        return copyWith(DisputeStatus.RESOLVED, fallbackRuling, Instant.now());
+        return new DisputeModel(id, taskId, raisedBy, reasonCategory, DisputeStatus.RESOLVED,
+                append(fallbackRuling), correlationId, createdAt, Instant.now());
     }
 
-    /** True while a ruling can still be applied (used for first-ruling-wins idempotency). */
+    /** True while a ruling can still be applied (first-ruling-wins guard). */
     public boolean isResolvable() {
         return status == DisputeStatus.OPEN || status == DisputeStatus.ARBITRATING;
     }
 
-    private DisputeModel copyWith(DisputeStatus newStatus, Ruling newRuling, Instant newResolvedAt) {
-        return new DisputeModel(id, taskId, raisedBy, reasonCategory, newStatus, newRuling,
-                correlationId, createdAt, newResolvedAt);
+    /** The highest-tier ruling, or empty if none recorded yet. */
+    public Optional<Ruling> effectiveRuling() {
+        return rulings.stream().max(Comparator.comparingInt(Ruling::tier));
     }
 
-    private void requireStatusIn(String transition, DisputeStatus... allowed) {
-        for (DisputeStatus s : allowed) {
-            if (this.status == s) {
-                return;
-            }
+    private List<Ruling> append(Ruling ruling) {
+        List<Ruling> next = new ArrayList<>(rulings);
+        next.add(ruling);
+        return next;
+    }
+
+    private void requireStatus(DisputeStatus expected, String op) {
+        if (status != expected) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    op + " requires " + expected + "; was " + status);
         }
-        throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
-                "Illegal dispute transition " + transition + " from " + this.status);
     }
 
     public UUID id() { return id; }
@@ -115,7 +138,7 @@ public final class DisputeModel {
     public UUID raisedBy() { return raisedBy; }
     public RejectReason reasonCategory() { return reasonCategory; }
     public DisputeStatus status() { return status; }
-    public Ruling ruling() { return ruling; }
+    public List<Ruling> rulings() { return rulings; }
     public String correlationId() { return correlationId; }
     public Instant createdAt() { return createdAt; }
     public Instant resolvedAt() { return resolvedAt; }

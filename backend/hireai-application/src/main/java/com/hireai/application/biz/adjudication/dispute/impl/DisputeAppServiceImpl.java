@@ -21,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -72,7 +73,7 @@ public class DisputeAppServiceImpl implements DisputeAppService {
             return;
         }
         Ruling fallback = new Ruling(TIER_1, RulingCategory.NOT_FULFILLED,
-                "arbitration unavailable; refunded by platform fallback", RulingDecidedBy.FALLBACK);
+                "arbitration unavailable; refunded by platform fallback", RulingDecidedBy.FALLBACK, Instant.now());
         TaskModel task = lockTask(dispute.taskId());
         settlementWriteAppService.settleRejected(task.id(), task.clientId(), task.budget());
         taskRepository.save(task.resolveDispute(TaskResolution.REJECTED));
@@ -82,7 +83,7 @@ public class DisputeAppServiceImpl implements DisputeAppService {
 
     /** Records the ruling, settles deterministically by category, and resolves both task and dispute. */
     private void settleAndResolve(DisputeModel dispute, RulingInfo info, RulingDecidedBy decidedBy) {
-        Ruling ruling = new Ruling(TIER_1, info.category(), info.rationale(), decidedBy);
+        Ruling ruling = new Ruling(TIER_1, info.category(), info.rationale(), decidedBy, Instant.now());
         DisputeModel ruled = dispute.recordRuling(ruling);
 
         TaskModel task = lockTask(dispute.taskId());

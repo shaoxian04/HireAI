@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, isPendingError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { StatusTrack } from "@/components/StatusTrack";
-import type { TaskDTO, TaskResultDTO, TaskStatus } from "@/lib/types";
+import type { TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
 import { ResultReviewBar } from "@/components/ResultReviewBar";
+import { DisputeOutcomePanel } from "@/components/DisputeOutcomePanel";
 
 const POLL_MS = 2000;
 
@@ -37,12 +38,24 @@ function TaskDetail() {
   const [task, setTask] = useState<TaskDTO | null>(null);
   const [result, setResult] = useState<TaskResultDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<DisputeOutcomeDTO | null>(null);
 
   // Keep the latest result in a ref so the interval closure can read it without re-subscribing.
   const resultRef = useRef<TaskResultDTO | null>(null);
   useEffect(() => {
     resultRef.current = result;
   }, [result]);
+
+  // Fetch the arbitration outcome once the task enters a dispute-capable terminal state.
+  useEffect(() => {
+    if (!task) return;
+    if (task.status !== "DISPUTED" && task.status !== "RESOLVED") return;
+    let cancelled = false;
+    api<DisputeOutcomeDTO>(`/disputes/by-task/${task.id}`)
+      .then((o) => { if (!cancelled) setOutcome(o); })
+      .catch((e) => { if (!cancelled && !isPendingError(e)) console.error(e); });
+    return () => { cancelled = true; };
+  }, [task]);
 
   useEffect(() => {
     if (!id) return;
@@ -220,6 +233,8 @@ function TaskDetail() {
           </section>
         )}
       </Card>
+
+      {outcome && <DisputeOutcomePanel outcome={outcome} />}
     </div>
   );
 }
