@@ -278,6 +278,13 @@ export interface BuilderEarningsDTO {
 
 // ── Dispute / arbitration ──────────────────────────────────────────────────
 
+/**
+ * Dispute reason categories exposed in the reject UI (A/B/C open a dispute;
+ * D_CHANGED_MIND is a backend-only option that charges the client in full — NOT
+ * offered through this UI).
+ */
+export type RejectReason = "A_MISMATCH" | "B_FACTUAL" | "C_INCOMPLETE";
+
 export type RulingCategory = "FULFILLED" | "PARTIALLY_FULFILLED" | "NOT_FULFILLED";
 export type RulingDecidedBy = "ARBITRATOR" | "ADMINISTRATOR" | "FALLBACK";
 

@@ -171,20 +171,21 @@ export const handlers = [
     }),
   ),
   http.post("*/api/tasks/:id/reject", async ({ params, request }) => {
-    const body = (await request.json().catch(() => null)) as { reason?: string } | null;
+    const body = (await request.json().catch(() => null)) as {
+      reasonCategory?: string;
+      reason?: string;
+    } | null;
     return ok({
       id: params.id,
       clientId: "u-1",
       title: "Summarise Q2 report",
       description: "Summarise it",
       budget: 30,
-      status: "RESOLVED",
+      status: "DISPUTED",
       outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
       createdAt: "2026-06-06T10:00:00Z",
-      resolution: "REJECTED",
-      resolvedAt: "2026-06-06T10:10:00Z",
+      resolution: null,
       rejectionReason: body?.reason ?? null,
-      refundAmount: 30,
     });
   }),
 
