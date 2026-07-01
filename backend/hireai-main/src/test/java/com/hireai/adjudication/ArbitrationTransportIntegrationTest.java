@@ -62,8 +62,8 @@ import static org.awaitility.Awaitility.await;
  *       RESOLVED + full refund + SettlementType.REJECT.</li>
  *   <li>First-ruling-wins: second POST on already-RESOLVED dispute → 200, no double settlement.</li>
  *   <li>Auth guard: wrong/absent secret → 401, dispute stays ARBITRATING.</li>
- *   <li>DLQ fallback (兜底): publish ArbitrationRequestMessage directly to DLQ →
- *       ArbitrationDlqListener resolves by refund.</li>
+ *   <li>DLQ escalation: publish ArbitrationRequestMessage directly to DLQ →
+ *       ArbitrationDlqListener escalates the dispute to ESCALATED (admin backstop; no auto-refund).</li>
  * </ol>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -316,16 +316,17 @@ class ArbitrationTransportIntegrationTest {
 
     /**
      * Publishing an ArbitrationRequestMessage directly to the DLQ (bypassing the main queue and
-     * any retry logic) triggers ArbitrationDlqListener, which calls resolveByFallback() →
-     * full refund to the client + dispute RESOLVED.
+     * any retry logic) triggers ArbitrationDlqListener, which now calls escalate() → the dispute
+     * moves to ESCALATED for the human admin backstop. No money moves: escrow stays frozen and the
+     * task stays DISPUTED until an admin rules.
      *
      * <p>Uses RabbitMQ's default exchange (empty string) with the queue name as routing key
      * so the message lands in the DLQ directly without going through the main exchange.</p>
      */
     @Test
-    void dlqFallback_refundsClientAndResolvesDispute() {
+    void dlqEscalatesDisputeToAdmin() {
         Fixture f = seedPendingReview(Money.of("100.00"));
-        reviewAppService.reject(f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "dlq fallback test");
+        reviewAppService.reject(f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "dlq escalate test");
         DisputeModel dispute = disputeRepository.findByTaskId(f.taskId()).orElseThrow();
         assertThat(dispute.status()).isEqualTo(DisputeStatus.ARBITRATING);
 
@@ -343,20 +344,20 @@ class ArbitrationTransportIntegrationTest {
                 RejectReason.A_MISMATCH.name());
         rabbitTemplate.convertAndSend("", ArbitrationQueues.DLQ, dlqMsg);
 
-        // Awaitility: poll until ArbitrationDlqListener processes the message (async consumer)
+        // Awaitility: poll until ArbitrationDlqListener escalates the dispute (async consumer)
         await().atMost(Duration.ofSeconds(10))
                 .untilAsserted(() -> {
                     DisputeModel d = disputeRepository.findById(dispute.id()).orElseThrow();
-                    assertThat(d.status()).isEqualTo(DisputeStatus.RESOLVED);
+                    assertThat(d.status()).isEqualTo(DisputeStatus.ESCALATED);
                 });
 
-        // Assert client fully refunded by the platform fallback
-        WalletModel refunded = walletRepository.findByUserId(f.clientId()).orElseThrow();
-        assertThat(refunded.available()).isEqualTo(Money.of("100.00"));
-        assertThat(refunded.escrow()).isEqualTo(Money.ZERO);
+        // No money moved — escrow stays frozen, awaiting the admin backstop (no auto-refund).
+        WalletModel wallet = walletRepository.findByUserId(f.clientId()).orElseThrow();
+        assertThat(wallet.available()).isEqualTo(Money.ZERO);
+        assertThat(wallet.escrow()).isEqualTo(Money.of("100.00"));
 
-        // Assert task reached its terminal status (mirrors scenario 1 after NOT_FULFILLED ruling)
+        // Task stays DISPUTED until an admin rules.
         TaskModel dlqTask = taskRepository.findById(f.taskId()).orElseThrow();
-        assertThat(dlqTask.status()).isEqualTo(TaskStatus.RESOLVED);
+        assertThat(dlqTask.status()).isEqualTo(TaskStatus.DISPUTED);
     }
 }

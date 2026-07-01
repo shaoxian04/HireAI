@@ -97,22 +97,6 @@ public class DisputeAppServiceImpl implements DisputeAppService {
         return disputeRepository.findStaleArbitratingIds(cutoff);
     }
 
-    @Override
-    public void resolveByFallback(UUID disputeId) {
-        DisputeModel dispute = requireDispute(disputeId);
-        if (!dispute.isResolvable()) {
-            log.info("Dispute {} already {}; fallback ignored", disputeId, dispute.status());
-            return;
-        }
-        Ruling fallback = new Ruling(TIER_1, RulingCategory.NOT_FULFILLED,
-                "arbitration unavailable; refunded by platform fallback", RulingDecidedBy.FALLBACK, Instant.now());
-        TaskModel task = lockTask(dispute.taskId());
-        settlementWriteAppService.settleRejected(task.id(), task.clientId(), task.budget());
-        taskRepository.save(task.resolveDispute(TaskResolution.REJECTED));
-        disputeRepository.save(dispute.resolveByFallback(fallback));
-        log.info("Dispute {} resolved by refund fallback", disputeId);
-    }
-
     /** Records the ruling, settles deterministically by category, and resolves both task and dispute. */
     private void settleAndResolve(DisputeModel dispute, RulingInfo info, int tier, RulingDecidedBy decidedBy) {
         Ruling ruling = new Ruling(tier, info.category(), info.rationale(), decidedBy, Instant.now());

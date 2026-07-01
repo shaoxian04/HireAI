@@ -18,9 +18,6 @@ public interface DisputeAppService {
     /** Apply an arbitrator ruling (first-ruling-wins): settle by category + resolve. No-op if not resolvable. */
     void applyRuling(@NonNull UUID disputeId, @NonNull RulingInfo ruling);
 
-    /** Platform refund fallback (DLQ 兜底): full refund + resolve. */
-    void resolveByFallback(@NonNull UUID disputeId);
-
     /** OPEN|ARBITRATING → ESCALATED (DLQ or stale-sweep). No-op if already resolved/escalated. */
     void escalate(@NonNull UUID disputeId);
 
