@@ -15,7 +15,7 @@ export function RoleGuard({
   role,
   children,
 }: {
-  role?: "CLIENT" | "BUILDER";
+  role?: "CLIENT" | "BUILDER" | "ADMIN";
   children: React.ReactNode;
 }) {
   const { token, hasRole } = useAuth();
@@ -29,7 +29,9 @@ export function RoleGuard({
       return;
     }
     if (role && token && !hasRole(role)) {
-      router.replace(hasRole("CLIENT") ? "/client" : "/builder");
+      router.replace(
+        hasRole("CLIENT") ? "/client" : hasRole("BUILDER") ? "/builder" : hasRole("ADMIN") ? "/admin" : "/login",
+      );
     }
   }, [token, role, hasRole, router]);
 

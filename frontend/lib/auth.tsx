@@ -50,9 +50,12 @@ function readPersisted(): { token: string | null; session: Session | null; surfa
   return { token, session, surface };
 }
 
-/** Picks the home route for a role set: client surface unless builder-only. */
-function homeFor(roles: Role[]): "/client" | "/builder" {
-  return roles.includes("CLIENT") ? "/client" : "/builder";
+/** Picks the home route for a role set: client, then builder, then admin-only. */
+function homeFor(roles: Role[]): "/client" | "/builder" | "/admin" {
+  if (roles.includes("CLIENT")) return "/client";
+  if (roles.includes("BUILDER")) return "/builder";
+  if (roles.includes("ADMIN")) return "/admin";
+  return "/client";
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

@@ -78,6 +78,13 @@ describe("AuthProvider / useAuth", () => {
     expect(screen.getByTestId("role").textContent).toBe("BUILDER");
   });
 
+  it("homeFor routes an admin-only user to /admin", async () => {
+    const { homeFor } = await import("./auth");
+    expect(homeFor(["ADMIN"])).toBe("/admin");
+    expect(homeFor(["CLIENT", "BUILDER"])).toBe("/client");
+    expect(homeFor(["BUILDER"])).toBe("/builder");
+  });
+
   it("loginWithToken decodes roles from a JWT", () => {
     function H() {
       const { loginWithToken, roles } = useAuth();
