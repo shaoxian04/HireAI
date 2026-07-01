@@ -241,8 +241,7 @@ function TaskDetail() {
             <p className="eyebrow">Settled</p>
             {task.resolution === "ACCEPTED" ? (
               <p className="font-mono text-sm text-accent">
-                {task.payoutAmount} cr paid to the builder · {task.commissionAmount} cr platform
-                commission
+                {task.payoutAmount} cr paid to the builder
               </p>
             ) : (
               <p className="font-mono text-sm text-red">
