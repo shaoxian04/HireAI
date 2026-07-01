@@ -87,7 +87,7 @@ export function ResultReviewBar({ taskId, onResolved }: Props) {
       ) : (
         <div className="space-y-4">
           <Field label="Dispute reason" hint="Required — an arbitrator will review this">
-            <div className="space-y-2" role="radiogroup" aria-label="Dispute reason">
+            <div className="space-y-2" role="radiogroup">
               {REJECT_REASONS.map(({ value, label }) => (
                 <label
                   key={value}
@@ -120,7 +120,15 @@ export function ResultReviewBar({ taskId, onResolved }: Props) {
             <Button variant="danger" onClick={submitDispute} disabled={busy || !reasonCategory}>
               Submit dispute
             </Button>
-            <Button variant="ghost" onClick={() => setRejecting(false)} disabled={busy}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setRejecting(false);
+                setReasonCategory(null);
+                setReason("");
+              }}
+              disabled={busy}
+            >
               Back
             </Button>
           </div>

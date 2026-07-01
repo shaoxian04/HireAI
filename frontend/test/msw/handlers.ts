@@ -175,6 +175,12 @@ export const handlers = [
       reasonCategory?: string;
       reason?: string;
     } | null;
+    if (!body?.reasonCategory) {
+      return HttpResponse.json(
+        { success: false, message: "reasonCategory required" },
+        { status: 400 }
+      );
+    }
     return ok({
       id: params.id,
       clientId: "u-1",
