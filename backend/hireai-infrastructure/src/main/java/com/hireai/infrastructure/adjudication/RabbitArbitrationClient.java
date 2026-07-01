@@ -43,7 +43,7 @@ public class RabbitArbitrationClient implements ArbitrationGateway {
         TaskResultModel result = task.result();
         ArbitrationRequestMessage message = new ArbitrationRequestMessage(
                 dispute.id(), task.id(), dispute.correlationId(),
-                spec.format().name(), spec.schema(), spec.acceptanceCriteria(),
+                spec.format().name(), spec.schema(), spec.acceptanceCriteria(), task.description(),
                 result == null ? null : result.resultPayloadJson(),
                 result == null ? null : result.resultUrl(),
                 dispute.reasonCategory().name());

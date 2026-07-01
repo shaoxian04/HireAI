@@ -50,6 +50,7 @@ class RabbitArbitrationClientTest {
         assertThat(msg.format()).isEqualTo("JSON");
         assertThat(msg.schema()).isEqualTo("{\"type\":\"object\"}");
         assertThat(msg.acceptanceCriteria()).isEqualTo("be correct"); // arbitrator sees the subjective criteria
+        assertThat(msg.taskDescription()).isEqualTo("d"); // arbitrator sees what the client actually asked for
         assertThat(msg.resultPayloadJson()).isEqualTo("{\"a\":1}");
         assertThat(msg.reasonCategory()).isEqualTo("A_MISMATCH");
     }
