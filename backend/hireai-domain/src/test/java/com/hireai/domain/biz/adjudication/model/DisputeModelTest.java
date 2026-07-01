@@ -104,4 +104,36 @@ class DisputeModelTest {
         assertThat(resolved.effectiveRuling()).contains(fb);
         assertThat(resolved.resolvedAt()).isNotNull();
     }
+
+    @Test
+    void escalateFromArbitratingSignalsNeedsAdmin() {
+        DisputeModel d = openDispute().startArbitrating().escalate();
+        assertThat(d.status()).isEqualTo(DisputeStatus.ESCALATED);
+        // isResolvable() gates the ARBITRATOR callback; an escalated dispute must be excluded so a
+        // late arbitrator ruling is ignored and the admin owns it.
+        assertThat(d.isResolvable()).isFalse();
+    }
+
+    @Test
+    void escalateFromOpenIsAllowed() {
+        assertThat(openDispute().escalate().status()).isEqualTo(DisputeStatus.ESCALATED);
+    }
+
+    @Test
+    void escalateRejectedOnceResolved() {
+        DisputeModel resolved = openDispute()
+                .recordRuling(new Ruling(1, RulingCategory.FULFILLED, "ok", RulingDecidedBy.ARBITRATOR, FIXED))
+                .resolve();
+        assertThatThrownBy(resolved::escalate).isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void adminCanRuleAnEscalatedDisputeAtTierTwo() {
+        Ruling admin = new Ruling(2, RulingCategory.NOT_FULFILLED, "backstop refund",
+                RulingDecidedBy.ADMINISTRATOR, FIXED);
+        DisputeModel resolved = openDispute().startArbitrating().escalate().recordRuling(admin).resolve();
+        assertThat(resolved.status()).isEqualTo(DisputeStatus.RESOLVED);
+        assertThat(resolved.effectiveRuling().get().decidedBy()).isEqualTo(RulingDecidedBy.ADMINISTRATOR);
+        assertThat(resolved.effectiveRuling().get().tier()).isEqualTo(2);
+    }
 }
