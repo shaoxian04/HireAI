@@ -72,6 +72,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/agent-callbacks/**").permitAll()
                         .requestMatchers("/api/arbitration-callbacks/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
