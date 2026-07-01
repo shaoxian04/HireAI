@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -127,5 +128,82 @@ class DisputeAppServiceImplTest {
         service.applyRuling(resolved.id(), new RulingInfo(RulingCategory.NOT_FULFILLED, "late"));
 
         verifyNoInteractions(settlement);
+    }
+
+    @Test
+    void escalateTransitionsArbitratingToEscalated() {
+        DisputeModel arbitrating = DisputeModel.open(disputedTask.id(), clientId, RejectReason.A_MISMATCH, "c")
+                .startArbitrating();
+        when(disputeRepository.findById(arbitrating.id())).thenReturn(Optional.of(arbitrating));
+
+        service.escalate(arbitrating.id());
+
+        ArgumentCaptor<DisputeModel> cap = ArgumentCaptor.forClass(DisputeModel.class);
+        verify(disputeRepository).save(cap.capture());
+        assertThat(cap.getValue().status()).isEqualTo(DisputeStatus.ESCALATED);
+    }
+
+    @Test
+    void escalateIsNoOpWhenAlreadyResolved() {
+        DisputeModel resolved = DisputeModel.open(disputedTask.id(), clientId, RejectReason.A_MISMATCH, "c")
+                .recordRuling(new Ruling(1, RulingCategory.FULFILLED, "x", RulingDecidedBy.ARBITRATOR,
+                        Instant.parse("2026-07-01T00:00:00Z")))
+                .resolve();
+        when(disputeRepository.findById(resolved.id())).thenReturn(Optional.of(resolved));
+
+        service.escalate(resolved.id());
+
+        verify(disputeRepository, never()).save(any());
+    }
+
+    @Test
+    void adminRuleOnEscalatedRefundsAndResolvesAtTierTwo() {
+        DisputeModel escalated = DisputeModel.open(disputedTask.id(), clientId, RejectReason.A_MISMATCH, "c")
+                .startArbitrating().escalate();
+        when(disputeRepository.findById(escalated.id())).thenReturn(Optional.of(escalated));
+
+        service.adminRule(escalated.id(), RulingCategory.NOT_FULFILLED, "backstop refund", UUID.randomUUID());
+
+        verify(settlement).settleRejected(eq(disputedTask.id()), eq(clientId), eq(Money.of("100.00")));
+        ArgumentCaptor<DisputeModel> cap = ArgumentCaptor.forClass(DisputeModel.class);
+        verify(disputeRepository, atLeastOnce()).save(cap.capture());
+        DisputeModel saved = cap.getValue();
+        assertThat(saved.status()).isEqualTo(DisputeStatus.RESOLVED);
+        assertThat(saved.effectiveRuling().get().decidedBy()).isEqualTo(RulingDecidedBy.ADMINISTRATOR);
+        assertThat(saved.effectiveRuling().get().tier()).isEqualTo(2);
+    }
+
+    @Test
+    void adminRuleFulfilledPaysBuilder() {
+        DisputeModel escalated = DisputeModel.open(disputedTask.id(), clientId, RejectReason.A_MISMATCH, "c")
+                .startArbitrating().escalate();
+        when(disputeRepository.findById(escalated.id())).thenReturn(Optional.of(escalated));
+
+        service.adminRule(escalated.id(), RulingCategory.FULFILLED, "meets spec", UUID.randomUUID());
+
+        verify(settlement).settleAccepted(eq(disputedTask.id()), eq(clientId), eq(builderId), eq(Money.of("100.00")));
+    }
+
+    @Test
+    void adminRuleRejectedWhenDisputeAlreadyResolved() {
+        DisputeModel resolved = DisputeModel.open(disputedTask.id(), clientId, RejectReason.A_MISMATCH, "c")
+                .recordRuling(new Ruling(1, RulingCategory.FULFILLED, "x", RulingDecidedBy.ARBITRATOR,
+                        Instant.parse("2026-07-01T00:00:00Z")))
+                .resolve();
+        when(disputeRepository.findById(resolved.id())).thenReturn(Optional.of(resolved));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        service.adminRule(resolved.id(), RulingCategory.NOT_FULFILLED, "late", UUID.randomUUID()))
+                .isInstanceOf(com.hireai.utility.exception.DomainException.class);
+        verifyNoInteractions(settlement);
+    }
+
+    @Test
+    void staleArbitratingDisputeIdsDelegatesToRepository() {
+        Instant cutoff = Instant.parse("2026-07-01T00:00:00Z");
+        List<UUID> ids = List.of(UUID.randomUUID(), UUID.randomUUID());
+        when(disputeRepository.findStaleArbitratingIds(cutoff)).thenReturn(ids);
+
+        assertThat(service.staleArbitratingDisputeIds(cutoff)).isEqualTo(ids);
     }
 }

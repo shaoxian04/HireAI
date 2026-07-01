@@ -4,6 +4,7 @@ import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.adjudication.port.ArbitrationGateway;
 import com.hireai.application.biz.adjudication.port.RulingInfo;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.domain.biz.adjudication.enums.DisputeStatus;
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
 import com.hireai.domain.biz.adjudication.enums.RulingDecidedBy;
 import com.hireai.domain.biz.adjudication.model.DisputeModel;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -32,6 +34,7 @@ import java.util.UUID;
 public class DisputeAppServiceImpl implements DisputeAppService {
 
     private static final int TIER_1 = 1;
+    private static final int TIER_2 = 2;
 
     private final DisputeRepository disputeRepository;
     private final TaskRepository taskRepository;
@@ -47,7 +50,7 @@ public class DisputeAppServiceImpl implements DisputeAppService {
 
         Optional<RulingInfo> immediate = arbitrationGateway.requestRuling(dispute, disputedTask);
         if (immediate.isPresent()) {
-            settleAndResolve(dispute, immediate.get(), RulingDecidedBy.ARBITRATOR);
+            settleAndResolve(dispute, immediate.get(), TIER_1, RulingDecidedBy.ARBITRATOR);
         } else {
             disputeRepository.save(dispute.startArbitrating());
             log.info("Dispute {} handed off for async arbitration", dispute.id());
@@ -62,7 +65,36 @@ public class DisputeAppServiceImpl implements DisputeAppService {
             log.info("Dispute {} already {}; ruling ignored (first-ruling-wins)", disputeId, dispute.status());
             return;
         }
-        settleAndResolve(dispute, ruling, RulingDecidedBy.ARBITRATOR);
+        settleAndResolve(dispute, ruling, TIER_1, RulingDecidedBy.ARBITRATOR);
+    }
+
+    @Override
+    public void escalate(UUID disputeId) {
+        DisputeModel dispute = requireDispute(disputeId);
+        if (!dispute.isResolvable()) {
+            log.info("Dispute {} is {}; escalate skipped", disputeId, dispute.status());
+            return;
+        }
+        disputeRepository.save(dispute.escalate());
+        log.info("Dispute {} escalated to ESCALATED (needs admin backstop)", disputeId);
+    }
+
+    @Override
+    public void adminRule(UUID disputeId, RulingCategory category, String rationale, UUID adminId) {
+        DisputeModel dispute = requireDispute(disputeId);
+        DisputeStatus s = dispute.status();
+        if (s != DisputeStatus.OPEN && s != DisputeStatus.ARBITRATING && s != DisputeStatus.ESCALATED) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Dispute " + disputeId + " is " + s + "; already settled — admin cannot re-rule");
+        }
+        log.info("Admin {} ruling dispute {} as {}", adminId, disputeId, category);
+        settleAndResolve(dispute, new RulingInfo(category, rationale), TIER_2, RulingDecidedBy.ADMINISTRATOR);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> staleArbitratingDisputeIds(Instant cutoff) {
+        return disputeRepository.findStaleArbitratingIds(cutoff);
     }
 
     @Override
@@ -82,8 +114,8 @@ public class DisputeAppServiceImpl implements DisputeAppService {
     }
 
     /** Records the ruling, settles deterministically by category, and resolves both task and dispute. */
-    private void settleAndResolve(DisputeModel dispute, RulingInfo info, RulingDecidedBy decidedBy) {
-        Ruling ruling = new Ruling(TIER_1, info.category(), info.rationale(), decidedBy, Instant.now());
+    private void settleAndResolve(DisputeModel dispute, RulingInfo info, int tier, RulingDecidedBy decidedBy) {
+        Ruling ruling = new Ruling(tier, info.category(), info.rationale(), decidedBy, Instant.now());
         DisputeModel ruled = dispute.recordRuling(ruling);
 
         TaskModel task = lockTask(dispute.taskId());
