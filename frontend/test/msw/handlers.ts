@@ -276,6 +276,83 @@ export const handlers = [
       createdAt: "2026-06-06T10:00:00Z",
     });
   }),
+
+  // ── Admin surface handlers ──
+  http.get("*/api/admin/overview", () =>
+    ok({
+      disputesOpen: 1,
+      disputesArbitrating: 0,
+      disputesEscalated: 2,
+      disputesResolved: 3,
+      tasksTotal: 10,
+      usersTotal: 4,
+      agentsTotal: 2,
+      escrowHeld: 20,
+      commissionEarned: 1.5,
+    }),
+  ),
+  http.get("*/api/admin/tasks", () => ok([])),
+  http.get("*/api/admin/users", () => ok([])),
+  http.get("*/api/admin/agents", () => ok([])),
+  http.get("*/api/admin/disputes", () =>
+    ok([
+      {
+        disputeId: "d-1",
+        taskId: "t-1",
+        taskTitle: "Summarise the Q3 report",
+        status: "ESCALATED",
+        reasonCategory: "A_MISMATCH",
+        createdAt: "2026-07-02T00:00:00Z",
+        clientName: "client",
+        hasArbitratorRuling: false,
+        needsAttention: true,
+      },
+    ]),
+  ),
+  http.get("*/api/admin/disputes/d-1", () =>
+    ok({
+      disputeId: "d-1",
+      taskId: "t-1",
+      taskTitle: "Summarise the Q3 report",
+      taskDescription: "Summarise the attached Q3 financial report in 5 bullets.",
+      status: "ESCALATED",
+      reasonCategory: "A_MISMATCH",
+      createdAt: "2026-07-02T00:00:00Z",
+      clientName: "client",
+      outputSpecJson: '{"format":"TEXT"}',
+      resultPayloadJson: '{"summary":"..."}',
+      resultUrl: null,
+      agentStatus: "COMPLETED",
+      actionable: true,
+      rulings: [],
+    }),
+  ),
+  http.post("*/api/admin/disputes/d-1/rule", () =>
+    ok({
+      disputeId: "d-1",
+      taskId: "t-1",
+      taskTitle: "Summarise the Q3 report",
+      taskDescription: "Summarise the attached Q3 financial report in 5 bullets.",
+      status: "RESOLVED",
+      reasonCategory: "A_MISMATCH",
+      createdAt: "2026-07-02T00:00:00Z",
+      clientName: "client",
+      outputSpecJson: '{"format":"TEXT"}',
+      resultPayloadJson: '{"summary":"..."}',
+      resultUrl: null,
+      agentStatus: "COMPLETED",
+      actionable: false,
+      rulings: [
+        {
+          tier: 2,
+          decidedBy: "ADMINISTRATOR",
+          category: "NOT_FULFILLED",
+          rationale: "backstop refund",
+          decidedAt: "2026-07-02T01:00:00Z",
+        },
+      ],
+    }),
+  ),
 ];
 
 // ── Builder manage-agent handlers ──
