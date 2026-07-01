@@ -23,6 +23,18 @@ const TERMINAL: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
   "CANCELLED",
 ]);
 
+/**
+ * Statuses where the agent's result row exists and should be displayed. RESULT_RECEIVED is a
+ * brief transient before the validation gate runs; PENDING_REVIEW is where the client actually
+ * reviews (accept/reject/dispute all requireStatus(PENDING_REVIEW) in the domain).
+ */
+const RESULT_READY: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
+  "RESULT_RECEIVED",
+  "PENDING_REVIEW",
+  "DISPUTED",
+  "RESOLVED",
+]);
+
 /** Pretty-print a JSON string; fall back to the raw text if it does not parse. */
 function prettyJson(raw: string): string {
   try {
@@ -53,7 +65,12 @@ function TaskDetail() {
     let cancelled = false;
     api<DisputeOutcomeDTO>(`/disputes/by-task/${task.id}`)
       .then((o) => { if (!cancelled) setOutcome(o); })
-      .catch((e) => { if (!cancelled && !isPendingError(e)) console.error(e); });
+      .catch((e) => {
+        if (cancelled) return;
+        // 404 = this task has no dispute (accepted, or a changed-mind reject) — expected, not an error.
+        if (e instanceof ApiError && e.status === 404) return;
+        if (!isPendingError(e)) console.error(e);
+      });
     return () => { cancelled = true; };
   }, [task]);
 
@@ -75,22 +92,25 @@ function TaskDetail() {
         if (cancelled) return;
         setTask(t);
 
-        if ((t.status === "RESULT_RECEIVED" || t.status === "RESOLVED") && !resultRef.current) {
+        // The validated agent result exists from RESULT_RECEIVED onward; fetch it once.
+        if (RESULT_READY.has(t.status) && !resultRef.current) {
           try {
             const r = await api<TaskResultDTO>(`/tasks/${id}/result`);
             if (cancelled) return;
             setResult(r);
-            stop(); // result is in — nothing more to poll
           } catch (e) {
             // 404 = result row not written yet; keep polling. Anything else is a real error.
             if (!(e instanceof ApiError && e.status === 404)) {
               setError(e instanceof ApiError ? e.message : "Failed to load result");
               stop();
+              return;
             }
           }
-        } else if (TERMINAL.has(t.status)) {
-          stop();
         }
+
+        // Stop only at a terminal state. PENDING_REVIEW waits on the client's decision, and
+        // DISPUTED resolves asynchronously once the arbitrator rules, so both keep polling.
+        if (TERMINAL.has(t.status)) stop();
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof ApiError ? e.message : "Failed to load task");
@@ -129,8 +149,8 @@ function TaskDetail() {
   }
 
   const inFlight =
-    task.status !== "RESULT_RECEIVED" &&
     !result &&
+    !RESULT_READY.has(task.status) &&
     !TERMINAL.has(task.status) &&
     task.status !== "AWAITING_CAPACITY";
 
@@ -210,7 +230,7 @@ function TaskDetail() {
                 Open deliverable →
               </a>
             )}
-            {task.status === "RESULT_RECEIVED" && (
+            {task.status === "PENDING_REVIEW" && (
               <ResultReviewBar taskId={task.id} onResolved={setTask} />
             )}
           </section>

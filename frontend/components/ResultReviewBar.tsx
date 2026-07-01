@@ -18,7 +18,7 @@ const REJECT_REASONS: { value: RejectReason; label: string }[] = [
 ];
 
 /**
- * Accept/Reject action bar shown under the result panel while the task is RESULT_RECEIVED.
+ * Accept/Reject action bar shown under the result panel while the task is PENDING_REVIEW.
  * Accept settles escrow to the builder (net of commission).
  * Reject opens a dispute: the client picks a required reason category and an optional detail;
  * an arbitrator reviews the dispute and issues a ruling (refund, split, or uphold payment).
