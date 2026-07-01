@@ -33,10 +33,23 @@ class FakeLLM:
 def _request(**over):
     base = dict(dispute_id="d", task_id="t", correlation_id="c", format="JSON",
                 schema_=None, acceptance_criteria="List 3 sources",
+                task_description="Find three sources about four-day work weeks",
                 result_payload_json='{"sources":["a","b","c"]}', result_url=None,
                 reason_category="C_INCOMPLETE")
     base.update(over)
     return ArbitrationRequest.model_validate(base)
+
+
+async def test_task_description_reaches_the_arbitrator():
+    """The submitted task must appear in the evidence, so the arbitrator can judge relevance —
+    not just whether the output is a well-formed answer to some other task."""
+    llm = FakeLLM("FULFILLED", "ok")
+    graph = build_graph(llm, _settings())
+    await run_arbitration(graph, _request(task_description="Summarise THIS specific article XYZ"))
+    seen_text = "".join(
+        m.content for messages in llm.seen for m in messages if hasattr(m, "content")
+    )
+    assert "Summarise THIS specific article XYZ" in seen_text
 
 
 async def test_graph_returns_structured_ruling():

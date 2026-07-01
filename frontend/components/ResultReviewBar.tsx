@@ -18,7 +18,7 @@ const REJECT_REASONS: { value: RejectReason; label: string }[] = [
 ];
 
 /**
- * Accept/Reject action bar shown under the result panel while the task is RESULT_RECEIVED.
+ * Accept/Reject action bar shown under the result panel while the task is PENDING_REVIEW.
  * Accept settles escrow to the builder (net of commission).
  * Reject opens a dispute: the client picks a required reason category and an optional detail;
  * an arbitrator reviews the dispute and issues a ruling (refund, split, or uphold payment).
@@ -66,9 +66,9 @@ export function ResultReviewBar({ taskId, onResolved }: Props) {
     <section aria-label="Review result" className="space-y-3 border-t border-line pt-5">
       <p className="eyebrow">Your decision</p>
       <p className="text-sm text-muted">
-        Accepting pays the builder out of escrow (15% platform commission). Rejecting opens a
-        dispute that an arbitrator will review — the outcome may be a full refund, a partial
-        settlement, or upholding payment to the builder.
+        Accepting pays the builder out of escrow. Rejecting opens a dispute that an arbitrator
+        will review — the outcome may be a full refund, a partial settlement, or upholding
+        payment to the builder.
       </p>
       {error && (
         <p role="alert" className="font-mono text-xs text-red">

@@ -16,6 +16,7 @@ JAVA_FIELDS = {
     "format",
     "schema",
     "acceptanceCriteria",
+    "taskDescription",
     "resultPayloadJson",
     "resultUrl",
     "reasonCategory",
