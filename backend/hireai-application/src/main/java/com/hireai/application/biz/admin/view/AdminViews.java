@@ -18,9 +18,12 @@ public final class AdminViews {
                              String reasonCategory, Instant createdAt, String clientName,
                              boolean hasArbitratorRuling, boolean needsAttention) {}
 
+    /** Full evidence a DAO assembles for the dispute detail (task submission + agent + result). */
     public record Evidence(UUID taskId, String taskTitle, String taskDescription, String clientName,
-                           String outputSpecJson, String resultPayloadJson, String resultUrl,
-                           String agentStatus) {}
+                           String clientReason, BigDecimal budget, String category, String outputFormat,
+                           Instant submittedAt, Instant resultReceivedAt,
+                           String agentName, String builderName, BigDecimal agentReputation, BigDecimal agentPrice,
+                           String outputSpecJson, String resultPayloadJson, String resultUrl, String agentStatus) {}
 
     public record TaskRow(UUID id, String title, String status, BigDecimal budget, String clientName,
                           Instant createdAt) {}
@@ -34,8 +37,21 @@ public final class AdminViews {
     public record RulingView(int tier, String decidedBy, String category, String rationale,
                              Instant decidedAt) {}
 
+    /**
+     * What each ruling category would settle for this budget, computed server-side from SettlementPolicy
+     * (so the money math is never duplicated in the UI). Amounts are indicative — the actual movement
+     * still happens deterministically in the domain at apply-time (Inv #3).
+     */
+    public record SettlementPreview(BigDecimal budget, BigDecimal fulfilledPayout, BigDecimal fulfilledCommission,
+                                    BigDecimal notFulfilledRefund, BigDecimal partialBuilderNet,
+                                    BigDecimal partialClientRefund) {}
+
     public record DisputeDetail(UUID disputeId, UUID taskId, String taskTitle, String taskDescription,
-                                String status, String reasonCategory, Instant createdAt, String clientName,
-                                String outputSpecJson, String resultPayloadJson, String resultUrl,
-                                String agentStatus, boolean actionable, List<RulingView> rulings) {}
+                                String status, String reasonCategory, String clientReason,
+                                Instant createdAt, String clientName,
+                                BigDecimal budget, String category, String outputFormat,
+                                Instant submittedAt, Instant resultReceivedAt,
+                                String agentName, String builderName, BigDecimal agentReputation, BigDecimal agentPrice,
+                                String outputSpecJson, String resultPayloadJson, String resultUrl, String agentStatus,
+                                boolean actionable, SettlementPreview settlementPreview, List<RulingView> rulings) {}
 }

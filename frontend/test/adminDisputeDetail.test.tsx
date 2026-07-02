@@ -30,6 +30,10 @@ describe("admin dispute detail", () => {
     );
 
     expect(await screen.findByText(/task description/i)).toBeInTheDocument();
+    // Enriched evidence: client complaint, agent block, and the money-at-stake preview.
+    expect(screen.getByText(/completely different company/i)).toBeInTheDocument();
+    expect(screen.getByText("Demo Summariser")).toBeInTheDocument();
+    expect(screen.getByText(/client refunded 40 cr in full/i)).toBeInTheDocument();
 
     // Choose NOT_FULFILLED + rationale, submit → the detail becomes RESOLVED.
     await userEvent.click(await screen.findByLabelText(/not fulfilled/i));

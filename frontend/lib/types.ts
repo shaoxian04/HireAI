@@ -329,6 +329,15 @@ export interface AdminDisputeRowDTO {
   needsAttention: boolean;
 }
 
+export interface AdminSettlementPreviewDTO {
+  budget: number;
+  fulfilledPayout: number;
+  fulfilledCommission: number;
+  notFulfilledRefund: number;
+  partialBuilderNet: number;
+  partialClientRefund: number;
+}
+
 export interface AdminDisputeDetailDTO {
   disputeId: string;
   taskId: string;
@@ -336,13 +345,24 @@ export interface AdminDisputeDetailDTO {
   taskDescription: string;
   status: string;
   reasonCategory: RejectReason;
+  clientReason: string | null;
   createdAt: string;
   clientName: string;
+  budget: number;
+  category: string | null;
+  outputFormat: string | null;
+  submittedAt: string | null;
+  resultReceivedAt: string | null;
+  agentName: string | null;
+  builderName: string | null;
+  agentReputation: number | null;
+  agentPrice: number | null;
   outputSpecJson: string | null;
   resultPayloadJson: string | null;
   resultUrl: string | null;
   agentStatus: string | null;
   actionable: boolean;
+  settlementPreview: AdminSettlementPreviewDTO | null;
   rulings: RulingDTO[];
 }
 

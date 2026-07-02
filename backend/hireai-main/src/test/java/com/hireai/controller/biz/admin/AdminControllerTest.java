@@ -72,9 +72,13 @@ class AdminControllerTest {
         UUID disputeId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(ADMIN_ID);
         when(adminReadAppService.disputeDetail(disputeId)).thenReturn(new AdminViews.DisputeDetail(
-                disputeId, UUID.randomUUID(), "t", "d", "RESOLVED", "A_MISMATCH",
-                java.time.Instant.parse("2026-07-02T00:00:00Z"), "client", null, null, null, null,
-                false, List.of()));
+                disputeId, UUID.randomUUID(), "t", "d", "RESOLVED", "A_MISMATCH", "complaint",
+                java.time.Instant.parse("2026-07-02T00:00:00Z"), "client",
+                new java.math.BigDecimal("40.00"), "summarisation", "TEXT",
+                java.time.Instant.parse("2026-07-02T00:00:00Z"), java.time.Instant.parse("2026-07-02T00:01:00Z"),
+                "Demo Agent", "builder", new java.math.BigDecimal("50.00"), new java.math.BigDecimal("10.00"),
+                null, null, null, null,
+                false, null, List.of()));
 
         mockMvc.perform(post("/api/admin/disputes/{id}/rule", disputeId)
                         .with(csrf())

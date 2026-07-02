@@ -75,19 +75,31 @@ public class JdbcAdminQueryDao implements AdminQueryPort {
         String sql = """
                 SELECT t.id AS task_id, t.title, t.description AS task_description,
                        split_part(u.email, '@', 1) AS client_name,
+                       t.rejection_reason AS client_reason, t.budget, t.category,
+                       av.output_spec->>'format' AS output_format,
+                       t.gmt_create AS submitted_at, tr.received_at AS result_received_at,
+                       ag.name AS agent_name, split_part(bu.email, '@', 1) AS builder_name,
+                       ag.reputation_score AS agent_reputation, av.price AS agent_price,
                        av.output_spec::text AS output_spec_json,
                        tr.result_payload::text AS result_payload_json, tr.result_url, tr.agent_status
                 FROM tasks t
                 JOIN users u ON u.id = t.client_id
                 LEFT JOIN agent_versions av ON av.id = t.agent_version_id
+                LEFT JOIN agents ag ON ag.id = av.agent_id
+                LEFT JOIN users bu ON bu.id = ag.owner_id
                 LEFT JOIN task_results tr ON tr.task_id = t.id
                 WHERE t.id = :taskId
                 """;
         var params = new MapSqlParameterSource().addValue("taskId", taskId);
         List<AdminViews.Evidence> rows = jdbc.query(sql, params, (rs, i) -> new AdminViews.Evidence(
                 rs.getObject("task_id", UUID.class), rs.getString("title"), rs.getString("task_description"),
-                rs.getString("client_name"), rs.getString("output_spec_json"),
-                rs.getString("result_payload_json"), rs.getString("result_url"), rs.getString("agent_status")));
+                rs.getString("client_name"), rs.getString("client_reason"), rs.getBigDecimal("budget"),
+                rs.getString("category"), rs.getString("output_format"),
+                toInstant(rs.getTimestamp("submitted_at")), toInstant(rs.getTimestamp("result_received_at")),
+                rs.getString("agent_name"), rs.getString("builder_name"),
+                rs.getBigDecimal("agent_reputation"), rs.getBigDecimal("agent_price"),
+                rs.getString("output_spec_json"), rs.getString("result_payload_json"),
+                rs.getString("result_url"), rs.getString("agent_status")));
         return rows.stream().findFirst();
     }
 

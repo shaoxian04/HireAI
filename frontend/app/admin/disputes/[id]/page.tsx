@@ -24,6 +24,10 @@ function prettyJson(raw: string | null): string {
   }
 }
 
+function fmt(ts: string | null): string {
+  return ts ? new Date(ts).toLocaleString() : "—";
+}
+
 function Evidence({ label, body }: { label: string; body: string }) {
   return (
     <div className="space-y-1">
@@ -31,6 +35,15 @@ function Evidence({ label, body }: { label: string; body: string }) {
       <pre className="overflow-auto rounded-md border border-line bg-canvas p-3 font-mono text-xs leading-relaxed text-fg">
         {body}
       </pre>
+    </div>
+  );
+}
+
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="font-mono text-[0.6rem] uppercase tracking-[0.18em] text-dim">{label}</dt>
+      <dd className="mt-0.5 font-mono text-xs text-fg">{value}</dd>
     </div>
   );
 }
@@ -93,6 +106,16 @@ function AdminDisputeDetail() {
     );
   }
 
+  const p = detail.settlementPreview;
+  function outcomeHint(cat: RulingCategory): string {
+    if (!p) return "";
+    if (cat === "FULFILLED") return `builder +${p.fulfilledPayout} cr · ${p.fulfilledCommission} cr commission`;
+    if (cat === "NOT_FULFILLED") return `client refunded ${p.notFulfilledRefund} cr in full`;
+    return `builder +${p.partialBuilderNet} cr · client refunded ${p.partialClientRefund} cr`;
+  }
+
+  const escalatedNoRuling = detail.actionable && detail.rulings.length === 0;
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <Link href="/admin/disputes" className="font-mono text-xs text-dim transition hover:text-accent">
@@ -104,15 +127,43 @@ function AdminDisputeDetail() {
           <div>
             <h1 className="text-xl font-extrabold tracking-tight">{detail.taskTitle}</h1>
             <p className="mt-1 font-mono text-xs text-dim">
-              #{detail.disputeId.slice(0, 8)} · reason {detail.reasonCategory} · raised by {detail.clientName}
+              #{detail.disputeId.slice(0, 8)} · reason {detail.reasonCategory} · raised by {detail.clientName} ·{" "}
+              <span className="text-accent">{detail.budget} cr</span> in escrow
             </p>
           </div>
           <Badge status={detail.status}>{detail.status}</Badge>
         </header>
 
+        {/* Task submission + agent context */}
+        <section className="rounded-md border border-line bg-surface-2 p-4">
+          <p className="eyebrow mb-3">Submission &amp; agent</p>
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+            <Meta label="Budget" value={`${detail.budget} cr`} />
+            <Meta label="Category" value={detail.category ?? "—"} />
+            <Meta label="Output format" value={detail.outputFormat ?? "—"} />
+            <Meta label="Submitted" value={fmt(detail.submittedAt)} />
+            <Meta label="Result received" value={fmt(detail.resultReceivedAt)} />
+            <Meta label="Agent status" value={detail.agentStatus ?? "—"} />
+            <Meta label="Agent" value={detail.agentName ?? "—"} />
+            <Meta label="Builder" value={detail.builderName ?? "—"} />
+            <Meta
+              label="Agent reputation"
+              value={detail.agentReputation == null ? "—" : `${detail.agentReputation} / 100`}
+            />
+          </dl>
+        </section>
+
+        {/* Client's complaint — the "why" behind the dispute */}
+        <div className="space-y-1">
+          <p className="eyebrow">Client&apos;s complaint</p>
+          <p className="rounded-md border border-amber/30 bg-amber/10 p-3 text-sm text-fg">
+            {detail.clientReason ? `“${detail.clientReason}”` : "No detail provided beyond the category."}
+          </p>
+        </div>
+
         <Evidence label="Task description (what the client asked)" body={detail.taskDescription} />
         <Evidence label="Output spec (the binding contract)" body={prettyJson(detail.outputSpecJson)} />
-        <Evidence label="Agent result" body={prettyJson(detail.resultPayloadJson)} />
+        <Evidence label="Agent result (what was delivered)" body={prettyJson(detail.resultPayloadJson)} />
         {detail.resultUrl && (
           <a
             href={detail.resultUrl}
@@ -124,23 +175,31 @@ function AdminDisputeDetail() {
           </a>
         )}
 
-        {detail.rulings.length > 0 && (
-          <section className="space-y-2 border-t border-line pt-5">
-            <p className="eyebrow">Ruling history</p>
-            {detail.rulings.map((r, idx) => (
+        {/* Arbitration / ruling history */}
+        <section className="space-y-2 border-t border-line pt-5">
+          <p className="eyebrow">Arbitration &amp; ruling history</p>
+          {detail.rulings.length > 0 ? (
+            detail.rulings.map((r, idx) => (
               <div key={idx} className="rounded-md border border-line bg-surface-2 p-3 font-mono text-xs text-muted">
                 <span className="text-accent">{r.decidedBy}</span> · tier {r.tier} · {r.category}
                 {r.rationale ? <span className="block text-dim">“{r.rationale}”</span> : null}
               </div>
-            ))}
-          </section>
-        )}
+            ))
+          ) : escalatedNoRuling ? (
+            <p className="font-mono text-xs text-dim">
+              Arbitration didn&apos;t complete — no ruling was produced (the arbitrator dead-lettered or timed
+              out). That&apos;s why this is on your desk.
+            </p>
+          ) : (
+            <p className="font-mono text-xs text-dim">No ruling recorded.</p>
+          )}
+        </section>
 
         {detail.actionable ? (
           <section aria-label="Issue ruling" className="space-y-4 border-t border-line pt-5">
             <p className="eyebrow">Backstop ruling</p>
             <p className="text-sm text-muted">
-              No money has settled yet. Your ruling settles escrow once, deterministically, from the category.
+              No money has settled yet. Your ruling settles escrow once, deterministically, from the category:
             </p>
             {error && (
               <p role="alert" className="font-mono text-xs text-red">
@@ -152,7 +211,7 @@ function AdminDisputeDetail() {
                 {CATEGORIES.map(({ value, label }) => (
                   <label
                     key={value}
-                    className="flex cursor-pointer items-center gap-3 rounded-md border border-line bg-canvas px-3 py-2.5 font-mono text-xs text-fg hover:border-line-bright"
+                    className="flex cursor-pointer items-start gap-3 rounded-md border border-line bg-canvas px-3 py-2.5 font-mono text-xs text-fg hover:border-line-bright"
                   >
                     <input
                       type="radio"
@@ -161,9 +220,12 @@ function AdminDisputeDetail() {
                       aria-label={label}
                       checked={category === value}
                       onChange={() => setCategory(value)}
-                      className="accent-accent"
+                      className="mt-0.5 accent-accent"
                     />
-                    {label}
+                    <span>
+                      {label}
+                      <span className="block text-[0.65rem] text-dim">{outcomeHint(value)}</span>
+                    </span>
                   </label>
                 ))}
               </div>

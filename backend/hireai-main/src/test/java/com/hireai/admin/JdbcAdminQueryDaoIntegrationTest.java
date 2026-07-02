@@ -68,8 +68,10 @@ class JdbcAdminQueryDaoIntegrationTest {
 
         UUID taskId = UUID.randomUUID();
         jdbc.update("""
-                INSERT INTO tasks (id, client_id, title, description, budget, output_spec, status)
-                VALUES (?, ?, 'Admin evidence task', 'Summarise the attached report.', ?, '{"format":"TEXT"}'::jsonb, 'DISPUTED')
+                INSERT INTO tasks (id, client_id, title, description, budget, output_spec, status,
+                                   reject_reason_category, rejection_reason, category)
+                VALUES (?, ?, 'Admin evidence task', 'Summarise the attached report.', ?, '{"format":"TEXT"}'::jsonb,
+                        'DISPUTED', 'A_MISMATCH', 'The summary is about a different report entirely.', 'summarisation')
                 """, taskId, clientId, budget);
         jdbc.update("""
                 INSERT INTO task_results (id, task_id, result_payload, agent_status)
@@ -119,5 +121,9 @@ class JdbcAdminQueryDaoIntegrationTest {
         assertThat(ev.get().taskDescription()).isEqualTo("Summarise the attached report.");
         assertThat(ev.get().resultPayloadJson()).contains("summary");
         assertThat(ev.get().agentStatus()).isEqualTo("COMPLETED");
+        assertThat(ev.get().clientReason()).isEqualTo("The summary is about a different report entirely.");
+        assertThat(ev.get().budget()).isEqualByComparingTo(new BigDecimal("20.00"));
+        assertThat(ev.get().category()).isEqualTo("summarisation");
+        assertThat(ev.get().submittedAt()).isNotNull();
     }
 }

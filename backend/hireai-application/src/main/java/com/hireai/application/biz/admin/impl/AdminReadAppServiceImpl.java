@@ -5,11 +5,14 @@ import com.hireai.application.biz.admin.AdminReadAppService;
 import com.hireai.application.biz.admin.view.AdminViews;
 import com.hireai.domain.biz.adjudication.model.DisputeModel;
 import com.hireai.domain.biz.adjudication.repository.DisputeRepository;
+import com.hireai.domain.biz.ledger.settlement.service.SettlementPolicy;
+import com.hireai.domain.shared.model.Money;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -54,9 +57,27 @@ public class AdminReadAppServiceImpl implements AdminReadAppService {
             case OPEN, ARBITRATING, ESCALATED -> true;
             case RULED, RESOLVED -> false;
         };
+        AdminViews.SettlementPreview preview = settlementPreview(ev.budget());
         return new AdminViews.DisputeDetail(disputeId, dispute.taskId(), ev.taskTitle(), ev.taskDescription(),
-                dispute.status().name(), dispute.reasonCategory().name(), dispute.createdAt(), ev.clientName(),
-                ev.outputSpecJson(), ev.resultPayloadJson(), ev.resultUrl(), ev.agentStatus(), actionable, rulings);
+                dispute.status().name(), dispute.reasonCategory().name(), ev.clientReason(),
+                dispute.createdAt(), ev.clientName(),
+                ev.budget(), ev.category(), ev.outputFormat(), ev.submittedAt(), ev.resultReceivedAt(),
+                ev.agentName(), ev.builderName(), ev.agentReputation(), ev.agentPrice(),
+                ev.outputSpecJson(), ev.resultPayloadJson(), ev.resultUrl(), ev.agentStatus(),
+                actionable, preview, rulings);
+    }
+
+    /** What each ruling category would move for this budget (authoritative math via SettlementPolicy). */
+    private AdminViews.SettlementPreview settlementPreview(BigDecimal budgetValue) {
+        Money budget = Money.of(budgetValue);
+        Money splitBuilderGross = SettlementPolicy.builderShareOnSplit(budget);
+        return new AdminViews.SettlementPreview(
+                budget.value(),
+                SettlementPolicy.netOf(budget).value(),
+                SettlementPolicy.commissionOn(budget).value(),
+                budget.value(),
+                SettlementPolicy.netOf(splitBuilderGross).value(),
+                budget.subtract(splitBuilderGross).value());
     }
 
     @Override
