@@ -177,6 +177,10 @@ function TaskDetail() {
     !TERMINAL.has(task.status) &&
     task.status !== "AWAITING_CAPACITY";
 
+  // Once a task is in a dispute (or resolved via one), the execution pipeline is history — the
+  // dispute timeline below tells the story instead.
+  const inDispute = task.status === "DISPUTED" || !!outcome;
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <Link href="/client/tasks" className="font-mono text-xs text-dim transition hover:text-accent">
@@ -198,11 +202,13 @@ function TaskDetail() {
           </Badge>
         </header>
 
-        {/* pipeline */}
-        <div className="rounded-md border border-line bg-surface-2 p-4">
-          <p className="eyebrow mb-4">Pipeline</p>
-          <StatusTrack status={task.status} labels />
-        </div>
+        {/* pipeline — hidden once the task is in dispute; the dispute timeline replaces it */}
+        {!inDispute && (
+          <div className="rounded-md border border-line bg-surface-2 p-4">
+            <p className="eyebrow mb-4">Pipeline</p>
+            <StatusTrack status={task.status} labels />
+          </div>
+        )}
 
         <p className="text-sm leading-relaxed text-muted">{task.description}</p>
 
@@ -276,7 +282,13 @@ function TaskDetail() {
         )}
       </Card>
 
-      {outcome && <DisputeProgressPanel outcome={outcome} onChange={setOutcome} />}
+      {outcome && (
+        <DisputeProgressPanel
+          outcome={outcome}
+          rejectionReason={task.rejectionReason ?? null}
+          onChange={setOutcome}
+        />
+      )}
     </div>
   );
 }

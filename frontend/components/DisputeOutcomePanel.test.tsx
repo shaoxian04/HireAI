@@ -7,6 +7,7 @@ const base: DisputeOutcomeDTO = {
   disputeId: "d-1",
   taskId: "t-1",
   status: "RESOLVED",
+  reasonCategory: "A_MISMATCH",
   effectiveCategory: "PARTIALLY_FULFILLED",
   rulings: [
     {

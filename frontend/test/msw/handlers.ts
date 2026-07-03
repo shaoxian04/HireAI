@@ -211,6 +211,7 @@ export const handlers = [
       disputeId: "d-1",
       taskId: params.taskId as string,
       status: "RULED",
+      reasonCategory: "B_FACTUAL",
       effectiveCategory: "FULFILLED",
       rulings: [
         {
@@ -228,6 +229,7 @@ export const handlers = [
       disputeId: params.id as string,
       taskId: "t-1",
       status: "RESOLVED",
+      reasonCategory: "B_FACTUAL",
       effectiveCategory: "FULFILLED",
       rulings: [
         {
@@ -245,6 +247,7 @@ export const handlers = [
       disputeId: params.id as string,
       taskId: "t-1",
       status: "ESCALATED",
+      reasonCategory: "B_FACTUAL",
       effectiveCategory: null,
       rulings: [
         {

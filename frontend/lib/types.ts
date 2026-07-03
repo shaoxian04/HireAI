@@ -300,6 +300,7 @@ export interface DisputeOutcomeDTO {
   disputeId: string;
   taskId: string;
   status: string;
+  reasonCategory: RejectReason | null;
   effectiveCategory: RulingCategory | null;
   rulings: RulingDTO[];
 }

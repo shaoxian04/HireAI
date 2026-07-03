@@ -18,6 +18,6 @@ public final class Dispute2DTOConverter {
                         r.rationale(), r.decidedAt()))
                 .toList();
         return new DisputeOutcomeDTO(dispute.id(), dispute.taskId(), dispute.status().name(),
-                effectiveCategory, rulings);
+                dispute.reasonCategory().name(), effectiveCategory, rulings);
     }
 }
