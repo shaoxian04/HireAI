@@ -114,15 +114,19 @@ public class DisputeAppServiceImpl implements DisputeAppService {
     }
 
     @Override
-    public void autoAcceptStaleRulings(Instant cutoff) {
-        for (UUID id : disputeRepository.findStaleRuledIds(cutoff)) {
-            DisputeModel dispute = requireDispute(id);
-            lockTask(dispute.taskId());
-            DisputeModel fresh = requireDispute(id);
-            if (fresh.status() == DisputeStatus.RULED) {
-                settleFromEffective(fresh);
-                log.info("Auto-accepted stale proposed ruling for dispute {}", id);
-            }
+    @Transactional(readOnly = true)
+    public List<UUID> staleRuledDisputeIds(Instant cutoff) {
+        return disputeRepository.findStaleRuledIds(cutoff);
+    }
+
+    @Override
+    public void autoAcceptOne(UUID disputeId) {
+        DisputeModel dispute = requireDispute(disputeId);
+        lockTask(dispute.taskId());
+        DisputeModel fresh = requireDispute(disputeId);
+        if (fresh.status() == DisputeStatus.RULED) {
+            settleFromEffective(fresh);
+            log.info("Auto-accepted stale proposed ruling for dispute {}", disputeId);
         }
     }
 

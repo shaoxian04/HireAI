@@ -291,4 +291,27 @@ class DisputeAppServiceImplTest {
                 .isInstanceOf(DomainException.class).hasMessageContaining("not your dispute");
         verifyNoInteractions(settlement);
     }
+
+    @Test
+    void autoAcceptOne_settlesFromProposal() {
+        DisputeModel ruled = ruledDispute(RulingCategory.FULFILLED);
+        when(disputeRepository.findById(ruled.id())).thenReturn(Optional.of(ruled));
+
+        service.autoAcceptOne(ruled.id());
+
+        verify(settlement).settleAccepted(eq(disputedTask.id()), eq(clientId), eq(builderId), eq(Money.of("100.00")));
+        ArgumentCaptor<DisputeModel> cap = ArgumentCaptor.forClass(DisputeModel.class);
+        verify(disputeRepository, atLeastOnce()).save(cap.capture());
+        assertThat(cap.getValue().status()).isEqualTo(DisputeStatus.RESOLVED);
+    }
+
+    @Test
+    void autoAcceptOne_skipsWhenNoLongerRuled() {
+        DisputeModel escalated = ruledDispute(RulingCategory.FULFILLED).appeal();
+        when(disputeRepository.findById(escalated.id())).thenReturn(Optional.of(escalated));
+
+        service.autoAcceptOne(escalated.id());
+
+        verifyNoInteractions(settlement);
+    }
 }

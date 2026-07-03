@@ -9,11 +9,15 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * Auto-accept sweeper: a RULED dispute is a PROPOSED ruling awaiting the client. If the client never
  * accepts or appeals, escrow would hang forever. This job auto-accepts any RULED dispute older than
- * {@code hireai.arbitration.ruling-accept-after}, settling from the arbitrator's proposal.
+ * {@code hireai.arbitration.ruling-accept-after}, settling from the arbitrator's proposal. Each
+ * autoAcceptOne() is a cross-bean call (own transaction), so one poisoned id can't roll back
+ * settlements already committed for healthy ids in the same pass.
  */
 @Slf4j
 @Component
@@ -36,10 +40,17 @@ public class RulingAcceptSweeper {
 
     /** Package-visible for tests: does one pass, auto-accepting every stale proposed ruling. */
     void sweep() {
-        try {
-            disputeAppService.autoAcceptStaleRulings(Instant.now().minus(acceptAfter));
-        } catch (Exception e) {
-            log.warn("Ruling-accept sweeper pass failed", e);
+        Instant cutoff = Instant.now().minus(acceptAfter);
+        List<UUID> stale = disputeAppService.staleRuledDisputeIds(cutoff);
+        for (UUID id : stale) {
+            try {
+                disputeAppService.autoAcceptOne(id);
+            } catch (Exception e) {
+                log.warn("Ruling-accept sweeper: failed to auto-accept dispute {}", id, e);
+            }
+        }
+        if (!stale.isEmpty()) {
+            log.info("Ruling-accept sweeper: auto-accepted {} stale RULED dispute(s)", stale.size());
         }
     }
 }
