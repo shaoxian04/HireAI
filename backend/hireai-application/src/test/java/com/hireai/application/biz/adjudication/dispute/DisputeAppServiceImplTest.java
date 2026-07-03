@@ -19,6 +19,7 @@ import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.shared.model.Money;
+import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -29,6 +30,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -227,5 +229,66 @@ class DisputeAppServiceImplTest {
         when(disputeRepository.findStaleArbitratingIds(cutoff)).thenReturn(ids);
 
         assertThat(service.staleArbitratingDisputeIds(cutoff)).isEqualTo(ids);
+    }
+
+    /** OPEN dispute for {@code disputedTask}, raised by {@code clientId}, immediately proposed-ruled at tier 1. */
+    private DisputeModel ruledDispute(RulingCategory category) {
+        return DisputeModel.open(disputedTask.id(), clientId, RejectReason.A_MISMATCH, "corr")
+                .recordRuling(new Ruling(1, category, "r", RulingDecidedBy.ARBITRATOR, Instant.now()));
+    }
+
+    @Test
+    void acceptRuling_settlesFromProposal() {
+        DisputeModel ruled = ruledDispute(RulingCategory.FULFILLED);
+        when(disputeRepository.findById(ruled.id())).thenReturn(Optional.of(ruled));
+
+        service.acceptRuling(ruled.id(), clientId);
+
+        verify(settlement).settleAccepted(eq(disputedTask.id()), eq(clientId), eq(builderId), eq(Money.of("100.00")));
+        ArgumentCaptor<DisputeModel> cap = ArgumentCaptor.forClass(DisputeModel.class);
+        verify(disputeRepository, atLeastOnce()).save(cap.capture());
+        assertThat(cap.getValue().status()).isEqualTo(DisputeStatus.RESOLVED);
+    }
+
+    @Test
+    void acceptRuling_byNonOwner_throws() {
+        when(disputeRepository.findById(any())).thenReturn(Optional.of(ruledDispute(RulingCategory.FULFILLED)));
+
+        assertThatThrownBy(() -> service.acceptRuling(UUID.randomUUID(), UUID.randomUUID()))
+                .isInstanceOf(DomainException.class).hasMessageContaining("not your dispute");
+        verifyNoInteractions(settlement);
+    }
+
+    @Test
+    void acceptRuling_whenNotRuled_throws() {
+        DisputeModel arbitrating = DisputeModel.open(disputedTask.id(), clientId, RejectReason.A_MISMATCH, "c")
+                .startArbitrating();
+        when(disputeRepository.findById(arbitrating.id())).thenReturn(Optional.of(arbitrating));
+
+        assertThatThrownBy(() -> service.acceptRuling(arbitrating.id(), clientId))
+                .isInstanceOf(DomainException.class);
+        verifyNoInteractions(settlement);
+    }
+
+    @Test
+    void appeal_movesToEscalated_noSettlement() {
+        DisputeModel ruled = ruledDispute(RulingCategory.FULFILLED);
+        when(disputeRepository.findById(ruled.id())).thenReturn(Optional.of(ruled));
+
+        service.appeal(ruled.id(), clientId);
+
+        ArgumentCaptor<DisputeModel> saved = ArgumentCaptor.forClass(DisputeModel.class);
+        verify(disputeRepository).save(saved.capture());
+        assertThat(saved.getValue().status()).isEqualTo(DisputeStatus.ESCALATED);
+        verifyNoInteractions(settlement);
+    }
+
+    @Test
+    void appeal_byNonOwner_throws() {
+        when(disputeRepository.findById(any())).thenReturn(Optional.of(ruledDispute(RulingCategory.FULFILLED)));
+
+        assertThatThrownBy(() -> service.appeal(UUID.randomUUID(), UUID.randomUUID()))
+                .isInstanceOf(DomainException.class).hasMessageContaining("not your dispute");
+        verifyNoInteractions(settlement);
     }
 }

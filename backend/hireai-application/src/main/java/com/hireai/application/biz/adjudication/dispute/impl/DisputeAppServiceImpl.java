@@ -95,9 +95,41 @@ public class DisputeAppServiceImpl implements DisputeAppService {
     }
 
     @Override
+    public void acceptRuling(UUID disputeId, UUID clientId) {
+        DisputeModel dispute = lockAndRevalidateRuled(disputeId, clientId);
+        settleFromEffective(dispute);
+    }
+
+    @Override
+    public void appeal(UUID disputeId, UUID clientId) {
+        DisputeModel dispute = lockAndRevalidateRuled(disputeId, clientId);
+        disputeRepository.save(dispute.appeal());
+        log.info("Client {} appealed dispute {} to admin backstop", clientId, disputeId);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<UUID> staleArbitratingDisputeIds(Instant cutoff) {
         return disputeRepository.findStaleArbitratingIds(cutoff);
+    }
+
+    /**
+     * Serializes the RULED→{RESOLVED|ESCALATED} transitions: takes the task pessimistic lock (the
+     * same lock settlement uses) so accept/appeal/auto-accept can't both win, then re-reads and
+     * re-validates the dispute under the lock. Ownership (Inv #5) is checked here too.
+     */
+    private DisputeModel lockAndRevalidateRuled(UUID disputeId, UUID clientId) {
+        DisputeModel dispute = requireDispute(disputeId);
+        if (!dispute.raisedBy().equals(clientId)) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION, "not your dispute: " + disputeId);
+        }
+        lockTask(dispute.taskId()); // serialization point
+        DisputeModel fresh = requireDispute(disputeId); // re-read under lock
+        if (fresh.status() != DisputeStatus.RULED) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Dispute " + disputeId + " is " + fresh.status() + "; no proposed ruling to act on");
+        }
+        return fresh;
     }
 
     /** Records a ruling and moves the dispute to RULED. No money moves. */
