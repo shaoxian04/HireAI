@@ -117,6 +117,45 @@ class DisputeReadAppServiceImplTest {
     }
 
     @Test
+    void clientCanReadDisputeOutcomeByDisputeId() {
+        when(disputeRepository.findById(dispute.id())).thenReturn(Optional.of(dispute));
+
+        DisputeModel result = service.getOutcomeByDispute(dispute.id(), clientId);
+
+        assertThat(result).isEqualTo(dispute);
+    }
+
+    @Test
+    void owningBuilderCanReadDisputeOutcomeByDisputeId() {
+        when(disputeRepository.findById(dispute.id())).thenReturn(Optional.of(dispute));
+
+        DisputeModel result = service.getOutcomeByDispute(dispute.id(), builderId);
+
+        assertThat(result).isEqualTo(dispute);
+    }
+
+    @Test
+    void strangerGetsNotFoundByDisputeId() {
+        when(disputeRepository.findById(dispute.id())).thenReturn(Optional.of(dispute));
+
+        assertThatThrownBy(() -> service.getOutcomeByDispute(dispute.id(), strangerId))
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).resultCode())
+                        .isEqualTo(ResultCode.NOT_FOUND));
+    }
+
+    @Test
+    void unknownDisputeIdGetsNotFound() {
+        UUID unknownDisputeId = UUID.randomUUID();
+        when(disputeRepository.findById(unknownDisputeId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getOutcomeByDispute(unknownDisputeId, clientId))
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).resultCode())
+                        .isEqualTo(ResultCode.NOT_FOUND));
+    }
+
+    @Test
     void myDisputesDelegatesToDisputeQueryPort() {
         List<DisputeMineRow> rows = List.of(new DisputeMineRow(
                 UUID.randomUUID(), task.id(), "t", "RULED", "FULFILLED", Instant.now()));

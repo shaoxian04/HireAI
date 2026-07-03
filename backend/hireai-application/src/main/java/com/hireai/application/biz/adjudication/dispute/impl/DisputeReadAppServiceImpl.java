@@ -48,6 +48,19 @@ public class DisputeReadAppServiceImpl implements DisputeReadAppService {
 
     @Override
     @Transactional(readOnly = true)
+    public DisputeModel getOutcomeByDispute(UUID disputeId, UUID currentUserId) {
+        DisputeModel dispute = disputeRepository.findById(disputeId)
+                .orElseThrow(() -> notFoundById(disputeId));
+        TaskModel task = taskRepository.findById(dispute.taskId())
+                .orElseThrow(() -> notFoundById(disputeId));
+        if (!isParticipant(task, currentUserId)) {
+            throw notFoundById(disputeId);
+        }
+        return dispute;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<DisputeMineRow> myDisputes(UUID clientId) {
         return disputeQueryPort.findDisputesForClient(clientId);
     }
@@ -63,5 +76,9 @@ public class DisputeReadAppServiceImpl implements DisputeReadAppService {
 
     private DomainException notFound(UUID taskId) {
         return new DomainException(ResultCode.NOT_FOUND, "Dispute not found for task: " + taskId);
+    }
+
+    private DomainException notFoundById(UUID disputeId) {
+        return new DomainException(ResultCode.NOT_FOUND, "Dispute not found: " + disputeId);
     }
 }

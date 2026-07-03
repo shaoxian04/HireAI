@@ -15,6 +15,13 @@ public interface DisputeReadAppService {
      */
     DisputeModel getOutcomeForUser(@NonNull UUID taskId, @NonNull UUID currentUserId);
 
+    /**
+     * The dispute (with full ruling history), looked up by its own id — for the refreshed view after
+     * accept/appeal. Same visibility rule as {@link #getOutcomeForUser}: only the task's client or the
+     * builder who owns the agent version that ran it. Anyone else, or no dispute, → NOT_FOUND.
+     */
+    DisputeModel getOutcomeByDispute(@NonNull UUID disputeId, @NonNull UUID currentUserId);
+
     /** All disputes the given client raised (action-needed first), for the /client/disputes surface. */
     List<DisputeMineRow> myDisputes(@NonNull UUID clientId);
 }
