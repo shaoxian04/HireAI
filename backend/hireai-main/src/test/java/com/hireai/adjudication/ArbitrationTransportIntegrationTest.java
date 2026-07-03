@@ -1,5 +1,6 @@
 package com.hireai.adjudication;
 
+import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.adjudication.port.ArbitrationRequestMessage;
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
@@ -56,11 +57,14 @@ import static org.awaitility.Awaitility.await;
  * {@code ArbitrationDlqListener} ({@code @Profile("!test")}) are active instead of the
  * synchronous stub. Skips cleanly when no Docker daemon is reachable.</p>
  *
- * <p>Scenarios:</p>
+ * <p>Scenarios (delayed settlement: an arbitrator ruling is a PROPOSAL — RULED, not RESOLVED — until
+ * the client accepts it or the dispute is escalated):</p>
  * <ol>
- *   <li>Round-trip: reject(A_MISMATCH) → ARBITRATING; POST callback NOT_FULFILLED →
- *       RESOLVED + full refund + SettlementType.REJECT.</li>
- *   <li>First-ruling-wins: second POST on already-RESOLVED dispute → 200, no double settlement.</li>
+ *   <li>Round-trip: reject(A_MISMATCH) → ARBITRATING; POST callback NOT_FULFILLED → RULED
+ *       (escrow still held, no settlement); client {@code acceptRuling} → RESOLVED + full refund +
+ *       SettlementType.REJECT.</li>
+ *   <li>First-ruling-wins: a redelivered/duplicate POST on an already-RESOLVED dispute → 200,
+ *       no re-proposal, no double settlement.</li>
  *   <li>Auth guard: wrong/absent secret → 401, dispute stays ARBITRATING.</li>
  *   <li>DLQ escalation: publish ArbitrationRequestMessage directly to DLQ →
  *       ArbitrationDlqListener escalates the dispute to ESCALATED (admin backstop; no auto-refund).</li>
@@ -105,6 +109,7 @@ class ArbitrationTransportIntegrationTest {
 
     @Autowired TestRestTemplate rest;
     @Autowired TaskReviewAppService reviewAppService;
+    @Autowired DisputeAppService disputeAppService;
     @Autowired TaskRepository taskRepository;
     @Autowired DisputeRepository disputeRepository;
     @Autowired SettlementRepository settlementRepository;
@@ -197,8 +202,10 @@ class ArbitrationTransportIntegrationTest {
 
     /**
      * reject(A_MISMATCH) publishes to Rabbit (RabbitArbitrationClient) and returns → task DISPUTED,
-     * dispute ARBITRATING, escrow held, no settlement. POST callback NOT_FULFILLED → task RESOLVED,
-     * dispute RESOLVED, client fully refunded, settlement REJECT.
+     * dispute ARBITRATING, escrow held, no settlement. POST callback NOT_FULFILLED is a PROPOSAL →
+     * dispute RULED, task still DISPUTED, escrow still held, no settlement yet. The client then
+     * accepts the ruling → settles exactly once → task RESOLVED, dispute RESOLVED, client fully
+     * refunded, settlement REJECT.
      */
     @Test
     void roundTrip_notFulfilledCallbackRefundsClient() {
@@ -223,6 +230,22 @@ class ArbitrationTransportIntegrationTest {
         ResponseEntity<String> resp = postRuling(dispute.id(), "NOT_FULFILLED", CALLBACK_SECRET);
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
 
+        // Arbitrator ruling is a PROPOSAL: dispute RULED, task still DISPUTED, escrow still held.
+        DisputeModel ruledDispute = disputeRepository.findByTaskId(f.taskId()).orElseThrow();
+        assertThat(ruledDispute.status()).isEqualTo(DisputeStatus.RULED);
+
+        TaskModel stillDisputed = taskRepository.findById(f.taskId()).orElseThrow();
+        assertThat(stillDisputed.status()).isEqualTo(TaskStatus.DISPUTED);
+
+        assertThat(settlementRepository.findByTaskId(f.taskId())).isEmpty();
+
+        WalletModel clientAfterRuling = walletRepository.findByUserId(f.clientId()).orElseThrow();
+        assertThat(clientAfterRuling.available()).isEqualTo(Money.ZERO);
+        assertThat(clientAfterRuling.escrow()).isEqualTo(Money.of("100.00")); // still held
+
+        // Client accepts the proposed ruling -> settles exactly once.
+        disputeAppService.acceptRuling(dispute.id(), f.clientId());
+
         // Assert full resolution + refund
         TaskModel resolved = taskRepository.findById(f.taskId()).orElseThrow();
         assertThat(resolved.status()).isEqualTo(TaskStatus.RESOLVED);
@@ -243,8 +266,10 @@ class ArbitrationTransportIntegrationTest {
     // -------------------------------------------------------------------------
 
     /**
-     * A second POST on an already-RESOLVED dispute returns 200 with no double settlement:
-     * wallet balances and settlement row count are unchanged after the second call.
+     * A redelivered/duplicate POST lands on an already-RESOLVED dispute (the client accepted the
+     * first proposed ruling in between): {@code applyRuling}'s first-ruling-wins guard
+     * ({@code isResolvable()} is false once RULED/RESOLVED) ignores it — 200, no re-proposal, no
+     * double settlement. Wallet balances and settlement row count are unchanged after the second call.
      */
     @Test
     void firstRulingWins_secondCallbackIsIdempotent() {
@@ -252,22 +277,28 @@ class ArbitrationTransportIntegrationTest {
         reviewAppService.reject(f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "idempotency test");
         DisputeModel dispute = disputeRepository.findByTaskId(f.taskId()).orElseThrow();
 
-        // First ruling resolves the dispute
+        // First ruling proposes -> RULED, no settlement yet.
         ResponseEntity<String> first = postRuling(dispute.id(), "NOT_FULFILLED", CALLBACK_SECRET);
         assertThat(first.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(disputeRepository.findByTaskId(f.taskId()).orElseThrow().status())
+                .isEqualTo(DisputeStatus.RULED);
+        assertThat(settlementRepository.findByTaskId(f.taskId())).isEmpty();
+
+        // Client accepts the proposed ruling -> settles exactly once.
+        disputeAppService.acceptRuling(dispute.id(), f.clientId());
 
         WalletModel afterFirst = walletRepository.findByUserId(f.clientId()).orElseThrow();
         int settlementCount = jdbc.queryForObject(
                 "SELECT count(*) FROM settlements WHERE task_id = ?", Integer.class, f.taskId());
 
-        // Guard: verify the first ruling actually settled before checking idempotency;
-        // without these, the later "unchanged" comparison can pass vacuously if the first callback silently failed.
-        assertThat(afterFirst.available()).isEqualTo(Money.of("100.00")); // fully refunded by first ruling
-        assertThat(settlementCount).isEqualTo(1); // exactly one settlement row created by first ruling
+        // Guard: verify accepting the ruling actually settled before checking idempotency;
+        // without these, the later "unchanged" comparison can pass vacuously if accept silently failed.
+        assertThat(afterFirst.available()).isEqualTo(Money.of("100.00")); // fully refunded on accept
+        assertThat(settlementCount).isEqualTo(1); // exactly one settlement row created by accept
         assertThat(disputeRepository.findByTaskId(f.taskId()).orElseThrow().status())
                 .isEqualTo(DisputeStatus.RESOLVED); // dispute resolved before duplicate callback
 
-        // Second ruling on the now-RESOLVED dispute
+        // A redelivered arbitrator callback lands on the now-RESOLVED dispute
         ResponseEntity<String> second = postRuling(dispute.id(), "NOT_FULFILLED", CALLBACK_SECRET);
         assertThat(second.getStatusCode()).isEqualTo(HttpStatus.OK);
 

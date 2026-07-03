@@ -4,6 +4,7 @@ import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.admin.AdminReadAppService;
 import com.hireai.application.biz.admin.view.AdminViews;
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
+import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.domain.biz.adjudication.enums.DisputeStatus;
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
 import com.hireai.domain.biz.adjudication.model.DisputeModel;
@@ -76,6 +77,7 @@ class AdminDisputeFlowIntegrationTest {
 
     @Autowired DisputeAppService disputeAppService;
     @Autowired AdminReadAppService adminReadAppService;
+    @Autowired TaskReviewAppService reviewAppService;
     @Autowired TaskRepository taskRepository;
     @Autowired DisputeRepository disputeRepository;
     @Autowired WalletRepository walletRepository;
@@ -132,6 +134,33 @@ class AdminDisputeFlowIntegrationTest {
         return new Fixture(task.id(), clientId, dispute.id());
     }
 
+    /**
+     * Seeds a PENDING_REVIEW task for {@code clientId} with the budget frozen in escrow — no
+     * dispute yet. Used by the full client-reject → propose → appeal → admin-override flow, which
+     * drives the dispute through the app services rather than constructing it directly.
+     */
+    private UUID seedReviewableTask(UUID clientId, Money budget) {
+        UUID builderId = newUser("BUILDER");
+        UUID agentVersionId = newAgentVersion(builderId);
+
+        TaskModel task = TaskModel.submit(clientId, "Appeal flow task", "desc",
+                        budget, new OutputSpec(OutputFormat.TEXT, null, null), "summarisation")
+                .assignAndQueue(agentVersionId)
+                .markExecuting();
+        task = task.recordResult(TaskResultModel.record(task.id(), "COMPLETED", "{\"summary\":\"ok\"}", null))
+                .passValidation();
+        taskRepository.save(task);
+
+        walletWrite.topUp(clientId, budget, "seed-topup-" + task.id());
+        walletWrite.freeze(clientId, budget, task.id(), "seed-freeze-" + task.id());
+
+        return task.id();
+    }
+
+    private int settlementCount(UUID taskId) {
+        return jdbc.queryForObject("SELECT count(*) FROM settlements WHERE task_id = ?", Integer.class, taskId);
+    }
+
     @Test
     void adminRuleNotFulfilledRefundsClientAndResolves() {
         Fixture f = seedEscalatedDispute(Money.of("30.00"));
@@ -175,5 +204,45 @@ class AdminDisputeFlowIntegrationTest {
         disputeAppService.escalate(disputeId);
         assertThat(disputeRepository.findById(disputeId).orElseThrow().status())
                 .isEqualTo(DisputeStatus.ESCALATED);
+    }
+
+    /**
+     * Full appeal E2E: client rejects (B_FACTUAL) → dispute opens; the stub arbitrator proposes a
+     * ruling synchronously → RULED (no settlement, escrow held). Client appeals → ESCALATED (admin
+     * queue), still no settlement. Admin overrides with a DIFFERENT category (NOT_FULFILLED,
+     * overriding the arbitrator's tier-1 PARTIALLY_FULFILLED proposal) → the tier-2 ruling is
+     * effective (highest tier wins) → settles exactly once, full refund.
+     */
+    @Test
+    void rejectProposeAppealAdmin_settlesExactlyOnce() {
+        UUID clientId = newUser("CLIENT");
+        UUID taskId = seedReviewableTask(clientId, Money.of("100.00"));
+
+        // client rejects (B_FACTUAL) -> dispute opens; stub proposes a ruling synchronously -> RULED
+        reviewAppService.reject(taskId, clientId, RejectReason.B_FACTUAL, "off-topic");
+        UUID disputeId = disputeRepository.findByTaskId(taskId).orElseThrow().id();
+        assertThat(disputeRepository.findById(disputeId).orElseThrow().status()).isEqualTo(DisputeStatus.RULED);
+        assertThat(walletRepository.findByUserId(clientId).orElseThrow().escrow())
+                .isEqualTo(Money.of("100.00")); // still held
+
+        // client appeals -> ESCALATED (admin queue), still no settlement
+        disputeAppService.appeal(disputeId, clientId);
+        assertThat(disputeRepository.findById(disputeId).orElseThrow().status()).isEqualTo(DisputeStatus.ESCALATED);
+        assertThat(walletRepository.findByUserId(clientId).orElseThrow().escrow())
+                .isEqualTo(Money.of("100.00"));
+        assertThat(settlementCount(taskId)).isEqualTo(0);
+
+        // admin overrides to NOT_FULFILLED -> settles once, full refund
+        disputeAppService.adminRule(disputeId, RulingCategory.NOT_FULFILLED, "human override", ADMIN_ID);
+        assertThat(disputeRepository.findById(disputeId).orElseThrow().status()).isEqualTo(DisputeStatus.RESOLVED);
+
+        WalletModel client = walletRepository.findByUserId(clientId).orElseThrow();
+        assertThat(client.available()).isEqualTo(Money.of("100.00")); // refunded
+        assertThat(client.escrow()).isEqualTo(Money.ZERO);
+
+        TaskModel task = taskRepository.findById(taskId).orElseThrow();
+        assertThat(task.status()).isEqualTo(TaskStatus.RESOLVED);
+
+        assertThat(settlementCount(taskId)).isEqualTo(1); // exactly once
     }
 }

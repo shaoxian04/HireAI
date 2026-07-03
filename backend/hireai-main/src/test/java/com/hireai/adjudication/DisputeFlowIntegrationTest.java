@@ -1,5 +1,6 @@
 package com.hireai.adjudication;
 
+import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.domain.biz.adjudication.enums.DisputeStatus;
@@ -40,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * End-to-end dispute flow against the synchronous StubArbitrationClient (Testcontainers Postgres;
- * Flyway V1–V17). All four reject paths are covered:
+ * Flyway V1–V23). All four reject paths are covered:
  * <ul>
  *   <li>A_MISMATCH  → NOT_FULFILLED ruling → full refund (SettlementType.REJECT)</li>
  *   <li>B_FACTUAL   → PARTIALLY_FULFILLED ruling → SPLIT (client 50.00 + builder 42.50)</li>
@@ -48,6 +49,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *   <li>D_CHANGED_MIND → no dispute, direct 85/15 charge (SettlementType.ACCEPT)</li>
  * </ul>
  * Plus a null-reason guard: reject() with a null category must throw DomainException.
+ *
+ * <p>Delayed settlement (A/B/C only): the stub arbitrator's ruling is a PROPOSAL — {@code reject()}
+ * leaves the task DISPUTED and the dispute RULED, with escrow still held. Each A/B/C test therefore
+ * asserts the RULED/held state first, then calls {@code disputeAppService.acceptRuling(...)} to
+ * settle (exactly once) before asserting the money movement. D_CHANGED_MIND never opens a dispute,
+ * so it still settles synchronously inside {@code reject()}.
  *
  * <p>Seeding mirrors {@code TaskSettlementIntegrationTest}: tasks are driven through domain
  * transitions directly (no app-service submission) to avoid triggering the RabbitMQ routing
@@ -79,6 +86,7 @@ class DisputeFlowIntegrationTest {
     }
 
     @Autowired TaskReviewAppService reviewAppService;
+    @Autowired DisputeAppService disputeAppService;
     @Autowired TaskRepository taskRepository;
     @Autowired DisputeRepository disputeRepository;
     @Autowired SettlementRepository settlementRepository;
@@ -144,13 +152,28 @@ class DisputeFlowIntegrationTest {
     }
 
     /**
-     * A_MISMATCH → StubArbitrationClient returns NOT_FULFILLED → full refund.
+     * A_MISMATCH → StubArbitrationClient proposes NOT_FULFILLED → RULED (no settlement yet, escrow
+     * held). Client accepts the ruling → settles once → full refund.
      * Expected: task RESOLVED, dispute RESOLVED, client fully refunded, settlement REJECT.
      */
     @Test
     void mismatchDisputeRefundsClientInFull() {
         Fixture f = seedPendingReview(Money.of("100.00"));
         reviewAppService.reject(f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "wrong output");
+
+        // Arbitrator's ruling is a PROPOSAL: dispute RULED, task still DISPUTED, escrow still held.
+        TaskModel disputedTask = taskRepository.findById(f.taskId()).orElseThrow();
+        assertThat(disputedTask.status()).isEqualTo(TaskStatus.DISPUTED);
+        UUID disputeId = disputeRepository.findByTaskId(f.taskId()).orElseThrow().id();
+        assertThat(disputeRepository.findById(disputeId).orElseThrow().status())
+                .isEqualTo(DisputeStatus.RULED);
+
+        WalletModel heldWallet = walletRepository.findByUserId(f.clientId()).orElseThrow();
+        assertThat(heldWallet.available()).isEqualTo(Money.ZERO);
+        assertThat(heldWallet.escrow()).isEqualTo(Money.of("100.00")); // still held
+
+        // Client accepts the proposed ruling -> settles exactly once.
+        disputeAppService.acceptRuling(disputeId, f.clientId());
 
         TaskModel task = taskRepository.findById(f.taskId()).orElseThrow();
         assertThat(task.status()).isEqualTo(TaskStatus.RESOLVED);
@@ -166,13 +189,22 @@ class DisputeFlowIntegrationTest {
     }
 
     /**
-     * B_FACTUAL → StubArbitrationClient returns PARTIALLY_FULFILLED → SPLIT.
+     * B_FACTUAL → StubArbitrationClient proposes PARTIALLY_FULFILLED → RULED (no settlement yet).
+     * Client accepts the ruling → settles once → SPLIT.
      * Expected: settlement SPLIT, client refunded 50.00, builder receives 42.50 (50% net of 15% commission).
      */
     @Test
     void factualDisputeSplits() {
         Fixture f = seedPendingReview(Money.of("100.00"));
         reviewAppService.reject(f.taskId(), f.clientId(), RejectReason.B_FACTUAL, "some errors");
+
+        UUID disputeId = disputeRepository.findByTaskId(f.taskId()).orElseThrow().id();
+        assertThat(disputeRepository.findById(disputeId).orElseThrow().status())
+                .isEqualTo(DisputeStatus.RULED);
+        WalletModel heldWallet = walletRepository.findByUserId(f.clientId()).orElseThrow();
+        assertThat(heldWallet.escrow()).isEqualTo(Money.of("100.00")); // still held pending accept
+
+        disputeAppService.acceptRuling(disputeId, f.clientId());
 
         SettlementModel s = settlementRepository.findByTaskId(f.taskId()).orElseThrow();
         assertThat(s.type()).isEqualTo(SettlementType.SPLIT);
@@ -189,13 +221,20 @@ class DisputeFlowIntegrationTest {
     }
 
     /**
-     * C_INCOMPLETE → StubArbitrationClient returns FULFILLED → 85/15 payout.
+     * C_INCOMPLETE → StubArbitrationClient proposes FULFILLED → RULED (no settlement yet).
+     * Client accepts the ruling → settles once → 85/15 payout.
      * Expected: settlement ACCEPT, builder receives 85.00 (100.00 × (1 − 0.15)).
      */
     @Test
     void incompleteDisputePaysBuilder() {
         Fixture f = seedPendingReview(Money.of("100.00"));
         reviewAppService.reject(f.taskId(), f.clientId(), RejectReason.C_INCOMPLETE, "missing parts");
+
+        UUID disputeId = disputeRepository.findByTaskId(f.taskId()).orElseThrow().id();
+        assertThat(disputeRepository.findById(disputeId).orElseThrow().status())
+                .isEqualTo(DisputeStatus.RULED);
+
+        disputeAppService.acceptRuling(disputeId, f.clientId());
 
         SettlementModel s = settlementRepository.findByTaskId(f.taskId()).orElseThrow();
         assertThat(s.type()).isEqualTo(SettlementType.ACCEPT);
