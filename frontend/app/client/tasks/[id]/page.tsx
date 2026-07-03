@@ -10,7 +10,7 @@ import { StatusTrack } from "@/components/StatusTrack";
 import type { TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
 import { ResultReviewBar } from "@/components/ResultReviewBar";
-import { DisputeOutcomePanel } from "@/components/DisputeOutcomePanel";
+import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
 
 const POLL_MS = 2000;
 
@@ -58,10 +58,12 @@ function TaskDetail() {
     resultRef.current = result;
   }, [result]);
 
-  // Fetch the arbitration outcome once the task enters a dispute-capable terminal state.
+  // Fetch the arbitration outcome once, when the task lands on its settled state. DISPUTED is
+  // handled by the poll effect below instead, since the outcome moves through several statuses
+  // (ARBITRATING -> RULED -> ESCALATED -> RESOLVED) before the task itself leaves DISPUTED.
   useEffect(() => {
     if (!task) return;
-    if (task.status !== "DISPUTED" && task.status !== "RESOLVED") return;
+    if (task.status !== "RESOLVED") return;
     let cancelled = false;
     api<DisputeOutcomeDTO>(`/disputes/by-task/${task.id}`)
       .then((o) => { if (!cancelled) setOutcome(o); })
@@ -72,6 +74,18 @@ function TaskDetail() {
         if (!isPendingError(e)) console.error(e);
       });
     return () => { cancelled = true; };
+  }, [task]);
+
+  // While the task is under dispute, poll the outcome so the client sees it move live through
+  // ARBITRATING -> RULED (accept/appeal) -> ESCALATED -> RESOLVED.
+  useEffect(() => {
+    if (!task || task.status !== "DISPUTED") return;
+    const t = setInterval(() => {
+      api<DisputeOutcomeDTO>(`/disputes/by-task/${task.id}`)
+        .then((o) => setOutcome(o))
+        .catch((e) => { if (!isPendingError(e)) console.error(e); });
+    }, POLL_MS);
+    return () => clearInterval(t);
   }, [task]);
 
   useEffect(() => {
@@ -253,7 +267,7 @@ function TaskDetail() {
         )}
       </Card>
 
-      {outcome && <DisputeOutcomePanel outcome={outcome} />}
+      {outcome && <DisputeProgressPanel outcome={outcome} onChange={setOutcome} />}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { DisputeOutcomePanel } from "./DisputeOutcomePanel";
 import type { DisputeOutcomeDTO } from "@/lib/types";
 
 const base: DisputeOutcomeDTO = {
+  disputeId: "d-1",
   taskId: "t-1",
   status: "RESOLVED",
   effectiveCategory: "PARTIALLY_FULFILLED",

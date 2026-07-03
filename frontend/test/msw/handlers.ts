@@ -202,6 +202,59 @@ export const handlers = [
     });
   }),
 
+  // ── Dispute lifecycle handlers (client-facing accept/appeal) ──
+  http.get("*/api/disputes/by-task/:taskId", ({ params }) =>
+    ok({
+      disputeId: "d-1",
+      taskId: params.taskId as string,
+      status: "RULED",
+      effectiveCategory: "FULFILLED",
+      rulings: [
+        {
+          tier: 1,
+          decidedBy: "ARBITRATOR",
+          category: "FULFILLED",
+          rationale: "Output matched the acceptance criteria.",
+          decidedAt: "2026-07-03T10:00:00Z",
+        },
+      ],
+    }),
+  ),
+  http.post("*/api/disputes/:id/accept-ruling", ({ params }) =>
+    ok({
+      disputeId: params.id as string,
+      taskId: "t-1",
+      status: "RESOLVED",
+      effectiveCategory: "FULFILLED",
+      rulings: [
+        {
+          tier: 1,
+          decidedBy: "ARBITRATOR",
+          category: "FULFILLED",
+          rationale: "Output matched the acceptance criteria.",
+          decidedAt: "2026-07-03T10:00:00Z",
+        },
+      ],
+    }),
+  ),
+  http.post("*/api/disputes/:id/appeal", ({ params }) =>
+    ok({
+      disputeId: params.id as string,
+      taskId: "t-1",
+      status: "ESCALATED",
+      effectiveCategory: null,
+      rulings: [
+        {
+          tier: 1,
+          decidedBy: "ARBITRATOR",
+          category: "FULFILLED",
+          rationale: "Output matched the acceptance criteria.",
+          decidedAt: "2026-07-03T10:00:00Z",
+        },
+      ],
+    }),
+  ),
+
   // ── Catalogue handlers ──
 
   // Single-fixture stub — filters by name/category only; sort and pagination are not modelled.

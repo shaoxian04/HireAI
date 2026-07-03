@@ -297,10 +297,21 @@ export interface RulingDTO {
 }
 
 export interface DisputeOutcomeDTO {
+  disputeId: string;
   taskId: string;
   status: string;
   effectiveCategory: RulingCategory | null;
   rulings: RulingDTO[];
+}
+
+/** Row shape for a client's own dispute list (future "my disputes" view). */
+export interface DisputeMineRowDTO {
+  disputeId: string;
+  taskId: string;
+  taskTitle: string;
+  status: string; // OPEN | ARBITRATING | RULED | ESCALATED | RESOLVED
+  proposedCategory: RulingCategory | null;
+  updatedAt: string;
 }
 
 // ── Admin surface ───────────────────────────────────────────────────────────
