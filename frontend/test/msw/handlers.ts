@@ -128,10 +128,17 @@ export const handlers = [
     });
   }),
 
-  // Drives a deterministic lifecycle: EXECUTING (poll 1) -> RESULT_RECEIVED (poll 2+).
+  // Drives the real backend lifecycle across polls: EXECUTING (poll 1) -> RESULT_RECEIVED
+  // (poll 2, transient while the validation gate runs) -> PENDING_REVIEW (poll 3+, the state
+  // the client actually reviews and acts on).
   http.get("*/api/tasks/:id", ({ params }) => {
     taskDetailPolls += 1;
-    const status = taskDetailPolls >= 2 ? "RESULT_RECEIVED" : "EXECUTING";
+    const status =
+      taskDetailPolls >= 3
+        ? "PENDING_REVIEW"
+        : taskDetailPolls === 2
+          ? "RESULT_RECEIVED"
+          : "EXECUTING";
     return ok({
       id: params.id,
       clientId: "u-1",

@@ -31,7 +31,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 describe("task detail polling", () => {
-  it("shows EXECUTING then renders the result once RESULT_RECEIVED", async () => {
+  it("shows EXECUTING, then renders the result and review controls at PENDING_REVIEW", async () => {
     render(
       <AuthProvider>
         <TaskDetailPage />
@@ -41,9 +41,10 @@ describe("task detail polling", () => {
     // First poll: EXECUTING badge.
     expect(await screen.findByText("EXECUTING")).toBeInTheDocument();
 
-    // Subsequent polls (2s interval) advance to RESULT_RECEIVED and load the result.
+    // Subsequent polls (2s interval) advance through RESULT_RECEIVED to PENDING_REVIEW — the
+    // state the client actually reviews. RESULT_RECEIVED is a transient the poller may skip.
     expect(
-      await screen.findByText("RESULT_RECEIVED", {}, { timeout: 5000 }),
+      await screen.findByText("PENDING_REVIEW", {}, { timeout: 8000 }),
     ).toBeInTheDocument();
     expect(await screen.findByText(/agent status/i)).toHaveTextContent(/COMPLETED/);
     // Pretty-printed payload is present.
@@ -53,5 +54,12 @@ describe("task detail polling", () => {
       "href",
       "https://example.com/out.json",
     );
-  }, 10000);
+
+    // Regression guard: the accept/reject controls MUST appear at PENDING_REVIEW (not only at
+    // the transient RESULT_RECEIVED). This is exactly the gap that left the UI stuck on "working".
+    expect(
+      await screen.findByRole("button", { name: /accept result/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^reject$/i })).toBeInTheDocument();
+  }, 12000);
 });
