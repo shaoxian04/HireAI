@@ -59,6 +59,11 @@ public class DisputeRepositoryImpl implements DisputeRepository {
         return jpa.findStaleArbitratingIds(cutoff);
     }
 
+    @Override
+    public List<UUID> findStaleRuledIds(Instant cutoff) {
+        return jpa.findStaleRuledIds(cutoff);
+    }
+
     private DisputeModel toModel(DisputeDO e) {
         List<Ruling> rulings = rulingJpa.findByDisputeIdOrderByGmtCreateAsc(e.getId()).stream()
                 .map(r -> new Ruling(r.getTier(), RulingCategory.valueOf(r.getCategory()),

@@ -33,4 +33,7 @@ public interface DisputeAppService {
 
     /** Ids of disputes stuck in ARBITRATING since before {@code cutoff} (for the sweeper). */
     List<UUID> staleArbitratingDisputeIds(@NonNull Instant cutoff);
+
+    /** Auto-accepts every RULED dispute whose proposed ruling has sat unacted since before {@code cutoff}. */
+    void autoAcceptStaleRulings(@NonNull Instant cutoff);
 }

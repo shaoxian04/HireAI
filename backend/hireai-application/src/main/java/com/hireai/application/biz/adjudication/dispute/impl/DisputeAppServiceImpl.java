@@ -113,6 +113,19 @@ public class DisputeAppServiceImpl implements DisputeAppService {
         return disputeRepository.findStaleArbitratingIds(cutoff);
     }
 
+    @Override
+    public void autoAcceptStaleRulings(Instant cutoff) {
+        for (UUID id : disputeRepository.findStaleRuledIds(cutoff)) {
+            DisputeModel dispute = requireDispute(id);
+            lockTask(dispute.taskId());
+            DisputeModel fresh = requireDispute(id);
+            if (fresh.status() == DisputeStatus.RULED) {
+                settleFromEffective(fresh);
+                log.info("Auto-accepted stale proposed ruling for dispute {}", id);
+            }
+        }
+    }
+
     /**
      * Serializes the RULED→{RESOLVED|ESCALATED} transitions: takes the task pessimistic lock (the
      * same lock settlement uses) so accept/appeal/auto-accept can't both win, then re-reads and

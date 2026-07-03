@@ -89,6 +89,10 @@ hireai:
     # Human-backstop sweeper: an ARBITRATING dispute older than this is escalated to the admin.
     stale-after: ${ARBITRATION_STALE_AFTER:PT2M}
     sweep-interval: ${ARBITRATION_SWEEP_INTERVAL:PT1M}
+    # Auto-accept sweeper: a RULED (proposed) dispute the client never acted on is auto-accepted
+    # after this long, so escrow doesn't hang forever.
+    ruling-accept-after: ${RULING_ACCEPT_AFTER:PT2M}
+    accept-sweep-interval: ${RULING_ACCEPT_SWEEP_INTERVAL:PT1M}
   storage:
     # Supabase Storage (public-read bucket; uploads happen ONLY server-side with the service key).
     supabase-url: ${SUPABASE_URL:}

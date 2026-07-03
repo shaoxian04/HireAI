@@ -14,4 +14,7 @@ public interface DisputeRepository {
 
     /** Ids of disputes stuck in ARBITRATING since before {@code cutoff} (for the stale-arbitration sweeper). */
     List<UUID> findStaleArbitratingIds(Instant cutoff);
+
+    /** Ids of disputes stuck in RULED (proposed, unacted) since before {@code cutoff} (auto-accept sweeper). */
+    List<UUID> findStaleRuledIds(Instant cutoff);
 }
