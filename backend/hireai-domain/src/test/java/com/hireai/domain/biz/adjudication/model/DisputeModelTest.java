@@ -136,4 +136,25 @@ class DisputeModelTest {
         assertThat(resolved.effectiveRuling().get().decidedBy()).isEqualTo(RulingDecidedBy.ADMINISTRATOR);
         assertThat(resolved.effectiveRuling().get().tier()).isEqualTo(2);
     }
+
+    @Test
+    void appeal_movesRuledToEscalated() {
+        DisputeModel ruled = DisputeModel
+                .open(UUID.randomUUID(), UUID.randomUUID(), RejectReason.B_FACTUAL, "corr")
+                .recordRuling(new Ruling(1, RulingCategory.FULFILLED, "ok", RulingDecidedBy.ARBITRATOR, Instant.now()));
+        assertThat(ruled.status()).isEqualTo(DisputeStatus.RULED);
+
+        DisputeModel appealed = ruled.appeal();
+
+        assertThat(appealed.status()).isEqualTo(DisputeStatus.ESCALATED);
+        assertThat(appealed.rulings()).hasSize(1); // arbitrator proposal preserved as admin context
+    }
+
+    @Test
+    void appeal_fromNonRuled_throws() {
+        DisputeModel open = DisputeModel.open(UUID.randomUUID(), UUID.randomUUID(), RejectReason.A_MISMATCH, "corr");
+        assertThatThrownBy(open::appeal)
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("appeal requires RULED");
+    }
 }
