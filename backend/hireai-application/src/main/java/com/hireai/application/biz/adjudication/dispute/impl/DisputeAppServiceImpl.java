@@ -50,7 +50,8 @@ public class DisputeAppServiceImpl implements DisputeAppService {
 
         Optional<RulingInfo> immediate = arbitrationGateway.requestRuling(dispute, disputedTask);
         if (immediate.isPresent()) {
-            settleAndResolve(dispute, immediate.get(), TIER_1, RulingDecidedBy.ARBITRATOR);
+            // Delayed settlement: an immediate (stub/sync) ruling is a PROPOSAL, not a settlement.
+            recordProposedRuling(dispute, toRuling(immediate.get(), TIER_1, RulingDecidedBy.ARBITRATOR));
         } else {
             disputeRepository.save(dispute.startArbitrating());
             log.info("Dispute {} handed off for async arbitration", dispute.id());
@@ -65,7 +66,8 @@ public class DisputeAppServiceImpl implements DisputeAppService {
             log.info("Dispute {} already {}; ruling ignored (first-ruling-wins)", disputeId, dispute.status());
             return;
         }
-        settleAndResolve(dispute, ruling, TIER_1, RulingDecidedBy.ARBITRATOR);
+        // Arbitrator ruling is now a PROPOSAL. Escrow stays held until the client accepts/appeals.
+        recordProposedRuling(dispute, toRuling(ruling, TIER_1, RulingDecidedBy.ARBITRATOR));
     }
 
     @Override
@@ -88,7 +90,8 @@ public class DisputeAppServiceImpl implements DisputeAppService {
                     "Dispute " + disputeId + " is " + s + "; already settled — admin cannot re-rule");
         }
         log.info("Admin {} ruling dispute {} as {}", adminId, disputeId, category);
-        settleAndResolve(dispute, new RulingInfo(category, rationale), TIER_2, RulingDecidedBy.ADMINISTRATOR);
+        DisputeModel ruled = dispute.recordRuling(toRuling(new RulingInfo(category, rationale), TIER_2, RulingDecidedBy.ADMINISTRATOR));
+        settleFromEffective(ruled);
     }
 
     @Override
@@ -97,13 +100,24 @@ public class DisputeAppServiceImpl implements DisputeAppService {
         return disputeRepository.findStaleArbitratingIds(cutoff);
     }
 
-    /** Records the ruling, settles deterministically by category, and resolves both task and dispute. */
-    private void settleAndResolve(DisputeModel dispute, RulingInfo info, int tier, RulingDecidedBy decidedBy) {
-        Ruling ruling = new Ruling(tier, info.category(), info.rationale(), decidedBy, Instant.now());
-        DisputeModel ruled = dispute.recordRuling(ruling);
+    /** Records a ruling and moves the dispute to RULED. No money moves. */
+    private void recordProposedRuling(DisputeModel dispute, Ruling ruling) {
+        disputeRepository.save(dispute.recordRuling(ruling));
+        log.info("Dispute {} proposed ruling {} (tier {}); awaiting client", dispute.id(), ruling.category(), ruling.tier());
+    }
 
+    private Ruling toRuling(RulingInfo info, int tier, RulingDecidedBy by) {
+        return new Ruling(tier, info.category(), info.rationale(), by, Instant.now());
+    }
+
+    /** Settles escrow ONCE from the dispute's effective (highest-tier) ruling, then resolves task + dispute. */
+    private void settleFromEffective(DisputeModel dispute) {
+        RulingCategory category = dispute.effectiveRuling()
+                .orElseThrow(() -> new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                        "Dispute " + dispute.id() + " has no ruling to settle"))
+                .category();
         TaskModel task = lockTask(dispute.taskId());
-        switch (info.category()) {
+        switch (category) {
             case FULFILLED -> {
                 UUID builderId = requireBuilder(task);
                 settlementWriteAppService.settleAccepted(task.id(), task.clientId(), builderId, task.budget());
@@ -119,7 +133,7 @@ public class DisputeAppServiceImpl implements DisputeAppService {
                 taskRepository.save(task.resolveDispute(TaskResolution.REJECTED));
             }
         }
-        disputeRepository.save(ruled.resolve());
+        disputeRepository.save(dispute.resolve());
     }
 
     private TaskModel lockTask(UUID taskId) {

@@ -14,7 +14,6 @@ import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskResolution;
-import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
@@ -71,41 +70,48 @@ class DisputeAppServiceImplTest {
     }
 
     @Test
-    void openWithSynchronousNotFulfilledRulingRefundsAndResolves() {
+    void openWithSynchronousNotFulfilledRulingRecordsProposal_doesNotSettle() {
         when(gateway.requestRuling(any(), any()))
                 .thenReturn(Optional.of(new RulingInfo(RulingCategory.NOT_FULFILLED, "no")));
 
         UUID disputeId = service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
 
-        verify(settlement).settleRejected(eq(disputedTask.id()), eq(clientId), eq(Money.of("100.00")));
+        // Delayed settlement: a synchronous (stub) ruling is a PROPOSAL — escrow stays held.
+        verifyNoInteractions(settlement);
         ArgumentCaptor<DisputeModel> cap = ArgumentCaptor.forClass(DisputeModel.class);
         verify(disputeRepository, atLeastOnce()).save(cap.capture());
-        assertThat(cap.getValue().status()).isEqualTo(DisputeStatus.RESOLVED);
+        assertThat(cap.getValue().status()).isEqualTo(DisputeStatus.RULED);
+        assertThat(cap.getValue().effectiveRuling()).isPresent();
+        assertThat(cap.getValue().effectiveRuling().get().category()).isEqualTo(RulingCategory.NOT_FULFILLED);
         assertThat(disputeId).isNotNull();
-        // task resolved
-        ArgumentCaptor<TaskModel> tcap = ArgumentCaptor.forClass(TaskModel.class);
-        verify(taskRepository, atLeastOnce()).save(tcap.capture());
-        assertThat(tcap.getValue().status()).isEqualTo(TaskStatus.RESOLVED);
+        // task not touched — no lock, no resolve
+        verify(taskRepository, never()).findByIdForUpdate(any());
+        verify(taskRepository, never()).save(any());
     }
 
     @Test
-    void synchronousPartialRulingSplits() {
+    void synchronousPartialRulingRecordsProposal_doesNotSettle() {
         when(gateway.requestRuling(any(), any()))
                 .thenReturn(Optional.of(new RulingInfo(RulingCategory.PARTIALLY_FULFILLED, "half")));
         service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
-        verify(settlement).settleSplit(eq(disputedTask.id()), eq(clientId), eq(builderId), eq(Money.of("100.00")));
-        // task must be labelled PARTIALLY_ACCEPTED, not ACCEPTED
-        ArgumentCaptor<TaskModel> tcap = ArgumentCaptor.forClass(TaskModel.class);
-        verify(taskRepository, atLeastOnce()).save(tcap.capture());
-        assertThat(tcap.getValue().resolution()).isEqualTo(TaskResolution.PARTIALLY_ACCEPTED);
+        verifyNoInteractions(settlement);
+        ArgumentCaptor<DisputeModel> cap = ArgumentCaptor.forClass(DisputeModel.class);
+        verify(disputeRepository, atLeastOnce()).save(cap.capture());
+        assertThat(cap.getValue().status()).isEqualTo(DisputeStatus.RULED);
+        assertThat(cap.getValue().effectiveRuling().get().category()).isEqualTo(RulingCategory.PARTIALLY_FULFILLED);
+        verify(taskRepository, never()).save(any());
     }
 
     @Test
-    void synchronousFulfilledRulingPaysBuilder() {
+    void synchronousFulfilledRulingRecordsProposal_doesNotSettle() {
         when(gateway.requestRuling(any(), any()))
                 .thenReturn(Optional.of(new RulingInfo(RulingCategory.FULFILLED, "ok")));
         service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
-        verify(settlement).settleAccepted(eq(disputedTask.id()), eq(clientId), eq(builderId), eq(Money.of("100.00")));
+        verifyNoInteractions(settlement);
+        ArgumentCaptor<DisputeModel> cap = ArgumentCaptor.forClass(DisputeModel.class);
+        verify(disputeRepository, atLeastOnce()).save(cap.capture());
+        assertThat(cap.getValue().status()).isEqualTo(DisputeStatus.RULED);
+        assertThat(cap.getValue().effectiveRuling().get().category()).isEqualTo(RulingCategory.FULFILLED);
     }
 
     @Test
@@ -116,6 +122,22 @@ class DisputeAppServiceImplTest {
         ArgumentCaptor<DisputeModel> cap = ArgumentCaptor.forClass(DisputeModel.class);
         verify(disputeRepository, atLeastOnce()).save(cap.capture());
         assertThat(cap.getValue().status()).isEqualTo(DisputeStatus.ARBITRATING);
+    }
+
+    @Test
+    void applyRuling_recordsProposal_doesNotSettle() {
+        DisputeModel arb = DisputeModel.open(disputedTask.id(), clientId, RejectReason.B_FACTUAL, "corr")
+                .startArbitrating();
+        when(disputeRepository.findById(arb.id())).thenReturn(Optional.of(arb));
+
+        service.applyRuling(arb.id(), new RulingInfo(RulingCategory.NOT_FULFILLED, "off-topic"));
+
+        // Ruling recorded, dispute now RULED, but NO settlement and NO task lock/resolve happened.
+        ArgumentCaptor<DisputeModel> saved = ArgumentCaptor.forClass(DisputeModel.class);
+        verify(disputeRepository).save(saved.capture());
+        assertThat(saved.getValue().status()).isEqualTo(DisputeStatus.RULED);
+        verifyNoInteractions(settlement);
+        verify(taskRepository, never()).findByIdForUpdate(any());
     }
 
     @Test
