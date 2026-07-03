@@ -1,6 +1,8 @@
 package com.hireai.application.biz.adjudication.dispute;
 
 import com.hireai.application.biz.adjudication.dispute.impl.DisputeReadAppServiceImpl;
+import com.hireai.application.biz.adjudication.dispute.view.DisputeMineRow;
+import com.hireai.application.biz.adjudication.port.DisputeQueryPort;
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
 import com.hireai.domain.biz.adjudication.enums.RulingDecidedBy;
 import com.hireai.domain.biz.adjudication.model.DisputeModel;
@@ -20,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,6 +36,7 @@ class DisputeReadAppServiceImplTest {
     DisputeRepository disputeRepository;
     TaskRepository taskRepository;
     AgentRepository agentRepository;
+    DisputeQueryPort disputeQueryPort;
     DisputeReadAppServiceImpl service;
 
     UUID clientId = UUID.randomUUID();
@@ -48,7 +52,8 @@ class DisputeReadAppServiceImplTest {
         disputeRepository = mock(DisputeRepository.class);
         taskRepository = mock(TaskRepository.class);
         agentRepository = mock(AgentRepository.class);
-        service = new DisputeReadAppServiceImpl(disputeRepository, taskRepository, agentRepository);
+        disputeQueryPort = mock(DisputeQueryPort.class);
+        service = new DisputeReadAppServiceImpl(disputeRepository, taskRepository, agentRepository, disputeQueryPort);
 
         // Build a task owned by clientId with a known agentVersionId
         TaskModel base = TaskModel.submit(clientId, "t", "d", Money.of("100.00"),
@@ -109,5 +114,16 @@ class DisputeReadAppServiceImplTest {
                 .isInstanceOf(DomainException.class)
                 .satisfies(ex -> assertThat(((DomainException) ex).resultCode())
                         .isEqualTo(ResultCode.NOT_FOUND));
+    }
+
+    @Test
+    void myDisputesDelegatesToDisputeQueryPort() {
+        List<DisputeMineRow> rows = List.of(new DisputeMineRow(
+                UUID.randomUUID(), task.id(), "t", "RULED", "FULFILLED", Instant.now()));
+        when(disputeQueryPort.findDisputesForClient(clientId)).thenReturn(rows);
+
+        List<DisputeMineRow> result = service.myDisputes(clientId);
+
+        assertThat(result).isEqualTo(rows);
     }
 }

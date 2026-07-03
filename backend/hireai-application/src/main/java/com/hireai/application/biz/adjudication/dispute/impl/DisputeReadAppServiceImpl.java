@@ -1,6 +1,8 @@
 package com.hireai.application.biz.adjudication.dispute.impl;
 
 import com.hireai.application.biz.adjudication.dispute.DisputeReadAppService;
+import com.hireai.application.biz.adjudication.dispute.view.DisputeMineRow;
+import com.hireai.application.biz.adjudication.port.DisputeQueryPort;
 import com.hireai.domain.biz.adjudication.model.DisputeModel;
 import com.hireai.domain.biz.adjudication.repository.DisputeRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
@@ -11,6 +13,7 @@ import com.hireai.utility.result.ResultCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -19,13 +22,16 @@ public class DisputeReadAppServiceImpl implements DisputeReadAppService {
     private final DisputeRepository disputeRepository;
     private final TaskRepository taskRepository;
     private final AgentRepository agentRepository;
+    private final DisputeQueryPort disputeQueryPort;
 
     public DisputeReadAppServiceImpl(DisputeRepository disputeRepository,
                                      TaskRepository taskRepository,
-                                     AgentRepository agentRepository) {
+                                     AgentRepository agentRepository,
+                                     DisputeQueryPort disputeQueryPort) {
         this.disputeRepository = disputeRepository;
         this.taskRepository = taskRepository;
         this.agentRepository = agentRepository;
+        this.disputeQueryPort = disputeQueryPort;
     }
 
     @Override
@@ -38,6 +44,12 @@ public class DisputeReadAppServiceImpl implements DisputeReadAppService {
         }
         return disputeRepository.findByTaskId(taskId)
                 .orElseThrow(() -> notFound(taskId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DisputeMineRow> myDisputes(UUID clientId) {
+        return disputeQueryPort.findDisputesForClient(clientId);
     }
 
     private boolean isParticipant(TaskModel task, UUID currentUserId) {
