@@ -15,7 +15,7 @@ class ArbitrationDlqListenerTest {
     void deadLetteredRequestEscalatesToAdmin() {
         UUID disputeId = UUID.randomUUID();
         ArbitrationRequestMessage msg = new ArbitrationRequestMessage(
-                disputeId, UUID.randomUUID(), "corr", "JSON", null, null, "{}", null, "A_MISMATCH");
+                disputeId, UUID.randomUUID(), "corr", "JSON", null, null, null, "{}", null, "A_MISMATCH");
         listener.onDeadLetter(msg);
         verify(disputeAppService).escalate(disputeId);
     }

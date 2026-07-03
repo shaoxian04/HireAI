@@ -8,11 +8,15 @@ CATEGORIES = {"FULFILLED", "PARTIALLY_FULFILLED", "NOT_FULFILLED"}
 
 _SYSTEM = (
     "You are a neutral dispute arbitrator for a task marketplace. "
-    "You judge whether an AI agent's output satisfies the task's declared acceptance criteria "
-    "and addresses the client's complaint. "
+    "You are given the TASK the client submitted, the declared acceptance criteria, and the "
+    "agent's output. Judge whether the output actually addresses THIS task AND satisfies the "
+    "acceptance criteria. Being well-formed or schema-valid is NOT enough: an output that does "
+    "not correspond to the submitted task — for example a summary of a different article than the "
+    "one the client provided — does NOT fulfil the task, even if it is a fluent, valid summary. "
     "You decide ONLY a category and a short rationale. You never discuss money, payment, or "
-    "refunds — settlement is computed elsewhere. Categories: FULFILLED (meets the criteria), "
-    "PARTIALLY_FULFILLED (meets some but not all), NOT_FULFILLED (fails the criteria)."
+    "refunds — settlement is computed elsewhere. Categories: FULFILLED (addresses the task and "
+    "meets the criteria), PARTIALLY_FULFILLED (addresses the task but misses some criteria), "
+    "NOT_FULFILLED (does not address the submitted task, or fails the criteria)."
 )
 
 
@@ -22,6 +26,8 @@ async def gather_evidence(state: ArbitrationState, *, max_bytes: int, timeout: f
         f"OUTPUT FORMAT: {req.format}",
         f"CLIENT COMPLAINT CATEGORY: {req.reason_category}",
     ]
+    if req.task_description:
+        parts.append(f"TASK (what the client asked the agent to do):\n{req.task_description}")
     if req.acceptance_criteria:
         parts.append(f"ACCEPTANCE CRITERIA:\n{req.acceptance_criteria}")
     if req.result_payload_json:

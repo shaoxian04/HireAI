@@ -8,6 +8,7 @@ GOLDEN = """
   "format": "JSON",
   "schema": "{\\"type\\":\\"object\\"}",
   "acceptanceCriteria": "Must list at least 3 sources.",
+  "taskDescription": "Find at least three reputable sources on four-day work weeks.",
   "resultPayloadJson": "{\\"sources\\":[\\"a\\"]}",
   "resultUrl": null,
   "reasonCategory": "C_INCOMPLETE"
@@ -21,6 +22,7 @@ def test_parses_camel_case_golden_message():
     assert req.format == "JSON"
     assert req.schema_ == '{"type":"object"}'
     assert req.acceptance_criteria == "Must list at least 3 sources."
+    assert req.task_description == "Find at least three reputable sources on four-day work weeks."
     assert req.result_payload_json == '{"sources":["a"]}'
     assert req.result_url is None
     assert req.reason_category == "C_INCOMPLETE"

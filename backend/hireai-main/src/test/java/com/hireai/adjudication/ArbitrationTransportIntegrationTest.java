@@ -339,6 +339,7 @@ class ArbitrationTransportIntegrationTest {
                 "TEXT",
                 null,
                 null,
+                null,
                 "{\"summary\":\"ok\"}",
                 null,
                 RejectReason.A_MISMATCH.name());
