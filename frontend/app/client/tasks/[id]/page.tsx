@@ -78,15 +78,24 @@ function TaskDetail() {
 
   // While the task is under dispute, poll the outcome so the client sees it move live through
   // ARBITRATING -> RULED (accept/appeal) -> ESCALATED -> RESOLVED.
+  //
+  // Depend on the STATUS (and the stable route `id`), not the whole `task` object: the main
+  // poller below calls setTask() with a brand-new object every tick regardless of whether
+  // anything changed, so depending on `task` tore this interval down and recreated it every
+  // tick in phase-lock with the main poll — its own setInterval callback then never got a
+  // chance to fire, and the outcome was never re-fetched. Fetch immediately on the DISPUTED
+  // transition too, so the panel appears within the first cycle rather than only after 2s.
   useEffect(() => {
-    if (!task || task.status !== "DISPUTED") return;
-    const t = setInterval(() => {
-      api<DisputeOutcomeDTO>(`/disputes/by-task/${task.id}`)
-        .then((o) => setOutcome(o))
-        .catch((e) => { if (!isPendingError(e)) console.error(e); });
-    }, POLL_MS);
-    return () => clearInterval(t);
-  }, [task]);
+    if (task?.status !== "DISPUTED") return;
+    let cancelled = false;
+    const fetchOutcome = () =>
+      api<DisputeOutcomeDTO>(`/disputes/by-task/${id}`)
+        .then((o) => { if (!cancelled) setOutcome(o); })
+        .catch((e) => { if (!cancelled && !isPendingError(e)) console.error(e); });
+    fetchOutcome();
+    const t = setInterval(fetchOutcome, POLL_MS);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [task?.status, id]);
 
   useEffect(() => {
     if (!id) return;
