@@ -203,6 +203,9 @@ export const handlers = [
   }),
 
   // ── Dispute lifecycle handlers (client-facing accept/appeal) ──
+  // Default empty list — Nav renders on nearly every authenticated page and now calls
+  // useDisputeCount(), which hits this endpoint. Individual tests override with server.use(...).
+  http.get("*/api/disputes/mine", () => ok([])),
   http.get("*/api/disputes/by-task/:taskId", ({ params }) =>
     ok({
       disputeId: "d-1",
