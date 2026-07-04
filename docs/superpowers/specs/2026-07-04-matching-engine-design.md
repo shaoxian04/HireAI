@@ -42,7 +42,7 @@ Phase 2. Direct booking is unchanged (bypasses matching; see §6.2 for the one a
 |---|---|---|
 | valueFit direction | **Cheaper = better**: `(budget − price)/budget` | Rewards budget headroom; price-as-quality is unsafe while reputation is static |
 | `maxConcurrent` source | **Builder-declared per agent version** (V24 column, registration field), default 5 | Realistic marketplace semantics; owner knows own capacity |
-| Re-match bound | **Attempt-bounded: 3 attempts × 30s ≈ 90s**, then `CANCELLED` + full refund | Fast definitive feedback; user chose fail-fast over long holds |
+| Re-match bound | **Attempt-bounded: 3 attempts × 10s ≈ 30s**, then `CANCELLED` + full refund | Fast definitive feedback; user chose fail-fast over long holds |
 | Scorer data source | **Counts computed inside the candidate query** (option A) | Derive-don't-duplicate; index makes it sub-ms; seam allows swap to projection later (Module 5 events) |
 | Exploration measure | **`sampleCount` = terminal tasks of any outcome** (not "completed") | Bandit sampling semantics; failures are information, not under-exploration |
 | Pinned re-match | **Strict version pin** — never substitute agent *or* version | Task's frozen spec/price contract is with that exact version |
@@ -169,7 +169,7 @@ with a status re-check inside — a poisoned task is logged and skipped (retried
 overlapping runs / second instances no-op on the status guard.
 
 ### 6.1 Re-match sweeper (`AWAITING_CAPACITY`)
-Every `rematch-interval` (30s): for each held task — increment `match_attempts`, then:
+Every `rematch-interval` (10s): for each held task — increment `match_attempts`, then:
 
 - **Open task** (`pinned_agent_version_id` NULL): re-run the full `route()` path (fresh candidate
   query + scorer + epsilon-greedy — *not* "runner-up from the original ranking"; the world has
@@ -186,7 +186,7 @@ transition on `TaskModel` + **full refund**.
 **Naming note:** with load as a *soft* factor, `AWAITING_CAPACITY` really means "awaiting eligible
 supply" (an agent activates / registers / a price drops into budget) — busy agents were never
 excluded. The name stays (already in the enum + DB constraint); re-match rescues transient
-unavailability, not marketplace growth: ~90s then fail-fast + refund, per the fail-fast decision.
+unavailability, not marketplace growth: ~30s then fail-fast + refund, per the fail-fast decision.
 
 ### 6.2 Execution-timeout sweeper (`QUEUED` / `EXECUTING`)
 Every `execution-sweep-interval` (30s): `status IN ('QUEUED','EXECUTING') AND
@@ -215,8 +215,8 @@ first-result-wins guard drops the callback as a no-op.
 | `hireai.matching.weight-load` | 0.20 | score weight |
 | `hireai.matching.weight-exploration` | 0.20 | score weight |
 | `hireai.matching.epsilon` | 0.10 | exploration rate (auto-route) |
-| `hireai.matching.rematch-interval` | 30s | re-match sweep cadence |
-| `hireai.matching.rematch-max-attempts` | 3 | attempts before cancel+refund (~90s window) |
+| `hireai.matching.rematch-interval` | 10s | re-match sweep cadence |
+| `hireai.matching.rematch-max-attempts` | 3 | attempts before cancel+refund (~30s window) |
 | `hireai.matching.default-max-concurrent` | 5 | applied when registration omits the field |
 | `hireai.execution.sweep-interval` | 30s | timeout sweep cadence |
 | `hireai.execution.grace` | 60s | added to `max_execution_seconds` for the deadline |
