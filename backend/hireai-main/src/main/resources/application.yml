@@ -60,6 +60,25 @@ hireai:
   # application.yml; consumed by Plan 4's RoutingAppServiceImpl. Localhost default for the demo.
   platform:
     public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
+  matching:
+    # Multi-factor matcher weights (must sum to 1.0) + epsilon-greedy exploration rate.
+    # Spec: docs/superpowers/specs/2026-07-04-matching-engine-design.md §4.
+    weight-reputation: ${MATCHING_WEIGHT_REPUTATION:0.40}
+    weight-value: ${MATCHING_WEIGHT_VALUE:0.20}
+    weight-load: ${MATCHING_WEIGHT_LOAD:0.20}
+    weight-exploration: ${MATCHING_WEIGHT_EXPLORATION:0.20}
+    epsilon: ${MATCHING_EPSILON:0.10}
+    # AWAITING_CAPACITY re-match sweeper: attempt-bounded fail-fast (~30s worst case), then
+    # CANCELLED + full refund.
+    rematch-interval: ${MATCHING_REMATCH_INTERVAL:PT10S}
+    rematch-max-attempts: ${MATCHING_REMATCH_MAX_ATTEMPTS:3}
+    # Applied when a registration omits maxConcurrent.
+    default-max-concurrent: ${MATCHING_DEFAULT_MAX_CONCURRENT:5}
+  execution:
+    # Execution-timeout sweeper: QUEUED/EXECUTING past execution_deadline -> TIMED_OUT + refund.
+    # The deadline is stamped at assignment: now + max_execution_seconds + grace-seconds.
+    sweep-interval: ${EXECUTION_SWEEP_INTERVAL:PT30S}
+    grace-seconds: ${EXECUTION_GRACE_SECONDS:60}
   dispatch:
     # HMAC secret for short-lived dispatch tokens. MUST be overridden in real deploys.
     token-secret: ${DISPATCH_TOKEN_SECRET:dev-only-dispatch-secret-change-me-32b}

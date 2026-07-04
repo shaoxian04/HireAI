@@ -65,7 +65,7 @@ class RoutingAppServiceImplTest {
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
         when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00")))
                 .thenReturn(List.of(candidate));
-        when(routingMatchDomainService.selectAgentVersion(any(), any())).thenReturn(Optional.of(versionId));
+        when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.of(versionId));
 
         service.route(taskId);
 
@@ -82,7 +82,7 @@ class RoutingAppServiceImplTest {
         AgentCandidate candidate = candidate(versionId);
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
         when(agentRepository.findActiveCandidates(eq("summarisation"), any())).thenReturn(List.of(candidate));
-        when(routingMatchDomainService.selectAgentVersion(any(), any())).thenReturn(Optional.of(versionId));
+        when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.of(versionId));
 
         service.route(taskId);
 
@@ -105,7 +105,7 @@ class RoutingAppServiceImplTest {
         AgentCandidate candidate = candidate(versionId);
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
         when(agentRepository.findActiveCandidates(eq("summarisation"), any())).thenReturn(List.of(candidate));
-        when(routingMatchDomainService.selectAgentVersion(any(), any())).thenReturn(Optional.of(versionId));
+        when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.of(versionId));
 
         service.route(taskId);
 
@@ -122,7 +122,7 @@ class RoutingAppServiceImplTest {
         UUID taskId = UUID.randomUUID();
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
         when(agentRepository.findActiveCandidates(any(), any())).thenReturn(List.of());
-        when(routingMatchDomainService.selectAgentVersion(any(), any())).thenReturn(Optional.empty());
+        when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.empty());
 
         service.route(taskId);
 

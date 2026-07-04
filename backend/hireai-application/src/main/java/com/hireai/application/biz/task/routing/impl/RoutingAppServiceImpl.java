@@ -51,7 +51,7 @@ public class RoutingAppServiceImpl implements RoutingAppService {
         TaskRoutingView view = taskReadAppService.getRoutingView(taskId);
         List<AgentCandidate> candidates =
                 agentRepository.findActiveCandidates(view.category(), view.budget());
-        Optional<UUID> chosen = routingMatchDomainService.selectAgentVersion(view, candidates);
+        Optional<UUID> chosen = routingMatchDomainService.selectOne(view, candidates);
 
         if (chosen.isEmpty()) {
             log.info("No ACTIVE agent matched task {} (category={}, budget={}); marking AWAITING_CAPACITY",
