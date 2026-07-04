@@ -29,4 +29,24 @@ public interface TaskJpaRepository extends JpaRepository<TaskDO, UUID> {
     @Modifying
     @Query(value = "UPDATE tasks SET pinned_agent_version_id = :versionId WHERE id = :id", nativeQuery = true)
     void pinAgentVersion(@Param("id") UUID id, @Param("versionId") UUID versionId);
+
+    @Query(value = "SELECT id FROM tasks WHERE status = 'AWAITING_CAPACITY'", nativeQuery = true)
+    List<UUID> findIdsAwaitingCapacity();
+
+    @Query(value = """
+            SELECT id FROM tasks
+            WHERE status IN ('QUEUED','EXECUTING')
+              AND execution_deadline IS NOT NULL AND execution_deadline < :now
+            """, nativeQuery = true)
+    List<UUID> findIdsExecutionExpired(@Param("now") Instant now);
+
+    @Modifying
+    @Query(value = "UPDATE tasks SET match_attempts = match_attempts + 1 WHERE id = :id", nativeQuery = true)
+    void incrementMatchAttempts(@Param("id") UUID id);
+
+    @Query(value = "SELECT match_attempts FROM tasks WHERE id = :id", nativeQuery = true)
+    int findMatchAttempts(@Param("id") UUID id);
+
+    @Query(value = "SELECT pinned_agent_version_id FROM tasks WHERE id = :id", nativeQuery = true)
+    Optional<UUID> findPinnedAgentVersionId(@Param("id") UUID id);
 }

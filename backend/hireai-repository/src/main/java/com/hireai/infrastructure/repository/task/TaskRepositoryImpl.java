@@ -85,6 +85,31 @@ public class TaskRepositoryImpl implements TaskRepository {
         taskJpa.pinAgentVersion(taskId, agentVersionId);
     }
 
+    @Override
+    public List<UUID> findIdsAwaitingCapacity() {
+        return taskJpa.findIdsAwaitingCapacity();
+    }
+
+    @Override
+    public List<UUID> findIdsExecutionExpired(Instant now) {
+        return taskJpa.findIdsExecutionExpired(now);
+    }
+
+    @Override
+    public void incrementMatchAttempts(UUID taskId) {
+        taskJpa.incrementMatchAttempts(taskId);
+    }
+
+    @Override
+    public int matchAttempts(UUID taskId) {
+        return taskJpa.findMatchAttempts(taskId);
+    }
+
+    @Override
+    public Optional<UUID> findPinnedAgentVersionId(UUID taskId) {
+        return taskJpa.findPinnedAgentVersionId(taskId);
+    }
+
     private TaskModel toModel(TaskDO entity) {
         TaskResultModel result = taskResultJpa.findByTaskId(entity.getId())
                 .map(this::toResultModel)
