@@ -93,6 +93,10 @@ The RNG is a constructor-injected seedable interface. `ε=0` ⇒ pure argmax (un
 exploration behaviour is tested with fixed seeds. The old `selectAgentVersion` implementation is
 **deleted, not kept alongside** — one ranking engine, consumed two ways.
 
+Mechanics, per-channel usage scenarios, and the rationale for pairing the score's exploration term
+with ε-greedy (starvation cliff, tie-break monopoly) are explained in
+`docs/matching-selection-mechanics.md`.
+
 ### 4.4 Invariants
 Exploration randomises **selection only**. Settlement remains deterministic from task outcome
 (Invariant #3). Escrow timing unchanged (Invariant #1). The dispatch payload still carries the
