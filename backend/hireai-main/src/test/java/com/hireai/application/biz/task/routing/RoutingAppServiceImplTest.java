@@ -54,7 +54,7 @@ class RoutingAppServiceImplTest {
         return new AgentCandidate(
                 UUID.randomUUID(), versionId, List.of("summarisation"),
                 new BigDecimal("10.00"), "https://agent.example/hook", 60, new BigDecimal("80.00"),
-                CANDIDATE_OUTPUT_SPEC);
+                CANDIDATE_OUTPUT_SPEC, 5, 0L, 0L);
     }
 
     @Test

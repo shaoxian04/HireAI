@@ -13,8 +13,13 @@ import java.util.UUID;
  * <p>{@code outputSpecJson} is the chosen version's declared {@code output_spec} as stored
  * (opaque JSON). It is irrelevant to selection but must be threaded through routing so the
  * winning agent's binding output contract reaches the dispatch payload (Hard Invariant #4).
+ *
+ * <p>{@code maxConcurrent}/{@code inFlight}/{@code sampleCount} feed the multi-factor scorer
+ * (loadHeadroom + exploration terms); counts are per-AGENT across all its versions, derived
+ * fresh by the candidate query.
  */
 public record AgentCandidate(UUID agentId, UUID agentVersionId, List<String> capabilityCategories,
                              BigDecimal price, String webhookUrl, int maxExecutionSeconds,
-                             BigDecimal reputationScore, String outputSpecJson) {
+                             BigDecimal reputationScore, String outputSpecJson,
+                             int maxConcurrent, long inFlight, long sampleCount) {
 }

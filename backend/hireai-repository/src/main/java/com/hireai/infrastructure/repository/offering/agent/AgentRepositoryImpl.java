@@ -114,7 +114,10 @@ public class AgentRepositoryImpl implements AgentRepository {
                 row.getAgentId(), row.getAgentVersionId(),
                 List.of(row.getCapabilityCategories()), row.getPrice(),
                 row.getWebhookUrl(), row.getMaxExecutionSeconds(), row.getReputationScore(),
-                row.getOutputSpec());
+                row.getOutputSpec(),
+                row.getMaxConcurrent() == null ? 5 : row.getMaxConcurrent(),
+                row.getInFlight() == null ? 0L : row.getInFlight(),
+                row.getSampleCount() == null ? 0L : row.getSampleCount());
     }
 
     private AgentModel toModel(AgentDO entity) {

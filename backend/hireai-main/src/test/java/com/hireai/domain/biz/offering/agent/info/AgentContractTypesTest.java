@@ -22,7 +22,8 @@ class AgentContractTypesTest {
         UUID versionId = UUID.randomUUID();
         AgentCandidate candidate = new AgentCandidate(agentId, versionId,
                 List.of("summarisation"), new BigDecimal("5.00"),
-                "https://a.example.com", 120, new BigDecimal("50.00"), "{\"format\":\"JSON\"}");
+                "https://a.example.com", 120, new BigDecimal("50.00"), "{\"format\":\"JSON\"}",
+                5, 0L, 0L);
 
         assertThat(candidate.agentId()).isEqualTo(agentId);
         assertThat(candidate.agentVersionId()).isEqualTo(versionId);
