@@ -1,6 +1,7 @@
 package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
+import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
@@ -24,8 +25,10 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,10 +38,11 @@ class TaskWriteAppServiceImplTest {
     @Mock TaskSubmitDomainService taskSubmitDomainService;
     @Mock WalletWriteAppService walletWriteAppService;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock SettlementWriteAppService settlementWriteAppService;
 
     private TaskWriteAppServiceImpl service() {
         return new TaskWriteAppServiceImpl(taskRepository, taskSubmitDomainService,
-                walletWriteAppService, eventPublisher);
+                walletWriteAppService, eventPublisher, settlementWriteAppService);
     }
 
     private TaskModel submittedTask() {
@@ -112,5 +116,44 @@ class TaskWriteAppServiceImplTest {
         service().submit(submitInfo);
 
         verify(taskRepository, never()).pinAgentVersion(any(), any());
+    }
+
+    @Test
+    void registerMatchAttemptIncrementsAndReturnsNewCount() {
+        UUID taskId = UUID.randomUUID();
+        when(taskRepository.matchAttempts(taskId)).thenReturn(2);
+
+        assertThat(service().registerMatchAttempt(taskId)).isEqualTo(2);
+
+        verify(taskRepository).incrementMatchAttempts(taskId);
+    }
+
+    @Test
+    void cancelRefundsFullBudgetAndCancels() {
+        UUID clientId = UUID.randomUUID();
+        Money budget = Money.of("100.00");
+        TaskModel task = TaskModel.submit(clientId, "title", "desc", budget,
+                new OutputSpec(OutputFormat.TEXT, null, "summary"), "general");
+        UUID taskId = task.id();
+        task = task.markAwaitingCapacity();
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+        when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service().cancelAwaitingCapacityWithRefund(taskId);
+
+        verify(taskRepository).save(argThat(t -> t.status() == TaskStatus.CANCELLED));
+        verify(settlementWriteAppService).settleRejected(taskId, clientId, budget);
+    }
+
+    @Test
+    void cancelIsANoOpWhenTaskAlreadyLeftAwaitingCapacity() {
+        UUID taskId = UUID.randomUUID();
+        TaskModel task = submittedTask();
+        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
+
+        service().cancelAwaitingCapacityWithRefund(taskId);
+
+        verify(taskRepository, never()).save(any());
+        verifyNoInteractions(settlementWriteAppService);
     }
 }

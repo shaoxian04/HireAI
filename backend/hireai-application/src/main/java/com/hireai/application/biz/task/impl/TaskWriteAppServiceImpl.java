@@ -2,12 +2,14 @@ package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
+import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.event.TaskSubmittedDomainEvent;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
+import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +31,7 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     private final TaskSubmitDomainService taskSubmitDomainService;
     private final WalletWriteAppService walletWriteAppService;
     private final ApplicationEventPublisher eventPublisher;
+    private final SettlementWriteAppService settlementWriteAppService;
 
     @Override
     public UUID submit(TaskSubmitInfo taskSubmitInfo) {
@@ -86,6 +89,25 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
         TaskModel task = load(taskId);
         taskRepository.save(task.markAwaitingCapacity());
         log.info("Task {} marked AWAITING_CAPACITY (no eligible agent)", taskId);
+    }
+
+    @Override
+    public int registerMatchAttempt(UUID taskId) {
+        taskRepository.incrementMatchAttempts(taskId);
+        return taskRepository.matchAttempts(taskId);
+    }
+
+    @Override
+    public void cancelAwaitingCapacityWithRefund(UUID taskId) {
+        TaskModel task = load(taskId);
+        if (task.status() != TaskStatus.AWAITING_CAPACITY) {
+            log.info("Task {} is {} (not AWAITING_CAPACITY); skipping cancel", taskId, task.status());
+            return;
+        }
+        TaskModel cancelled = task.markCancelled();
+        taskRepository.save(cancelled);
+        settlementWriteAppService.settleRejected(taskId, cancelled.clientId(), cancelled.budget());
+        log.info("Task {} CANCELLED after re-match exhaustion; escrow fully refunded", taskId);
     }
 
     private TaskModel load(UUID taskId) {
