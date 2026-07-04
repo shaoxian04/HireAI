@@ -12,6 +12,6 @@ public class AgentRegisterDomainServiceImpl implements AgentRegisterDomainServic
     public AgentModel register(AgentRegisterInfo info) {
         return AgentModel.register(info.ownerId(), info.name(), info.outputSpec(),
                 info.capabilityCategories(), info.webhookUrl(), info.maxExecutionSeconds(),
-                Pricing.of(info.price()));
+                Pricing.of(info.price()), info.maxConcurrent());
     }
 }

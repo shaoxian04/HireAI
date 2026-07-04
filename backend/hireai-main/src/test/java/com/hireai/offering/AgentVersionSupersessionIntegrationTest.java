@@ -74,7 +74,7 @@ class AgentVersionSupersessionIntegrationTest {
     private AgentRegisterInfo info(UUID ownerId, String category, String price) {
         return new AgentRegisterInfo(ownerId, "Summariser Bot",
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
-                List.of(category), "https://agent.example.com/hook", 120, new BigDecimal(price));
+                List.of(category), "https://agent.example.com/hook", 120, new BigDecimal(price), 5);
     }
 
     @Test

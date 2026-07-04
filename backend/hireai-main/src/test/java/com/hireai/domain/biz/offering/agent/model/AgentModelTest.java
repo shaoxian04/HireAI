@@ -22,7 +22,7 @@ class AgentModelTest {
     private AgentModel registered(UUID ownerId) {
         return AgentModel.register(ownerId, "Summariser Bot", spec(),
                 List.of("summarisation"), "https://agent.example.com/hook", 120,
-                Pricing.of(new BigDecimal("5.00")));
+                Pricing.of(new BigDecimal("5.00")), 5);
     }
 
     @Test
@@ -43,22 +43,29 @@ class AgentModelTest {
     @Test
     void registerTrimsName() {
         AgentModel agent = AgentModel.register(UUID.randomUUID(), "  Bot  ", spec(),
-                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE));
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5);
         assertThat(agent.name()).isEqualTo("Bot");
     }
 
     @Test
     void registerRejectsBlankName() {
         assertThatThrownBy(() -> AgentModel.register(UUID.randomUUID(), "  ", spec(),
-                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE)))
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5))
                 .isInstanceOf(DomainException.class);
     }
 
     @Test
     void registerRejectsNullOwner() {
         assertThatThrownBy(() -> AgentModel.register(null, "Bot", spec(),
-                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE)))
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5))
                 .isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void registerCarriesMaxConcurrentOntoTheVersion() {
+        AgentModel agent = AgentModel.register(UUID.randomUUID(), "Bot", spec(),
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 8);
+        assertThat(agent.currentVersion().maxConcurrent()).isEqualTo(8);
     }
 
     @Test

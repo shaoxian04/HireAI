@@ -26,7 +26,7 @@ class AgentVersionModelTest {
         UUID agentId = UUID.randomUUID();
         AgentVersionModel v = AgentVersionModel.create(agentId, 1, spec(),
                 List.of(" Summarisation ", "TRANSLATION"), "https://agent.example.com/hook",
-                120, Pricing.of(new BigDecimal("5.00")));
+                120, Pricing.of(new BigDecimal("5.00")), 5);
 
         assertThat(v.id()).isNotNull();
         assertThat(v.agentId()).isEqualTo(agentId);
@@ -41,42 +41,52 @@ class AgentVersionModelTest {
     @Test
     void rejectsNonHttpsWebhook() {
         assertThatThrownBy(() -> AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
-                List.of("summarisation"), "http://agent.example.com/hook", 60, Pricing.of(BigDecimal.ONE)))
+                List.of("summarisation"), "http://agent.example.com/hook", 60, Pricing.of(BigDecimal.ONE), 5))
                 .isInstanceOf(DomainException.class);
     }
 
     @Test
     void rejectsBlankWebhook() {
         assertThatThrownBy(() -> AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
-                List.of("summarisation"), "  ", 60, Pricing.of(BigDecimal.ONE)))
+                List.of("summarisation"), "  ", 60, Pricing.of(BigDecimal.ONE), 5))
                 .isInstanceOf(DomainException.class);
     }
 
     @Test
     void rejectsEmptyCategories() {
         assertThatThrownBy(() -> AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
-                List.of(), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE)))
+                List.of(), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5))
                 .isInstanceOf(DomainException.class);
     }
 
     @Test
     void rejectsBlankCategory() {
         assertThatThrownBy(() -> AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
-                List.of("ok", "  "), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE)))
+                List.of("ok", "  "), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5))
                 .isInstanceOf(DomainException.class);
     }
 
     @Test
     void rejectsNonPositiveMaxExecutionSeconds() {
         assertThatThrownBy(() -> AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
-                List.of("summarisation"), "https://a.example.com", 0, Pricing.of(BigDecimal.ONE)))
+                List.of("summarisation"), "https://a.example.com", 0, Pricing.of(BigDecimal.ONE), 5))
                 .isInstanceOf(DomainException.class);
     }
 
     @Test
     void rejectsNullOutputSpec() {
         assertThatThrownBy(() -> AgentVersionModel.create(UUID.randomUUID(), 1, null,
-                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE)))
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5))
+                .isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void createRejectsMaxConcurrentOutOfRange() {
+        assertThatThrownBy(() -> AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 0))
+                .isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 101))
                 .isInstanceOf(DomainException.class);
     }
 
@@ -87,7 +97,7 @@ class AgentVersionModelTest {
         UUID agentId = UUID.randomUUID();
         AgentVersionModel original = AgentVersionModel.create(agentId, 1, spec(),
                 List.of("summarisation"), "https://agent.example.com/hook",
-                120, Pricing.of(new BigDecimal("5.00")));
+                120, Pricing.of(new BigDecimal("5.00")), 5);
 
         AgentVersionModel next = original.supersededBy(
                 Pricing.of(new BigDecimal("99.50")), 300, List.of(" Translation "));
@@ -106,9 +116,17 @@ class AgentVersionModelTest {
     }
 
     @Test
+    void supersededByCarriesMaxConcurrentOver() {
+        AgentVersionModel v = AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 8);
+        AgentVersionModel next = v.supersededBy(Pricing.of(BigDecimal.ONE), 60, List.of("summarisation"));
+        assertThat(next.maxConcurrent()).isEqualTo(8);
+    }
+
+    @Test
     void supersededByRejectsZeroMaxExecutionSeconds() {
         AgentVersionModel v = AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
-                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE));
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5);
         assertThatThrownBy(() -> v.supersededBy(Pricing.of(BigDecimal.ONE), 0, List.of("summarisation")))
                 .isInstanceOf(DomainException.class);
     }
@@ -116,7 +134,7 @@ class AgentVersionModelTest {
     @Test
     void supersededByRejectsEmptyCategories() {
         AgentVersionModel v = AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
-                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE));
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5);
         assertThatThrownBy(() -> v.supersededBy(Pricing.of(BigDecimal.ONE), 60, List.of()))
                 .isInstanceOf(DomainException.class);
     }
@@ -126,7 +144,7 @@ class AgentVersionModelTest {
     @Test
     void assertAffordableAcceptsBudgetAtOrAbovePriceAndRejectsBelow() {
         AgentVersionModel v = AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
-                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(new BigDecimal("5.00")));
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(new BigDecimal("5.00")), 5);
 
         assertThatCode(() -> {
             v.assertAffordable(Money.of("5.00")); // equal

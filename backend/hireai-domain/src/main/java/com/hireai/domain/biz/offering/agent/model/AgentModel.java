@@ -44,12 +44,12 @@ public final class AgentModel {
     /** Factory for the REGISTER transition: builds a PENDING_VERIFICATION agent + version v1. */
     public static AgentModel register(UUID ownerId, String name, OutputSpec outputSpec,
                                       List<String> capabilityCategories, String webhookUrl,
-                                      int maxExecutionSeconds, Pricing pricing) {
+                                      int maxExecutionSeconds, Pricing pricing, int maxConcurrent) {
         requirePresent(ownerId, "owner id");
         requireText(name, "name");
         UUID agentId = UUID.randomUUID();
         AgentVersionModel version = AgentVersionModel.create(agentId, 1, outputSpec,
-                capabilityCategories, webhookUrl, maxExecutionSeconds, pricing);
+                capabilityCategories, webhookUrl, maxExecutionSeconds, pricing, maxConcurrent);
         return new AgentModel(agentId, ownerId, name.trim(), AgentStatus.PENDING_VERIFICATION,
                 null, DEFAULT_REPUTATION, version, Instant.now());
     }

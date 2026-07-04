@@ -4,6 +4,7 @@ import com.hireai.domain.biz.task.enums.OutputFormat;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -23,7 +24,10 @@ public record RegisterAgentRequest(
         @NotNull
         @DecimalMin(value = "0.00", message = "price must be non-negative")
         @Digits(integer = 12, fraction = 2, message = "price must have at most 2 decimal places")
-        BigDecimal price
+        BigDecimal price,
+        @Min(value = 1, message = "maxConcurrent must be at least 1")
+        @Max(value = 100, message = "maxConcurrent must be at most 100")
+        Integer maxConcurrent
 ) {
 
     public record OutputSpecRequest(

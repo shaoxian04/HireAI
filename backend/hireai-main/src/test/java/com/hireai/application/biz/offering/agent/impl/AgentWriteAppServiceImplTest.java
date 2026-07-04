@@ -110,7 +110,7 @@ class AgentWriteAppServiceImplTest {
     private AgentRegisterInfo info(UUID ownerId) {
         return new AgentRegisterInfo(ownerId, "Summariser Bot",
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
-                List.of("summarisation"), "https://agent.example.com/hook", 120, new BigDecimal("5.00"));
+                List.of("summarisation"), "https://agent.example.com/hook", 120, new BigDecimal("5.00"), 5);
     }
 
     @Test

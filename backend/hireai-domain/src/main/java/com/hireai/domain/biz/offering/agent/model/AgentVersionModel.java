@@ -25,13 +25,14 @@ public final class AgentVersionModel {
     private final List<String> capabilityCategories;
     private final String webhookUrl;
     private final int maxExecutionSeconds;
+    private final int maxConcurrent;
     private final Pricing pricing;
     private final AgentVersionStatus status;
     private final Instant createdAt;
 
     public AgentVersionModel(UUID id, UUID agentId, int versionNumber, OutputSpec outputSpec,
                              List<String> capabilityCategories, String webhookUrl,
-                             int maxExecutionSeconds, Pricing pricing,
+                             int maxExecutionSeconds, int maxConcurrent, Pricing pricing,
                              AgentVersionStatus status, Instant createdAt) {
         this.id = id;
         this.agentId = agentId;
@@ -40,6 +41,7 @@ public final class AgentVersionModel {
         this.capabilityCategories = List.copyOf(capabilityCategories);
         this.webhookUrl = webhookUrl;
         this.maxExecutionSeconds = maxExecutionSeconds;
+        this.maxConcurrent = maxConcurrent;
         this.pricing = pricing;
         this.status = status;
         this.createdAt = createdAt;
@@ -48,7 +50,7 @@ public final class AgentVersionModel {
     /** Factory: validates the contract and builds a fresh ACTIVE version snapshot. */
     public static AgentVersionModel create(UUID agentId, int versionNumber, OutputSpec outputSpec,
                                            List<String> capabilityCategories, String webhookUrl,
-                                           int maxExecutionSeconds, Pricing pricing) {
+                                           int maxExecutionSeconds, Pricing pricing, int maxConcurrent) {
         requirePresent(agentId, "agent id");
         requirePresent(outputSpec, "output spec");
         requirePresent(pricing, "pricing");
@@ -57,8 +59,11 @@ public final class AgentVersionModel {
         if (maxExecutionSeconds <= 0) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "maxExecutionSeconds must be positive");
         }
+        if (maxConcurrent < 1 || maxConcurrent > 100) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "maxConcurrent must be between 1 and 100");
+        }
         return new AgentVersionModel(UUID.randomUUID(), agentId, versionNumber, outputSpec,
-                normalisedCategories, webhookUrl.trim(), maxExecutionSeconds, pricing,
+                normalisedCategories, webhookUrl.trim(), maxExecutionSeconds, maxConcurrent, pricing,
                 AgentVersionStatus.ACTIVE, Instant.now());
     }
 
@@ -100,7 +105,7 @@ public final class AgentVersionModel {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "maxExecutionSeconds must be positive");
         }
         return new AgentVersionModel(UUID.randomUUID(), agentId, versionNumber + 1, outputSpec,
-                normalised, webhookUrl, maxExecutionSeconds, pricing,
+                normalised, webhookUrl, maxExecutionSeconds, maxConcurrent, pricing,
                 AgentVersionStatus.ACTIVE, Instant.now());
     }
 
@@ -125,6 +130,7 @@ public final class AgentVersionModel {
     public List<String> capabilityCategories() { return capabilityCategories; }
     public String webhookUrl() { return webhookUrl; }
     public int maxExecutionSeconds() { return maxExecutionSeconds; }
+    public int maxConcurrent() { return maxConcurrent; }
     public Pricing pricing() { return pricing; }
     public AgentVersionStatus status() { return status; }
     public Instant createdAt() { return createdAt; }

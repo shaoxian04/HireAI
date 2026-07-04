@@ -22,7 +22,7 @@ class AgentRegisterDomainServiceImplTest {
     private AgentRegisterInfo info(String webhookUrl) {
         return new AgentRegisterInfo(UUID.randomUUID(), "Summariser Bot",
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
-                List.of("summarisation"), webhookUrl, 120, new BigDecimal("5.00"));
+                List.of("summarisation"), webhookUrl, 120, new BigDecimal("5.00"), 5);
     }
 
     @Test
