@@ -21,6 +21,7 @@ CREATE INDEX idx_tasks_agent_version_status ON tasks (agent_version_id, status);
 -- 6) Defensive category normalisation. AgentVersionModel.create already lowercases categories at
 --    registration, but rows created by seed data or before that rule may not comply; the candidate
 --    query lowercases its :category parameter and relies on stored values being lowercase.
+--    COALESCE keeps empty arrays empty instead of nulling them (array_agg over zero rows returns NULL).
 UPDATE agent_versions SET capability_categories =
-    (SELECT array_agg(lower(trim(c))) FROM unnest(capability_categories) AS c)
+    (SELECT COALESCE(array_agg(lower(trim(c))), '{}') FROM unnest(capability_categories) AS c)
 WHERE capability_categories IS NOT NULL;
