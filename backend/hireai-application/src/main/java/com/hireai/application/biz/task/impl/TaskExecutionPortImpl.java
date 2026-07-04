@@ -1,7 +1,9 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.port.task.TaskExecutionPort;
 import com.hireai.utility.result.ResultCode;
+import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.utility.exception.DomainException;
@@ -24,6 +26,7 @@ import java.util.UUID;
 public class TaskExecutionPortImpl implements TaskExecutionPort {
 
     private final TaskRepository taskRepository;
+    private final SettlementWriteAppService settlementWriteAppService;
 
     @Override
     public void markExecuting(UUID taskId) {
@@ -39,8 +42,19 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
 
     @Override
     public void markFailed(UUID taskId) {
-        taskRepository.save(load(taskId).markFailed());
-        log.info("Task {} marked FAILED", taskId);
+        TaskModel task = load(taskId);
+        if (task.status() != TaskStatus.QUEUED && task.status() != TaskStatus.EXECUTING) {
+            // Duplicate failure signal (e.g. DLQ redelivery, or the timeout sweeper got there first):
+            // the terminal state + refund already happened. Idempotent no-op.
+            log.info("Task {} already {}; ignoring duplicate failure signal", taskId, task.status());
+            return;
+        }
+        TaskModel failed = task.markFailed();
+        taskRepository.save(failed);
+        // Stranded-escrow fix (spec §6.3): the DLQ path previously marked FAILED without refunding,
+        // freezing the client's escrow forever. Every escrow exit is a recorded settlement.
+        settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
+        log.info("Task {} marked FAILED and escrow refunded", taskId);
     }
 
     private TaskModel load(UUID taskId) {
