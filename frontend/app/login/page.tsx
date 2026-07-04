@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth";
+import { useAuth, homeFor } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { Button, Field, Input } from "@/components/ui";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
@@ -28,7 +28,7 @@ export default function LoginPage() {
     setBusy(true);
     try {
       const res = await login(email, password);
-      router.replace(res.roles.includes("BUILDER") && !res.roles.includes("CLIENT") ? "/builder" : "/client");
+      router.replace(homeFor(res.roles));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
     } finally {

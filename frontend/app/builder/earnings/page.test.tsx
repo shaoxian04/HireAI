@@ -28,8 +28,10 @@ afterEach(() => {
 afterAll(() => server.close());
 
 const DISPUTE_OUTCOME = {
+  disputeId: "d-1",
   taskId: "t-1",
   status: "RESOLVED",
+  reasonCategory: "A_MISMATCH",
   effectiveCategory: "FULFILLED",
   rulings: [
     {

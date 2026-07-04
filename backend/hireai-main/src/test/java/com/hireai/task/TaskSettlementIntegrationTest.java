@@ -1,9 +1,12 @@
 package com.hireai.task;
 
+import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.application.biz.ledger.wallet.WalletReadAppService;
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.utility.result.ResultCode;
+import com.hireai.domain.biz.adjudication.enums.DisputeStatus;
+import com.hireai.domain.biz.adjudication.repository.DisputeRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskResolution;
@@ -76,6 +79,8 @@ class TaskSettlementIntegrationTest {
     }
 
     @Autowired TaskReviewAppService reviewAppService;
+    @Autowired DisputeAppService disputeAppService;
+    @Autowired DisputeRepository disputeRepository;
     @Autowired TaskRepository taskRepository;
     @Autowired WalletWriteAppService walletWrite;
     @Autowired WalletReadAppService walletRead;
@@ -159,20 +164,35 @@ class TaskSettlementIntegrationTest {
 
     @Test
     void rejectRefundsTheFullBudgetAndStoresTheReason() {
-        // A_MISMATCH → dispute → StubArbitrationClient → NOT_FULFILLED → full refund synchronously.
-        // OLD: reject(reason) → direct settleRejected (unconditional refund).
-        // NEW: A_MISMATCH → openDispute → stub ruling → settleRejected (same money, via dispute path).
+        // A_MISMATCH → dispute → StubArbitrationClient proposes NOT_FULFILLED → RULED (a PROPOSAL,
+        // not a settlement): escrow stays held until the client accepts the ruling.
         UUID client = newUser("CLIENT");
         UUID builder = newUser("BUILDER");
         TaskModel task = seedReviewableTask(client, newAgentVersion(builder), "20.00");
 
         reviewAppService.reject(task.id(), client, RejectReason.A_MISMATCH, "wrong format");
 
+        TaskModel disputed = taskRepository.findById(task.id()).orElseThrow();
+        assertThat(disputed.status()).isEqualTo(TaskStatus.DISPUTED);
+        assertThat(disputed.rejectionReason()).isEqualTo("wrong format"); // set at dispute() time
+
+        UUID disputeId = disputeRepository.findByTaskId(task.id()).orElseThrow().id();
+        assertThat(disputeRepository.findById(disputeId).orElseThrow().status())
+                .isEqualTo(DisputeStatus.RULED);
+
+        WalletModel heldWallet = walletRead.getByUserId(client);
+        assertThat(heldWallet.available()).isEqualTo(Money.of("80.00")); // 100 topped up - 20 frozen; still held
+        assertThat(heldWallet.escrow()).isEqualTo(Money.of("20.00"));
+
+        // Client accepts the proposed ruling -> settles exactly once -> full refund.
+        disputeAppService.acceptRuling(disputeId, client);
+
         WalletModel clientWallet = walletRead.getByUserId(client);
         assertThat(clientWallet.available()).isEqualTo(Money.of("100.00"));
         assertThat(clientWallet.escrow()).isEqualTo(Money.ZERO);
 
         TaskModel resolved = taskRepository.findById(task.id()).orElseThrow();
+        assertThat(resolved.status()).isEqualTo(TaskStatus.RESOLVED);
         assertThat(resolved.resolution()).isEqualTo(TaskResolution.REJECTED);
         assertThat(resolved.rejectionReason()).isEqualTo("wrong format");
     }

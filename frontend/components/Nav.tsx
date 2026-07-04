@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { useDisputeCount } from "@/lib/useDisputeCount";
 import { Button } from "@/components/ui";
 
 /** Wordmark with the lime diode mark. */
@@ -25,7 +26,9 @@ function Logo({ href }: { href: string }) {
 export function Nav() {
   const { role, activeSurface, setActiveSurface, hasRole, logout } = useAuth();
   const dual = hasRole("CLIENT") && hasRole("BUILDER");
-  const home = activeSurface === "BUILDER" ? "/builder" : "/client";
+  const home =
+    activeSurface === "BUILDER" ? "/builder" : activeSurface === "ADMIN" ? "/admin" : "/client";
+  const disputeCount = useDisputeCount(activeSurface === "CLIENT");
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-canvas/80 backdrop-blur-md">
@@ -48,6 +51,17 @@ export function Nav() {
                     {l.label}
                   </Link>
                 ))}
+                <Link
+                  href="/client/disputes"
+                  className="relative rounded-md px-3 py-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted transition hover:text-fg"
+                >
+                  Disputes
+                  {disputeCount > 0 && (
+                    <span className="ml-1.5 rounded-full bg-accent/20 px-1.5 py-0.5 text-[0.6rem] font-bold text-accent">
+                      {disputeCount}
+                    </span>
+                  )}
+                </Link>
               </div>
             )}
             {activeSurface === "BUILDER" && (
@@ -55,6 +69,22 @@ export function Nav() {
                 {[
                   { href: "/builder", label: "My agents" },
                   { href: "/builder/earnings", label: "Earnings" },
+                ].map((l) => (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    className="rounded-md px-3 py-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted transition hover:text-fg"
+                  >
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+            )}
+            {activeSurface === "ADMIN" && (
+              <div className="hidden items-center gap-1 md:flex">
+                {[
+                  { href: "/admin", label: "Overview" },
+                  { href: "/admin/disputes", label: "Disputes" },
                 ].map((l) => (
                   <Link
                     key={l.href}

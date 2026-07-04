@@ -202,6 +202,65 @@ export const handlers = [
     });
   }),
 
+  // ── Dispute lifecycle handlers (client-facing accept/appeal) ──
+  // Default empty list — Nav renders on nearly every authenticated page and now calls
+  // useDisputeCount(), which hits this endpoint. Individual tests override with server.use(...).
+  http.get("*/api/disputes/mine", () => ok([])),
+  http.get("*/api/disputes/by-task/:taskId", ({ params }) =>
+    ok({
+      disputeId: "d-1",
+      taskId: params.taskId as string,
+      status: "RULED",
+      reasonCategory: "B_FACTUAL",
+      effectiveCategory: "FULFILLED",
+      rulings: [
+        {
+          tier: 1,
+          decidedBy: "ARBITRATOR",
+          category: "FULFILLED",
+          rationale: "Output matched the acceptance criteria.",
+          decidedAt: "2026-07-03T10:00:00Z",
+        },
+      ],
+    }),
+  ),
+  http.post("*/api/disputes/:id/accept-ruling", ({ params }) =>
+    ok({
+      disputeId: params.id as string,
+      taskId: "t-1",
+      status: "RESOLVED",
+      reasonCategory: "B_FACTUAL",
+      effectiveCategory: "FULFILLED",
+      rulings: [
+        {
+          tier: 1,
+          decidedBy: "ARBITRATOR",
+          category: "FULFILLED",
+          rationale: "Output matched the acceptance criteria.",
+          decidedAt: "2026-07-03T10:00:00Z",
+        },
+      ],
+    }),
+  ),
+  http.post("*/api/disputes/:id/appeal", ({ params }) =>
+    ok({
+      disputeId: params.id as string,
+      taskId: "t-1",
+      status: "ESCALATED",
+      reasonCategory: "B_FACTUAL",
+      effectiveCategory: null,
+      rulings: [
+        {
+          tier: 1,
+          decidedBy: "ARBITRATOR",
+          category: "FULFILLED",
+          rationale: "Output matched the acceptance criteria.",
+          decidedAt: "2026-07-03T10:00:00Z",
+        },
+      ],
+    }),
+  ),
+
   // ── Catalogue handlers ──
 
   // Single-fixture stub — filters by name/category only; sort and pagination are not modelled.
@@ -283,6 +342,119 @@ export const handlers = [
       createdAt: "2026-06-06T10:00:00Z",
     });
   }),
+
+  // ── Admin surface handlers ──
+  http.get("*/api/admin/overview", () =>
+    ok({
+      disputesOpen: 1,
+      disputesArbitrating: 0,
+      disputesEscalated: 2,
+      disputesResolved: 3,
+      tasksTotal: 10,
+      usersTotal: 4,
+      agentsTotal: 2,
+      escrowHeld: 20,
+      commissionEarned: 1.5,
+    }),
+  ),
+  http.get("*/api/admin/tasks", () => ok([])),
+  http.get("*/api/admin/users", () => ok([])),
+  http.get("*/api/admin/agents", () => ok([])),
+  http.get("*/api/admin/disputes", () =>
+    ok([
+      {
+        disputeId: "d-1",
+        taskId: "t-1",
+        taskTitle: "Summarise the Q3 report",
+        status: "ESCALATED",
+        reasonCategory: "A_MISMATCH",
+        createdAt: "2026-07-02T00:00:00Z",
+        clientName: "client",
+        hasArbitratorRuling: false,
+        needsAttention: true,
+      },
+    ]),
+  ),
+  http.get("*/api/admin/disputes/d-1", () =>
+    ok({
+      disputeId: "d-1",
+      taskId: "t-1",
+      taskTitle: "Summarise the Q3 report",
+      taskDescription: "Summarise the attached Q3 financial report in 5 bullets.",
+      status: "ESCALATED",
+      reasonCategory: "A_MISMATCH",
+      clientReason: "The summary is about a completely different company.",
+      createdAt: "2026-07-02T00:00:00Z",
+      clientName: "client",
+      budget: 40,
+      category: "summarisation",
+      outputFormat: "TEXT",
+      submittedAt: "2026-07-01T23:00:00Z",
+      resultReceivedAt: "2026-07-01T23:05:00Z",
+      agentName: "Demo Summariser",
+      builderName: "builder",
+      agentReputation: 55,
+      agentPrice: 10,
+      outputSpecJson: '{"format":"TEXT"}',
+      resultPayloadJson: '{"summary":"..."}',
+      resultUrl: null,
+      agentStatus: "COMPLETED",
+      actionable: true,
+      settlementPreview: {
+        budget: 40,
+        fulfilledPayout: 34,
+        fulfilledCommission: 6,
+        notFulfilledRefund: 40,
+        partialBuilderNet: 17,
+        partialClientRefund: 20,
+      },
+      rulings: [],
+    }),
+  ),
+  http.post("*/api/admin/disputes/d-1/rule", () =>
+    ok({
+      disputeId: "d-1",
+      taskId: "t-1",
+      taskTitle: "Summarise the Q3 report",
+      taskDescription: "Summarise the attached Q3 financial report in 5 bullets.",
+      status: "RESOLVED",
+      reasonCategory: "A_MISMATCH",
+      clientReason: "The summary is about a completely different company.",
+      createdAt: "2026-07-02T00:00:00Z",
+      clientName: "client",
+      budget: 40,
+      category: "summarisation",
+      outputFormat: "TEXT",
+      submittedAt: "2026-07-01T23:00:00Z",
+      resultReceivedAt: "2026-07-01T23:05:00Z",
+      agentName: "Demo Summariser",
+      builderName: "builder",
+      agentReputation: 55,
+      agentPrice: 10,
+      outputSpecJson: '{"format":"TEXT"}',
+      resultPayloadJson: '{"summary":"..."}',
+      resultUrl: null,
+      agentStatus: "COMPLETED",
+      actionable: false,
+      settlementPreview: {
+        budget: 40,
+        fulfilledPayout: 34,
+        fulfilledCommission: 6,
+        notFulfilledRefund: 40,
+        partialBuilderNet: 17,
+        partialClientRefund: 20,
+      },
+      rulings: [
+        {
+          tier: 2,
+          decidedBy: "ADMINISTRATOR",
+          category: "NOT_FULFILLED",
+          rationale: "backstop refund",
+          decidedAt: "2026-07-02T01:00:00Z",
+        },
+      ],
+    }),
+  ),
 ];
 
 // ── Builder manage-agent handlers ──

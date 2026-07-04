@@ -8,7 +8,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
-/** 兜底: an exhausted/poison arbitration request dead-letters here → full refund to the client + dispute RESOLVED. */
+/** An exhausted/poison arbitration request dead-letters here → escalate the dispute to the admin backstop. */
 @Slf4j
 @Component
 @Profile("!test")
@@ -19,8 +19,8 @@ public class ArbitrationDlqListener {
 
     @RabbitListener(queues = ArbitrationQueues.DLQ)
     public void onDeadLetter(ArbitrationRequestMessage message) {
-        log.warn("Arbitration request dead-lettered for dispute {} (correlation {}); refund-fallback",
+        log.warn("Arbitration request dead-lettered for dispute {} (correlation {}); escalating to admin",
                 message.disputeId(), message.correlationId());
-        disputeAppService.resolveByFallback(message.disputeId());
+        disputeAppService.escalate(message.disputeId());
     }
 }

@@ -115,20 +115,23 @@ class BuilderEarningsIntegrationTest {
         TaskModel rejectedTask = seedReviewableTask(client, versionA, "20.00");
         seedReviewableTask(client, versionB, "20.00"); // stays PENDING_REVIEW (pending review)
         reviewAppService.accept(acceptedTask.id(), client);
-        // A_MISMATCH → dispute → StubArbitrationClient → NOT_FULFILLED → refund; builder earns nothing.
+        // A_MISMATCH → dispute → StubArbitrationClient proposes NOT_FULFILLED → RULED (a PROPOSAL,
+        // not a settlement yet): the task stays DISPUTED with escrow still held, which
+        // TaskStatus.isPendingEscrow() counts as "pending" (it could still pay the builder if the
+        // ruling is appealed and overridden) — so it still shows up in pendingIfAccepted, not earned.
         reviewAppService.reject(rejectedTask.id(), client, RejectReason.A_MISMATCH, "not good enough");
 
         Earnings e = earningsService.earningsFor(builder);
 
-        assertThat(e.lifetimeEarned()).isEqualByComparingTo("10.20");   // net of 12.00
-        assertThat(e.pendingIfAccepted()).isEqualByComparingTo("17.00"); // net of 20.00
+        assertThat(e.lifetimeEarned()).isEqualByComparingTo("10.20");   // net of 12.00; rejected task never accepted
+        assertThat(e.pendingIfAccepted()).isEqualByComparingTo("34.00"); // net of 20.00 (still-DISPUTED) + net of 20.00 (PENDING_REVIEW)
         assertThat(e.paidTaskCount()).isEqualTo(1);
 
         assertThat(e.perAgent()).hasSize(2);
         var agentA = e.perAgent().stream().filter(a -> a.agentName().equals("Agent A")).findFirst().orElseThrow();
         var agentB = e.perAgent().stream().filter(a -> a.agentName().equals("Agent B")).findFirst().orElseThrow();
         assertThat(agentA.earned()).isEqualByComparingTo("10.20");
-        assertThat(agentA.pendingIfAccepted()).isEqualByComparingTo("0.00");
+        assertThat(agentA.pendingIfAccepted()).isEqualByComparingTo("17.00"); // rejectedTask: still DISPUTED, escrow held
         assertThat(agentB.earned()).isEqualByComparingTo("0.00");
         assertThat(agentB.pendingIfAccepted()).isEqualByComparingTo("17.00");
 

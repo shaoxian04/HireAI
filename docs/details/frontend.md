@@ -82,9 +82,12 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   Reviews; image uploader via `apiUpload`).
 - `client/` — **Marketplace** (search/category/sort/hot strip/agent grid); `client/tasks` — task list +
   wallet (resolution badges on each task row); `client/tasks/new` — auto-route submit; `client/tasks/[id]` — polls
-  result; at `RESULT_RECEIVED` renders the `ResultReviewBar` (accept / reject with optional reason), then on
-  `RESOLVED` shows the settled summary (payout/commission/refund amounts); `client/agents/[id]`
-  — agent storefront; `client/agents/[id]/book` — direct-booking form (adopts agent's `output_spec`).
+  result; at `PENDING_REVIEW` renders the `ResultReviewBar` (accept / reject with an A/B/C reason), then on
+  `RESOLVED` shows the settled summary. **Once the task is in a dispute** the execution pipeline is replaced by a
+  `DisputeProgressPanel` — a reject→arbitrator→admin **timeline** with Accept-ruling / Appeal actions while a
+  proposed ruling awaits; it persists after `RESOLVED`. `client/disputes` — the client's dispute list ("awaiting
+  your decision" `RULED` rows first); `client/agents/[id]` — agent storefront; `client/agents/[id]/book` —
+  direct-booking form (adopts agent's `output_spec`).
 
 **`AgentDTO` is nested** — read `agent.currentVersion.{ capabilityCategories, price, webhookUrl }`, not the root.
 
@@ -93,7 +96,9 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
 `components/Nav.tsx` reads `activeSurface`, `hasRole`, and `setActiveSurface` from `useAuth()`. When the
 signed-in user holds **both** roles (`CLIENT` and `BUILDER`), a pill switcher renders inline — each
 option is a `<Link>` (routes to that surface's home) that also calls `setActiveSurface` on click. Single-
-role users see no switcher; the nav links shown depend on `activeSurface`.
+role users see no switcher; the nav links shown depend on `activeSurface`. The CLIENT surface shows
+Marketplace · My tasks · **Disputes** — the Disputes link carries a count badge of disputes awaiting the
+client's decision (`RULED`), sourced from `lib/useDisputeCount.ts` (`GET /api/disputes/mine`).
 
 ## Role guards
 

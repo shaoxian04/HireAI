@@ -17,7 +17,7 @@ public final class Dispute2DTOConverter {
                 .map(r -> new RulingDTO(r.tier(), r.decidedBy().name(), r.category().name(),
                         r.rationale(), r.decidedAt()))
                 .toList();
-        return new DisputeOutcomeDTO(dispute.taskId(), dispute.status().name(),
-                effectiveCategory, rulings);
+        return new DisputeOutcomeDTO(dispute.id(), dispute.taskId(), dispute.status().name(),
+                dispute.reasonCategory().name(), effectiveCategory, rulings);
     }
 }

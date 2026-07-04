@@ -1,5 +1,6 @@
 package com.hireai.controller.biz.adjudication;
 
+import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.adjudication.dispute.DisputeReadAppService;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
@@ -42,6 +43,7 @@ class DisputeControllerIntegrationTest {
     @Autowired MockMvc mockMvc;
 
     @MockBean DisputeReadAppService disputeReadAppService;
+    @MockBean DisputeAppService disputeAppService;
     @MockBean CurrentUserProvider currentUserProvider;
 
     private static final UUID CLIENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");

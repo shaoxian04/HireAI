@@ -35,6 +35,11 @@ const STATUS_CLASSES: Record<string, string> = {
   // dispute / arbitration
   DISPUTED: AMBER,
   PARTIALLY_ACCEPTED: VIOLET,
+  // dispute lifecycle (admin surface)
+  OPEN: AMBER,
+  ARBITRATING: CYAN,
+  ESCALATED: RED,
+  RULED: VIOLET,
 };
 
 /** Tailwind classes for a lifecycle status badge. Falls back to neutral for unknown values. */

@@ -10,7 +10,7 @@ import { StatusTrack } from "@/components/StatusTrack";
 import type { TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
 import { ResultReviewBar } from "@/components/ResultReviewBar";
-import { DisputeOutcomePanel } from "@/components/DisputeOutcomePanel";
+import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
 
 const POLL_MS = 2000;
 
@@ -58,10 +58,12 @@ function TaskDetail() {
     resultRef.current = result;
   }, [result]);
 
-  // Fetch the arbitration outcome once the task enters a dispute-capable terminal state.
+  // Fetch the arbitration outcome once, when the task lands on its settled state. DISPUTED is
+  // handled by the poll effect below instead, since the outcome moves through several statuses
+  // (ARBITRATING -> RULED -> ESCALATED -> RESOLVED) before the task itself leaves DISPUTED.
   useEffect(() => {
     if (!task) return;
-    if (task.status !== "DISPUTED" && task.status !== "RESOLVED") return;
+    if (task.status !== "RESOLVED") return;
     let cancelled = false;
     api<DisputeOutcomeDTO>(`/disputes/by-task/${task.id}`)
       .then((o) => { if (!cancelled) setOutcome(o); })
@@ -73,6 +75,27 @@ function TaskDetail() {
       });
     return () => { cancelled = true; };
   }, [task]);
+
+  // While the task is under dispute, poll the outcome so the client sees it move live through
+  // ARBITRATING -> RULED (accept/appeal) -> ESCALATED -> RESOLVED.
+  //
+  // Depend on the STATUS (and the stable route `id`), not the whole `task` object: the main
+  // poller below calls setTask() with a brand-new object every tick regardless of whether
+  // anything changed, so depending on `task` tore this interval down and recreated it every
+  // tick in phase-lock with the main poll — its own setInterval callback then never got a
+  // chance to fire, and the outcome was never re-fetched. Fetch immediately on the DISPUTED
+  // transition too, so the panel appears within the first cycle rather than only after 2s.
+  useEffect(() => {
+    if (task?.status !== "DISPUTED") return;
+    let cancelled = false;
+    const fetchOutcome = () =>
+      api<DisputeOutcomeDTO>(`/disputes/by-task/${id}`)
+        .then((o) => { if (!cancelled) setOutcome(o); })
+        .catch((e) => { if (!cancelled && !isPendingError(e)) console.error(e); });
+    fetchOutcome();
+    const t = setInterval(fetchOutcome, POLL_MS);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [task?.status, id]);
 
   useEffect(() => {
     if (!id) return;
@@ -154,6 +177,10 @@ function TaskDetail() {
     !TERMINAL.has(task.status) &&
     task.status !== "AWAITING_CAPACITY";
 
+  // Once a task is in a dispute (or resolved via one), the execution pipeline is history — the
+  // dispute timeline below tells the story instead.
+  const inDispute = task.status === "DISPUTED" || !!outcome;
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <Link href="/client/tasks" className="font-mono text-xs text-dim transition hover:text-accent">
@@ -175,11 +202,13 @@ function TaskDetail() {
           </Badge>
         </header>
 
-        {/* pipeline */}
-        <div className="rounded-md border border-line bg-surface-2 p-4">
-          <p className="eyebrow mb-4">Pipeline</p>
-          <StatusTrack status={task.status} labels />
-        </div>
+        {/* pipeline — hidden once the task is in dispute; the dispute timeline replaces it */}
+        {!inDispute && (
+          <div className="rounded-md border border-line bg-surface-2 p-4">
+            <p className="eyebrow mb-4">Pipeline</p>
+            <StatusTrack status={task.status} labels />
+          </div>
+        )}
 
         <p className="text-sm leading-relaxed text-muted">{task.description}</p>
 
@@ -253,7 +282,13 @@ function TaskDetail() {
         )}
       </Card>
 
-      {outcome && <DisputeOutcomePanel outcome={outcome} />}
+      {outcome && (
+        <DisputeProgressPanel
+          outcome={outcome}
+          rejectionReason={task.rejectionReason ?? null}
+          onChange={setOutcome}
+        />
+      )}
     </div>
   );
 }

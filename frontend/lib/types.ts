@@ -297,8 +297,110 @@ export interface RulingDTO {
 }
 
 export interface DisputeOutcomeDTO {
+  disputeId: string;
   taskId: string;
   status: string;
+  reasonCategory: RejectReason | null;
   effectiveCategory: RulingCategory | null;
   rulings: RulingDTO[];
+}
+
+/** Row shape for a client's own dispute list (future "my disputes" view). */
+export interface DisputeMineRowDTO {
+  disputeId: string;
+  taskId: string;
+  taskTitle: string;
+  status: string; // OPEN | ARBITRATING | RULED | ESCALATED | RESOLVED
+  proposedCategory: RulingCategory | null;
+  updatedAt: string;
+}
+
+// ── Admin surface ───────────────────────────────────────────────────────────
+
+export interface AdminOverviewDTO {
+  disputesOpen: number;
+  disputesArbitrating: number;
+  disputesEscalated: number;
+  disputesResolved: number;
+  tasksTotal: number;
+  usersTotal: number;
+  agentsTotal: number;
+  escrowHeld: number;
+  commissionEarned: number;
+}
+
+export interface AdminDisputeRowDTO {
+  disputeId: string;
+  taskId: string;
+  taskTitle: string;
+  status: string;
+  reasonCategory: RejectReason;
+  createdAt: string;
+  clientName: string;
+  hasArbitratorRuling: boolean;
+  needsAttention: boolean;
+}
+
+export interface AdminSettlementPreviewDTO {
+  budget: number;
+  fulfilledPayout: number;
+  fulfilledCommission: number;
+  notFulfilledRefund: number;
+  partialBuilderNet: number;
+  partialClientRefund: number;
+}
+
+export interface AdminDisputeDetailDTO {
+  disputeId: string;
+  taskId: string;
+  taskTitle: string;
+  taskDescription: string;
+  status: string;
+  reasonCategory: RejectReason;
+  clientReason: string | null;
+  createdAt: string;
+  clientName: string;
+  budget: number;
+  category: string | null;
+  outputFormat: string | null;
+  submittedAt: string | null;
+  resultReceivedAt: string | null;
+  agentName: string | null;
+  builderName: string | null;
+  agentReputation: number | null;
+  agentPrice: number | null;
+  outputSpecJson: string | null;
+  resultPayloadJson: string | null;
+  resultUrl: string | null;
+  agentStatus: string | null;
+  actionable: boolean;
+  settlementPreview: AdminSettlementPreviewDTO | null;
+  rulings: RulingDTO[];
+}
+
+export interface AdminTaskRowDTO {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  budget: number;
+  clientName: string;
+  createdAt: string;
+}
+
+export interface AdminUserRowDTO {
+  id: string;
+  name: string;
+  email: string;
+  roles: Role[];
+  availableBalance: number;
+  escrowBalance: number;
+}
+
+export interface AdminAgentRowDTO {
+  id: string;
+  name: string;
+  status: string;
+  builderName: string;
+  reputationScore: number;
+  price: number | null;
 }

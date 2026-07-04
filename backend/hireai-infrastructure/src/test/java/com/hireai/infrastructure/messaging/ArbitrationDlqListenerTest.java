@@ -12,11 +12,11 @@ class ArbitrationDlqListenerTest {
     private final ArbitrationDlqListener listener = new ArbitrationDlqListener(disputeAppService);
 
     @Test
-    void deadLetteredRequestTriggersRefundFallback() {
+    void deadLetteredRequestEscalatesToAdmin() {
         UUID disputeId = UUID.randomUUID();
         ArbitrationRequestMessage msg = new ArbitrationRequestMessage(
                 disputeId, UUID.randomUUID(), "corr", "JSON", null, null, null, "{}", null, "A_MISMATCH");
         listener.onDeadLetter(msg);
-        verify(disputeAppService).resolveByFallback(disputeId);
+        verify(disputeAppService).escalate(disputeId);
     }
 }

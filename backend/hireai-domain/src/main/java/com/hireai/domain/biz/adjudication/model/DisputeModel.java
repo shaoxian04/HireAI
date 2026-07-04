@@ -19,7 +19,8 @@ import java.util.UUID;
  * not from this model (Invariant #3) — this aggregate only records what was decided.
  *
  * State machine: OPEN → ARBITRATING → RULED → RESOLVED,
- * with a RESOLVED-via-fallback path from OPEN/ARBITRATING.
+ * with a RESOLVED-via-fallback path from OPEN/ARBITRATING, and from RULED branching either to
+ * RESOLVED (via accept) or ESCALATED (via appeal).
  */
 public final class DisputeModel {
 
@@ -77,11 +78,41 @@ public final class DisputeModel {
                 rulings, correlationId, createdAt, resolvedAt);
     }
 
-    /** OPEN|ARBITRATING → RULED: append a ruling to the history. */
-    public DisputeModel recordRuling(Ruling ruling) {
+    /**
+     * OPEN|ARBITRATING → ESCALATED: hand a stranded dispute to the human admin backstop. Written by
+     * the DLQ listener (loud failure) and the stale-arbitration sweeper (quiet failure). Records no
+     * ruling — escalation only flags "needs admin". isResolvable() now returns false, so a late
+     * ARBITRATOR callback is ignored (the admin owns it).
+     */
+    public DisputeModel escalate() {
         if (status != DisputeStatus.OPEN && status != DisputeStatus.ARBITRATING) {
             throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
-                    "recordRuling requires OPEN|ARBITRATING; was " + status);
+                    "escalate requires OPEN|ARBITRATING; was " + status);
+        }
+        return new DisputeModel(id, taskId, raisedBy, reasonCategory, DisputeStatus.ESCALATED,
+                rulings, correlationId, createdAt, resolvedAt);
+    }
+
+    /**
+     * RULED → ESCALATED: the client appeals the arbitrator's PROPOSED ruling to the human admin.
+     * The arbitrator ruling stays in the history as the admin's context; settlement has not run yet
+     * (delayed-settlement model), so no money reversal is involved.
+     */
+    public DisputeModel appeal() {
+        if (status != DisputeStatus.RULED) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "appeal requires RULED; was " + status);
+        }
+        return new DisputeModel(id, taskId, raisedBy, reasonCategory, DisputeStatus.ESCALATED,
+                rulings, correlationId, createdAt, resolvedAt);
+    }
+
+    /** OPEN|ARBITRATING|ESCALATED → RULED: append a ruling to the history. */
+    public DisputeModel recordRuling(Ruling ruling) {
+        if (status != DisputeStatus.OPEN && status != DisputeStatus.ARBITRATING
+                && status != DisputeStatus.ESCALATED) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "recordRuling requires OPEN|ARBITRATING|ESCALATED; was " + status);
         }
         if (ruling == null) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "ruling is required");
