@@ -107,6 +107,7 @@ export interface CreateAgentRequest {
   webhookUrl: string;
   maxExecutionSeconds: number;
   price: number;
+  maxConcurrent: number;
 }
 
 // ── Tasks ──
