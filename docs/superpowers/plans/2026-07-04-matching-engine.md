@@ -18,7 +18,7 @@
 - **Do NOT map `match_attempts`, `execution_deadline`, `pinned_agent_version_id` on `TaskDO`.** `TaskRepositoryImpl.save` writes the full row from `TaskModel`; a mapped-but-unthreaded column would be overwritten with NULL on every transition save. These columns are managed exclusively by targeted native queries (Task 8) and are invisible to the entity.
 - Flyway owns schema (`ddl-auto: validate`); unmapped DB columns are fine (precedent: `gmt_modified`).
 - Commit format: `<type>: <description>` (feat/fix/refactor/docs/test/chore). No attribution footers.
-- Backend targeted test run (from repo root): `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest=<TestClass> -DfailIfNoTests=false`. Full suite: `mvn -f backend/pom.xml -B test`. Frontend: `npx vitest run` in `frontend/`.
+- Backend targeted test run (from repo root): `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest=<TestClass> -Dsurefire.failIfNoSpecifiedTests=false`. Full suite: `mvn -f backend/pom.xml -B test`. Frontend: `npx vitest run` in `frontend/`.
 - Integration tests (`*IntegrationTest`) need Docker; they auto-skip without it. If Docker is available, run them; if not, note it in the commit body.
 - Config defaults (spec §7): weights 0.40/0.20/0.20/0.20, ε 0.10, rematch-interval PT10S, rematch-max-attempts 3, execution sweep-interval PT30S, grace 60s, default max-concurrent 5.
 
@@ -181,7 +181,7 @@ class MatchingPolicyTest {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest=MatchingPolicyTest -DfailIfNoTests=false`
+Run: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest=MatchingPolicyTest -Dsurefire.failIfNoSpecifiedTests=false`
 Expected: COMPILATION ERROR ("cannot find symbol: class MatchingPolicy").
 
 - [ ] **Step 3: Write the implementation**
@@ -251,7 +251,7 @@ public record ScoredCandidate(AgentCandidate candidate, double score) {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest=MatchingPolicyTest -DfailIfNoTests=false`
+Run: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest=MatchingPolicyTest -Dsurefire.failIfNoSpecifiedTests=false`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
@@ -381,7 +381,7 @@ Write each case as a real `@Test` with AssertJ assertions on the returned `Agent
 
 - [ ] **Step 5: Run the tests**
 
-Run: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest='CandidateCountsIntegrationTest,RoutingMatchDomainServiceTest,RoutingAppServiceImplTest,RoutingAppServiceDirectDispatchTest,AgentContractTypesTest,SpineContractsTest' -DfailIfNoTests=false`
+Run: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest='CandidateCountsIntegrationTest,RoutingMatchDomainServiceTest,RoutingAppServiceImplTest,RoutingAppServiceDirectDispatchTest,AgentContractTypesTest,SpineContractsTest' -Dsurefire.failIfNoSpecifiedTests=false`
 Expected: PASS (integration class skips without Docker — then verify at least the five updated unit classes pass).
 
 - [ ] **Step 6: Commit**
@@ -650,7 +650,7 @@ class RoutingMatchDomainServiceTest {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest=RoutingMatchDomainServiceTest -DfailIfNoTests=false`
+Run: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest=RoutingMatchDomainServiceTest -Dsurefire.failIfNoSpecifiedTests=false`
 Expected: COMPILATION ERROR (no such constructor / methods).
 
 - [ ] **Step 3: Implement**
@@ -855,7 +855,7 @@ public class RoutingMatchDomainServiceImpl implements RoutingMatchDomainService 
 
 - [ ] **Step 4: Run the tests**
 
-Run: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest='RoutingMatchDomainServiceTest,RoutingAppServiceImplTest,MatchingPolicyTest' -DfailIfNoTests=false`
+Run: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest='RoutingMatchDomainServiceTest,RoutingAppServiceImplTest,MatchingPolicyTest' -Dsurefire.failIfNoSpecifiedTests=false`
 Expected: PASS.
 
 - [ ] **Step 5: Run the full backend suite (catches any other selectAgentVersion references)**
@@ -976,7 +976,7 @@ and in **both** `route()` and `dispatchDirect()` replace the `assignAndQueue` ca
 
 - [ ] **Step 4: Update `RoutingAppServiceDirectDispatchTest`** — change `verify(...).assignAndQueue(taskId, versionId)` forms to `assignAndQueue(eq(taskId), eq(versionId), any(Instant.class))`.
 
-- [ ] **Step 5: Run**: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest='RoutingAppServiceImplTest,RoutingAppServiceDirectDispatchTest' -DfailIfNoTests=false` → PASS, then full suite → PASS.
+- [ ] **Step 5: Run**: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest='RoutingAppServiceImplTest,RoutingAppServiceDirectDispatchTest' -Dsurefire.failIfNoSpecifiedTests=false` → PASS, then full suite → PASS.
 
 - [ ] **Step 6: Commit**: `git add backend && git commit -m "feat: stamp execution_deadline at assignment (maxExec + grace)"`
 
@@ -1744,7 +1744,7 @@ it("submits maxConcurrent (default 5) with the registration", async () => {
 //     findActiveCandidates returns maxConcurrent() == 8 for it.
 ```
 
-- [ ] **Step 2: Run with Docker**: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest=MatchingEngineIntegrationTest -DfailIfNoTests=false` → PASS (or SKIPPED without Docker — then flag to the user that a Docker run is still owed).
+- [ ] **Step 2: Run with Docker**: `mvn -f backend/pom.xml -pl hireai-main -am -B test -Dtest=MatchingEngineIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false` → PASS (or SKIPPED without Docker — then flag to the user that a Docker run is still owed).
 
 - [ ] **Step 3: Full regression, both stacks**
 
