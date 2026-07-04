@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,6 +47,10 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     @org.springframework.beans.factory.annotation.Value("${hireai.platform.public-base-url:http://localhost:8080}")
     private String publicBaseUrl = "http://localhost:8080";
 
+    /** Grace added to the agent's maxExecutionSeconds when stamping the execution deadline. */
+    @org.springframework.beans.factory.annotation.Value("${hireai.execution.grace-seconds:60}")
+    private long executionGraceSeconds = 60;
+
     @Override
     public void route(UUID taskId) {
         TaskRoutingView view = taskReadAppService.getRoutingView(taskId);
@@ -68,7 +73,9 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                         "Matcher returned an agentVersionId absent from candidates: " + agentVersionId));
 
         // Commit the QUEUED transition FIRST so the consumer always sees a durable QUEUED row.
-        taskWriteAppService.assignAndQueue(taskId, agentVersionId);
+        Instant executionDeadline = Instant.now()
+                .plusSeconds(winner.maxExecutionSeconds() + executionGraceSeconds);
+        taskWriteAppService.assignAndQueue(taskId, agentVersionId, executionDeadline);
 
         DispatchMessage message = buildDispatchMessage(taskId, agentVersionId, view, winner);
         taskDispatchPublisher.publish(message);
@@ -91,7 +98,9 @@ public class RoutingAppServiceImpl implements RoutingAppService {
         }
         AgentCandidate target = maybeTarget.get();
         // Same ordering contract as route(): QUEUED commits FIRST (REQUIRES_NEW), then publish.
-        taskWriteAppService.assignAndQueue(taskId, agentVersionId);
+        Instant executionDeadline = Instant.now()
+                .plusSeconds(target.maxExecutionSeconds() + executionGraceSeconds);
+        taskWriteAppService.assignAndQueue(taskId, agentVersionId, executionDeadline);
         DispatchMessage message = buildDispatchMessage(taskId, agentVersionId, view, target);
         taskDispatchPublisher.publish(message);
         log.info("Task {} direct-dispatched to agentVersion {} (correlationId={})",

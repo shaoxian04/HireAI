@@ -98,7 +98,7 @@ class AgentCallbackIntegrationTest {
         UUID taskId = taskWriteAppService.submit(new TaskSubmitInfo(
                 client, "Summarise", "Summarise the attached report", Money.of("30.00"),
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"), "summarisation"));
-        taskWriteAppService.assignAndQueue(taskId, agentVersionId);
+        taskWriteAppService.assignAndQueue(taskId, agentVersionId, Instant.now().plusSeconds(120));
         taskExecutionPort.markExecuting(taskId);
         return taskId;
     }

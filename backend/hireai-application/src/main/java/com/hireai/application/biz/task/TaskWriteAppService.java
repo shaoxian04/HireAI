@@ -4,6 +4,7 @@ import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -22,7 +23,11 @@ public interface TaskWriteAppService {
     /** Direct booking: identical atomic submit+freeze, but routing is pinned to agentVersionId. */
     UUID submitDirectlyBooked(@NonNull TaskSubmitInfo taskSubmitInfo, @NonNull UUID agentVersionId);
 
-    void assignAndQueue(@NonNull UUID taskId, @NonNull UUID agentVersionId);
+    /**
+     * SUBMITTED/AWAITING_CAPACITY -> QUEUED, and stamps the execution deadline
+     * (assignment time + agent maxExecutionSeconds + grace) used by the timeout sweeper.
+     */
+    void assignAndQueue(@NonNull UUID taskId, @NonNull UUID agentVersionId, @NonNull Instant executionDeadline);
 
     void markAwaitingCapacity(@NonNull UUID taskId);
 }

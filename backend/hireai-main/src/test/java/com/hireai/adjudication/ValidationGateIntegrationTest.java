@@ -116,7 +116,7 @@ class ValidationGateIntegrationTest {
         UUID taskId = taskWriteAppService.submit(new TaskSubmitInfo(
                 clientId, "Gate test task", "Drive the validation gate", Money.of(budget),
                 spec, "summarisation"));
-        taskWriteAppService.assignAndQueue(taskId, agentVersionId);
+        taskWriteAppService.assignAndQueue(taskId, agentVersionId, Instant.now().plusSeconds(120));
         taskExecutionPort.markExecuting(taskId);
         return taskId;
     }

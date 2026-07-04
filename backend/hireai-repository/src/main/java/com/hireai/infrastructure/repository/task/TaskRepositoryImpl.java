@@ -12,6 +12,7 @@ import com.hireai.application.biz.task.OutputSpecJsonMapper;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -72,6 +73,11 @@ public class TaskRepositoryImpl implements TaskRepository {
                 .stream()
                 .map(this::toModel)
                 .toList();
+    }
+
+    @Override
+    public void stampExecutionDeadline(UUID taskId, Instant deadline) {
+        taskJpa.stampExecutionDeadline(taskId, deadline);
     }
 
     private TaskModel toModel(TaskDO entity) {

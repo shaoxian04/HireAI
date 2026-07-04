@@ -16,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,15 +48,17 @@ class TaskWriteAppServiceImplTest {
     void assignAndQueueTransitionsAndSaves() {
         TaskModel task = submittedTask();
         UUID agentVersionId = UUID.randomUUID();
+        Instant deadline = Instant.now().plusSeconds(120);
         when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        service().assignAndQueue(task.id(), agentVersionId);
+        service().assignAndQueue(task.id(), agentVersionId, deadline);
 
         ArgumentCaptor<TaskModel> captor = ArgumentCaptor.forClass(TaskModel.class);
         verify(taskRepository).save(captor.capture());
         assertThat(captor.getValue().status()).isEqualTo(TaskStatus.QUEUED);
         assertThat(captor.getValue().agentVersionId()).isEqualTo(agentVersionId);
+        verify(taskRepository).stampExecutionDeadline(task.id(), deadline);
     }
 
     @Test
@@ -76,7 +79,7 @@ class TaskWriteAppServiceImplTest {
         UUID taskId = UUID.randomUUID();
         when(taskRepository.findById(taskId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().assignAndQueue(taskId, UUID.randomUUID()))
+        assertThatThrownBy(() -> service().assignAndQueue(taskId, UUID.randomUUID(), Instant.now().plusSeconds(120)))
                 .isInstanceOf(DomainException.class);
     }
 }

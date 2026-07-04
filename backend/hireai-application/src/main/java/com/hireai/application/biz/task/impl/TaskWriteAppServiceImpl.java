@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -67,10 +68,12 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
      */
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void assignAndQueue(UUID taskId, UUID agentVersionId) {
+    public void assignAndQueue(UUID taskId, UUID agentVersionId, Instant executionDeadline) {
         TaskModel task = load(taskId);
         taskRepository.save(task.assignAndQueue(agentVersionId));
-        log.info("Task {} assigned to agent version {} and queued", taskId, agentVersionId);
+        taskRepository.stampExecutionDeadline(taskId, executionDeadline);
+        log.info("Task {} assigned to agent version {} and queued (deadline {})",
+                taskId, agentVersionId, executionDeadline);
     }
 
     @Override

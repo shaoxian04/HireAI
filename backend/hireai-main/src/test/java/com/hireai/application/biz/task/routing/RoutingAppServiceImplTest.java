@@ -14,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -70,9 +71,31 @@ class RoutingAppServiceImplTest {
         service.route(taskId);
 
         InOrder inOrder = inOrder(taskWriteAppService, taskDispatchPublisher);
-        inOrder.verify(taskWriteAppService).assignAndQueue(taskId, versionId);
+        inOrder.verify(taskWriteAppService).assignAndQueue(eq(taskId), eq(versionId), any(Instant.class));
         inOrder.verify(taskDispatchPublisher).publish(any(DispatchMessage.class));
         verify(taskWriteAppService, never()).markAwaitingCapacity(any());
+    }
+
+    @Test
+    void assignAndQueueReceivesDeadlineOfNowPlusMaxExecPlusGrace() {
+        // fixture candidate has maxExecutionSeconds 60; impl default grace is 60s
+        // (arrange the existing happy-path mocks so route() reaches assignAndQueue)
+        UUID taskId = UUID.randomUUID();
+        UUID chosenVersionId = UUID.randomUUID();
+        AgentCandidate candidate = candidate(chosenVersionId);
+        when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
+        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00")))
+                .thenReturn(List.of(candidate));
+        when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.of(chosenVersionId));
+
+        Instant before = Instant.now();
+        service.route(taskId);
+
+        ArgumentCaptor<Instant> deadline = ArgumentCaptor.forClass(Instant.class);
+        verify(taskWriteAppService).assignAndQueue(eq(taskId), eq(chosenVersionId), deadline.capture());
+        Instant expectedMin = before.plusSeconds(120);
+        assertThat(deadline.getValue()).isAfterOrEqualTo(expectedMin.minusSeconds(1));
+        assertThat(deadline.getValue()).isBeforeOrEqualTo(Instant.now().plusSeconds(121));
     }
 
     @Test
@@ -127,7 +150,7 @@ class RoutingAppServiceImplTest {
         service.route(taskId);
 
         verify(taskWriteAppService).markAwaitingCapacity(taskId);
-        verify(taskWriteAppService, never()).assignAndQueue(any(), any());
+        verify(taskWriteAppService, never()).assignAndQueue(any(), any(), any());
         verify(taskDispatchPublisher, never()).publish(any());
     }
 }

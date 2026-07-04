@@ -26,4 +26,7 @@ public interface TaskRepository {
     Optional<TaskModel> findByIdForUpdate(UUID taskId);
 
     List<TaskModel> findByClientId(UUID clientId, TaskQuery query);
+
+    /** Operational column write (unmapped on the entity — see plan Global Constraints). */
+    void stampExecutionDeadline(UUID taskId, java.time.Instant deadline);
 }
