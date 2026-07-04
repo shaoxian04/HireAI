@@ -564,9 +564,10 @@ class RoutingMatchDomainServiceTest {
         UUID cheap = UUID.randomUUID();
         List<ScoredCandidate> ranked2 = greedy().rank(task("summarisation", "40.00"), List.of(
                 candidate(UUID.randomUUID(), List.of("summarisation"), "20.00", "50.00", 5, 0, 100),
-                candidate(cheap, List.of("summarisation"), "16.00", "56.00", 5, 4, 100)));
-        // scores engineered equal: valueFit 0.5 vs 0.6, rep 0.5 vs 0.56, load 1.0 vs 0.2:
-        // c1 = .4*.5 + .2*.5 + .2*1.0 + .2*(1/101) ; c2 = .4*.56 + .2*.6 + .2*.2 + .2*(1/101) — equal sums
+                candidate(cheap, List.of("summarisation"), "16.00", "45.00", 5, 0, 100)));
+        // scores engineered equal (budget 40, same load/exploration):
+        // c1 = .4*.50 + .2*((40-20)/40) + .2*1.0 + e = .20 + .10 + .20 + e
+        // c2 = .4*.45 + .2*((40-16)/40) + .2*1.0 + e = .18 + .12 + .20 + e   — equal sums
         assertThat(ranked2.get(0).candidate().agentVersionId()).isEqualTo(cheap);
     }
 
