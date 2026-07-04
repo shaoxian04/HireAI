@@ -29,4 +29,7 @@ public interface TaskRepository {
 
     /** Operational column write (unmapped on the entity — see plan Global Constraints). */
     void stampExecutionDeadline(UUID taskId, java.time.Instant deadline);
+
+    /** Operational column write (unmapped on the entity). Pins the agent version for direct bookings. */
+    void pinAgentVersion(UUID taskId, UUID agentVersionId);
 }

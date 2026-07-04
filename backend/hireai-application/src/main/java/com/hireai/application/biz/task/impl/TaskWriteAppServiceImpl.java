@@ -37,7 +37,11 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
 
     @Override
     public UUID submitDirectlyBooked(TaskSubmitInfo taskSubmitInfo, UUID agentVersionId) {
-        return doSubmit(taskSubmitInfo, agentVersionId);
+        UUID taskId = doSubmit(taskSubmitInfo, agentVersionId);
+        // Same transaction as the submit: the re-match sweeper must be able to tell pinned tasks
+        // from open tasks and never substitute another agent for a direct booking (spec §6.1).
+        taskRepository.pinAgentVersion(taskId, agentVersionId);
+        return taskId;
     }
 
     /**

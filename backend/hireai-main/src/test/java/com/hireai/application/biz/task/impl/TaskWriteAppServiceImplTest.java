@@ -3,6 +3,7 @@ package com.hireai.application.biz.task.impl;
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.TaskStatus;
+import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
@@ -23,6 +24,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -81,5 +83,34 @@ class TaskWriteAppServiceImplTest {
 
         assertThatThrownBy(() -> service().assignAndQueue(taskId, UUID.randomUUID(), Instant.now().plusSeconds(120)))
                 .isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void directBookingPersistsThePinnedAgentVersion() {
+        UUID versionId = UUID.randomUUID();
+        TaskSubmitInfo submitInfo = new TaskSubmitInfo(UUID.randomUUID(), "title", "desc",
+                Money.of("10.00"), new OutputSpec(OutputFormat.TEXT, null, "summary"), "general");
+        TaskModel submittedTask = submittedTask();
+        when(taskSubmitDomainService.submit(submitInfo)).thenReturn(submittedTask);
+        when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service().submitDirectlyBooked(submitInfo, versionId);
+
+        verify(taskRepository).pinAgentVersion(submittedTask.id(), versionId);
+    }
+
+    @Test
+    void openSubmitDoesNotPin() {
+        TaskSubmitInfo submitInfo = new TaskSubmitInfo(UUID.randomUUID(), "title", "desc",
+                Money.of("10.00"), new OutputSpec(OutputFormat.TEXT, null, "summary"), "general");
+        UUID taskId = UUID.randomUUID();
+        TaskModel submittedTask = TaskModel.submit(taskId, "title", "desc", Money.of("10.00"),
+                new OutputSpec(OutputFormat.TEXT, null, "summary"), "general");
+        when(taskSubmitDomainService.submit(submitInfo)).thenReturn(submittedTask);
+        when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        service().submit(submitInfo);
+
+        verify(taskRepository, never()).pinAgentVersion(any(), any());
     }
 }

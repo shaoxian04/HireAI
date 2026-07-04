@@ -80,6 +80,11 @@ public class TaskRepositoryImpl implements TaskRepository {
         taskJpa.stampExecutionDeadline(taskId, deadline);
     }
 
+    @Override
+    public void pinAgentVersion(UUID taskId, UUID agentVersionId) {
+        taskJpa.pinAgentVersion(taskId, agentVersionId);
+    }
+
     private TaskModel toModel(TaskDO entity) {
         TaskResultModel result = taskResultJpa.findByTaskId(entity.getId())
                 .map(this::toResultModel)
