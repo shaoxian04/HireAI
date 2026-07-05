@@ -51,6 +51,18 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     @org.springframework.beans.factory.annotation.Value("${hireai.execution.grace-seconds:60}")
     private long executionGraceSeconds = 60;
 
+    /**
+     * Bad config is a startup crash (spec §7): a negative grace would stamp execution deadlines in
+     * the past, so every dispatch would be mass-refunded by the timeout sweeper ~30s after routing.
+     */
+    @jakarta.annotation.PostConstruct
+    void validateConfig() {
+        if (executionGraceSeconds < 0) {
+            throw new IllegalStateException(
+                    "hireai.execution.grace-seconds must be >= 0; got " + executionGraceSeconds);
+        }
+    }
+
     @Override
     public void route(UUID taskId) {
         TaskRoutingView view = taskReadAppService.getRoutingView(taskId);

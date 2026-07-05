@@ -77,8 +77,10 @@ public final class TaskModel {
         requirePositive(budget);
         requirePresent(outputSpec, "output spec");
         requireText(category, "category");
+        // Lowercase to match AgentVersionModel.normaliseCategories' .trim().toLowerCase() idiom,
+        // so the routing re-filter's case-sensitive containment check (coversCategory) actually matches.
         return new TaskModel(UUID.randomUUID(), clientId, title.trim(), description.trim(),
-                budget, outputSpec, category.trim(), TaskStatus.SUBMITTED, null, null, Instant.now());
+                budget, outputSpec, category.trim().toLowerCase(), TaskStatus.SUBMITTED, null, null, Instant.now());
     }
 
     private static void requirePresent(Object value, String field) {

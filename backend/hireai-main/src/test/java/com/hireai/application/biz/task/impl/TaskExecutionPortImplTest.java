@@ -55,22 +55,52 @@ class TaskExecutionPortImplTest {
     }
 
     @Test
-    void markTimedOutTransitionsQueuedToTimedOut() {
-        TaskModel task = queuedTask();
-        when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
+    void markTimedOutTransitionsQueuedToTimedOutAndRefunds() {
+        // FIX 4: markTimedOut now mirrors markFailed's guarded+refund shape and loads under a row lock.
+        UUID taskId = UUID.randomUUID();
+        UUID clientId = UUID.randomUUID();
+        Money budget = Money.of("100.00");
+
+        TaskModel executingTask = TaskModel.submit(clientId, "title", "desc", budget,
+                new OutputSpec(OutputFormat.TEXT, null, "summary"), "general")
+                .assignAndQueue(UUID.randomUUID())
+                .markExecuting();
+
+        when(taskRepository.findByIdForUpdate(taskId)).thenReturn(Optional.of(executingTask));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        port().markTimedOut(task.id());
+        port().markTimedOut(taskId);
 
         ArgumentCaptor<TaskModel> captor = ArgumentCaptor.forClass(TaskModel.class);
         verify(taskRepository).save(captor.capture());
         assertThat(captor.getValue().status()).isEqualTo(TaskStatus.TIMED_OUT);
+        verify(settlementWriteAppService).settleRejected(taskId, clientId, budget);
+    }
+
+    @Test
+    void duplicateMarkTimedOutIsANoOp() {
+        UUID taskId = UUID.randomUUID();
+        UUID clientId = UUID.randomUUID();
+        Money budget = Money.of("100.00");
+
+        TaskModel timedOutTask = TaskModel.submit(clientId, "title", "desc", budget,
+                new OutputSpec(OutputFormat.TEXT, null, "summary"), "general")
+                .assignAndQueue(UUID.randomUUID())
+                .markExecuting()
+                .markTimedOut();
+
+        when(taskRepository.findByIdForUpdate(taskId)).thenReturn(Optional.of(timedOutTask));
+
+        port().markTimedOut(taskId);
+
+        verify(taskRepository, never()).save(any());
+        verifyNoInteractions(settlementWriteAppService);
     }
 
     @Test
     void markFailedTransitionsQueuedToFailed() {
         TaskModel task = queuedTask();
-        when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         port().markFailed(task.id());
@@ -101,7 +131,7 @@ class TaskExecutionPortImplTest {
                 .assignAndQueue(UUID.randomUUID())
                 .markExecuting();
 
-        when(taskRepository.findById(taskId)).thenReturn(Optional.of(executingTask));
+        when(taskRepository.findByIdForUpdate(taskId)).thenReturn(Optional.of(executingTask));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         TaskExecutionPortImpl port = port();
@@ -127,7 +157,7 @@ class TaskExecutionPortImplTest {
                 .markExecuting()
                 .markFailed();
 
-        when(taskRepository.findById(taskId)).thenReturn(Optional.of(failedTask));
+        when(taskRepository.findByIdForUpdate(taskId)).thenReturn(Optional.of(failedTask));
 
         TaskExecutionPortImpl port = port();
         port.markFailed(taskId);

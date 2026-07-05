@@ -65,6 +65,11 @@ class TaskReliabilityAppServiceImplTest {
                 .thenReturn(Optional.of(taskWithStatus(second)));
     }
 
+    /** timeoutOne loads under a row lock (FIX 2), unlike rematchOne's plain findById. */
+    private void givenTaskInStatusForUpdate(TaskStatus status) {
+        when(taskRepository.findByIdForUpdate(taskId)).thenReturn(Optional.of(taskWithStatus(status)));
+    }
+
     @Test
     void rematchSkipsTasksThatAlreadyLeftAwaitingCapacity() {
         givenTaskInStatus(TaskStatus.QUEUED);
@@ -125,7 +130,7 @@ class TaskReliabilityAppServiceImplTest {
 
     @Test
     void timeoutMarksTimedOutAndRefunds() {
-        givenTaskInStatus(TaskStatus.EXECUTING); // with clientId + budget on the fixture task
+        givenTaskInStatusForUpdate(TaskStatus.EXECUTING); // with clientId + budget on the fixture task
         service.timeoutOne(taskId);
         verify(taskRepository).save(argThat(t -> t.status() == TaskStatus.TIMED_OUT));
         verify(settlementWriteAppService).settleRejected(taskId, clientId, budget);
@@ -133,7 +138,7 @@ class TaskReliabilityAppServiceImplTest {
 
     @Test
     void timeoutIsANoOpOncePastExecuting() {
-        givenTaskInStatus(TaskStatus.PENDING_REVIEW);
+        givenTaskInStatusForUpdate(TaskStatus.PENDING_REVIEW);
         service.timeoutOne(taskId);
         verify(taskRepository, never()).save(any());
         verifyNoInteractions(settlementWriteAppService);

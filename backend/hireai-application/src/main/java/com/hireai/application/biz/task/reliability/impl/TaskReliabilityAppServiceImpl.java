@@ -85,7 +85,11 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
     @Override
     @Transactional
     public void timeoutOne(UUID taskId) {
-        TaskModel task = taskRepository.findById(taskId).orElse(null);
+        // Row-locked load: lock ordering is task-row -> wallet-row (settleRejected locks the wallet
+        // next), identical to the review/accept path, so no new deadlock. The residual
+        // timeout-vs-agent-callback race window remains money-safe via the settlements.task_id
+        // UNIQUE constraint (the callback path is out of this branch's scope).
+        TaskModel task = taskRepository.findByIdForUpdate(taskId).orElse(null);
         if (task == null
                 || (task.status() != TaskStatus.QUEUED && task.status() != TaskStatus.EXECUTING)) {
             return; // result arrived / already failed since the sweep listed it
