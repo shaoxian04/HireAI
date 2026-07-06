@@ -21,7 +21,8 @@ Polyglot service-oriented architecture. Three deployable services + shared infra
 
 - **Synchronous REST/JSON (JWT)** — frontend ↔ backend.
 - **Webhook dispatch + signed callback** — backend ↔ self-hosted third-party Agents. Dispatch carries a structured payload + short-lived signed token; callbacks are token-authenticated.
-- **Async messaging (RabbitMQ)** — routing/dispatch, retry/DLQ, and arbitration jobs run off the request thread.
+- **Async messaging (RabbitMQ)** — routing/dispatch, retry/DLQ, and arbitration jobs run off the request thread. Task→agent selection uses a multi-factor weighted score + ε-greedy (`RoutingMatchDomainService`); see `docs/matching-selection-mechanics.md`.
+- **`@Scheduled` reliability sweepers** — periodic jobs (single-instance today) are the safety net that async messaging alone can't cover: re-match held `AWAITING_CAPACITY` tasks (→ cancel + refund on exhaustion), time out silent executors past their `execution_deadline` (→ refund), and auto-accept/escalate stale disputes. Combined with the DLQ-refund path, every escrow exit ends in a recorded settlement.
 - **Correlation IDs** — generated at the gateway, propagated via `X-Correlation-ID` across the Java↔Python boundary and into dispatch metadata.
 
 ## Why the LLM is isolated to arbitration
