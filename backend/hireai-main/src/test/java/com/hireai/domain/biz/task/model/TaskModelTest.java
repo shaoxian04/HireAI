@@ -42,6 +42,14 @@ class TaskModelTest {
     }
 
     @Test
+    void submitLowercasesCategory() {
+        TaskModel task = TaskModel.submit(UUID.randomUUID(), "Translate doc", "Translate the report",
+                Money.of("25.00"), spec(), "Translation");
+
+        assertThat(task.category()).isEqualTo("translation");
+    }
+
+    @Test
     void submitRejectsBlankCategory() {
         assertThatThrownBy(() -> TaskModel.submit(UUID.randomUUID(), "title", "desc",
                 Money.of("5.00"), spec(), "  "))

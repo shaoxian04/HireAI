@@ -11,7 +11,9 @@ import java.util.Set;
  * (no eligible agent matched), TIMED_OUT, FAILED, SPEC_VIOLATION.
  * PENDING_REVIEW (validation passed) and SPEC_VIOLATION (validation failed → auto-refund)
  * are produced by the Module 4 validation gate in the agent callback.
- * CANCELLED is reserved. PENDING_REVIEW and DISPUTED are included in {@link #PENDING_ESCROW}.
+ * CANCELLED is produced by the re-match sweeper when capacity re-match attempts are exhausted
+ * (AWAITING_CAPACITY → CANCELLED, with a full escrow refund). PENDING_REVIEW and DISPUTED are
+ * included in {@link #PENDING_ESCROW}.
  */
 public enum TaskStatus {
     SUBMITTED,

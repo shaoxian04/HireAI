@@ -57,7 +57,7 @@ class DirectBookingAppServiceTest {
         UUID versionId = UUID.randomUUID();
         return new AgentVersionModel(
                 versionId, agentId, 1, AGENT_SPEC, List.of(CATEGORY),
-                "https://agent.example.com/hook", 120, Pricing.of(AGENT_PRICE),
+                "https://agent.example.com/hook", 120, 5, Pricing.of(AGENT_PRICE),
                 AgentVersionStatus.ACTIVE, Instant.now());
     }
 

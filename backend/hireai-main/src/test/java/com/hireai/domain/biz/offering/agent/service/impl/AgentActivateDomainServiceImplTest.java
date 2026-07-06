@@ -22,7 +22,7 @@ class AgentActivateDomainServiceImplTest {
     private AgentModel registered() {
         return AgentModel.register(UUID.randomUUID(), "Bot",
                 new OutputSpec(OutputFormat.JSON, null, null),
-                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE));
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5);
     }
 
     @Test

@@ -51,7 +51,7 @@ public class AgentRepositoryImpl implements AgentRepository {
                     version.id(), version.agentId(), version.versionNumber(),
                     outputSpecJsonMapper.toJson(version.outputSpec()),
                     version.capabilityCategories(), version.webhookUrl(),
-                    version.maxExecutionSeconds(), version.pricing().price(),
+                    version.maxExecutionSeconds(), version.maxConcurrent(), version.pricing().price(),
                     version.status().name(), version.createdAt()));
         }
         return agent;
@@ -68,7 +68,7 @@ public class AgentRepositoryImpl implements AgentRepository {
                 v.id(), v.agentId(), v.versionNumber(),
                 outputSpecJsonMapper.toJson(v.outputSpec()),
                 v.capabilityCategories(), v.webhookUrl(),
-                v.maxExecutionSeconds(), v.pricing().price(),
+                v.maxExecutionSeconds(), v.maxConcurrent(), v.pricing().price(),
                 v.status().name(), v.createdAt()));
         // 3. update the agent row (current_version_id now points at the new version when ACTIVE).
         agentJpa.save(new AgentDO(
@@ -114,7 +114,10 @@ public class AgentRepositoryImpl implements AgentRepository {
                 row.getAgentId(), row.getAgentVersionId(),
                 List.of(row.getCapabilityCategories()), row.getPrice(),
                 row.getWebhookUrl(), row.getMaxExecutionSeconds(), row.getReputationScore(),
-                row.getOutputSpec());
+                row.getOutputSpec(),
+                row.getMaxConcurrent() == null ? 5 : row.getMaxConcurrent(),
+                row.getInFlight() == null ? 0L : row.getInFlight(),
+                row.getSampleCount() == null ? 0L : row.getSampleCount());
     }
 
     private AgentModel toModel(AgentDO entity) {
@@ -134,7 +137,7 @@ public class AgentRepositoryImpl implements AgentRepository {
                 entity.getId(), entity.getAgentId(), entity.getVersionNumber(),
                 outputSpecJsonMapper.fromJson(entity.getOutputSpec()),
                 entity.getCapabilityCategories(), entity.getWebhookUrl(),
-                entity.getMaxExecutionSeconds(), Pricing.of(entity.getPrice()),
+                entity.getMaxExecutionSeconds(), entity.getMaxConcurrent(), Pricing.of(entity.getPrice()),
                 AgentVersionStatus.valueOf(entity.getStatus()), entity.getGmtCreate());
     }
 }

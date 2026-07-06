@@ -5,9 +5,16 @@
 > Supersedes the original single-winner `max(reputation)` matcher described in `docs/details/` / the routing code.
 > **Revised 2026-06-29:** lifecycle states aligned to the now-canonical `TaskStatus` enum / SAD §6.3 — the
 > no-eligible-candidate path uses the existing **`AWAITING_CAPACITY`** holding state (not a new state), and a
-> matched agent that goes silent is swept to **`TIMED_OUT`** (SAD §6.3 reliability). The proposed frontend
-> **`AWAITING_SELECTION`** shortlist state and the multi-factor scorer below are still pending (the live matcher
-> is still single-winner `max(reputation)`).
+> matched agent that goes silent is swept to **`TIMED_OUT`** (SAD §6.3 reliability).
+>
+> **✅ Phase 1 BUILT — 2026-07-05, PR #20.** The multi-factor weighted scorer + ε-greedy selection (§3, as
+> `RoutingMatchDomainService.rank`/`selectOne`), the candidate enrichment (§3.1–3.2, per-agent in-flight/sample
+> counts + builder-declared `max_concurrent`), the attempt-bounded `AWAITING_CAPACITY` re-match sweeper (§5,
+> 3×10s → `CANCELLED` + refund; pinned direct bookings retry only their version) and the `execution_deadline`
+> **`TIMED_OUT`** sweeper are all implemented — **the live matcher is no longer single-winner `max(reputation)`.**
+> The frontend **`AWAITING_SELECTION`** shortlist (§2, §5) + near-miss suggestions remain **Phase 2**. Built spec:
+> `docs/superpowers/specs/2026-07-04-matching-engine-design.md`; selection mechanics + rationale:
+> `docs/matching-selection-mechanics.md`.
 
 ## 1. Summary
 

@@ -129,4 +129,37 @@ class TaskModelTransitionsTest {
         assertThatThrownBy(() -> submitted().markFailed())
                 .isInstanceOf(DomainException.class);
     }
+
+    @Test
+    void markCancelledFromAwaitingCapacity() {
+        TaskModel awaiting = submitted().markAwaitingCapacity();
+        TaskModel cancelled = awaiting.markCancelled();
+
+        assertThat(cancelled.status()).isEqualTo(TaskStatus.CANCELLED);
+    }
+
+    @Test
+    void markCancelledRejectsOtherStatuses() {
+        assertThatThrownBy(() -> submitted().markCancelled())
+                .isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void assignAndQueueAcceptsAwaitingCapacity() {
+        UUID agentVersionId = UUID.randomUUID();
+        TaskModel awaiting = submitted().markAwaitingCapacity();
+        TaskModel queued = awaiting.assignAndQueue(agentVersionId);
+
+        assertThat(queued.status()).isEqualTo(TaskStatus.QUEUED);
+        assertThat(queued.agentVersionId()).isEqualTo(agentVersionId);
+    }
+
+    @Test
+    void markAwaitingCapacityIsIdempotentFromAwaitingCapacity() {
+        TaskModel awaiting = submitted().markAwaitingCapacity();
+        TaskModel again = awaiting.markAwaitingCapacity();
+
+        assertThat(again.status()).isEqualTo(TaskStatus.AWAITING_CAPACITY);
+        assertThat(again).isNotSameAs(awaiting);
+    }
 }

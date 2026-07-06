@@ -26,4 +26,24 @@ public interface TaskRepository {
     Optional<TaskModel> findByIdForUpdate(UUID taskId);
 
     List<TaskModel> findByClientId(UUID clientId, TaskQuery query);
+
+    /** Operational column write (unmapped on the entity — see plan Global Constraints). */
+    void stampExecutionDeadline(UUID taskId, java.time.Instant deadline);
+
+    /** Operational column write (unmapped on the entity). Pins the agent version for direct bookings. */
+    void pinAgentVersion(UUID taskId, UUID agentVersionId);
+
+    /*
+     * Operational reliability columns — unmapped on TaskDO by design; see V24.
+     */
+
+    List<UUID> findIdsAwaitingCapacity();
+
+    List<UUID> findIdsExecutionExpired(java.time.Instant now);
+
+    void incrementMatchAttempts(UUID taskId);
+
+    int matchAttempts(UUID taskId);
+
+    Optional<UUID> findPinnedAgentVersionId(UUID taskId);
 }

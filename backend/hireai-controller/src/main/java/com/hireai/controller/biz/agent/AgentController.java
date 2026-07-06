@@ -25,6 +25,7 @@ import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.utility.exception.DomainException;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -54,15 +55,18 @@ public class AgentController extends BaseController {
     private final AgentReadAppService readAppService;
     private final AgentStorefrontAppService storefrontAppService;
     private final CurrentUserProvider currentUser;
+    private final int defaultMaxConcurrent;
 
     public AgentController(AgentWriteAppService writeAppService,
                            AgentReadAppService readAppService,
                            AgentStorefrontAppService storefrontAppService,
-                           CurrentUserProvider currentUser) {
+                           CurrentUserProvider currentUser,
+                           @Value("${hireai.matching.default-max-concurrent:5}") int defaultMaxConcurrent) {
         this.writeAppService = writeAppService;
         this.readAppService = readAppService;
         this.storefrontAppService = storefrontAppService;
         this.currentUser = currentUser;
+        this.defaultMaxConcurrent = defaultMaxConcurrent;
     }
 
     @PostMapping
@@ -76,7 +80,8 @@ public class AgentController extends BaseController {
                 request.capabilityCategories(),
                 request.webhookUrl(),
                 request.maxExecutionSeconds(),
-                request.price());
+                request.price(),
+                request.maxConcurrent() == null ? defaultMaxConcurrent : request.maxConcurrent());
         UUID agentId = writeAppService.register(info);
         AgentDTO dto = AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId));
         return ok(dto);

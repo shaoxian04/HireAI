@@ -39,7 +39,16 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
                    v.webhook_url         AS webhook_url,
                    v.max_execution_seconds AS max_execution_seconds,
                    a.reputation_score    AS reputation_score,
-                   v.output_spec         AS output_spec
+                   v.output_spec         AS output_spec,
+                   v.max_concurrent      AS max_concurrent,
+                   (SELECT COUNT(*) FROM tasks t
+                      JOIN agent_versions av ON av.id = t.agent_version_id
+                     WHERE av.agent_id = a.id
+                       AND t.status IN ('QUEUED','EXECUTING'))            AS in_flight,
+                   (SELECT COUNT(*) FROM tasks t
+                      JOIN agent_versions av ON av.id = t.agent_version_id
+                     WHERE av.agent_id = a.id
+                       AND t.status IN ('RESOLVED','FAILED','TIMED_OUT','SPEC_VIOLATION')) AS sample_count
             FROM agent_versions v
             JOIN agents a ON a.id = v.agent_id AND a.current_version_id = v.id
             WHERE a.status = 'ACTIVE'
@@ -63,7 +72,16 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
                    v.webhook_url         AS webhook_url,
                    v.max_execution_seconds AS max_execution_seconds,
                    a.reputation_score    AS reputation_score,
-                   v.output_spec         AS output_spec
+                   v.output_spec         AS output_spec,
+                   v.max_concurrent      AS max_concurrent,
+                   (SELECT COUNT(*) FROM tasks t
+                      JOIN agent_versions av ON av.id = t.agent_version_id
+                     WHERE av.agent_id = a.id
+                       AND t.status IN ('QUEUED','EXECUTING'))            AS in_flight,
+                   (SELECT COUNT(*) FROM tasks t
+                      JOIN agent_versions av ON av.id = t.agent_version_id
+                     WHERE av.agent_id = a.id
+                       AND t.status IN ('RESOLVED','FAILED','TIMED_OUT','SPEC_VIOLATION')) AS sample_count
             FROM agent_versions v
             JOIN agents a ON a.id = v.agent_id AND a.current_version_id = v.id
             WHERE v.id = :versionId
@@ -93,5 +111,8 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
         int getMaxExecutionSeconds();
         BigDecimal getReputationScore();
         String getOutputSpec();
+        Integer getMaxConcurrent();
+        Long getInFlight();
+        Long getSampleCount();
     }
 }

@@ -183,7 +183,7 @@ class AgentControllerStorefrontTest {
         AgentVersionModel version = new AgentVersionModel(
                 UUID.randomUUID(), AGENT_ID, 2,
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
-                categories, "https://agent.example.com/hook", maxExec,
+                categories, "https://agent.example.com/hook", maxExec, 5,
                 Pricing.of(price), AgentVersionStatus.ACTIVE, Instant.now());
         return new AgentModel(AGENT_ID, OWNER_ID, "Test Agent",
                 AgentStatus.ACTIVE, version.id(), new BigDecimal("50.00"), version, Instant.now());

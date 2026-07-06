@@ -77,8 +77,10 @@ public final class TaskModel {
         requirePositive(budget);
         requirePresent(outputSpec, "output spec");
         requireText(category, "category");
+        // Lowercase to match AgentVersionModel.normaliseCategories' .trim().toLowerCase() idiom,
+        // so the routing re-filter's case-sensitive containment check (coversCategory) actually matches.
         return new TaskModel(UUID.randomUUID(), clientId, title.trim(), description.trim(),
-                budget, outputSpec, category.trim(), TaskStatus.SUBMITTED, null, null, Instant.now());
+                budget, outputSpec, category.trim().toLowerCase(), TaskStatus.SUBMITTED, null, null, Instant.now());
     }
 
     private static void requirePresent(Object value, String field) {
@@ -101,9 +103,9 @@ public final class TaskModel {
 
     // --- Routing & execution transitions (immutable: each returns a NEW TaskModel) ---
 
-    /** SUBMITTED → QUEUED: a matching agent version was selected. */
+    /** SUBMITTED/AWAITING_CAPACITY → QUEUED: a matching agent version was selected (re-match included). */
     public TaskModel assignAndQueue(UUID agentVersionId) {
-        requireStatus(TaskStatus.SUBMITTED, "assignAndQueue");
+        requireStatusIn("assignAndQueue", TaskStatus.SUBMITTED, TaskStatus.AWAITING_CAPACITY);
         requirePresent(agentVersionId, "agent version id");
         return copyWith(TaskStatus.QUEUED, agentVersionId, this.result);
     }
@@ -133,10 +135,16 @@ public final class TaskModel {
         return copyWith(TaskStatus.SPEC_VIOLATION, this.agentVersionId, this.result);
     }
 
-    /** SUBMITTED → AWAITING_CAPACITY: no eligible active agent was found. */
+    /** SUBMITTED → AWAITING_CAPACITY (idempotent from AWAITING_CAPACITY for re-match no-match passes). */
     public TaskModel markAwaitingCapacity() {
-        requireStatus(TaskStatus.SUBMITTED, "markAwaitingCapacity");
+        requireStatusIn("markAwaitingCapacity", TaskStatus.SUBMITTED, TaskStatus.AWAITING_CAPACITY);
         return copyWith(TaskStatus.AWAITING_CAPACITY, this.agentVersionId, this.result);
+    }
+
+    /** AWAITING_CAPACITY → CANCELLED: re-match attempts exhausted; the caller refunds escrow. */
+    public TaskModel markCancelled() {
+        requireStatus(TaskStatus.AWAITING_CAPACITY, "markCancelled");
+        return copyWith(TaskStatus.CANCELLED, this.agentVersionId, this.result);
     }
 
     /** QUEUED/EXECUTING → TIMED_OUT: the agent did not respond in time. */

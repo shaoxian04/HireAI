@@ -17,6 +17,7 @@ function RegisterAgent() {
   const [webhookUrl, setWebhookUrl] = useState("");
   const [maxExecutionSeconds, setMaxExecutionSeconds] = useState(60);
   const [price, setPrice] = useState(10);
+  const [maxConcurrent, setMaxConcurrent] = useState(5);
   const [outputSpec, setOutputSpec] = useState<OutputSpecDTO>(EMPTY_OUTPUT_SPEC);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -34,6 +35,7 @@ function RegisterAgent() {
       webhookUrl,
       maxExecutionSeconds,
       price,
+      maxConcurrent,
       outputSpec,
     };
     try {
@@ -86,7 +88,7 @@ function RegisterAgent() {
               required
             />
           </Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <Field label="Max execution seconds" htmlFor="maxExec">
               <Input
                 id="maxExec"
@@ -104,6 +106,17 @@ function RegisterAgent() {
                 min={0}
                 value={price}
                 onChange={(e) => setPrice(Number(e.target.value))}
+                required
+              />
+            </Field>
+            <Field label="Max parallel tasks" htmlFor="maxConcurrent">
+              <Input
+                id="maxConcurrent"
+                type="number"
+                min={1}
+                max={100}
+                value={maxConcurrent}
+                onChange={(e) => setMaxConcurrent(Number(e.target.value))}
                 required
               />
             </Field>

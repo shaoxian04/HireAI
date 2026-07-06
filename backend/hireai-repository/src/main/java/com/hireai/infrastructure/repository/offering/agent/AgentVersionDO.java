@@ -45,6 +45,9 @@ public class AgentVersionDO {
     @Column(name = "max_execution_seconds", nullable = false)
     private int maxExecutionSeconds;
 
+    @Column(name = "max_concurrent", nullable = false)
+    private int maxConcurrent;
+
     @Column(name = "price", nullable = false)
     private BigDecimal price;
 
@@ -59,7 +62,8 @@ public class AgentVersionDO {
 
     public AgentVersionDO(UUID id, UUID agentId, int versionNumber, String outputSpec,
                                  List<String> capabilityCategories, String webhookUrl,
-                                 int maxExecutionSeconds, BigDecimal price, String status, Instant gmtCreate) {
+                                 int maxExecutionSeconds, int maxConcurrent, BigDecimal price,
+                                 String status, Instant gmtCreate) {
         this.id = id;
         this.agentId = agentId;
         this.versionNumber = versionNumber;
@@ -67,6 +71,7 @@ public class AgentVersionDO {
         this.capabilityCategories = capabilityCategories;
         this.webhookUrl = webhookUrl;
         this.maxExecutionSeconds = maxExecutionSeconds;
+        this.maxConcurrent = maxConcurrent;
         this.price = price;
         this.status = status;
         this.gmtCreate = gmtCreate;
@@ -79,6 +84,7 @@ public class AgentVersionDO {
     public List<String> getCapabilityCategories() { return capabilityCategories; }
     public String getWebhookUrl() { return webhookUrl; }
     public int getMaxExecutionSeconds() { return maxExecutionSeconds; }
+    public int getMaxConcurrent() { return maxConcurrent; }
     public BigDecimal getPrice() { return price; }
     public String getStatus() { return status; }
     public Instant getGmtCreate() { return gmtCreate; }

@@ -12,5 +12,5 @@ import java.util.UUID;
  */
 public record AgentRegisterInfo(UUID ownerId, String name, OutputSpec outputSpec,
                                 List<String> capabilityCategories, String webhookUrl,
-                                int maxExecutionSeconds, BigDecimal price) {
+                                int maxExecutionSeconds, BigDecimal price, int maxConcurrent) {
 }

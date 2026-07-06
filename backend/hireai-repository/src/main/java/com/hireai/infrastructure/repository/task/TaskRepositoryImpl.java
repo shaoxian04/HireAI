@@ -12,6 +12,7 @@ import com.hireai.application.biz.task.OutputSpecJsonMapper;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -72,6 +73,41 @@ public class TaskRepositoryImpl implements TaskRepository {
                 .stream()
                 .map(this::toModel)
                 .toList();
+    }
+
+    @Override
+    public void stampExecutionDeadline(UUID taskId, Instant deadline) {
+        taskJpa.stampExecutionDeadline(taskId, deadline);
+    }
+
+    @Override
+    public void pinAgentVersion(UUID taskId, UUID agentVersionId) {
+        taskJpa.pinAgentVersion(taskId, agentVersionId);
+    }
+
+    @Override
+    public List<UUID> findIdsAwaitingCapacity() {
+        return taskJpa.findIdsAwaitingCapacity();
+    }
+
+    @Override
+    public List<UUID> findIdsExecutionExpired(Instant now) {
+        return taskJpa.findIdsExecutionExpired(now);
+    }
+
+    @Override
+    public void incrementMatchAttempts(UUID taskId) {
+        taskJpa.incrementMatchAttempts(taskId);
+    }
+
+    @Override
+    public int matchAttempts(UUID taskId) {
+        return taskJpa.findMatchAttempts(taskId);
+    }
+
+    @Override
+    public Optional<UUID> findPinnedAgentVersionId(UUID taskId) {
+        return taskJpa.findPinnedAgentVersionId(taskId);
     }
 
     private TaskModel toModel(TaskDO entity) {
