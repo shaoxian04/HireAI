@@ -1,7 +1,7 @@
 package com.hireai.domain.biz.task.routing.service;
 
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
-import com.hireai.domain.biz.task.info.TaskRoutingView;
+import com.hireai.domain.biz.task.info.MatchCriteria;
 import com.hireai.domain.biz.task.routing.info.ScoredCandidate;
 
 import java.util.List;
@@ -24,7 +24,7 @@ import java.util.UUID;
  */
 public interface RoutingMatchDomainService {
 
-    List<ScoredCandidate> rank(TaskRoutingView criteria, List<AgentCandidate> candidates);
+    List<ScoredCandidate> rank(MatchCriteria criteria, List<AgentCandidate> candidates);
 
-    Optional<UUID> selectOne(TaskRoutingView criteria, List<AgentCandidate> candidates);
+    Optional<UUID> selectOne(MatchCriteria criteria, List<AgentCandidate> candidates);
 }
