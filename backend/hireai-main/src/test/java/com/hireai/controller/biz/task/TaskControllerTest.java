@@ -1,6 +1,9 @@
 package com.hireai.controller.biz.task;
 
 import com.hireai.application.biz.task.DirectBookingAppService;
+import com.hireai.application.biz.task.MatchPreviewAppService;
+import com.hireai.application.biz.task.MatchPreviewAppService.AgentOption;
+import com.hireai.application.biz.task.MatchPreviewAppService.MatchPreview;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
@@ -25,7 +28,9 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -55,6 +60,7 @@ class TaskControllerTest {
     @MockBean CurrentUserProvider currentUserProvider;
     @MockBean DirectBookingAppService directBookingAppService;
     @MockBean TaskReviewAppService taskReviewAppService;
+    @MockBean MatchPreviewAppService matchPreviewAppService;
 
     @Test
     void returns200WithResultPayloadForOwningClient() throws Exception {
@@ -268,6 +274,46 @@ class TaskControllerTest {
         mockMvc.perform(post("/api/tasks/{id}/reject", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reasonCategory\":\"A_MISMATCH\",\"reason\":\"" + "x".repeat(501) + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    // ---- GET /api/tasks/match-preview ----
+
+    @Test
+    void matchPreviewReturns200WithBothLists() throws Exception {
+        UUID agentId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        when(matchPreviewAppService.preview(eq("summarisation"), any()))
+                .thenReturn(new MatchPreview(
+                        List.of(new AgentOption(agentId, versionId, "Alpha", "tag", "logo",
+                                new BigDecimal("12.00"), new BigDecimal("80.00"), true, "JSON",
+                                List.of("summarisation"))),
+                        List.of(new AgentOption(UUID.randomUUID(), UUID.randomUUID(), "Pricey", null, null,
+                                new BigDecimal("40.00"), new BigDecimal("90.00"), false, "JSON",
+                                List.of("summarisation")))));
+
+        mockMvc.perform(get("/api/tasks/match-preview")
+                        .param("category", "summarisation").param("budget", "30"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.shortlist[0].agentName").value("Alpha"))
+                .andExpect(jsonPath("$.data.shortlist[0].price").value(12.00))
+                .andExpect(jsonPath("$.data.shortlist[0].availability").value("AVAILABLE"))
+                .andExpect(jsonPath("$.data.nearMisses[0].agentName").value("Pricey"))
+                .andExpect(jsonPath("$.data.nearMisses[0].availability").value("BUSY"));
+    }
+
+    @Test
+    void matchPreviewBlankCategoryReturns400() throws Exception {
+        mockMvc.perform(get("/api/tasks/match-preview").param("category", "").param("budget", "30"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void matchPreviewNonPositiveBudgetReturns400() throws Exception {
+        mockMvc.perform(get("/api/tasks/match-preview").param("category", "summarisation").param("budget", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }

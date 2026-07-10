@@ -1,14 +1,17 @@
 package com.hireai.controller.biz.task;
 
 import com.hireai.application.biz.task.DirectBookingAppService;
+import com.hireai.application.biz.task.MatchPreviewAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
+import com.hireai.controller.biz.task.converter.MatchPreview2DTOConverter;
 import com.hireai.controller.biz.task.converter.TaskModel2DTOConverter;
 import com.hireai.controller.biz.task.converter.TaskResult2DTOConverter;
 import com.hireai.controller.biz.task.dto.DirectBookRequest;
+import com.hireai.controller.biz.task.dto.MatchPreviewDTO;
 import com.hireai.controller.biz.task.dto.RejectTaskRequest;
 import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
 import com.hireai.controller.biz.task.dto.TaskDTO;
@@ -19,6 +22,8 @@ import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.repository.TaskQuery;
 import com.hireai.domain.shared.model.Money;
+import com.hireai.utility.exception.DomainException;
+import com.hireai.utility.result.ResultCode;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -45,17 +51,20 @@ public class TaskController extends BaseController {
     private final CurrentUserProvider currentUser;
     private final DirectBookingAppService directBookingAppService;
     private final TaskReviewAppService reviewAppService;
+    private final MatchPreviewAppService matchPreviewAppService;
 
     public TaskController(TaskWriteAppService writeAppService,
                           TaskReadAppService readAppService,
                           CurrentUserProvider currentUser,
                           DirectBookingAppService directBookingAppService,
-                          TaskReviewAppService reviewAppService) {
+                          TaskReviewAppService reviewAppService,
+                          MatchPreviewAppService matchPreviewAppService) {
         this.writeAppService = writeAppService;
         this.readAppService = readAppService;
         this.currentUser = currentUser;
         this.directBookingAppService = directBookingAppService;
         this.reviewAppService = reviewAppService;
+        this.matchPreviewAppService = matchPreviewAppService;
     }
 
     @PostMapping
@@ -122,5 +131,17 @@ public class TaskController extends BaseController {
         UUID clientId = currentUser.currentUserId();
         reviewAppService.reject(id, clientId, request.reasonCategory(), request.reason());
         return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
+    }
+
+    @GetMapping("/match-preview")
+    public WebResult<MatchPreviewDTO> matchPreview(@RequestParam("category") String category,
+                                                   @RequestParam("budget") BigDecimal budget) {
+        if (category == null || category.isBlank()) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "category is required");
+        }
+        if (budget == null || budget.signum() <= 0) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "budget must be positive");
+        }
+        return ok(MatchPreview2DTOConverter.toDTO(matchPreviewAppService.preview(category, Money.of(budget))));
     }
 }
