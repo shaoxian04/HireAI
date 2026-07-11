@@ -81,7 +81,8 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   an agent; `builder/agents/[id]` — manage console (tabs: Storefront · Pricing & tags · Stats ·
   Reviews; image uploader via `apiUpload`).
 - `client/` — **Marketplace** (search/category/sort/hot strip/agent grid); `client/tasks` — task list +
-  wallet (resolution badges on each task row); `client/tasks/new` — auto-route submit; `client/tasks/[id]` — polls
+  wallet (resolution badges on each task row); `client/tasks/new` — match-preview **shortlist → pick → book** at the
+  agent's price (`ShortlistPanel`, in-budget top-5 + above-budget near-miss, `localStorage` draft); `client/tasks/[id]` — polls
   result; at `PENDING_REVIEW` renders the `ResultReviewBar` (accept / reject with an A/B/C reason), then on
   `RESOLVED` shows the settled summary. **Once the task is in a dispute** the execution pipeline is replaced by a
   `DisputeProgressPanel` — a reject→arbitrator→admin **timeline** with Accept-ruling / Appeal actions while a
@@ -109,7 +110,7 @@ directly so it doesn't bounce an authenticated user before context rehydrates.
 
 - `components/ui/` — `Button, Input, Select, Card, Field, Badge` (+ `statusColor(status)`); `Badge`
   takes a `status` prop and colours itself. `lib/outputSpecFields.tsx` is the shared output-spec sub-form.
-- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~59 tests). Auth-dependent tests
+- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~90 tests). Auth-dependent tests
   must seed **both** `hireai.token` and `hireai.auth`. `next build` and `npx tsc --noEmit` must stay clean.
 
 ## Run
