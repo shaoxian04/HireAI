@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import java.sql.Array;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -58,7 +59,7 @@ public class JdbcMatchPreviewQueryDao implements MatchPreviewQueryPort {
     @Override
     public List<ShortlistCandidateRow> findBookableCandidates(String category) {
         var params = new MapSqlParameterSource()
-                .addValue("category", category == null ? "" : category.trim().toLowerCase());
+                .addValue("category", category == null ? "" : category.trim().toLowerCase(Locale.ROOT));
         return jdbc.query(SQL, params, (rs, i) -> new ShortlistCandidateRow(
                 rs.getObject("agent_id", UUID.class),
                 rs.getObject("agent_version_id", UUID.class),

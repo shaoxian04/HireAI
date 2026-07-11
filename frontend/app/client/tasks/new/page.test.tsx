@@ -93,4 +93,17 @@ describe("submit task — shortlist flow", () => {
       expect(localStorage.getItem("hireai.taskDraft")).toContain("Summarise"),
     );
   });
+
+  it("restores a saved draft on mount without blanking it in localStorage", async () => {
+    localStorage.setItem(
+      "hireai.taskDraft",
+      JSON.stringify({ title: "Restored", description: "d", category: "summarisation", budget: 42 }),
+    );
+    renderPage();
+
+    await screen.findByDisplayValue("Restored");
+
+    const stored = JSON.parse(localStorage.getItem("hireai.taskDraft")!) as { title: string };
+    expect(stored.title).toBe("Restored");
+  });
 });

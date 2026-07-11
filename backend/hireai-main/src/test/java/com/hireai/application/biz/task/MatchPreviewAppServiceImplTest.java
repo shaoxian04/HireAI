@@ -36,6 +36,13 @@ class MatchPreviewAppServiceImplTest {
                 "{\"format\":\"JSON\"}", "JSON", "https://a/hook", 60, maxConc, inFlight, samples);
     }
 
+    private ShortlistCandidateRow row(UUID agentVersionId, String name, String price, String rep,
+            int maxConc, long inFlight, long samples) {
+        return new ShortlistCandidateRow(UUID.randomUUID(), agentVersionId, name, "tag", "logo",
+                new BigDecimal(price), new BigDecimal(rep), List.of("summarisation"),
+                "{\"format\":\"JSON\"}", "JSON", "https://a/hook", 60, maxConc, inFlight, samples);
+    }
+
     @Test
     void shortlistHoldsOnlyInBudgetRankedBest_nearMissHoldsOverBudget() {
         when(queryPort.findBookableCandidates(anyString())).thenReturn(List.of(
@@ -63,6 +70,20 @@ class MatchPreviewAppServiceImplTest {
 
         assertThat(preview.nearMisses()).extracting(AgentOption::agentName)
                 .containsExactly("P25", "P30", "P40");              // cheapest 3, ascending
+    }
+
+    @Test
+    void nearMissTiesOnPriceBreakByAgentVersionIdAscending() {
+        UUID higherId = new UUID(0L, 2L);
+        UUID lowerId = new UUID(0L, 1L);
+        when(queryPort.findBookableCandidates(anyString())).thenReturn(List.of(
+                row(higherId, "Second", "40.00", "50.00", 5, 0, 0),
+                row(lowerId, "First", "40.00", "50.00", 5, 0, 0)));
+
+        MatchPreview preview = service().preview("summarisation", Money.of("20.00"));
+
+        assertThat(preview.nearMisses()).extracting(AgentOption::agentVersionId)
+                .containsExactly(lowerId, higherId);
     }
 
     @Test

@@ -160,8 +160,14 @@ Row projection `ShortlistCandidateRow` carries every field above (display + scor
 
 ### 6.2 Application read service — `MatchPreviewAppService`
 ```
-MatchPreview preview(String category, Money budget, UUID clientId)
+MatchPreview preview(String category, Money budget)
 ```
+No `clientId` parameter: the preview is a public-catalogue read (same bookable-agent projection
+storefront browsing already exposes) with no owner-scoped data to filter by — there is no task, no
+wallet, nothing belonging to the caller. Invariant #5 (server-side identity) is not engaged because
+nothing here is owner-scoped; the endpoint still requires an authenticated caller (§6.3), just not
+their identity.
+
 Impl (`@Transactional(readOnly = true)`):
 1. `rows = queryPort.findBookableCandidates(category)`.
 2. Map each row → a full `AgentCandidate` (for scoring) and keep the row for display, keyed by
@@ -203,10 +209,11 @@ Add to `TaskController`:
 ```
 GET /api/tasks/match-preview?category={c}&budget={b}  → WebResult<MatchPreviewDTO>
 ```
-Thin: validate `category` non-blank and `budget` positive; resolve `clientId` from
-`CurrentUserProvider` (never from the query); call the read service; wrap. Client-authenticated
-(same security posture as `POST /api/tasks`). `category`/`budget` in the query string are
-non-sensitive (no personal data).
+Thin: validate `category` non-blank and `budget` positive; call the read service directly (no
+`clientId` to resolve — see §6.2); wrap. Behind `anyRequest().authenticated()`, the same posture as
+every other authenticated endpoint — but no `CurrentUserProvider` lookup is needed, since the result
+is not scoped to the caller. `category`/`budget` in the query string are non-sensitive (no personal
+data).
 
 ### 6.4 DTOs
 ```
@@ -288,7 +295,9 @@ source-compatible.
 **Controller (slice / integration):**
 12. `GET /api/tasks/match-preview` returns `{shortlist, nearMisses}` for a valid client + params.
 13. Blank category or non-positive budget → 400.
-14. `clientId` is taken from the principal, not the query string.
+14. No `clientId` is resolved or required: the preview is a public-catalogue read behind
+    `anyRequest().authenticated()` only — any authenticated caller gets the same result for the same
+    `category`/`budget`, regardless of identity (nothing is owner-scoped).
 
 **Frontend (vitest):**
 15. Shortlist zone renders in-budget cards in server order; each has a working **Select**.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
@@ -29,6 +29,7 @@ function SubmitTask() {
   const [selected, setSelected] = useState<AgentOptionDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const firstPersist = useRef(true);
 
   // Restore the draft once on mount so a reload / re-search never loses the client's work.
   useEffect(() => {
@@ -45,9 +46,15 @@ function SubmitTask() {
     }
   }, []);
 
-  // Persist the draft whenever a field changes.
+  // Persist the draft whenever a field changes. Skip the first run: it fires on mount
+  // alongside the restore effect above, and would otherwise overwrite the just-restored
+  // draft with the blank initial state before it commits.
   useEffect(() => {
     if (typeof localStorage === "undefined") return;
+    if (firstPersist.current) {
+      firstPersist.current = false;
+      return;
+    }
     const draft: Draft = { title, description, category, budget };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
   }, [title, description, category, budget]);

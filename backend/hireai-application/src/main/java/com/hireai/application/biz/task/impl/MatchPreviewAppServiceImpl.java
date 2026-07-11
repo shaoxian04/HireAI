@@ -50,7 +50,8 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
         BigDecimal budgetValue = budget.value();
         List<AgentOption> nearMisses = rows.stream()
                 .filter(r -> r.price().compareTo(budgetValue) > 0)
-                .sorted(Comparator.comparing(ShortlistCandidateRow::price))
+                .sorted(Comparator.comparing(ShortlistCandidateRow::price)
+                        .thenComparing(ShortlistCandidateRow::agentVersionId))
                 .limit(NEAR_MISS_LIMIT)
                 .map(this::toOption)
                 .toList();
