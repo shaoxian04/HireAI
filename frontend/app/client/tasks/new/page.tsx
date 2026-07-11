@@ -37,6 +37,7 @@ function SubmitTask() {
     if (!raw) return;
     try {
       const d = JSON.parse(raw) as Draft;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- SSR-safe client-only hydration from localStorage; lazy useState would read localStorage during SSR and cause hydration mismatch
       setTitle(d.title ?? "");
       setDescription(d.description ?? "");
       setCategory(d.category ?? "");
