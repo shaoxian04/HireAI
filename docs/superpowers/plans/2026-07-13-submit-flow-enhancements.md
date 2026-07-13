@@ -846,11 +846,9 @@ describe("ShortlistPanel", () => {
   });
 
   it("renders the agent's profile picture when logoUrl is present", () => {
-    render(<ShortlistPanel open budget={30} nearMisses={[]} onSelect={noop} onClose={noop}
+    const { container } = render(<ShortlistPanel open budget={30} nearMisses={[]} onSelect={noop} onClose={noop}
       shortlist={[opt({ agentName: "Logo Co", logoUrl: "https://cdn.test/l.png" })]} />);
-    const img = screen.getByRole("presentation", { hidden: true }) as HTMLImageElement | null;
-    // Fallback assertion: query the <img> directly (alt="" → presentation role).
-    expect(document.querySelector('img[src="https://cdn.test/l.png"]')).toBeTruthy();
+    expect(container.querySelector('img[src="https://cdn.test/l.png"]')).toBeTruthy();
   });
 
   it("shows the empty state when both lists are empty", () => {
