@@ -14,6 +14,14 @@ export function Modal({ open, onClose, ariaLabel, children }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
 
+  // Keep the latest onClose in a ref so the open/close effect below is keyed ONLY on `open`.
+  // Otherwise an inline `onClose` (new identity each parent render) would tear down and rebuild
+  // the trap while the modal is open — briefly dropping the focus trap and mis-restoring focus.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
     restoreRef.current = document.activeElement as HTMLElement | null;
@@ -23,7 +31,7 @@ export function Modal({ open, onClose, ariaLabel, children }: ModalProps) {
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab") return;
@@ -48,14 +56,14 @@ export function Modal({ open, onClose, ariaLabel, children }: ModalProps) {
       document.body.style.overflow = prevOverflow;
       restoreRef.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-canvas/70 p-4 backdrop-blur-sm sm:p-8"
-      onClick={onClose}
+      onClick={() => onCloseRef.current()}
     >
       <div
         ref={dialogRef}

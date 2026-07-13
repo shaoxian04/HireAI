@@ -35,4 +35,53 @@ describe("Modal", () => {
     rerender(<Modal open={false} onClose={() => {}} ariaLabel="P"><p>x</p></Modal>);
     expect(document.body.style.overflow).toBe("");
   });
+
+  it("traps Tab focus within the dialog", () => {
+    render(
+      <Modal open onClose={() => {}} ariaLabel="Trap">
+        <button>first</button>
+        <button>last</button>
+      </Modal>,
+    );
+    const first = screen.getByRole("button", { name: "first" });
+    const last = screen.getByRole("button", { name: "last" });
+    last.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(first);
+    first.focus();
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(last);
+  });
+
+  it("restores focus to the trigger on close", () => {
+    function Harness({ open }: { open: boolean }) {
+      return (
+        <>
+          <button data-testid="trigger">open</button>
+          <Modal open={open} onClose={() => {}} ariaLabel="Restore"><button>inside</button></Modal>
+        </>
+      );
+    }
+    const { rerender } = render(<Harness open={false} />);
+    const trigger = screen.getByTestId("trigger");
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+    rerender(<Harness open />);
+    expect(document.activeElement).not.toBe(trigger);
+    rerender(<Harness open={false} />);
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("does not rebuild the focus trap when onClose identity changes while open", () => {
+    const { rerender } = render(
+      <Modal open onClose={() => {}} ariaLabel="Stable"><button>only</button></Modal>,
+    );
+    const only = screen.getByRole("button", { name: "only" });
+    only.focus();
+    // Parent re-renders with a brand-new onClose reference (the inline-arrow pattern).
+    rerender(<Modal open onClose={() => {}} ariaLabel="Stable"><button>only</button></Modal>);
+    // Keyed on [open] only, the effect does not re-run, so focus stays where the user left it.
+    // (With the old [open, onClose] deps the rerun would steal focus back to the dialog.)
+    expect(document.activeElement).toBe(only);
+  });
 });
