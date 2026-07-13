@@ -36,11 +36,18 @@ function renderPage() {
   return render(<AuthProvider><SubmitTaskPage /></AuthProvider>);
 }
 
-function fillForm(budget: string) {
+function fillBasics(budget: string) {
   fireEvent.change(screen.getByLabelText(/title/i), { target: { value: "Summarise" } });
   fireEvent.change(screen.getByLabelText(/description/i), { target: { value: "the report" } });
-  fireEvent.change(screen.getByLabelText(/category/i), { target: { value: "summarisation" } });
   fireEvent.change(screen.getByLabelText(/budget/i), { target: { value: budget } });
+}
+
+// The default msw categories handler returns "summarisation" + "translation".
+// CategoryCombobox commits an option on mousedown (preventDefault, so blur can't fire first) —
+// see components/CategoryCombobox.test.tsx — so selection here must fire mousedown, not click.
+async function pickCategory() {
+  fireEvent.change(screen.getByLabelText(/category/i), { target: { value: "summar" } });
+  fireEvent.mouseDown(await screen.findByRole("option", { name: /summarisation/i }));
 }
 
 describe("submit task — shortlist flow", () => {
@@ -54,9 +61,10 @@ describe("submit task — shortlist flow", () => {
       }),
     );
     renderPage();
-    fillForm("30");
+    fillBasics("30");
+    await pickCategory();
     fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
-    await screen.findByText("Alpha");
+    await screen.findByRole("dialog", { name: /pick your agent/i });
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     await screen.findByText(/confirm booking/i);
     fireEvent.click(screen.getByRole("button", { name: /confirm & book/i }));
@@ -75,10 +83,14 @@ describe("submit task — shortlist flow", () => {
       }),
     );
     renderPage();
-    fillForm("20");
+    fillBasics("20");
+    await pickCategory();
     fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
-    await screen.findByText("Pricey");
-    fireEvent.click(screen.getByRole("button", { name: /above budget/i }));
+    await screen.findByRole("dialog", { name: /pick your agent/i });
+    // The near-miss disclosure is a native <summary> — not exposed with role="button" here — so
+    // open it by its visible text, then select the near-miss option by its button label.
+    fireEvent.click(screen.getByText(/above your budget/i));
+    fireEvent.click(screen.getByRole("button", { name: /pays 40 cr/i }));
     await screen.findByText(/confirm booking/i);
     fireEvent.click(screen.getByRole("button", { name: /confirm & book/i }));
     await waitFor(() => expect(captured).not.toBeNull());
@@ -86,9 +98,17 @@ describe("submit task — shortlist flow", () => {
     expect(captured!.budget).toBe(40);
   });
 
+  it("keeps Find agents disabled until a real category is selected", async () => {
+    renderPage();
+    fillBasics("30");
+    expect(screen.getByRole("button", { name: /find agents/i })).toBeDisabled();
+    await pickCategory();
+    expect(screen.getByRole("button", { name: /find agents/i })).toBeEnabled();
+  });
+
   it("persists the form draft to localStorage", async () => {
     renderPage();
-    fillForm("25");
+    fillBasics("25");
     await waitFor(() =>
       expect(localStorage.getItem("hireai.taskDraft")).toContain("Summarise"),
     );
@@ -100,9 +120,7 @@ describe("submit task — shortlist flow", () => {
       JSON.stringify({ title: "Restored", description: "d", category: "summarisation", budget: 42 }),
     );
     renderPage();
-
     await screen.findByDisplayValue("Restored");
-
     const stored = JSON.parse(localStorage.getItem("hireai.taskDraft")!) as { title: string };
     expect(stored.title).toBe("Restored");
   });

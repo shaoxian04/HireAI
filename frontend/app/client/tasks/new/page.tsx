@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { ShortlistPanel } from "@/components/ShortlistPanel";
+import { CategoryCombobox } from "@/components/CategoryCombobox";
 import type { AgentOptionDTO, DirectBookRequest, MatchPreviewDTO, TaskDTO } from "@/lib/types";
 import { Button, Card, Field, Input } from "@/components/ui";
 
@@ -26,6 +27,7 @@ function SubmitTask() {
   const [category, setCategory] = useState("");
   const [budget, setBudget] = useState(30);
   const [preview, setPreview] = useState<MatchPreviewDTO | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [selected, setSelected] = useState<AgentOptionDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -70,6 +72,7 @@ function SubmitTask() {
         `/tasks/match-preview?category=${encodeURIComponent(category)}&budget=${budget}`,
       );
       setPreview(result);
+      setPreviewOpen(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Search failed");
     } finally {
@@ -133,13 +136,7 @@ function SubmitTask() {
             />
           </Field>
           <Field label="Category" htmlFor="category">
-            <Input
-              id="category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="must match an active agent's category"
-              required
-            />
+            <CategoryCombobox id="category" value={category} onChange={setCategory} />
           </Field>
           <Field label="Budget (credits)" htmlFor="budget">
             <Input
@@ -151,7 +148,7 @@ function SubmitTask() {
               required
             />
           </Field>
-          <Button type="submit" disabled={loading} className="w-full">
+          <Button type="submit" disabled={loading || !category} className="w-full">
             {loading ? "Searching…" : "Find agents ▸"}
           </Button>
         </form>
@@ -166,13 +163,24 @@ function SubmitTask() {
         </p>
       )}
 
-      {preview && !selected && (
+      {preview && (
         <ShortlistPanel
+          open={previewOpen && !selected}
           shortlist={preview.shortlist}
           nearMisses={preview.nearMisses}
           budget={budget}
-          onSelect={setSelected}
+          onSelect={(o) => {
+            setSelected(o);
+            setPreviewOpen(false);
+          }}
+          onClose={() => setPreviewOpen(false)}
         />
+      )}
+
+      {preview && !selected && !previewOpen && (
+        <Button variant="secondary" onClick={() => setPreviewOpen(true)} className="w-full">
+          Show {preview.shortlist.length + preview.nearMisses.length} matched agents ▸
+        </Button>
       )}
 
       {selected && (
