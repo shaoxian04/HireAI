@@ -7,4 +7,6 @@ import java.util.UUID;
 
 public interface ValidationReportJpaRepository extends JpaRepository<ValidationReportDO, UUID> {
     Optional<ValidationReportDO> findByTaskIdAndAttemptNo(UUID taskId, int attemptNo);
+
+    Optional<ValidationReportDO> findFirstByTaskIdOrderByAttemptNoDesc(UUID taskId);
 }

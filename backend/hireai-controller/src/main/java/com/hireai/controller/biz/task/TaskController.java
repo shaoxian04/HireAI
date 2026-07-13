@@ -1,5 +1,6 @@
 package com.hireai.controller.biz.task;
 
+import com.hireai.application.biz.adjudication.validation.ValidationReadAppService;
 import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.MatchPreviewAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
@@ -7,6 +8,8 @@ import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
+import com.hireai.controller.biz.adjudication.ValidationReport2DTOConverter;
+import com.hireai.controller.biz.adjudication.dto.ValidationReportDTO;
 import com.hireai.controller.biz.task.converter.MatchPreview2DTOConverter;
 import com.hireai.controller.biz.task.converter.TaskModel2DTOConverter;
 import com.hireai.controller.biz.task.converter.TaskResult2DTOConverter;
@@ -17,6 +20,7 @@ import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
 import com.hireai.controller.biz.task.dto.TaskDTO;
 import com.hireai.controller.biz.task.dto.TaskResultDTO;
 import com.hireai.controller.config.CurrentUserProvider;
+import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -52,19 +56,22 @@ public class TaskController extends BaseController {
     private final DirectBookingAppService directBookingAppService;
     private final TaskReviewAppService reviewAppService;
     private final MatchPreviewAppService matchPreviewAppService;
+    private final ValidationReadAppService validationReadAppService;
 
     public TaskController(TaskWriteAppService writeAppService,
                           TaskReadAppService readAppService,
                           CurrentUserProvider currentUser,
                           DirectBookingAppService directBookingAppService,
                           TaskReviewAppService reviewAppService,
-                          MatchPreviewAppService matchPreviewAppService) {
+                          MatchPreviewAppService matchPreviewAppService,
+                          ValidationReadAppService validationReadAppService) {
         this.writeAppService = writeAppService;
         this.readAppService = readAppService;
         this.currentUser = currentUser;
         this.directBookingAppService = directBookingAppService;
         this.reviewAppService = reviewAppService;
         this.matchPreviewAppService = matchPreviewAppService;
+        this.validationReadAppService = validationReadAppService;
     }
 
     @PostMapping
@@ -104,6 +111,16 @@ public class TaskController extends BaseController {
         UUID clientId = currentUser.currentUserId();
         TaskResultDTO dto = TaskResult2DTOConverter.toDTO(readAppService.getResult(taskId, clientId));
         return ok(dto);
+    }
+
+    @GetMapping("/{id}/validation")
+    public WebResult<ValidationReportDTO> getValidation(@PathVariable("id") UUID id) {
+        UUID clientId = currentUser.currentUserId();
+        readAppService.getForClient(id, clientId); // ownership guard (Hard Invariant #5)
+        ValidationReportModel report = validationReadAppService.latestForTask(id)
+                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
+                        "No validation report for task: " + id));
+        return ok(ValidationReport2DTOConverter.toDTO(report));
     }
 
     @GetMapping

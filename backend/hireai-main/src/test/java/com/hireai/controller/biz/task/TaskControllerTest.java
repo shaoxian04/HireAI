@@ -1,5 +1,6 @@
 package com.hireai.controller.biz.task;
 
+import com.hireai.application.biz.adjudication.validation.ValidationReadAppService;
 import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.MatchPreviewAppService;
 import com.hireai.application.biz.task.MatchPreviewAppService.AgentOption;
@@ -10,6 +11,8 @@ import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
+import com.hireai.domain.biz.adjudication.model.CheckResult;
+import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskStatus;
@@ -31,6 +34,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -61,6 +65,7 @@ class TaskControllerTest {
     @MockBean DirectBookingAppService directBookingAppService;
     @MockBean TaskReviewAppService taskReviewAppService;
     @MockBean MatchPreviewAppService matchPreviewAppService;
+    @MockBean ValidationReadAppService validationReadAppService;
 
     @Test
     void returns200WithResultPayloadForOwningClient() throws Exception {
@@ -316,5 +321,51 @@ class TaskControllerTest {
         mockMvc.perform(get("/api/tasks/match-preview").param("category", "summarisation").param("budget", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    // ---- GET /api/tasks/{id}/validation ----
+
+    @Test
+    void validationReturns200WithFailedChecksForOwner() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(clientId);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(null);
+        when(validationReadAppService.latestForTask(eq(taskId)))
+                .thenReturn(Optional.of(ValidationReportModel.of(taskId, 1,
+                        List.of(new CheckResult("format", false, "expected FILE, got none")))));
+
+        mockMvc.perform(get("/api/tasks/{id}/validation", taskId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.verdict").value("FAIL"))
+                .andExpect(jsonPath("$.data.checks[0].rule").value("format"))
+                .andExpect(jsonPath("$.data.checks[0].passed").value(false))
+                .andExpect(jsonPath("$.data.checks[0].detail").value("expected FILE, got none"));
+    }
+
+    @Test
+    void validationReturns404WhenNoReport() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(clientId);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(null);
+        when(validationReadAppService.latestForTask(eq(taskId))).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/tasks/{id}/validation", taskId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
+
+    @Test
+    void validationReturns404ForNonOwner() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(clientId);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId)))
+                .thenThrow(new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
+
+        mockMvc.perform(get("/api/tasks/{id}/validation", taskId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
     }
 }

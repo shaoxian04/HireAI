@@ -34,6 +34,11 @@ public class ValidationReportRepositoryImpl implements ValidationReportRepositor
         return jpa.findByTaskIdAndAttemptNo(taskId, attemptNo).map(this::toModel);
     }
 
+    @Override
+    public Optional<ValidationReportModel> findLatestByTaskId(UUID taskId) {
+        return jpa.findFirstByTaskIdOrderByAttemptNoDesc(taskId).map(this::toModel);
+    }
+
     private ValidationReportModel toModel(ValidationReportDO d) {
         return ValidationReportModel.rehydrate(d.getId(), d.getTaskId(), d.getAttemptNo(),
                 Verdict.valueOf(d.getVerdict()), readChecks(d.getChecks()));
