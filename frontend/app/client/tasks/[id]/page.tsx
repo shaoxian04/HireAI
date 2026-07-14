@@ -7,7 +7,8 @@ import { api, ApiError, isPendingError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { StatusTrack } from "@/components/StatusTrack";
-import type { TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO } from "@/lib/types";
+import { TaskFailurePanel } from "@/components/TaskFailurePanel";
+import type { TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO, ValidationReportDTO } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
 import { ResultReviewBar } from "@/components/ResultReviewBar";
 import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
@@ -35,6 +36,14 @@ const RESULT_READY: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
   "RESOLVED",
 ]);
 
+/** Terminal auto-refund failures that get a plain-English panel. */
+const TERMINAL_FAILURE: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
+  "SPEC_VIOLATION",
+  "TIMED_OUT",
+  "FAILED",
+  "CANCELLED",
+]);
+
 /** Pretty-print a JSON string; fall back to the raw text if it does not parse. */
 function prettyJson(raw: string): string {
   try {
@@ -51,6 +60,7 @@ function TaskDetail() {
   const [result, setResult] = useState<TaskResultDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<DisputeOutcomeDTO | null>(null);
+  const [validation, setValidation] = useState<ValidationReportDTO | null>(null);
 
   // Keep the latest result in a ref so the interval closure can read it without re-subscribing.
   const resultRef = useRef<TaskResultDTO | null>(null);
@@ -75,6 +85,17 @@ function TaskDetail() {
       });
     return () => { cancelled = true; };
   }, [task]);
+
+  // On a spec-violation, fetch the real failing-check reason for the "show what failed" drawer.
+  // Best-effort: a 404 (no report) or any error just leaves the drawer off.
+  useEffect(() => {
+    if (task?.status !== "SPEC_VIOLATION") return;
+    let cancelled = false;
+    api<ValidationReportDTO>(`/tasks/${id}/validation`)
+      .then((v) => { if (!cancelled) setValidation(v); })
+      .catch(() => { /* no report — panel still renders without the drawer */ });
+    return () => { cancelled = true; };
+  }, [task?.status, id]);
 
   // While the task is under dispute, poll the outcome so the client sees it move live through
   // ARBITRATING -> RULED (accept/appeal) -> ESCALATED -> RESOLVED.
@@ -225,6 +246,10 @@ function TaskDetail() {
               your task as soon as one is free.
             </p>
           </section>
+        )}
+
+        {TERMINAL_FAILURE.has(task.status) && (
+          <TaskFailurePanel status={task.status} budget={task.budget} detail={validation} />
         )}
 
         {inFlight && (
