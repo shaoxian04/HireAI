@@ -84,4 +84,19 @@ describe("Modal", () => {
     // (With the old [open, onClose] deps the rerun would steal focus back to the dialog.)
     expect(document.activeElement).toBe(only);
   });
+
+  it("includes textarea in the focus trap (expanded selector)", () => {
+    render(
+      <Modal open onClose={() => {}} ariaLabel="Wide">
+        <button>first</button>
+        <textarea aria-label="notes" />
+      </Modal>,
+    );
+    const first = screen.getByRole("button", { name: "first" });
+    const notes = screen.getByLabelText("notes");
+    notes.focus();
+    // textarea is the last trap-eligible node; Tab must wrap back to the first, not escape.
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(first);
+  });
 });
