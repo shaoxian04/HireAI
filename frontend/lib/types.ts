@@ -425,3 +425,16 @@ export interface MatchPreviewDTO {
   shortlist: AgentOptionDTO[];
   nearMisses: AgentOptionDTO[];
 }
+
+// ── Validation report (spec-violation reason) ───────────────────────────────
+
+export interface ValidationCheckDTO {
+  rule: string;
+  passed: boolean;
+  detail: string | null;
+}
+
+export interface ValidationReportDTO {
+  verdict: "PASS" | "FAIL";
+  checks: ValidationCheckDTO[];
+}
