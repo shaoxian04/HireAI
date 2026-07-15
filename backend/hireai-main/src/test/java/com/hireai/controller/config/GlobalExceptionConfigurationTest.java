@@ -46,4 +46,24 @@ class GlobalExceptionConfigurationTest {
         assertThat(insufficient.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(ruleViolation.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     }
+
+    @Test
+    void idempotencyConflictMapsTo409() {
+        ResponseEntity<WebResult<Void>> response =
+                advice.handleDomain(new DomainException(ResultCode.IDEMPOTENCY_CONFLICT, "duplicate"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().code()).isEqualTo("IDEMPOTENCY_CONFLICT");
+    }
+
+    @Test
+    void spendCapExceededMapsTo409() {
+        ResponseEntity<WebResult<Void>> response =
+                advice.handleDomain(new DomainException(ResultCode.SPEND_CAP_EXCEEDED, "cap hit"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().code()).isEqualTo("SPEND_CAP_EXCEEDED");
+    }
 }
