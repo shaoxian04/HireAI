@@ -13,4 +13,18 @@
     <artifactId>hireai-utility</artifactId>
     <name>hireai-utility</name>
     <description>Cross-cutting primitives shared by every layer (result codes, shared helpers). No internal or framework dependencies.</description>
+
+    <dependencies>
+        <!-- Test dependencies (minimal, no Spring) -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>
