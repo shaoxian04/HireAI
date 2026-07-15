@@ -15,5 +15,5 @@ import java.util.UUID;
  * must be used in the dispatch payload, not re-read from the agent version.
  */
 public record TaskRoutingView(UUID taskId, String category, BigDecimal budget, String status,
-                              String outputSpecJson) {
+                              String outputSpecJson) implements MatchCriteria {
 }

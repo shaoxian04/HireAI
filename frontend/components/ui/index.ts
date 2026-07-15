@@ -4,3 +4,4 @@ export { Select } from "./Select";
 export { Card } from "./Card";
 export { Field } from "./Field";
 export { Badge, statusColor } from "./Badge";
+export { Modal } from "./Modal";

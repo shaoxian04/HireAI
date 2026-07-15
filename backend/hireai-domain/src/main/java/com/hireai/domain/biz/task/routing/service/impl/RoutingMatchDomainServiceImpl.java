@@ -1,7 +1,7 @@
 package com.hireai.domain.biz.task.routing.service.impl;
 
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
-import com.hireai.domain.biz.task.info.TaskRoutingView;
+import com.hireai.domain.biz.task.info.MatchCriteria;
 import com.hireai.domain.biz.task.routing.info.ScoredCandidate;
 import com.hireai.domain.biz.task.routing.service.MatchingPolicy;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
@@ -30,7 +30,7 @@ public class RoutingMatchDomainServiceImpl implements RoutingMatchDomainService 
     }
 
     @Override
-    public List<ScoredCandidate> rank(TaskRoutingView criteria, List<AgentCandidate> candidates) {
+    public List<ScoredCandidate> rank(MatchCriteria criteria, List<AgentCandidate> candidates) {
         if (criteria == null || candidates == null || candidates.isEmpty()) {
             return List.of();
         }
@@ -45,7 +45,7 @@ public class RoutingMatchDomainServiceImpl implements RoutingMatchDomainService 
     }
 
     @Override
-    public Optional<UUID> selectOne(TaskRoutingView criteria, List<AgentCandidate> candidates) {
+    public Optional<UUID> selectOne(MatchCriteria criteria, List<AgentCandidate> candidates) {
         List<ScoredCandidate> ranked = rank(criteria, candidates);
         if (ranked.isEmpty()) {
             return Optional.empty();
@@ -56,7 +56,7 @@ public class RoutingMatchDomainServiceImpl implements RoutingMatchDomainService 
         return Optional.of(ranked.get(0).candidate().agentVersionId());
     }
 
-    private double score(AgentCandidate c, TaskRoutingView criteria) {
+    private double score(AgentCandidate c, MatchCriteria criteria) {
         double reputation = c.reputationScore() == null
                 ? 0.0 : clamp(c.reputationScore().doubleValue() / 100.0);
         double budget = criteria.budget().doubleValue();
@@ -102,7 +102,7 @@ public class RoutingMatchDomainServiceImpl implements RoutingMatchDomainService 
                 && candidate.capabilityCategories().contains(category);
     }
 
-    private boolean withinBudget(AgentCandidate candidate, TaskRoutingView criteria) {
+    private boolean withinBudget(AgentCandidate candidate, MatchCriteria criteria) {
         return criteria.budget() != null
                 && candidate.price() != null
                 && candidate.price().compareTo(criteria.budget()) <= 0;

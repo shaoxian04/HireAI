@@ -81,9 +81,14 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   an agent; `builder/agents/[id]` — manage console (tabs: Storefront · Pricing & tags · Stats ·
   Reviews; image uploader via `apiUpload`).
 - `client/` — **Marketplace** (search/category/sort/hot strip/agent grid); `client/tasks` — task list +
-  wallet (resolution badges on each task row); `client/tasks/new` — auto-route submit; `client/tasks/[id]` — polls
+  wallet (resolution badges on each task row); `client/tasks/new` — **searchable category picker** (`CategoryCombobox` from `/catalogue/categories`, strict —
+  Find-agents gated on a real category) → match-preview **shortlist → pick → book** at the
+  agent's price (the `ShortlistPanel` opens in a `Modal` popout of ranked agent cards: profile avatars,
+  best-match highlight, star ratings, above-budget near-miss drawer; `localStorage` draft); `client/tasks/[id]` — polls
   result; at `PENDING_REVIEW` renders the `ResultReviewBar` (accept / reject with an A/B/C reason), then on
-  `RESOLVED` shows the settled summary. **Once the task is in a dispute** the execution pipeline is replaced by a
+  `RESOLVED` shows the settled summary. On a **terminal failure** (`SPEC_VIOLATION`/`TIMED_OUT`/`FAILED`/`CANCELLED`)
+  it renders a `TaskFailurePanel` (plain-English cause + `{budget} cr refunded` line; the spec-violation panel
+  fetches the real failing-check reason from `GET /api/tasks/{id}/validation`). **Once the task is in a dispute** the execution pipeline is replaced by a
   `DisputeProgressPanel` — a reject→arbitrator→admin **timeline** with Accept-ruling / Appeal actions while a
   proposed ruling awaits; it persists after `RESOLVED`. `client/disputes` — the client's dispute list ("awaiting
   your decision" `RULED` rows first); `client/agents/[id]` — agent storefront; `client/agents/[id]/book` —
@@ -107,9 +112,12 @@ directly so it doesn't bounce an authenticated user before context rehydrates.
 
 ## UI kit & tests
 
-- `components/ui/` — `Button, Input, Select, Card, Field, Badge` (+ `statusColor(status)`); `Badge`
-  takes a `status` prop and colours itself. `lib/outputSpecFields.tsx` is the shared output-spec sub-form.
-- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~59 tests). Auth-dependent tests
+- `components/ui/` — `Button, Input, Select, Card, Field, Badge, Modal` (+ `statusColor(status)`); `Badge`
+  takes a `status` prop and colours itself; `Modal` is an accessible overlay dialog (focus-trap incl.
+  `summary`/`select`/`textarea`, Esc-to-close, body scroll-lock). `components/CategoryCombobox.tsx` (strict
+  searchable category picker) and `components/TaskFailurePanel.tsx` (per-failure panels) are feature components.
+  `lib/outputSpecFields.tsx` is the shared output-spec sub-form.
+- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~118 tests). Auth-dependent tests
   must seed **both** `hireai.token` and `hireai.auth`. `next build` and `npx tsc --noEmit` must stay clean.
 
 ## Run

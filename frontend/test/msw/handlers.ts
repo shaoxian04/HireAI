@@ -202,6 +202,10 @@ export const handlers = [
     });
   }),
 
+  // Default: a task has no validation report unless a test overrides this (only fetched on
+  // SPEC_VIOLATION). Keeps onUnhandledRequest:"error" happy for the failure-panel path.
+  http.get("*/api/tasks/:id/validation", () => fail("NOT_FOUND", "No validation report", 404)),
+
   // ── Dispute lifecycle handlers (client-facing accept/appeal) ──
   // Default empty list — Nav renders on nearly every authenticated page and now calls
   // useDisputeCount(), which hits this endpoint. Individual tests override with server.use(...).

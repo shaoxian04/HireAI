@@ -405,3 +405,36 @@ export interface AdminAgentRowDTO {
   reputationScore: number;
   price: number | null;
 }
+
+// ── Matching / Shortlist ────────────────────────────────────────────────────
+
+export interface AgentOptionDTO {
+  agentId: string;
+  agentVersionId: string;
+  agentName: string;
+  tagline: string | null;
+  logoUrl: string | null;
+  price: number;
+  reputationScore: number;
+  availability: "AVAILABLE" | "BUSY";
+  outputFormat: string | null;
+  capabilityCategories: string[];
+}
+
+export interface MatchPreviewDTO {
+  shortlist: AgentOptionDTO[];
+  nearMisses: AgentOptionDTO[];
+}
+
+// ── Validation report (spec-violation reason) ───────────────────────────────
+
+export interface ValidationCheckDTO {
+  rule: string;
+  passed: boolean;
+  detail: string | null;
+}
+
+export interface ValidationReportDTO {
+  verdict: "PASS" | "FAIL";
+  checks: ValidationCheckDTO[];
+}
