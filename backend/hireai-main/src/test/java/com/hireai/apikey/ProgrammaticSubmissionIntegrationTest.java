@@ -140,9 +140,13 @@ class ProgrammaticSubmissionIntegrationTest {
         String retryTaskId = objectMapper.readTree(retry.getBody()).path("data").path("id").asText();
         assertThat(retryTaskId).isEqualTo(taskId);
 
+        // Scope to THIS task: api_key_task is the per-key spend ledger (one row per successful
+        // API-key submit, read by JdbcSpendReadDao), so a global count would also pick up other
+        // tests' submits in the shared Testcontainers DB. Exactly one row for this task proves the
+        // idempotent retry created no second attribution -> no second submit/freeze (Invariant #1).
         Integer attributionRows = jdbc.queryForObject(
-                "SELECT count(*) FROM api_key_task", Integer.class);
-        assertThat(attributionRows).isEqualTo(1); // exactly one attribution -> no double submit/freeze
+                "SELECT count(*) FROM api_key_task WHERE task_id = ?::uuid", Integer.class, taskId);
+        assertThat(attributionRows).isEqualTo(1);
     }
 
     @Test

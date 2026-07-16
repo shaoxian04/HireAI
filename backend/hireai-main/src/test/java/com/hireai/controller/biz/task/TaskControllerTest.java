@@ -226,7 +226,13 @@ class TaskControllerTest {
 
         ArgumentCaptor<SubmitContext> ctxCaptor = ArgumentCaptor.forClass(SubmitContext.class);
         verify(submitOrchestrationAppService).submitRouted(ctxCaptor.capture(), any());
-        assertThat(ctxCaptor.getValue().idempotencyKey()).isEqualTo("abc-123");
+        SubmitContext ctx = ctxCaptor.getValue();
+        assertThat(ctx.idempotencyKey()).isEqualTo("abc-123");
+        assertThat(ctx.ownerId()).isEqualTo(clientId);
+        // JWT request (no API key): the key id + both spend caps must be null.
+        assertThat(ctx.apiKeyId()).isNull();
+        assertThat(ctx.spendCap()).isNull();
+        assertThat(ctx.dailySpendCap()).isNull();
     }
 
     // ---- POST /api/tasks/{id}/accept and /reject ----
