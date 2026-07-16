@@ -1,5 +1,7 @@
 package com.hireai.application.config;
 
+import com.hireai.domain.biz.apikey.service.ApiKeyIssueDomainService;
+import com.hireai.domain.biz.apikey.service.impl.ApiKeyIssueDomainServiceImpl;
 import com.hireai.domain.biz.offering.agent.service.AgentActivateDomainService;
 import com.hireai.domain.biz.offering.agent.service.AgentDeactivateDomainService;
 import com.hireai.domain.biz.offering.agent.service.AgentReactivateDomainService;
@@ -109,5 +111,10 @@ public class DomainServiceConfig {
     @Bean
     public ValidationDomainService validationDomainService(SchemaValidator schemaValidator) {
         return new ValidationDomainServiceImpl(schemaValidator);
+    }
+
+    @Bean
+    public ApiKeyIssueDomainService apiKeyIssueDomainService() {
+        return new ApiKeyIssueDomainServiceImpl(new SecureRandom());
     }
 }
