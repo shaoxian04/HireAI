@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class ApiKeyAuthenticationFilterTest {
@@ -78,17 +79,22 @@ class ApiKeyAuthenticationFilterTest {
 
     @Test
     void doesNotOverrideAnExistingJwtAuthentication() throws Exception {
-        // A Bearer JWT filter ran first and set an authentication; the ApiKey filter must not clobber it.
+        // A JWT filter ran first and set an authentication; the ApiKey filter must not clobber it —
+        // even when the request carries a key the filter WOULD normally resolve to a different principal.
         UUID jwtUser = UUID.randomUUID();
+        UUID differentUser = UUID.randomUUID();
         SecurityContextHolder.getContext().setAuthentication(
                 new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                         jwtUser, null, java.util.List.of()));
+        when(authService.authenticate("hk_live_would_override")).thenReturn(Optional.of(
+                new ApiKeyPrincipal(differentUser, UUID.randomUUID(), null, null)));
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.addHeader("Authorization", "Bearer some.jwt.token"); // not an ApiKey scheme
+        request.addHeader("Authorization", "ApiKey hk_live_would_override");
         FilterChain chain = mock(FilterChain.class);
 
         filter.doFilter(request, new MockHttpServletResponse(), chain);
 
         assertThat(SecurityContextHolder.getContext().getAuthentication().getPrincipal()).isEqualTo(jwtUser);
+        verifyNoInteractions(authService);
     }
 }
