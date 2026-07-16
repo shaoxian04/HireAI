@@ -130,7 +130,10 @@ submit/track/settle — `POST /api/tasks`, `/api/tasks/direct`; `GET /api/tasks`
 `hasAnyRole("CLIENT","API_CLIENT")`). Everything else falls through to
 `anyRequest().hasAnyRole("CLIENT","BUILDER","ADMIN")` — a default-deny that only *adds* the API-key
 lockout (a human JWT already holds one of those roles, so this is a no-op for them) — so e.g.
-`GET /api/wallet` returns 403 for an API-key caller. **Key management is JWT-only**:
+`GET /api/wallet` is denied for an API-key caller. (This chain sets an `authenticationEntryPoint`
+(`HttpStatusEntryPoint` UNAUTHORIZED) but no `accessDeniedHandler`, so the full application renders an
+authenticated-but-unauthorized request as **401**, not 403 — the same way a JWT `CLIENT` hitting
+`/api/admin/**` returns 401; the `@WebMvcTest` slices render the same denial as 403.) **Key management is JWT-only**:
 `/api/keys/**` is `hasRole("CLIENT")`, deliberately excluding `ROLE_API_CLIENT` — a leaked key can be used
 to submit/spend but can never mint or revoke keys itself. `ApiKeyController` (`POST /api/keys`,
 `GET /api/keys`, `POST /api/keys/{id}/revoke`) is owner-scoped like every other resource: revoking a

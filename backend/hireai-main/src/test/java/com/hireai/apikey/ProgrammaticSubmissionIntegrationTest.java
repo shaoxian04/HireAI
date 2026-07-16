@@ -164,17 +164,24 @@ class ProgrammaticSubmissionIntegrationTest {
     }
 
     @Test
-    void apiKeyIsForbiddenOnKeyManagementAndWallet() throws Exception {
+    void apiKeyIsLockedOutOfKeyManagementAndWallet() throws Exception {
         String jwt = login();
         String rawKey = createKey(jwt, "");
 
+        // The key holds only ROLE_API_CLIENT, so the allow-list denies /api/keys (JWT-only) and
+        // /api/wallet. NOTE: this full-app chain configures an authenticationEntryPoint
+        // (HttpStatusEntryPoint UNAUTHORIZED) but no accessDeniedHandler, so an authenticated-but-
+        // -unauthorized request renders as 401, not 403 — the app's consistent, pre-existing
+        // convention (a JWT CLIENT hitting /api/admin/** returns 401 the same way). The security
+        // property under test is the lockout (access denied), which 401 satisfies. (Note: the
+        // @WebMvcTest slices render the same denial as 403; the full app returns 401.)
         ResponseEntity<String> keys = rest.exchange(url("/api/keys"), HttpMethod.GET,
                 new HttpEntity<>(apiKey(rawKey)), String.class);
-        assertThat(keys.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(keys.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
 
         ResponseEntity<String> wallet = rest.exchange(url("/api/wallet"), HttpMethod.GET,
                 new HttpEntity<>(apiKey(rawKey)), String.class);
-        assertThat(wallet.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(wallet.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
