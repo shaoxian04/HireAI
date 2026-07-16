@@ -1,11 +1,11 @@
 package com.hireai.controller.biz.task;
 
 import com.hireai.application.biz.adjudication.validation.ValidationReadAppService;
-import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.MatchPreviewAppService;
+import com.hireai.application.biz.task.SubmitContext;
+import com.hireai.application.biz.task.SubmitOrchestrationAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
-import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.adjudication.ValidationReport2DTOConverter;
@@ -19,6 +19,8 @@ import com.hireai.controller.biz.task.dto.RejectTaskRequest;
 import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
 import com.hireai.controller.biz.task.dto.TaskDTO;
 import com.hireai.controller.biz.task.dto.TaskResultDTO;
+import com.hireai.controller.config.ApiKeyContext;
+import com.hireai.controller.config.CurrentApiKeyProvider;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
@@ -33,12 +35,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -50,32 +54,34 @@ import java.util.UUID;
 @RequestMapping("/api/tasks")
 public class TaskController extends BaseController {
 
-    private final TaskWriteAppService writeAppService;
+    private final SubmitOrchestrationAppService submitOrchestrationAppService;
     private final TaskReadAppService readAppService;
     private final CurrentUserProvider currentUser;
-    private final DirectBookingAppService directBookingAppService;
+    private final CurrentApiKeyProvider currentApiKey;
     private final TaskReviewAppService reviewAppService;
     private final MatchPreviewAppService matchPreviewAppService;
     private final ValidationReadAppService validationReadAppService;
 
-    public TaskController(TaskWriteAppService writeAppService,
+    public TaskController(SubmitOrchestrationAppService submitOrchestrationAppService,
                           TaskReadAppService readAppService,
                           CurrentUserProvider currentUser,
-                          DirectBookingAppService directBookingAppService,
+                          CurrentApiKeyProvider currentApiKey,
                           TaskReviewAppService reviewAppService,
                           MatchPreviewAppService matchPreviewAppService,
                           ValidationReadAppService validationReadAppService) {
-        this.writeAppService = writeAppService;
+        this.submitOrchestrationAppService = submitOrchestrationAppService;
         this.readAppService = readAppService;
         this.currentUser = currentUser;
-        this.directBookingAppService = directBookingAppService;
+        this.currentApiKey = currentApiKey;
         this.reviewAppService = reviewAppService;
         this.matchPreviewAppService = matchPreviewAppService;
         this.validationReadAppService = validationReadAppService;
     }
 
     @PostMapping
-    public WebResult<TaskDTO> submit(@Valid @RequestBody SubmitTaskRequest request) {
+    public WebResult<TaskDTO> submit(@Valid @RequestBody SubmitTaskRequest request,
+                                     @RequestHeader(value = "Idempotency-Key", required = false)
+                                     String idempotencyKey) {
         UUID clientId = currentUser.currentUserId();
         SubmitTaskRequest.OutputSpecRequest specRequest = request.outputSpec();
         TaskSubmitInfo info = new TaskSubmitInfo(
@@ -85,18 +91,35 @@ public class TaskController extends BaseController {
                 Money.of(request.budget()),
                 new OutputSpec(specRequest.format(), specRequest.schema(), specRequest.acceptanceCriteria()),
                 request.category());
-        UUID taskId = writeAppService.submit(info);
+        UUID taskId = submitOrchestrationAppService.submitRouted(
+                submitContext(clientId, idempotencyKey), info);
         TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId));
         return ok(dto);
     }
 
     @PostMapping("/direct")
-    public WebResult<TaskDTO> bookDirect(@Valid @RequestBody DirectBookRequest request) {
+    public WebResult<TaskDTO> bookDirect(@Valid @RequestBody DirectBookRequest request,
+                                         @RequestHeader(value = "Idempotency-Key", required = false)
+                                         String idempotencyKey) {
         UUID clientId = currentUser.currentUserId();
-        UUID taskId = directBookingAppService.book(new DirectBookingInfo(
-                clientId, request.title(), request.description(),
-                Money.of(request.budget()), request.agentId()));
+        UUID taskId = submitOrchestrationAppService.submitDirect(
+                submitContext(clientId, idempotencyKey),
+                new DirectBookingInfo(clientId, request.title(), request.description(),
+                        Money.of(request.budget()), request.agentId()));
         return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId)));
+    }
+
+    /**
+     * Assembles the submit context from the JWT user, the optional Idempotency-Key header, and — if
+     * the request was API-key authenticated — the key id + spend caps. The app layer never touches the
+     * SecurityContext (Hard Invariant #5).
+     */
+    private SubmitContext submitContext(UUID ownerId, String idempotencyKey) {
+        Optional<ApiKeyContext> apiKey = currentApiKey.current();
+        return new SubmitContext(ownerId, idempotencyKey,
+                apiKey.map(ApiKeyContext::keyId).orElse(null),
+                apiKey.map(ApiKeyContext::spendCap).orElse(null),
+                apiKey.map(ApiKeyContext::dailySpendCap).orElse(null));
     }
 
     @GetMapping("/{id}")

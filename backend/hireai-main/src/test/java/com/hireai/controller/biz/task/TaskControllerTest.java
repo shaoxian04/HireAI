@@ -1,14 +1,15 @@
 package com.hireai.controller.biz.task;
 
 import com.hireai.application.biz.adjudication.validation.ValidationReadAppService;
-import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.MatchPreviewAppService;
 import com.hireai.application.biz.task.MatchPreviewAppService.AgentOption;
 import com.hireai.application.biz.task.MatchPreviewAppService.MatchPreview;
+import com.hireai.application.biz.task.SubmitContext;
+import com.hireai.application.biz.task.SubmitOrchestrationAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
-import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.utility.result.ResultCode;
+import com.hireai.controller.config.CurrentApiKeyProvider;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
 import com.hireai.domain.biz.adjudication.model.CheckResult;
@@ -21,7 +22,9 @@ import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.domain.shared.model.Money;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -37,8 +40,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -60,12 +65,17 @@ class TaskControllerTest {
     @Autowired MockMvc mockMvc;
 
     @MockBean TaskReadAppService taskReadAppService;
-    @MockBean TaskWriteAppService taskWriteAppService;
+    @MockBean SubmitOrchestrationAppService submitOrchestrationAppService;
     @MockBean CurrentUserProvider currentUserProvider;
-    @MockBean DirectBookingAppService directBookingAppService;
+    @MockBean CurrentApiKeyProvider currentApiKeyProvider;
     @MockBean TaskReviewAppService taskReviewAppService;
     @MockBean MatchPreviewAppService matchPreviewAppService;
     @MockBean ValidationReadAppService validationReadAppService;
+
+    @BeforeEach
+    void noApiKeyByDefault() {
+        when(currentApiKeyProvider.current()).thenReturn(Optional.empty());
+    }
 
     @Test
     void returns200WithResultPayloadForOwningClient() throws Exception {
@@ -113,7 +123,7 @@ class TaskControllerTest {
         UUID agentId = UUID.randomUUID();
         UUID taskId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
-        when(directBookingAppService.book(any())).thenReturn(taskId);
+        when(submitOrchestrationAppService.submitDirect(any(), any())).thenReturn(taskId);
         TaskModel task = submittedTask(taskId, clientId);
         when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(task);
 
@@ -138,7 +148,7 @@ class TaskControllerTest {
         UUID clientId = UUID.randomUUID();
         UUID agentId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
-        when(directBookingAppService.book(any()))
+        when(submitOrchestrationAppService.submitDirect(any(), any()))
                 .thenThrow(new DomainException(ResultCode.VALIDATION_ERROR,
                         "Budget 5.00 is below the agent's price 20.00"));
 
@@ -162,7 +172,7 @@ class TaskControllerTest {
         UUID clientId = UUID.randomUUID();
         UUID agentId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
-        when(directBookingAppService.book(any()))
+        when(submitOrchestrationAppService.submitDirect(any(), any()))
                 .thenThrow(new DomainException(ResultCode.NOT_FOUND, "Agent not found"));
 
         mockMvc.perform(post("/api/tasks/direct")
@@ -195,6 +205,28 @@ class TaskControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void submitWithIdempotencyKeyPassesItThroughToOrchestration() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(clientId);
+        when(submitOrchestrationAppService.submitRouted(any(), any())).thenReturn(taskId);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId)))
+                .thenReturn(submittedTask(taskId, clientId));
+
+        mockMvc.perform(post("/api/tasks").header("Idempotency-Key", "abc-123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"T","description":"d","category":"summarisation","budget":"20.00",
+                                 "outputSpec":{"format":"JSON","schema":"{}","acceptanceCriteria":"ok"}}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("SUBMITTED"));
+
+        ArgumentCaptor<SubmitContext> ctxCaptor = ArgumentCaptor.forClass(SubmitContext.class);
+        verify(submitOrchestrationAppService).submitRouted(ctxCaptor.capture(), any());
+        assertThat(ctxCaptor.getValue().idempotencyKey()).isEqualTo("abc-123");
     }
 
     // ---- POST /api/tasks/{id}/accept and /reject ----
