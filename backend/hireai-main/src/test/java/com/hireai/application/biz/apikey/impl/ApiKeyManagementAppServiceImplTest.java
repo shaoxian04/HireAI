@@ -20,6 +20,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -56,6 +57,8 @@ class ApiKeyManagementAppServiceImplTest {
         ApiKeyModel revoked = svc.revoke(keyId, owner);
         assertThat(revoked.status()).isEqualTo(com.hireai.domain.biz.apikey.model.ApiKeyStatus.REVOKED);
         assertThat(revoked.revokedAt()).isEqualTo(fixed);
+        verify(repo).save(argThat(
+                k -> k.status() == com.hireai.domain.biz.apikey.model.ApiKeyStatus.REVOKED));
     }
 
     @Test
@@ -75,6 +78,8 @@ class ApiKeyManagementAppServiceImplTest {
     void revokeMissingKeyThrowsNotFound() {
         when(repo.findById(any())).thenReturn(Optional.empty());
         assertThatThrownBy(() -> svc.revoke(UUID.randomUUID(), UUID.randomUUID()))
-                .isInstanceOf(DomainException.class);
+                .isInstanceOf(DomainException.class)
+                .satisfies(e -> assertThat(((DomainException) e).resultCode()).isEqualTo(ResultCode.NOT_FOUND));
+        verify(repo, never()).save(any());
     }
 }
