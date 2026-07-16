@@ -438,3 +438,32 @@ export interface ValidationReportDTO {
   verdict: "PASS" | "FAIL";
   checks: ValidationCheckDTO[];
 }
+
+// ── API keys (programmatic submission) ──────────────────────────────────────
+
+export interface ApiKeyDTO {
+  id: string;
+  name: string;
+  displayPrefix: string;
+  spendCap: number | null;
+  dailySpendCap: number | null;
+  status: "ACTIVE" | "REVOKED";
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+export interface CreateApiKeyRequest {
+  name: string;
+  spendCap?: number | null;
+  dailySpendCap?: number | null;
+}
+
+/** Returned ONLY from POST /api/keys — the one place `rawKey` ever appears. */
+export interface CreatedApiKeyDTO {
+  id: string;
+  name: string;
+  displayPrefix: string;
+  spendCap: number | null;
+  dailySpendCap: number | null;
+  rawKey: string;
+}
