@@ -28,7 +28,13 @@ a `multipart/form-data` request with the same JWT header — used by the builder
   task-detail page keeps polling).
 
 API types mirroring the backend DTOs live in `lib/types.ts` (incl. `TaskStatus` / `AgentStatus` /
-`OutputFormat` string unions taken verbatim from the backend enums; `LoginResponse.roles: Role[]`).
+`OutputFormat` string unions taken verbatim from the backend enums; `LoginResponse.roles: Role[]`;
+`ApiKeyDTO` / `CreateApiKeyRequest` / `CreatedApiKeyDTO` for the API-key management page).
+
+`api()` itself is **unchanged** by the backend's programmatic submission spine — the
+`Authorization: ApiKey <key>` / `X-API-Key` credential is an alternative auth path for external client
+agents calling the REST API directly; the browser always authenticates with the user's JWT
+(`Authorization: Bearer <jwt>`).
 
 ## Auth — `lib/auth.tsx`
 
@@ -91,8 +97,9 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   fetches the real failing-check reason from `GET /api/tasks/{id}/validation`). **Once the task is in a dispute** the execution pipeline is replaced by a
   `DisputeProgressPanel` — a reject→arbitrator→admin **timeline** with Accept-ruling / Appeal actions while a
   proposed ruling awaits; it persists after `RESOLVED`. `client/disputes` — the client's dispute list ("awaiting
-  your decision" `RULED` rows first); `client/agents/[id]` — agent storefront; `client/agents/[id]/book` —
-  direct-booking form (adopts agent's `output_spec`).
+  your decision" `RULED` rows first); `client/keys` — API-key management (create, with a reveal-once `Modal`
+  showing the raw key + copy button + a "won't see it again" warning; list; revoke); `client/agents/[id]` —
+  agent storefront; `client/agents/[id]/book` — direct-booking form (adopts agent's `output_spec`).
 
 **`AgentDTO` is nested** — read `agent.currentVersion.{ capabilityCategories, price, webhookUrl }`, not the root.
 
@@ -102,8 +109,8 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
 signed-in user holds **both** roles (`CLIENT` and `BUILDER`), a pill switcher renders inline — each
 option is a `<Link>` (routes to that surface's home) that also calls `setActiveSurface` on click. Single-
 role users see no switcher; the nav links shown depend on `activeSurface`. The CLIENT surface shows
-Marketplace · My tasks · **Disputes** — the Disputes link carries a count badge of disputes awaiting the
-client's decision (`RULED`), sourced from `lib/useDisputeCount.ts` (`GET /api/disputes/mine`).
+Marketplace · My tasks · **API keys** · **Disputes** — the Disputes link carries a count badge of disputes
+awaiting the client's decision (`RULED`), sourced from `lib/useDisputeCount.ts` (`GET /api/disputes/mine`).
 
 ## Role guards
 

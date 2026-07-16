@@ -106,6 +106,42 @@ fails fast if the creds are missing rather than starting silently broken.
 | `OAUTH2_SUCCESS_REDIRECT_URL` | `http://localhost:3000/auth/callback` | Frontend callback page |
 | `OAUTH2_FAILURE_REDIRECT_URL` | `http://localhost:3000/login` | Frontend login on failure |
 
+## API keys — the programmatic submission channel (Phase 3)
+
+A second, independent credential lets an external **client agent** submit/track/settle tasks without a
+human login. `ApiKeyAuthenticationFilter` reads `Authorization: ApiKey <raw>` or `X-API-Key: <raw>`,
+resolves it via `ApiKeyAuthService` (hash → `findActiveByHash`, throttled `last_used_at` bump), and — if
+no authentication is already set (it never overrides a JWT that ran first) — sets the **same**
+`UsernamePasswordAuthenticationToken` shape as `JwtAuthenticationFilter`: principal = the owning user's
+UUID, so `CurrentUserProvider.currentUserId()` and every downstream ownership check work **unchanged**
+(Hard Invariant #5 holds for API-key requests too). The differences from a JWT authority are:
+- a single `ROLE_API_CLIENT` authority (never `CLIENT`/`BUILDER`/`ADMIN`); and
+- an `ApiKeyContext(keyId, spendCap, dailySpendCap)` record set as the `Authentication`'s **details**.
+
+**`CurrentApiKeyProvider`** (mirrors `CurrentUserProvider`) exposes that context: `HttpCurrentApiKeyProvider`
+(`@Profile("!test")`) reads it off the `SecurityContext` — present iff the request was API-key
+authenticated, empty for JWT/human requests; `NoApiKeyProvider` (`@Profile("test")`) is always empty.
+`SubmitOrchestrationAppService` reads it to decide whether a submission is subject to the two per-key
+spend caps at all.
+
+**Submit-scoped allow-list** (`securedFilterChain`, `SecurityConfig`): `ROLE_API_CLIENT` may reach only
+submit/track/settle — `POST /api/tasks`, `/api/tasks/direct`; `GET /api/tasks`, `/api/tasks/*`,
+`/api/tasks/*/result`, `/api/tasks/*/validation`; `POST /api/tasks/*/accept`, `/api/tasks/*/reject` (each
+`hasAnyRole("CLIENT","API_CLIENT")`). Everything else falls through to
+`anyRequest().hasAnyRole("CLIENT","BUILDER","ADMIN")` — a default-deny that only *adds* the API-key
+lockout (a human JWT already holds one of those roles, so this is a no-op for them) — so e.g.
+`GET /api/wallet` returns 403 for an API-key caller. **Key management is JWT-only**:
+`/api/keys/**` is `hasRole("CLIENT")`, deliberately excluding `ROLE_API_CLIENT` — a leaked key can be used
+to submit/spend but can never mint or revoke keys itself. `ApiKeyController` (`POST /api/keys`,
+`GET /api/keys`, `POST /api/keys/{id}/revoke`) is owner-scoped like every other resource: revoking a
+key you don't own is a `NOT_FOUND`, not a 403 (no existence leak).
+
+Both filters are wired on the same chain via `addFilterBefore(..., UsernamePasswordAuthenticationFilter.class)`
+— API-key first, then JWT — so a request carrying both an API key and a JWT is authenticated by whichever
+runs first and wins the race to set the context; in practice a caller sends exactly one. See
+`docs/details/data-model.md` (`V25` — `api_keys`/`idempotency_keys`/`api_key_task`) and
+`docs/programmatic-task-submission.md` for the schema and the feature design.
+
 ## The Agent callback is NOT JWT-authenticated
 
 `POST /api/agent-callbacks/{taskId}/result` is `permitAll` in the chain because the **Agent** (not a
@@ -122,8 +158,10 @@ in `user_roles` (not the old `role` column, which was dropped in `V10`).
 
 ## Status / gaps
 
-- **RBAC is not enforced per-endpoint yet.** Roles ride in the token and are exposed as `ROLE_*`
-  authorities, but the secured chain only does `anyRequest().authenticated()` — no `hasRole` /
-  `@PreAuthorize` gating. Add it when role-scoped endpoints are needed.
+- **RBAC gating is coarse-grained.** `securedFilterChain` now does route-level `hasRole`/`hasAnyRole`
+  gating (admin routes, key management, the API-key submit allow-list — see above), but most
+  CLIENT/BUILDER endpoints are only gated to "any signed-in human role"; per-resource ownership
+  (a builder's own agent, a client's own task/wallet) is still enforced in the app services, not via
+  `@PreAuthorize`.
 - No **fail-fast** guard if the `test` profile is launched in prod (it would disable auth).
 - Frontend token storage is `localStorage` (demo-grade; an httpOnly cookie is the hardening).
