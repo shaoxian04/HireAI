@@ -3,6 +3,7 @@ package com.hireai.controller.biz.adjudication;
 import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.adjudication.dispute.DisputeReadAppService;
 import com.hireai.application.biz.adjudication.dispute.view.DisputeMineRow;
+import com.hireai.application.biz.apikey.ApiKeyAuthService;
 import com.hireai.application.port.security.JwtService;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
@@ -49,6 +50,7 @@ class DisputeControllerTest {
     @MockBean DisputeAppService disputeAppService;
     @MockBean CurrentUserProvider currentUserProvider;
     @MockBean JwtService jwtService; // required to wire the secured filter chain
+    @MockBean ApiKeyAuthService apiKeyAuthService; // also required by the secured chain (Task 7)
 
     private static final UUID DISPUTE_ID = UUID.randomUUID();
     private static final UUID CLIENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -70,7 +72,7 @@ class DisputeControllerTest {
     }
 
     @Test
-    @WithMockUser
+    @WithMockUser(roles = "CLIENT")
     void acceptRuling_delegates() throws Exception {
         when(currentUserProvider.currentUserId()).thenReturn(CLIENT_ID);
         when(disputeReadAppService.getOutcomeByDispute(eq(DISPUTE_ID), eq(CLIENT_ID)))
@@ -92,7 +94,7 @@ class DisputeControllerTest {
     }
 
     @Test
-    @WithMockUser
+    @WithMockUser(roles = "CLIENT")
     void appeal_delegates() throws Exception {
         when(currentUserProvider.currentUserId()).thenReturn(CLIENT_ID);
         when(disputeReadAppService.getOutcomeByDispute(eq(DISPUTE_ID), eq(CLIENT_ID)))
@@ -110,7 +112,7 @@ class DisputeControllerTest {
     }
 
     @Test
-    @WithMockUser
+    @WithMockUser(roles = "CLIENT")
     void mine_returnsRows() throws Exception {
         when(currentUserProvider.currentUserId()).thenReturn(CLIENT_ID);
         when(disputeReadAppService.myDisputes(eq(CLIENT_ID))).thenReturn(List.of(

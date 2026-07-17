@@ -3,6 +3,7 @@ package com.hireai.controller.biz.admin;
 import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.admin.AdminReadAppService;
 import com.hireai.application.biz.admin.view.AdminViews;
+import com.hireai.application.biz.apikey.ApiKeyAuthService;
 import com.hireai.application.port.security.JwtService;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
@@ -39,6 +40,7 @@ class AdminControllerTest {
     @MockBean DisputeAppService disputeAppService;
     @MockBean CurrentUserProvider currentUserProvider;
     @MockBean JwtService jwtService; // required to wire the secured filter chain
+    @MockBean ApiKeyAuthService apiKeyAuthService; // also required by the secured chain (Task 7)
 
     private static final UUID ADMIN_ID = UUID.fromString("00000000-0000-0000-0000-000000000002");
 

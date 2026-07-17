@@ -42,6 +42,7 @@ export function Nav() {
                 {[
                   { href: "/client", label: "Marketplace" },
                   { href: "/client/tasks", label: "My tasks" },
+                  { href: "/client/keys", label: "API keys" },
                 ].map((l) => (
                   <Link
                     key={l.href}

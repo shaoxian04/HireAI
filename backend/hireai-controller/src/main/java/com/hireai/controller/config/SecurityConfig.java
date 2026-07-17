@@ -1,5 +1,6 @@
 package com.hireai.controller.config;
 
+import com.hireai.application.biz.apikey.ApiKeyAuthService;
 import com.hireai.application.port.security.JwtService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -62,7 +63,8 @@ public class SecurityConfig {
     @Bean
     @Order(2)
     @Profile("!test")
-    public SecurityFilterChain securedFilterChain(HttpSecurity http, JwtService jwtService) throws Exception {
+    public SecurityFilterChain securedFilterChain(HttpSecurity http, JwtService jwtService,
+                                                  ApiKeyAuthService apiKeyAuthService) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -72,10 +74,25 @@ public class SecurityConfig {
                         .requestMatchers("/api/agent-callbacks/**").permitAll()
                         .requestMatchers("/api/arbitration-callbacks/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // Submit / track / settle: reachable by a human CLIENT or an API_CLIENT key.
+                        .requestMatchers(org.springframework.http.HttpMethod.POST,
+                                "/api/tasks", "/api/tasks/direct").hasAnyRole("CLIENT", "API_CLIENT")
+                        .requestMatchers(org.springframework.http.HttpMethod.GET,
+                                "/api/tasks", "/api/tasks/*", "/api/tasks/*/result",
+                                "/api/tasks/*/validation").hasAnyRole("CLIENT", "API_CLIENT")
+                        .requestMatchers(org.springframework.http.HttpMethod.POST,
+                                "/api/tasks/*/accept", "/api/tasks/*/reject").hasAnyRole("CLIENT", "API_CLIENT")
+                        // Key management is JWT-only (a leaked key cannot mint keys).
+                        .requestMatchers("/api/keys/**").hasRole("CLIENT")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        .anyRequest().authenticated())
+                        // Default-deny for API keys: everything else needs a human role. Equivalent to
+                        // authenticated() for JWT users (all hold >=1 of CLIENT/BUILDER/ADMIN); it only
+                        // ADDS the API_CLIENT lockout.
+                        .anyRequest().hasAnyRole("CLIENT", "BUILDER", "ADMIN"))
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                .addFilterBefore(new ApiKeyAuthenticationFilter(apiKeyAuthService),
+                        UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new JwtAuthenticationFilter(jwtService),
                         UsernamePasswordAuthenticationFilter.class);
         return http.build();

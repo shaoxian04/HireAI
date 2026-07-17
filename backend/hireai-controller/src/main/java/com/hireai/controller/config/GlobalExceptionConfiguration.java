@@ -31,7 +31,8 @@ public class GlobalExceptionConfiguration {
             case NOT_FOUND -> HttpStatus.NOT_FOUND;
             // Genuine state conflicts → 409. VALIDATION_ERROR is bad input, so it falls through
             // to the default 400 Bad Request.
-            case INSUFFICIENT_BALANCE, DOMAIN_RULE_VIOLATION -> HttpStatus.CONFLICT;
+            case INSUFFICIENT_BALANCE, DOMAIN_RULE_VIOLATION,
+                 IDEMPOTENCY_CONFLICT, SPEND_CAP_EXCEEDED -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status).body(WebResult.error(ex.resultCode(), ex.getMessage()));
