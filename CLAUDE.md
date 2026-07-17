@@ -53,6 +53,12 @@ These are needed on every task and are too important to risk being unread. Enfor
 - **`postgres-patterns`** — when writing schema, migrations, or queries.
 - **`api-design`** — when designing REST endpoints.
 
+## Post-mortems
+
+Read before making auth, security-config, or controller-test changes — these are real mistakes from this project, not hypotheticals.
+
+- **`docs/post-mortem/2026-07-17-api-key-lockout-401-vs-403.md`** — `SecurityConfig` has no `accessDeniedHandler`, so the full app returns **401 (not 403) for every authenticated-but-forbidden request** — but `@WebMvcTest` slices render it as 403. A slice-trusting integration-test assertion (403) would have failed only in CI. Lesson: assert denied-status against the full app, not the slice; expect 401 for forbidden app-wide.
+
 ## Detail index
 
 Read the relevant file on demand — don't preload everything.
