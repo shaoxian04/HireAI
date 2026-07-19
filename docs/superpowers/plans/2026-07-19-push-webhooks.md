@@ -1749,7 +1749,7 @@ public class WebhookOutboxAppServiceImpl implements WebhookOutboxAppService {
         subscriptionFor(task.id()).ifPresent(sub -> {
             Instant now = clock.instant();
             UUID eventId = UUID.randomUUID();
-            String refunded = task.budget().value().toPlainString();
+            java.math.BigDecimal refunded = task.budget().value(); // WebhookPayloads.failed owns numeric rendering
             String payload = WebhookPayloads.failed(eventId, task.id(), reason, refunded, now);
             enqueue(eventId, task, sub, WebhookEventType.TASK_FAILED, payload, now);
         });
