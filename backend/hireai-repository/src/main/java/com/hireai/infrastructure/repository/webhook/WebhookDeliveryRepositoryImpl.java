@@ -39,14 +39,18 @@ public class WebhookDeliveryRepositoryImpl implements WebhookDeliveryRepository 
     @Override public Optional<WebhookDeliveryModel> findById(UUID id) { return jpa.findById(id).map(this::toModel); }
 
     @Override public List<WebhookDeliveryModel> findForOwner(UUID ownerId, Instant since, String status, UUID taskId) {
-        // Dynamic filter via a native query with optional predicates (nulls ignored).
+        // Dynamic filter via a native query with optional predicates (nulls ignored). A null `since`
+        // means "no time floor" — it must be omitted, not bound as `created_at >= NULL` (which is
+        // UNKNOWN for every row in Postgres and would wrongly return an empty list).
         StringBuilder sql = new StringBuilder(
-            "SELECT * FROM webhook_deliveries WHERE owner_id = :owner AND created_at >= :since");
+            "SELECT * FROM webhook_deliveries WHERE owner_id = :owner");
+        if (since != null) sql.append(" AND created_at >= :since");
         if (status != null) sql.append(" AND status = :status");
         if (taskId != null) sql.append(" AND task_id = :taskId");
         sql.append(" ORDER BY created_at DESC");
         var q = em.createNativeQuery(sql.toString(), WebhookDeliveryDO.class)
-                .setParameter("owner", ownerId).setParameter("since", since);
+                .setParameter("owner", ownerId);
+        if (since != null) q.setParameter("since", since);
         if (status != null) q.setParameter("status", status);
         if (taskId != null) q.setParameter("taskId", taskId);
         @SuppressWarnings("unchecked")

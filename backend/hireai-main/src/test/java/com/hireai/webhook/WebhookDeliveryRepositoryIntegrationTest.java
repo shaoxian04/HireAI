@@ -113,5 +113,9 @@ class WebhookDeliveryRepositoryIntegrationTest {
         assertThat(byOwner).extracting(WebhookDeliveryModel::id).contains(d.id());
         assertThat(repo.findForOwner(owner, now.minusSeconds(60), "DELIVERED", task)).isNotEmpty();
         assertThat(repo.findForOwner(owner, now.minusSeconds(60), "DEAD", null)).isEmpty();
+        // null `since` = no time floor → must return the full owner history. Regression guard: an
+        // unguarded `created_at >= NULL` is UNKNOWN for every row and would wrongly return empty.
+        assertThat(repo.findForOwner(owner, null, null, null))
+                .extracting(WebhookDeliveryModel::id).contains(d.id());
     }
 }
