@@ -20,6 +20,7 @@ import com.hireai.domain.biz.adjudication.service.ValidationDomainService;
 import com.hireai.domain.biz.adjudication.service.impl.ValidationDomainServiceImpl;
 import com.hireai.domain.biz.identity.service.OAuthAccountLinkingDomainService;
 import com.hireai.domain.biz.identity.service.impl.OAuthAccountLinkingDomainServiceImpl;
+import com.hireai.domain.biz.webhook.service.WebhookSecretGenerator;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
 import com.hireai.domain.biz.task.service.impl.TaskSubmitDomainServiceImpl;
 import com.hireai.domain.biz.ledger.settlement.service.SettlementDomainService;
@@ -116,5 +117,10 @@ public class DomainServiceConfig {
     @Bean
     public ApiKeyIssueDomainService apiKeyIssueDomainService() {
         return new ApiKeyIssueDomainServiceImpl(new SecureRandom());
+    }
+
+    @Bean
+    public WebhookSecretGenerator webhookSecretGenerator() {
+        return new WebhookSecretGenerator();
     }
 }
