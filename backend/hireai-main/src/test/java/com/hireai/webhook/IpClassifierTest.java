@@ -10,7 +10,7 @@ class IpClassifierTest {
 
     @Test void blocksLoopbackPrivateLinkLocalAndMetadata() throws Exception {
         for (String bad : new String[]{"127.0.0.1","10.0.0.5","172.16.0.1","192.168.1.1",
-                "169.254.169.254","0.0.0.0","::1"}) {
+                "169.254.169.254","0.0.0.0","::1","224.0.0.1","ff02::1"}) { // last two: IPv4/IPv6 multicast
             assertThat(IpClassifier.isBlocked(ip(bad))).as(bad).isTrue();
         }
     }
