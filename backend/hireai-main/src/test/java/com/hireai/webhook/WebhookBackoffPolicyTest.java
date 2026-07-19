@@ -21,6 +21,13 @@ class WebhookBackoffPolicyTest {
         assertThat(p.nextAttempt(10, now)).isEqualTo(now.plusSeconds(3600)); // capped
         assertThat(p.nextAttempt(100, now)).isEqualTo(now.plusSeconds(3600)); // no shift overflow
     }
+    @Test void overflowGuardClampsUnmaskedShiftToCap() {
+        // Genuinely exercises the `shift >= 20` guard: shift 60/63 are unmasked (< 64), so without the
+        // guard `baseSeconds << shift` overflows to a negative/zero delay. (The attempts=100 case above
+        // masks down to shift 35 and stays safe even without the guard, so it does not prove it.)
+        assertThat(p.nextAttempt(61, now)).isEqualTo(now.plusSeconds(3600)); // shift 60: 10L<<60 wraps negative
+        assertThat(p.nextAttempt(64, now)).isEqualTo(now.plusSeconds(3600)); // shift 63: 10L<<63 == 0
+    }
     @Test void exhaustedAtMaxAttempts() {
         assertThat(p.exhausted(27)).isFalse();
         assertThat(p.exhausted(28)).isTrue();
