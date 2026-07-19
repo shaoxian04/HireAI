@@ -286,7 +286,7 @@ the pattern (Stripe/GitHub model: at-least-once push + always-available pull + e
 | View subscription (+ secret) | `GET /api/webhooks/subscription` | JWT (CLIENT) |
 | Rotate signing secret | `POST /api/webhooks/subscription/rotate-secret` | JWT (CLIENT) |
 | Deactivate | `POST /api/webhooks/subscription/deactivate` | JWT (CLIENT) |
-| List deliveries | `GET /api/webhooks/deliveries?since=&status=` | JWT (CLIENT) **and** API key |
+| List deliveries | `GET /api/webhooks/deliveries?since=&status=&taskId=` | JWT (CLIENT) **and** API key |
 | Redeliver | `POST /api/webhooks/deliveries/{id}/redeliver` | JWT (CLIENT) **and** API key |
 | (reused) Track / result | `GET /api/tasks/{id}`, `/result`, `/validation` | JWT + API key (unchanged) |
 
@@ -327,9 +327,11 @@ Additional: the signing secret is a credential (retrievable by the owner, rotata
 cannot repoint the callback (subscription management is JWT-only); redeliver is idempotent-safe
 (re-enqueues an owned event, never creates money movement).
 
-## 11. Frontend — `/client/webhooks`
+## 11. Frontend
 
-A dashboard page (sibling to `/client/keys`, same Mission-Control kit):
+Two surfaces, both on the Mission-Control kit:
+
+**(a) `/client/webhooks` — the webhooks console** (sibling to `/client/keys`):
 - Register / replace the callback URL (choose which API key it attaches to); client-side + server-side
   HTTPS validation.
 - Reveal the signing secret (retrievable) + **Rotate** action (confirm modal).
@@ -337,6 +339,15 @@ A dashboard page (sibling to `/client/keys`, same Mission-Control kit):
   a **Resend** button per row (→ `redeliver`).
 - A banner/health flag when recent deliveries are failing.
 - Nav link in the CLIENT surface next to *API keys*.
+
+**(b) Delivery status *on the task views* (task-centric):**
+- On the **task detail** page, a small **notification indicator** — *Delivered* / *Pending* / **Failed** —
+  with a **Resend** action when failed, so a client sees a delivery problem in the context of the task
+  without opening the console. Powered by `GET /api/webhooks/deliveries?taskId={id}` (empty ⇒ no webhook /
+  WEB task ⇒ render nothing).
+- Optionally a compact **Failed-delivery badge** on rows in the **tasks list** so failures are visible while
+  browsing. (List badge is the trimmable part if the plan wants to keep scope tight; the detail indicator
+  is the core.)
 
 *(Frontend is a distinct workstream and can be split to a follow-up if the plan prefers; the API + backend
 is the core of Phase 4.)*
@@ -354,7 +365,8 @@ Reuse the `test` profile + Testcontainers pattern; Docker-gated integration test
 - **Full-app (RANDOM_PORT):** the allow-list change — API key **can** submit/track/list-deliveries/redeliver
   and **cannot** accept/reject (**401**) or manage the subscription (**401**); a signed delivery verifies
   end-to-end against a local receiver.
-- **Frontend (vitest):** register form validation, reveal/rotate secret, delivery log render, resend.
+- **Frontend (vitest):** register form validation, reveal/rotate secret, delivery log render, resend; the
+  task-detail delivery indicator (Delivered/Pending/Failed + Resend; renders nothing when no deliveries).
 - **Live E2E (per [[verify-with-real-e2e]]):** boot against Supabase, submit via API key, point the
   callback at a local receiver (e.g. an HTTPS tunnel / request-bin), assert a valid signed `task.completed`
   arrives and the fetched result matches; kill the receiver to force `DEAD` → confirm poll + `redeliver`
