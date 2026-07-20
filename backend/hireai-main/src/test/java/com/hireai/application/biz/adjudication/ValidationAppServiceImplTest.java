@@ -124,6 +124,28 @@ class ValidationAppServiceImplTest {
     }
 
     @Test
+    void apiTaskPassWithNoAgentOwnerThrowsAndSettlesNothing() {
+        // Money safety on the new auto-settle path: if the agent version has no owner, the branch
+        // throws BEFORE any settlement/accept/enqueue, so the whole (transactional) callback rolls back.
+        UUID taskId = UUID.randomUUID(), versionId = UUID.randomUUID();
+        TaskModel task = mock(TaskModel.class);
+        when(task.id()).thenReturn(taskId);
+        when(task.agentVersionId()).thenReturn(versionId);
+        TaskModel pending = mock(TaskModel.class);
+        when(task.passValidation()).thenReturn(pending);
+        when(domain.validate(any(), any(), anyInt())).thenReturn(passingReport(taskId));
+        when(apiKeyTaskRepository.findApiKeyIdByTask(taskId)).thenReturn(Optional.of(UUID.randomUUID()));
+        when(agentRepository.findOwnerByVersionId(versionId)).thenReturn(Optional.empty()); // no owner
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> svc.validateAndGate(task))
+                .isInstanceOf(com.hireai.utility.exception.DomainException.class)
+                .hasMessageContaining("owner");
+        verify(settlement, never()).settleAccepted(any(), any(), any(), any());
+        verify(tasks, never()).save(pending);        // never advanced to RESOLVED
+        verify(webhookOutbox, never()).enqueueCompleted(any());
+    }
+
+    @Test
     void failEnqueuesFailedSpecViolation() {
         TaskModel task = resultReceivedTask();
         when(tasks.save(any())).thenAnswer(i -> i.getArgument(0));
