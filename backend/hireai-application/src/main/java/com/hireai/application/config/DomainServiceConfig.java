@@ -20,6 +20,7 @@ import com.hireai.domain.biz.adjudication.service.ValidationDomainService;
 import com.hireai.domain.biz.adjudication.service.impl.ValidationDomainServiceImpl;
 import com.hireai.domain.biz.identity.service.OAuthAccountLinkingDomainService;
 import com.hireai.domain.biz.identity.service.impl.OAuthAccountLinkingDomainServiceImpl;
+import com.hireai.domain.biz.webhook.WebhookBackoffPolicy;
 import com.hireai.domain.biz.webhook.service.WebhookSecretGenerator;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
 import com.hireai.domain.biz.task.service.impl.TaskSubmitDomainServiceImpl;
@@ -122,5 +123,13 @@ public class DomainServiceConfig {
     @Bean
     public WebhookSecretGenerator webhookSecretGenerator() {
         return new WebhookSecretGenerator();
+    }
+
+    @Bean
+    public WebhookBackoffPolicy webhookBackoffPolicy(
+            @Value("${hireai.webhooks.base-backoff-seconds:10}") long base,
+            @Value("${hireai.webhooks.cap-backoff-seconds:3600}") long cap,
+            @Value("${hireai.webhooks.max-attempts:28}") int max) {
+        return new WebhookBackoffPolicy(base, cap, max);
     }
 }
