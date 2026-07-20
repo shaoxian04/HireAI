@@ -3,6 +3,7 @@ package com.hireai.application.biz.task.callback.impl;
 import com.hireai.application.biz.adjudication.validation.ValidationAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.task.callback.AgentCallbackAppService;
+import com.hireai.application.biz.webhook.WebhookOutboxAppService;
 import com.hireai.application.port.security.DispatchTokenClaims;
 import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.application.port.security.DispatchTokenService;
@@ -39,6 +40,7 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
     private final DispatchTokenService dispatchTokenService;
     private final ValidationAppService validationAppService;
     private final SettlementWriteAppService settlementWriteAppService;
+    private final WebhookOutboxAppService webhookOutboxAppService;
 
     @Override
     public void recordResult(UUID taskId, String bearerToken, AgentResultInfo result) {
@@ -69,6 +71,7 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
             TaskModel failed = task.markFailed();
             taskRepository.save(failed);
             settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
+            webhookOutboxAppService.enqueueFailed(failed, "FAILED");
             log.info("Task {} agent reported {} -> FAILED (refunded)", taskId, result.agentStatus());
             return;
         }

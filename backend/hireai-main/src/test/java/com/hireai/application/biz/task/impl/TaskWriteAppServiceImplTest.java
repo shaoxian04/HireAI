@@ -2,6 +2,7 @@ package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.application.biz.webhook.WebhookOutboxAppService;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
@@ -26,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -39,10 +41,11 @@ class TaskWriteAppServiceImplTest {
     @Mock WalletWriteAppService walletWriteAppService;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock SettlementWriteAppService settlementWriteAppService;
+    @Mock WebhookOutboxAppService webhookOutboxAppService;
 
     private TaskWriteAppServiceImpl service() {
         return new TaskWriteAppServiceImpl(taskRepository, taskSubmitDomainService,
-                walletWriteAppService, eventPublisher, settlementWriteAppService);
+                walletWriteAppService, eventPublisher, settlementWriteAppService, webhookOutboxAppService);
     }
 
     private TaskModel submittedTask() {
@@ -143,6 +146,7 @@ class TaskWriteAppServiceImplTest {
 
         verify(taskRepository).save(argThat(t -> t.status() == TaskStatus.CANCELLED));
         verify(settlementWriteAppService).settleRejected(taskId, clientId, budget);
+        verify(webhookOutboxAppService).enqueueFailed(any(), eq("CANCELLED"));
     }
 
     @Test

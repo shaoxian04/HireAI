@@ -3,6 +3,7 @@ package com.hireai.application.biz.task.impl;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.application.biz.webhook.WebhookOutboxAppService;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.event.TaskSubmittedDomainEvent;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
@@ -32,6 +33,7 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     private final WalletWriteAppService walletWriteAppService;
     private final ApplicationEventPublisher eventPublisher;
     private final SettlementWriteAppService settlementWriteAppService;
+    private final WebhookOutboxAppService webhookOutboxAppService;
 
     @Override
     public UUID submit(TaskSubmitInfo taskSubmitInfo) {
@@ -107,6 +109,7 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
         TaskModel cancelled = task.markCancelled();
         taskRepository.save(cancelled);
         settlementWriteAppService.settleRejected(taskId, cancelled.clientId(), cancelled.budget());
+        webhookOutboxAppService.enqueueFailed(cancelled, "CANCELLED");
         log.info("Task {} CANCELLED after re-match exhaustion; escrow fully refunded", taskId);
     }
 
