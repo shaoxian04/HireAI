@@ -43,4 +43,15 @@ class WebhookSenderTest {
         assertThat(r.success()).isFalse();
         assertThat(r.statusCode()).isEqualTo(500);
     }
+
+    @Test void malformedUrlYieldsFailZeroWithoutThrowing() {
+        // Covers the other half of the never-throws contract: any non-HTTP exception (here URI.create
+        // on an illegal URL) is caught by the generic branch and returned as fail(0, ...), not thrown.
+        MockRestServiceServer[] h = new MockRestServiceServer[1];
+        WebhookSender sender = sender(h);
+        WebhookSendResult r = sender.send("not a url", "{}", "t=1,v1=z", "ev-3", "task.failed");
+        assertThat(r.success()).isFalse();
+        assertThat(r.statusCode()).isEqualTo(0);
+        assertThat(r.error()).isNotBlank();
+    }
 }
