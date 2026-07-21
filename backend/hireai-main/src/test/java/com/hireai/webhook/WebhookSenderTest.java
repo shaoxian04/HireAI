@@ -16,7 +16,7 @@ class WebhookSenderTest {
     private WebhookSender sender(MockRestServiceServer[] holder) {
         RestClient.Builder builder = RestClient.builder();
         holder[0] = MockRestServiceServer.bindTo(builder).build();
-        return new WebhookSender(builder);
+        return new WebhookSender(builder.build()); // build the mock-bound client (prod injects webhookRestClient)
     }
 
     @Test void postsSignedBodyAndReportsSuccessOn2xx() {

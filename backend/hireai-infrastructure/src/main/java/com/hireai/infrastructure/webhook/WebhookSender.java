@@ -15,8 +15,13 @@ public class WebhookSender implements WebhookSenderPort {
 
     private final RestClient restClient;
 
-    public WebhookSender(RestClient.Builder restClientBuilder) {
-        this.restClient = restClientBuilder.build();
+    /**
+     * Injects the dedicated {@code webhookRestClient} (redirects disabled + webhook timeouts,
+     * see {@link WebhookRestClientConfig}) — NOT the shared auto-configured builder, so the
+     * Inv #6 SSRF guard cannot be bypassed via a callback's 3xx redirect to an internal host.
+     */
+    public WebhookSender(RestClient webhookRestClient) {
+        this.restClient = webhookRestClient;
     }
 
     @Override
