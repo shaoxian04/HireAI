@@ -467,3 +467,29 @@ export interface CreatedApiKeyDTO {
   dailySpendCap: number | null;
   rawKey: string;
 }
+
+// ── Push webhooks (per-API-key subscription + delivery log) ────────────────
+
+/** Mirrors the backend's SubscriptionDTO record (WebhookSubscriptionController). */
+export type WebhookSubscriptionDTO = {
+  id: string;
+  apiKeyId: string;
+  callbackUrl: string;
+  signingSecret: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Mirrors the backend's DeliveryDTO record (WebhookDeliveryController). */
+export type WebhookDeliveryDTO = {
+  eventId: string;
+  taskId: string;
+  eventType: "task.completed" | "task.failed";
+  status: "PENDING" | "DELIVERED" | "DEAD";
+  attempts: number;
+  nextAttemptAt: string;
+  createdAt: string;
+  deliveredAt: string | null;
+  lastError: string | null;
+};
