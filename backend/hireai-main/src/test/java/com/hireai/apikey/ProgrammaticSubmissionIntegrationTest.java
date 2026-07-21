@@ -243,5 +243,13 @@ class ProgrammaticSubmissionIntegrationTest {
                 new HttpEntity<>("{\"apiKeyId\":\"" + UUID.randomUUID() + "\",\"callbackUrl\":\"https://example.com/hook\"}",
                         apiKey(rawKey)), String.class);
         assertThat(subscribe.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        // redeliver is also reachable by an API_CLIENT key (headless reconcile/replay). A random id
+        // clears the security layer (NOT 401) and then fails on the missing delivery — proving the
+        // API_CLIENT half of the deliveries matcher, not just the CLIENT/GET half.
+        ResponseEntity<String> redeliver = rest.postForEntity(
+                url("/api/webhooks/deliveries/" + UUID.randomUUID() + "/redeliver"),
+                new HttpEntity<>(apiKey(rawKey)), String.class);
+        assertThat(redeliver.getStatusCode()).isNotEqualTo(HttpStatus.UNAUTHORIZED);
     }
 }
