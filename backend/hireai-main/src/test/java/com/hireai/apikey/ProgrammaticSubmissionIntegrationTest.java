@@ -200,4 +200,48 @@ class ProgrammaticSubmissionIntegrationTest {
         assertThat(objectMapper.readTree(second.getBody()).path("code").asText())
                 .isEqualTo("SPEND_CAP_EXCEEDED");
     }
+
+    /**
+     * Task 17 allow-list check (authoritative — see the 401-vs-403 post-mortem). This full-app chain
+     * has no {@code accessDeniedHandler}, so an authenticated-but-forbidden request renders 401, not
+     * 403 (the {@code @WebMvcTest} slice sees 403 for the same denial; only this full-app assertion is
+     * trustworthy). accept/reject are now human-only, so an API key is denied even against a
+     * random/non-existent task id — the security filter chain blocks it before the controller (and
+     * therefore any ownership/existence check) ever runs.
+     */
+    @Test
+    void acceptAndRejectAreDeniedForApiKey() throws Exception {
+        String jwt = login();
+        String rawKey = createKey(jwt, "");
+        UUID anyTaskId = UUID.randomUUID();
+
+        ResponseEntity<String> accept = rest.postForEntity(url("/api/tasks/" + anyTaskId + "/accept"),
+                new HttpEntity<>(null, apiKey(rawKey)), String.class);
+        assertThat(accept.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        ResponseEntity<String> reject = rest.postForEntity(url("/api/tasks/" + anyTaskId + "/reject"),
+                new HttpEntity<>("{\"reasonCategory\":\"A_MISMATCH\",\"reason\":\"no\"}", apiKey(rawKey)),
+                String.class);
+        assertThat(reject.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    /**
+     * Task 17 allow-list check: the delivery log is reachable headless (reconcile/replay by an
+     * API_CLIENT key), but subscription management is JWT-only (a leaked key must not be able to
+     * repoint the callback URL).
+     */
+    @Test
+    void webhookDeliveriesReachableByApiKeyButSubscriptionIsJwtOnly() throws Exception {
+        String jwt = login();
+        String rawKey = createKey(jwt, "");
+
+        ResponseEntity<String> deliveries = rest.exchange(url("/api/webhooks/deliveries"), HttpMethod.GET,
+                new HttpEntity<>(apiKey(rawKey)), String.class);
+        assertThat(deliveries.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<String> subscribe = rest.postForEntity(url("/api/webhooks/subscription"),
+                new HttpEntity<>("{\"apiKeyId\":\"" + UUID.randomUUID() + "\",\"callbackUrl\":\"https://example.com/hook\"}",
+                        apiKey(rawKey)), String.class);
+        assertThat(subscribe.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
 }
