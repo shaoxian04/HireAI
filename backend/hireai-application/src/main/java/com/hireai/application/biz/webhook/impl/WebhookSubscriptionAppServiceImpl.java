@@ -38,8 +38,8 @@ public class WebhookSubscriptionAppServiceImpl implements WebhookSubscriptionApp
 
     @Override
     public WebhookSubscriptionModel register(UUID ownerId, UUID apiKeyId, String callbackUrl) {
-        urlValidator.assertDeliverable(callbackUrl);
-        assertKeyOwned(ownerId, apiKeyId);
+        assertKeyOwned(ownerId, apiKeyId);          // Inv #5: authorize first — no DNS/SSRF work for a non-owner
+        urlValidator.assertDeliverable(callbackUrl); // Inv #6: SSRF-check the callback before any persist
         Instant now = clock.instant();
         repository.findActiveByApiKeyId(apiKeyId).ifPresent(s -> repository.save(s.deactivate(now)));
         WebhookSubscriptionModel sub = WebhookSubscriptionModel.create(

@@ -70,6 +70,15 @@ class WebhookSubscriptionAppServiceImplTest {
         verify(repo, times(2)).save(any());
     }
 
+    @Test void registerRejectsPrivateUrlAndPersistsNothing() {
+        keyOwnedBy(owner); // ownership passes → this isolates the Inv #6 SSRF gate, not the owner gate
+        doThrow(new DomainException(com.hireai.utility.result.ResultCode.VALIDATION_ERROR, "private"))
+                .when(validator).assertDeliverable("https://169.254.169.254/cb");
+        assertThatThrownBy(() -> svc.register(owner, keyId, "https://169.254.169.254/cb"))
+                .isInstanceOf(DomainException.class);
+        verify(repo, never()).save(any()); // Inv #6: nothing persisted when the callback URL is rejected
+    }
+
     @Test void rotateSecretReplacesSecret() {
         keyOwnedBy(owner);
         WebhookSubscriptionModel active = WebhookSubscriptionModel.create(UUID.randomUUID(), keyId, owner,
