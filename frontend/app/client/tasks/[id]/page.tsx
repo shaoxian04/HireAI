@@ -8,6 +8,7 @@ import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { StatusTrack } from "@/components/StatusTrack";
 import { TaskFailurePanel } from "@/components/TaskFailurePanel";
+import WebhookDeliveryStatus from "@/components/WebhookDeliveryStatus";
 import type { TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO, ValidationReportDTO } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
 import { ResultReviewBar } from "@/components/ResultReviewBar";
@@ -222,6 +223,9 @@ function TaskDetail() {
             {task.resolution ? `RESOLVED · ${task.resolution}` : task.status}
           </Badge>
         </header>
+
+        {/* Renders nothing for a WEB task or an API task with no webhook subscription. */}
+        <WebhookDeliveryStatus taskId={task.id} />
 
         {/* pipeline — hidden once the task is in dispute; the dispute timeline replaces it */}
         {!inDispute && (
