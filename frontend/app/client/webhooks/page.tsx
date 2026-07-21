@@ -22,6 +22,7 @@ function ClientWebhooks() {
   const [deliveries, setDeliveries] = useState<WebhookDeliveryDTO[] | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [hasDeadDeliveries, setHasDeadDeliveries] = useState(false);
 
   // useCallback (rather than a plain function + useEffect(load, [])) so the effects below can list
   // these as dependencies and satisfy react-hooks/exhaustive-deps cleanly — no disable needed.
@@ -66,9 +67,34 @@ function ClientWebhooks() {
     loadDeliveries();
   }, [loadDeliveries]);
 
+  // Account-wide DEAD health signal — deliberately NOT derived from `deliveries` (which is
+  // scoped by `statusFilter`): a filter like "Pending" must never hide the fact that DEAD
+  // deliveries exist elsewhere in the account, so this fetches status=DEAD unconditionally.
+  const loadDeadStatus = useCallback(() => {
+    api<WebhookDeliveryDTO[]>("/webhooks/deliveries?status=DEAD")
+      .then((rows) => setHasDeadDeliveries(rows.length > 0))
+      .catch(() => {
+        // best-effort health signal only — a failure here shouldn't surface a page-level error
+      });
+  }, []);
+  useEffect(() => {
+    loadDeadStatus();
+  }, [loadDeadStatus]);
+
+  // Reset the "Copied ✓" affordance when switching API keys so it doesn't linger and imply the
+  // newly-selected key's secret was just copied.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional reset-on-key-switch so a newly selected key never shows a stale "Copied" affordance
+    setCopied(false);
+  }, [selectedKeyId]);
+
   async function registerCallback(e: FormEvent) {
     e.preventDefault();
     if (!selectedKeyId) return;
+    if (!callbackUrl.startsWith("https://")) {
+      setError("Callback URL must be HTTPS.");
+      return;
+    }
     setError(null);
     setSaving(true);
     try {
@@ -124,6 +150,7 @@ function ClientWebhooks() {
     try {
       await api<void>(`/webhooks/deliveries/${eventId}/redeliver`, { method: "POST" });
       loadDeliveries();
+      loadDeadStatus();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Resend failed");
     } finally {
@@ -136,8 +163,6 @@ function ClientWebhooks() {
     await navigator.clipboard.writeText(subscription.signingSecret);
     setCopied(true);
   }
-
-  const hasDeadDeliveries = (deliveries ?? []).some((d) => d.status === "DEAD");
 
   return (
     <div className="space-y-10">
