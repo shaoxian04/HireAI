@@ -69,11 +69,12 @@ class OpenApiDocsIntegrationTest {
 
     @Test
     void defaultApiDocDoesNotExposeAdminRoutes() {
+        // springdoc serves a DEFAULT ungrouped doc at bare /v3/api-docs (empirically 200) alongside the
+        // scoped /v3/api-docs/programmatic. Assert OK unconditionally so a future change that stops
+        // serving it fails loud instead of vacuously passing, then assert it excludes admin routes
+        // (springdoc.paths-to-match scopes this default doc to the programmatic surface).
         ResponseEntity<String> resp = rest.getForEntity(url("/v3/api-docs"), String.class);
-        // The bare/ungrouped doc must never publish admin/internal routes to an anonymous caller.
-        // (If springdoc doesn't serve a bare doc, the body is null/non-200 and the assertion holds.)
-        if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
-            assertThat(resp.getBody()).doesNotContain("/api/admin");
-        }
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(resp.getBody()).doesNotContain("/api/admin");
     }
 }

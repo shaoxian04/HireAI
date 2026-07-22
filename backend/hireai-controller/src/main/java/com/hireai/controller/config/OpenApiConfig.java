@@ -17,6 +17,9 @@ public class OpenApiConfig {
 
     @Bean
     public GroupedOpenApi programmaticApi() {
+        // This path allowlist is MIRRORED by `springdoc.paths-to-match` in hireai-main's
+        // application.yml, which scopes the DEFAULT ungrouped /v3/api-docs to the same surface so the
+        // public default doc never exposes admin routes. Keep the two lists in sync.
         return GroupedOpenApi.builder()
                 .group("programmatic")
                 .pathsToMatch("/api/tasks", "/api/tasks/**",
