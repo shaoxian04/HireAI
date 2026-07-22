@@ -54,6 +54,12 @@ logging:
   level:
     root: INFO
 
+springdoc:
+  # The "programmatic" GroupedOpenApi only ADDS /v3/api-docs/programmatic; springdoc still serves a
+  # DEFAULT ungrouped doc at /v3/api-docs. Scope that default to the same programmatic surface so the
+  # public doc never exposes admin/internal routes (brief: "must EXCLUDE admin/internal routes").
+  paths-to-match: /api/tasks, /api/tasks/**, /api/keys, /api/keys/**, /api/webhooks/**, /api/catalogue/**
+
 hireai:
   # Public base URL the platform advertises to Agents for result callbacks (Plan 4's routing
   # builds callbackUrl = <this> + /api/agent-callbacks/{taskId}/result). Owned here in Plan 2's

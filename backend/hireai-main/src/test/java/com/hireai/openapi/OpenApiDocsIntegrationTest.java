@@ -66,4 +66,14 @@ class OpenApiDocsIntegrationTest {
         ResponseEntity<String> resp = rest.getForEntity(url("/swagger-ui/index.html"), String.class);
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
+
+    @Test
+    void defaultApiDocDoesNotExposeAdminRoutes() {
+        ResponseEntity<String> resp = rest.getForEntity(url("/v3/api-docs"), String.class);
+        // The bare/ungrouped doc must never publish admin/internal routes to an anonymous caller.
+        // (If springdoc doesn't serve a bare doc, the body is null/non-200 and the assertion holds.)
+        if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
+            assertThat(resp.getBody()).doesNotContain("/api/admin");
+        }
+    }
 }
