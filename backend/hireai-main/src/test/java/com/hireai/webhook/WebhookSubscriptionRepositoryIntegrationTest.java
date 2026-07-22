@@ -71,8 +71,11 @@ class WebhookSubscriptionRepositoryIntegrationTest {
         }
 
         Instant now = Instant.parse("2026-07-19T00:00:00Z");
-        ApiKeyModel key = ApiKeyModel.issue(owner, "sub-test-hash", "hk_live_sub_test", "webhook-test",
-                null, null, now);
+        // Unique key_hash per call — api_keys.key_hash is UNIQUE, and both test methods
+        // seed against the same per-class Postgres container.
+        String uniq = UUID.randomUUID().toString().replace("-", "");
+        ApiKeyModel key = ApiKeyModel.issue(owner, "sub-test-hash-" + uniq, "hk_live_" + uniq.substring(0, 6),
+                "webhook-test", null, null, now);
         apiKeys.save(key);
         return key.id();
     }
