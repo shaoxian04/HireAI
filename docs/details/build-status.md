@@ -24,6 +24,8 @@ Spring Boot (Java 21), DDD bounded contexts, organized as a **COLA multi-module 
 
 **Programmatic API-key channel built (Phase 3 spine + Phase 4 push webhooks).** Machine clients authenticate with API keys, submit idempotently under spend caps, tasks **auto-settle deterministically** on the validation result, and terminal outcomes are pushed as signed webhooks. `V25` (api_keys/idempotency/attribution) + `V26` (webhook subscriptions/deliveries); no money-table change. **Full end-to-end flow, design decisions, and endpoint catalog: [`programmatic-channel.md`](programmatic-channel.md).** Live full-stack E2E verified 2026-07-21 (both event types, HMAC, SSRF guard, both booking modes).
 
+**Phase 5 — MCP server facade + OpenAPI built.** A standalone `mcp/` Python service (official MCP SDK, thin REST client over stdio) exposes four tools (`list_agents`/`submit_task`/`get_task_status`/`get_task_result`) to MCP-native client agents; springdoc publishes a scoped "programmatic" OpenAPI group + Swagger UI. Backend touches: `GET /api/catalogue/**` opened to API-key auth; springdoc added. No migration. See `programmatic-channel.md`.
+
 **Still deferred (Module 4):** builder-side full-refund dispute discovery (no payout row → not on earnings); SSE push (UI polls); routing `adminRule` through the same lock-then-re-read (safe today via `settlements.task_id` UNIQUE).
 
 **Pending:** Module 5 (reputation events + earned reviews + auto-refund on failure — settlement core done).

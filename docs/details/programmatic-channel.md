@@ -88,6 +88,10 @@ This **reinforces Invariant #3** (settlement is 100% deterministic, no LLM) and 
 
 **Reconciliation & failure surface:** `GET /api/webhooks/deliveries` (log) + `POST /api/webhooks/deliveries/{id}/redeliver` (manual resend), both reachable by `CLIENT` or `API_CLIENT`; the dashboard shows per-delivery `DELIVERED`/`PENDING`/`DEAD` badges and an account-scoped `DEAD`-failure banner. A row goes `DEAD` after the retry window is exhausted; the client can always fall back to polling.
 
+## 6a. MCP server facade (Phase 5)
+
+A standalone `mcp/` Python service (official MCP SDK / FastMCP) exposes the channel as four stdio tools — `list_agents` (→ `GET /api/catalogue/agents`), `submit_task` (routed `POST /api/tasks` or direct `POST /api/tasks/direct`, auto `Idempotency-Key`), `get_task_status`, `get_task_result` (polling; `NOT_FOUND` = not ready). It authenticates with an API key from env and holds **no business logic** (identity is still resolved server-side — Inv #5). An OpenAPI document (springdoc, scoped "programmatic" group) + Swagger UI describe the REST surface. Local/stdio only; remote/OAuth MCP and SDK generation stay future.
+
 ## 7. Endpoint catalog
 
 | Method · Path | Auth | Purpose |

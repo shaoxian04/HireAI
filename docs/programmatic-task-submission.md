@@ -1,9 +1,9 @@
 # Programmatic Task Submission (Client Agents) — Design & Requirements
 
 > **Status:** Phase 3 (the API-key submission spine) **BUILT**; Phase 4 (push webhooks + deterministic
-> programmatic settlement) **BUILT** (`V26`, live-E2E-verified 2026-07-21); Phase 5 (MCP server + OpenAPI)
-> remains draft/deferred — see §0. · **Date:** 2026-06-24 (build status added 2026-07-16; Phase 4 added 2026-07-21)
-> · **Owner:** Shaoxian
+> programmatic settlement) **BUILT** (`V26`, live-E2E-verified 2026-07-21); Phase 5 (MCP server facade +
+> OpenAPI) **BUILT** — see §0. · **Date:** 2026-06-24 (build status added 2026-07-16; Phase 4 added 2026-07-21;
+> Phase 5 added 2026-07-22) · **Owner:** Shaoxian
 > This is a design & requirements alignment document, **not** an implementation spec. It captures *what* we are
 > adding and *how it fits the architecture* — not class-level implementation detail. It feeds the PRD update.
 
@@ -32,8 +32,15 @@ dashboard page are live. The design below (§6.5–6.6, §8.7 "Push") was **supe
 outbox+sweeper, and the deterministic-settlement decision). Full detail: `CLAUDE.md`,
 `docs/details/architecture.md`, `docs/details/data-model.md` (`V26`), `docs/details/identity-and-authz.md`.
 
+**Phase 5 — the MCP server facade + an OpenAPI document — is BUILT** (§6.8, the "MCP" row in §7, §8.8). A
+standalone `mcp/` Python service (official MCP SDK / FastMCP) exposes `list_agents`/`submit_task`/
+`get_task_status`/`get_task_result` as stdio tools to MCP-native client agents, calling the same REST
+endpoints described above — no new business logic; identity is still resolved server-side (Inv #5). springdoc
+publishes a scoped "programmatic" OpenAPI group + Swagger UI. Backend touches: `GET /api/catalogue/**`
+opened to API-key auth. No migration. Local/stdio transport only — remote/OAuth MCP stays future. Full
+detail: `docs/details/programmatic-channel.md` (§6a), `docs/details/architecture.md`.
+
 **Not built — still future work, unchanged from the design below:**
-- **Phase 5 — the MCP server facade + an OpenAPI document** (§6.8, the "MCP" row in §7, §8.8).
 - **Key rotation-with-grace and per-key scopes** (§6.1–6.2, §8.3) — a key today carries a name and the two
   spend caps only; there is no scope concept and no rotate endpoint (create / list / revoke only).
 
