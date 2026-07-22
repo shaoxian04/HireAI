@@ -4,6 +4,7 @@ import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.biz.task.reliability.impl.TaskReliabilityAppServiceImpl;
 import com.hireai.application.biz.task.routing.RoutingAppService;
+import com.hireai.application.biz.webhook.WebhookOutboxAppService;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -22,6 +23,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -34,6 +36,7 @@ class TaskReliabilityAppServiceImplTest {
     @Mock RoutingAppService routingAppService;
     @Mock TaskWriteAppService taskWriteAppService;
     @Mock SettlementWriteAppService settlementWriteAppService;
+    @Mock WebhookOutboxAppService webhookOutboxAppService;
 
     private TaskReliabilityAppServiceImpl service;
 
@@ -44,7 +47,7 @@ class TaskReliabilityAppServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new TaskReliabilityAppServiceImpl(taskRepository, routingAppService,
-                taskWriteAppService, settlementWriteAppService, 3);
+                taskWriteAppService, settlementWriteAppService, webhookOutboxAppService, 3);
     }
 
     private TaskModel taskWithStatus(TaskStatus status) {
@@ -134,6 +137,7 @@ class TaskReliabilityAppServiceImplTest {
         service.timeoutOne(taskId);
         verify(taskRepository).save(argThat(t -> t.status() == TaskStatus.TIMED_OUT));
         verify(settlementWriteAppService).settleRejected(taskId, clientId, budget);
+        verify(webhookOutboxAppService).enqueueFailed(any(), eq("TIMED_OUT"));
     }
 
     @Test

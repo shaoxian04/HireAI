@@ -2,6 +2,7 @@ package com.hireai.application.biz.task.callback.impl;
 
 import com.hireai.application.biz.adjudication.validation.ValidationAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.application.biz.webhook.WebhookOutboxAppService;
 import com.hireai.application.port.security.DispatchTokenClaims;
 import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.application.port.security.DispatchTokenService;
@@ -27,6 +28,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -38,10 +40,11 @@ class AgentCallbackAppServiceImplTest {
     @Mock DispatchTokenService dispatchTokenService;
     @Mock ValidationAppService validationAppService;
     @Mock SettlementWriteAppService settlementWriteAppService;
+    @Mock WebhookOutboxAppService webhookOutboxAppService;
 
     private AgentCallbackAppServiceImpl service() {
         return new AgentCallbackAppServiceImpl(taskRepository, dispatchTokenService,
-                validationAppService, settlementWriteAppService);
+                validationAppService, settlementWriteAppService, webhookOutboxAppService);
     }
 
     private TaskModel executingTask() {
@@ -167,6 +170,7 @@ class AgentCallbackAppServiceImplTest {
         assertThat(captor.getValue().status()).isEqualTo(TaskStatus.FAILED);
         verify(settlementWriteAppService).settleRejected(
                 task.id(), task.clientId(), task.budget());
+        verify(webhookOutboxAppService).enqueueFailed(any(), eq("FAILED"));
         verify(validationAppService, never()).validateAndGate(any());
     }
 }

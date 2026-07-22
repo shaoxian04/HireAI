@@ -12,6 +12,12 @@ import com.hireai.application.port.task.TaskExecutionPort;
 import com.hireai.domain.biz.adjudication.enums.Verdict;
 import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
 import com.hireai.domain.biz.adjudication.repository.ValidationReportRepository;
+import com.hireai.domain.biz.apikey.model.ApiKeyModel;
+import com.hireai.domain.biz.apikey.repository.ApiKeyRepository;
+import com.hireai.domain.biz.apikey.repository.ApiKeyTaskRepository;
+import com.hireai.domain.biz.ledger.settlement.enums.SettlementType;
+import com.hireai.domain.biz.ledger.settlement.model.SettlementModel;
+import com.hireai.domain.biz.ledger.settlement.repository.SettlementRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.info.AgentResultInfo;
@@ -19,6 +25,12 @@ import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.ledger.wallet.model.WalletModel;
+import com.hireai.domain.biz.webhook.enums.WebhookDeliveryStatus;
+import com.hireai.domain.biz.webhook.enums.WebhookEventType;
+import com.hireai.domain.biz.webhook.model.WebhookDeliveryModel;
+import com.hireai.domain.biz.webhook.model.WebhookSubscriptionModel;
+import com.hireai.domain.biz.webhook.repository.WebhookDeliveryRepository;
+import com.hireai.domain.biz.webhook.repository.WebhookSubscriptionRepository;
 import com.hireai.domain.shared.model.Money;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
@@ -34,7 +46,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -90,6 +104,11 @@ class ValidationGateIntegrationTest {
     @Autowired WalletWriteAppService walletWriteAppService;
     @Autowired WalletReadAppService walletReadAppService;
     @Autowired ValidationReportRepository validationReportRepository;
+    @Autowired ApiKeyRepository apiKeyRepository;
+    @Autowired ApiKeyTaskRepository apiKeyTaskRepository;
+    @Autowired WebhookSubscriptionRepository webhookSubscriptionRepository;
+    @Autowired WebhookDeliveryRepository webhookDeliveryRepository;
+    @Autowired SettlementRepository settlementRepository;
     @Autowired JdbcTemplate jdbc;
 
     /** Mocked: RoutingAppService suppresses the auto-routing event listener on task submit. */
@@ -103,6 +122,51 @@ class ValidationGateIntegrationTest {
         jdbc.update("INSERT INTO users (id, email) VALUES (?, ?)", id, id + "@test.local");
         jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'CLIENT')", id);
         return id;
+    }
+
+    private UUID newBuilder() {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO users (id, email) VALUES (?, ?)", id, id + "@test.local");
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'BUILDER')", id);
+        return id;
+    }
+
+    /**
+     * Seeds an ACTIVE agent + version owned by {@code builderId} via raw JDBC (mirrors
+     * DisputeFlowIntegrationTest) so {@code AgentRepository.findOwnerByVersionId} resolves the
+     * builder for the auto-settle branch under test.
+     */
+    private UUID newAgentVersion(UUID builderId) {
+        UUID agentId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO agents (id, owner_id, name, status, current_version_id)
+                VALUES (?, ?, 'IT Agent', 'ACTIVE', ?)""", agentId, builderId, versionId);
+        jdbc.update("""
+                INSERT INTO agent_versions (id, agent_id, version_number, output_spec,
+                                            capability_categories, webhook_url, max_execution_seconds, price)
+                VALUES (?, ?, 1, '{"format":"JSON"}'::jsonb, ARRAY['summarisation'],
+                        'https://agent.test/run', 60, 10.00)""", versionId, agentId);
+        return versionId;
+    }
+
+    /** Mints an API key for {@code ownerId} and returns its id. */
+    private UUID newApiKey(UUID ownerId) {
+        ApiKeyModel key = ApiKeyModel.issue(ownerId, UUID.randomUUID().toString(), "hk_live_gate_test",
+                "gate-test-key", null, null, Instant.now());
+        return apiKeyRepository.save(key).id();
+    }
+
+    /** Attributes {@code taskId} to {@code apiKeyId} (programmatic-channel marker read by the gate). */
+    private void attributeToApiKey(UUID taskId, UUID apiKeyId, String budget) {
+        apiKeyTaskRepository.attribute(taskId, apiKeyId, new BigDecimal(budget), Instant.now());
+    }
+
+    /** Registers an active webhook subscription for {@code apiKeyId} so enqueue* is not a no-op. */
+    private void subscribeWebhook(UUID apiKeyId, UUID ownerId) {
+        webhookSubscriptionRepository.save(WebhookSubscriptionModel.create(
+                UUID.randomUUID(), apiKeyId, ownerId, "https://client.example.com/webhook",
+                "whsec_gate_test", Instant.now()));
     }
 
     /**
@@ -125,7 +189,8 @@ class ValidationGateIntegrationTest {
      * PASS scenario: a COMPLETED callback with a valid-JSON payload passes the validation gate.
      * Expected: task status == PENDING_REVIEW; a validation_reports row exists with verdict PASS.
      * The spec is JSON-format with no schema, so FORMAT_JSON_PARSEABLE=true + SCHEMA_SKIPPED=true
-     * is sufficient for a PASS verdict.
+     * is sufficient for a PASS verdict. This is a WEB-submitted task (no api_key_task attribution),
+     * so it must NOT auto-settle and must NOT enqueue any webhook delivery row (Task 13).
      */
     @Test
     void validJsonResultPassesGateAndMovesToPendingReview() {
@@ -147,6 +212,52 @@ class ValidationGateIntegrationTest {
                 .orElseThrow(() -> new AssertionError("Expected a validation_reports row for task " + taskId));
         assertThat(report.verdict()).isEqualTo(Verdict.PASS);
         assertThat(report.taskId()).isEqualTo(taskId);
+
+        assertThat(settlementRepository.findByTaskId(taskId)).isEmpty(); // no auto-settle on WEB channel
+        List<WebhookDeliveryModel> deliveries = webhookDeliveryRepository.findForOwner(client, null, null, taskId);
+        assertThat(deliveries).isEmpty(); // no api_key_task attribution -> enqueue is a no-op
+    }
+
+    /**
+     * API-submitted PASS scenario (Task 13): a task attributed to an API key (api_key_task row) that
+     * passes validation auto-settles deterministically in the SAME transaction as the gate — no human
+     * PENDING_REVIEW stop. Reuses {@code settleAccepted} verbatim (Invariant #3: no new money path;
+     * the 85/15 split is computed by SettlementPolicy/SettlementDomainService, never here).
+     * Expected: task RESOLVED; a settlement row (type ACCEPT) exists; builder's wallet credited 85%;
+     * exactly one PENDING task.completed delivery row is enqueued (transactional outbox).
+     */
+    @Test
+    void apiSubmittedTaskAutoSettlesOnPassAndEnqueuesCompletedWebhook() {
+        UUID client = newClient();
+        UUID builder = newBuilder();
+        UUID agentVersionId = newAgentVersion(builder);
+        UUID taskId = submitExecutingTask(client, agentVersionId, "30.00");
+
+        UUID apiKeyId = newApiKey(client);
+        attributeToApiKey(taskId, apiKeyId, "30.00");
+        subscribeWebhook(apiKeyId, client);
+
+        when(dispatchTokenService.verify(eq("tok-pass-api")))
+                .thenReturn(new DispatchTokenClaims(taskId, agentVersionId, Instant.now().plusSeconds(120)));
+
+        agentCallbackAppService.recordResult(taskId, "tok-pass-api",
+                new AgentResultInfo("COMPLETED", "{\"result\":\"gate passed\"}", null, "ok"));
+
+        TaskModel task = taskReadAppService.getForClient(taskId, client);
+        assertThat(task.status()).isEqualTo(TaskStatus.RESOLVED);
+
+        SettlementModel settlement = settlementRepository.findByTaskId(taskId)
+                .orElseThrow(() -> new AssertionError("Expected a settlement row for task " + taskId));
+        assertThat(settlement.type()).isEqualTo(SettlementType.ACCEPT);
+
+        WalletModel builderWallet = walletReadAppService.getByUserId(builder);
+        assertThat(builderWallet.available()).isEqualTo(Money.of("25.50")); // 30.00 x 0.85
+
+        List<WebhookDeliveryModel> deliveries = webhookDeliveryRepository.findForOwner(client, null, null, taskId);
+        assertThat(deliveries).hasSize(1);
+        assertThat(deliveries.get(0).status()).isEqualTo(WebhookDeliveryStatus.PENDING);
+        assertThat(deliveries.get(0).eventType()).isEqualTo(WebhookEventType.TASK_COMPLETED);
+        assertThat(deliveries.get(0).taskId()).isEqualTo(taskId);
     }
 
     /**

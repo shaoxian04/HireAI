@@ -206,6 +206,11 @@ export const handlers = [
   // SPEC_VIOLATION). Keeps onUnhandledRequest:"error" happy for the failure-panel path.
   http.get("*/api/tasks/:id/validation", () => fail("NOT_FOUND", "No validation report", 404)),
 
+  // Default: no webhook deliveries for this task (WEB task / no API subscription) — the
+  // WebhookDeliveryStatus indicator mounts unconditionally on the task-detail page, so every
+  // taskDetail-family test needs this handled under onUnhandledRequest:"error".
+  http.get("*/api/webhooks/deliveries", () => ok([])),
+
   // ── Dispute lifecycle handlers (client-facing accept/appeal) ──
   // Default empty list — Nav renders on nearly every authenticated page and now calls
   // useDisputeCount(), which hits this endpoint. Individual tests override with server.use(...).

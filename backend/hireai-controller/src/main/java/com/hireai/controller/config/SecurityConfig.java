@@ -80,10 +80,21 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.GET,
                                 "/api/tasks", "/api/tasks/*", "/api/tasks/*/result",
                                 "/api/tasks/*/validation").hasAnyRole("CLIENT", "API_CLIENT")
+                        // Accept/reject are human-only: a client must review and decide, not a script.
+                        // Equivalent to letting them fall through to anyRequest() below; kept explicit
+                        // to document intent. An API_CLIENT key is denied (401 at the full app).
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
-                                "/api/tasks/*/accept", "/api/tasks/*/reject").hasAnyRole("CLIENT", "API_CLIENT")
+                                "/api/tasks/*/accept", "/api/tasks/*/reject").hasAnyRole("CLIENT", "BUILDER", "ADMIN")
                         // Key management is JWT-only (a leaked key cannot mint keys).
                         .requestMatchers("/api/keys/**").hasRole("CLIENT")
+                        // Subscription management is JWT-only (a leaked key cannot repoint the callback).
+                        .requestMatchers("/api/webhooks/subscription/**").hasRole("CLIENT")
+                        // Delivery log + redeliver: reachable by a human CLIENT or an API_CLIENT key
+                        // (reconcile/replay headless).
+                        .requestMatchers(org.springframework.http.HttpMethod.GET,
+                                "/api/webhooks/deliveries").hasAnyRole("CLIENT", "API_CLIENT")
+                        .requestMatchers(org.springframework.http.HttpMethod.POST,
+                                "/api/webhooks/deliveries/*/redeliver").hasAnyRole("CLIENT", "API_CLIENT")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // Default-deny for API keys: everything else needs a human role. Equivalent to
                         // authenticated() for JWT users (all hold >=1 of CLIENT/BUILDER/ADMIN); it only

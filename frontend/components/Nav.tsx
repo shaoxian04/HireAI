@@ -43,6 +43,7 @@ export function Nav() {
                   { href: "/client", label: "Marketplace" },
                   { href: "/client/tasks", label: "My tasks" },
                   { href: "/client/keys", label: "API keys" },
+                  { href: "/client/webhooks", label: "Webhooks" },
                 ].map((l) => (
                   <Link
                     key={l.href}

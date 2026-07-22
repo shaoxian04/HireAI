@@ -2,9 +2,10 @@ import type { ReactNode } from "react";
 
 /**
  * Tailwind colour classes per lifecycle status. Covers the full TaskStatus and AgentStatus
- * enums (see lib/types.ts); unknown values fall back to neutral so the UI never crashes on a
- * status the backend adds later. Lime = good/terminal-success + live, cyan = in-flight,
- * amber = waiting/attention, red = failure/terminal-bad, neutral/dim = inactive.
+ * enums, the dispute lifecycle, and the webhook delivery status (see lib/types.ts); unknown
+ * values fall back to neutral so the UI never crashes on a status the backend adds later.
+ * Lime = good/terminal-success + live, cyan = in-flight, amber = waiting/attention, red =
+ * failure/terminal-bad, neutral/dim = inactive.
  */
 const ACCENT = "text-accent border-accent/40 bg-accent/10";
 const CYAN = "text-cyan border-cyan/35 bg-cyan/10";
@@ -40,6 +41,10 @@ const STATUS_CLASSES: Record<string, string> = {
   ARBITRATING: CYAN,
   ESCALATED: RED,
   RULED: VIOLET,
+  // webhook delivery log
+  PENDING: AMBER,
+  DELIVERED: ACCENT,
+  DEAD: RED,
 };
 
 /** Tailwind classes for a lifecycle status badge. Falls back to neutral for unknown values. */

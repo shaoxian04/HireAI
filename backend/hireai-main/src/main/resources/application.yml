@@ -117,3 +117,17 @@ hireai:
     supabase-url: ${SUPABASE_URL:}
     service-key: ${SUPABASE_SERVICE_KEY:}
     bucket: ${SUPABASE_STORAGE_BUCKET:agent-media}
+  webhooks:
+    # Phase 4 push webhooks: a transactional-outbox sweeper delivers signed task.completed/task.failed
+    # pings to a client-registered callback. Retry is exponential-with-cap (WebhookBackoffPolicy):
+    # base 10s doubling to a 1h cap over up to 28 attempts (~24h reconciliation window).
+    sweep-interval: ${WEBHOOKS_SWEEP_INTERVAL:PT5S}
+    batch-size: ${WEBHOOKS_BATCH_SIZE:50}
+    base-backoff-seconds: ${WEBHOOKS_BASE_BACKOFF_SECONDS:10}
+    cap-backoff-seconds: ${WEBHOOKS_CAP_BACKOFF_SECONDS:3600}
+    max-attempts: ${WEBHOOKS_MAX_ATTEMPTS:28}
+    # Allow http://localhost callbacks only when explicitly enabled (dev/demo); HTTPS enforced
+    # in every other case (Hard Invariant #6). Mirrors hireai.dispatch.allow-insecure-localhost.
+    allow-insecure-localhost: ${WEBHOOKS_ALLOW_INSECURE_LOCALHOST:false}
+    connect-timeout: ${WEBHOOKS_CONNECT_TIMEOUT:PT3S}
+    read-timeout: ${WEBHOOKS_READ_TIMEOUT:PT5S}

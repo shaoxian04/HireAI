@@ -1,7 +1,8 @@
 # Programmatic Task Submission (Client Agents) — Design & Requirements
 
-> **Status:** Phase 3 (the API-key submission spine) **BUILT**; Phase 4 (push webhooks) and Phase 5 (MCP
-> server + OpenAPI) remain draft/deferred — see §0. · **Date:** 2026-06-24 (build status added 2026-07-16)
+> **Status:** Phase 3 (the API-key submission spine) **BUILT**; Phase 4 (push webhooks + deterministic
+> programmatic settlement) **BUILT** (`V26`, live-E2E-verified 2026-07-21); Phase 5 (MCP server + OpenAPI)
+> remains draft/deferred — see §0. · **Date:** 2026-06-24 (build status added 2026-07-16; Phase 4 added 2026-07-21)
 > · **Owner:** Shaoxian
 > This is a design & requirements alignment document, **not** an implementation spec. It captures *what* we are
 > adding and *how it fits the architecture* — not class-level implementation detail. It feeds the PRD update.
@@ -18,10 +19,20 @@ frozen escrow + rolling-24h daily spend, either exceeded → 409 `SPEND_CAP_EXCE
 `CLAUDE.md` (build-status paragraph), `docs/details/identity-and-authz.md` (the auth filter + allow-list),
 `docs/details/data-model.md` (`V25` — `api_keys`/`idempotency_keys`/`api_key_task`).
 
+**Phase 4 — signed push webhooks + deterministic programmatic settlement — is BUILT** (migration `V26`,
+over the same unchanged core). API/MCP-submitted tasks **auto-settle on the objective validation result**
+(PASS → 85/15 payout → `RESOLVED`; FAIL → refund → `SPEC_VIOLATION`) — no human review, accept/reject, or
+dispute (accept/reject were consequently dropped from the API allow-list). Terminal transitions enqueue a
+thin, HMAC-signed (Stripe-style), SSRF-guarded `task.completed`/`task.failed` event into a **transactional
+outbox** (`webhook_deliveries`) delivered at-least-once by an `@Scheduled WebhookDeliverySweeper`; the
+webhook is a *doorbell* (the client still reads the result via the poll path). Per-key subscription
+(register/rotate-secret/deactivate, JWT-only), a delivery log + manual redeliver, and a `/client/webhooks`
+dashboard page are live. The design below (§6.5–6.6, §8.7 "Push") was **superseded** by
+`docs/superpowers/specs/2026-07-19-push-webhooks-design.md` where they differ (notably RabbitMQ+DLQ →
+outbox+sweeper, and the deterministic-settlement decision). Full detail: `CLAUDE.md`,
+`docs/details/architecture.md`, `docs/details/data-model.md` (`V26`), `docs/details/identity-and-authz.md`.
+
 **Not built — still future work, unchanged from the design below:**
-- **Phase 4 — signed push webhooks** (§6.5–6.6, the "Push" half of §8.7, `callbackUrl` + HMAC + the SSRF
-  guard, `client_webhook_subscriptions` / `webhook_deliveries`). Today a client agent can only **poll**
-  (§8.7 "Poll" — this half is built, reusing the existing `GET` endpoints under API-key auth).
 - **Phase 5 — the MCP server facade + an OpenAPI document** (§6.8, the "MCP" row in §7, §8.8).
 - **Key rotation-with-grace and per-key scopes** (§6.1–6.2, §8.3) — a key today carries a name and the two
   spend caps only; there is no scope concept and no rotate endpoint (create / list / revoke only).

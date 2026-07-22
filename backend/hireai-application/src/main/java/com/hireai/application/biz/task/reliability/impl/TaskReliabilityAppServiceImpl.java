@@ -4,6 +4,7 @@ import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.biz.task.reliability.TaskReliabilityAppService;
 import com.hireai.application.biz.task.routing.RoutingAppService;
+import com.hireai.application.biz.webhook.WebhookOutboxAppService;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
@@ -31,12 +32,14 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
     private final RoutingAppService routingAppService;
     private final TaskWriteAppService taskWriteAppService;
     private final SettlementWriteAppService settlementWriteAppService;
+    private final WebhookOutboxAppService webhookOutboxAppService;
     private final int rematchMaxAttempts;
 
     public TaskReliabilityAppServiceImpl(TaskRepository taskRepository,
                                          RoutingAppService routingAppService,
                                          TaskWriteAppService taskWriteAppService,
                                          SettlementWriteAppService settlementWriteAppService,
+                                         WebhookOutboxAppService webhookOutboxAppService,
                                          @Value("${hireai.matching.rematch-max-attempts:3}") int rematchMaxAttempts) {
         if (rematchMaxAttempts < 1) {
             throw new IllegalStateException("rematch-max-attempts must be >= 1; got " + rematchMaxAttempts);
@@ -45,6 +48,7 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
         this.routingAppService = routingAppService;
         this.taskWriteAppService = taskWriteAppService;
         this.settlementWriteAppService = settlementWriteAppService;
+        this.webhookOutboxAppService = webhookOutboxAppService;
         this.rematchMaxAttempts = rematchMaxAttempts;
     }
 
@@ -97,6 +101,7 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
         TaskModel timedOut = task.markTimedOut();
         taskRepository.save(timedOut);
         settlementWriteAppService.settleRejected(taskId, timedOut.clientId(), timedOut.budget());
+        webhookOutboxAppService.enqueueFailed(timedOut, "TIMED_OUT");
         log.info("Task {} TIMED_OUT past execution deadline; escrow fully refunded", taskId);
     }
 }
