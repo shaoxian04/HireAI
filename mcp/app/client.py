@@ -1,3 +1,4 @@
+import uuid
 from typing import Any
 
 import httpx
@@ -57,3 +58,34 @@ class HireAIClient:
             return body.get("data")
         raise HireAIError(body.get("message") or "HireAI request failed",
                           code=body.get("code"), status=resp.status_code)
+
+    async def list_agents(self, *, category: str = "", query: str = "", sort: str = "hot",
+                          page: int = 0, size: int = 20) -> list:
+        return await self._request("GET", "/api/catalogue/agents", params={
+            "q": query, "category": category, "sort": sort, "page": page, "size": size})
+
+    async def submit_routed(self, *, title: str, description: str, category: str, budget: float,
+                            output_format: str, schema: str = "", acceptance_criteria: str = "") -> dict:
+        return await self._request(
+            "POST", "/api/tasks",
+            json={"title": title, "description": description, "category": category, "budget": budget,
+                  "outputSpec": {"format": output_format, "schema": schema,
+                                 "acceptanceCriteria": acceptance_criteria}},
+            extra_headers={"Idempotency-Key": str(uuid.uuid4())})
+
+    async def submit_direct(self, *, title: str, description: str, budget: float, agent_id: str) -> dict:
+        return await self._request(
+            "POST", "/api/tasks/direct",
+            json={"title": title, "description": description, "budget": budget, "agentId": agent_id},
+            extra_headers={"Idempotency-Key": str(uuid.uuid4())})
+
+    async def get_task(self, task_id: str) -> dict:
+        return await self._request("GET", f"/api/tasks/{task_id}")
+
+    async def get_task_result(self, task_id: str) -> dict:
+        try:
+            return await self._request("GET", f"/api/tasks/{task_id}/result")
+        except HireAIError as exc:
+            if exc.code == "NOT_FOUND":
+                raise ResultNotReady() from exc
+            raise
