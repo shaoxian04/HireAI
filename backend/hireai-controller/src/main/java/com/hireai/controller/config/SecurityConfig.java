@@ -96,6 +96,11 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
                                 "/api/webhooks/deliveries/*/redeliver").hasAnyRole("CLIENT", "API_CLIENT")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // Public catalogue browse: reachable by any human role or an API_CLIENT key
+                        // (powers the MCP list_agents tool). GET only; owner-private fields are already
+                        // stripped from the catalogue DTOs (Hard Invariant #5).
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/catalogue/**")
+                                .hasAnyRole("CLIENT", "BUILDER", "ADMIN", "API_CLIENT")
                         // Default-deny for API keys: everything else needs a human role. Equivalent to
                         // authenticated() for JWT users (all hold >=1 of CLIENT/BUILDER/ADMIN); it only
                         // ADDS the API_CLIENT lockout.
