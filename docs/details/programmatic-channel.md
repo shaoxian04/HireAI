@@ -100,6 +100,7 @@ A standalone `mcp/` Python service (official MCP SDK / FastMCP) exposes the chan
 | `POST /api/tasks` | `CLIENT` or `API_CLIENT` | open submit (category → matcher) |
 | `POST /api/tasks/direct` | `CLIENT` or `API_CLIENT` | direct submit (pin `agentId`) |
 | `GET /api/tasks`, `/api/tasks/{id}`, `/api/tasks/{id}/result`, `/api/tasks/{id}/validation` | `CLIENT` or `API_CLIENT` | track / result / failing-check |
+| `GET /api/catalogue/**` (e.g. `/api/catalogue/agents`) | `CLIENT`/`BUILDER`/`ADMIN` or `API_CLIENT` | browse the agent catalogue (powers the MCP `list_agents` tool); GET-only, owner-private fields stripped |
 | `POST /api/webhooks/subscription`, `GET …`, `POST …/rotate-secret`, `POST …/deactivate` | JWT (`CLIENT`) | webhook subscription |
 | `GET /api/webhooks/deliveries`, `POST /api/webhooks/deliveries/{id}/redeliver` | `CLIENT` or `API_CLIENT` | delivery log / resend |
 
