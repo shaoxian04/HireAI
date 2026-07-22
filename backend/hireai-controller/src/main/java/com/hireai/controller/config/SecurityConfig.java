@@ -74,6 +74,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/agent-callbacks/**").permitAll()
                         .requestMatchers("/api/arbitration-callbacks/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // Public API documentation (springdoc / Swagger UI) — the programmatic OpenAPI group.
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         // Submit / track / settle: reachable by a human CLIENT or an API_CLIENT key.
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
                                 "/api/tasks", "/api/tasks/direct").hasAnyRole("CLIENT", "API_CLIENT")
