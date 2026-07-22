@@ -98,8 +98,12 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   `DisputeProgressPanel` — a reject→arbitrator→admin **timeline** with Accept-ruling / Appeal actions while a
   proposed ruling awaits; it persists after `RESOLVED`. `client/disputes` — the client's dispute list ("awaiting
   your decision" `RULED` rows first); `client/keys` — API-key management (create, with a reveal-once `Modal`
-  showing the raw key + copy button + a "won't see it again" warning; list; revoke); `client/agents/[id]` —
-  agent storefront; `client/agents/[id]/book` — direct-booking form (adopts agent's `output_spec`).
+  showing the raw key + copy button + a "won't see it again" warning; list; revoke); `client/webhooks` —
+  webhooks console (register/replace an HTTPS callback per API key, reveal/rotate the signing secret, a
+  delivery log with `DELIVERED`/`PENDING`/`DEAD` badges + an account-scoped `DEAD`-failure banner, manual
+  resend); `client/agents/[id]` — agent storefront; `client/agents/[id]/book` — direct-booking form (adopts
+  agent's `output_spec`). The `client/tasks/[id]` view also shows a per-task `WebhookDeliveryStatus`
+  indicator with a resend action.
 
 **`AgentDTO` is nested** — read `agent.currentVersion.{ capabilityCategories, price, webhookUrl }`, not the root.
 

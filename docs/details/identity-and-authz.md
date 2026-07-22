@@ -125,9 +125,15 @@ authenticated, empty for JWT/human requests; `NoApiKeyProvider` (`@Profile("test
 spend caps at all.
 
 **Submit-scoped allow-list** (`securedFilterChain`, `SecurityConfig`): `ROLE_API_CLIENT` may reach only
-submit/track/settle — `POST /api/tasks`, `/api/tasks/direct`; `GET /api/tasks`, `/api/tasks/*`,
-`/api/tasks/*/result`, `/api/tasks/*/validation`; `POST /api/tasks/*/accept`, `/api/tasks/*/reject` (each
-`hasAnyRole("CLIENT","API_CLIENT")`). Everything else falls through to
+submit/track — `POST /api/tasks`, `/api/tasks/direct`; `GET /api/tasks`, `/api/tasks/*`,
+`/api/tasks/*/result`, `/api/tasks/*/validation` (each `hasAnyRole("CLIENT","API_CLIENT")`), plus the
+webhook delivery log + redeliver (`GET /api/webhooks/deliveries`,
+`POST /api/webhooks/deliveries/*/redeliver`). **Phase 4 dropped `POST /api/tasks/*/accept`/`/reject` from
+the API allow-list** — those routes are now `hasAnyRole("CLIENT","BUILDER","ADMIN")` (human-only): an
+API task **auto-settles on the validation result**, so there is nothing for a script to accept or reject,
+and an `API_CLIENT` key hitting them is 401. Webhook **subscription** management
+(`/api/webhooks/subscription/**`) is `hasRole("CLIENT")` — **JWT-only**, like key management. Everything
+else falls through to
 `anyRequest().hasAnyRole("CLIENT","BUILDER","ADMIN")` — a default-deny that only *adds* the API-key
 lockout (a human JWT already holds one of those roles, so this is a no-op for them) — so e.g.
 `GET /api/wallet` is denied for an API-key caller. (This chain sets an `authenticationEntryPoint`
@@ -152,6 +158,18 @@ logged-in user) calls it. It is gated instead by the short-lived **signed dispat
 Invariant #6): the callback app service verifies the token — its `taskId` and `agentVersionId` must match
 the task's assignment — and returns **401** on an invalid / expired / mismatched token. Keep the two token
 systems distinct: the user **JWT** secures the UI/API; the **dispatch token** secures Agent I/O.
+
+## Outbound webhooks: HMAC signature (Phase 4, Inv #6 outbound side)
+
+Push webhooks to a programmatic client's `callbackUrl` carry **no JWT and no dispatch token** — the
+platform authenticates *itself to the client* with an HMAC. Each delivery is signed Stripe-style with the
+subscription's `signingSecret`: `X-HireAI-Signature: t=<unix-ts>,v1=<hex hmac-sha256(secret,"{ts}.{body}")>`
+alongside `X-HireAI-Event-Id` (idempotency key) and `X-HireAI-Event-Type`. The client verifies by
+recomputing the HMAC over `"{t}.{rawBody}"` and constant-time-comparing `v1`. The secret is created on
+subscription registration, revealed on request, and rotatable (`/rotate-secret`). The outbound target is
+**SSRF-guarded at registration** (`WebhookUrlValidator`) — this is the outbound half of Invariant #6,
+mirroring the inbound dispatch-token gate above. See `docs/details/architecture.md` and
+`docs/details/data-model.md` (`V26`).
 
 ## Seed users (Flyway `V5`)
 
