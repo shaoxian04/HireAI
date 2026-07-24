@@ -23,6 +23,7 @@
         <jjwt.version>0.12.6</jjwt.version>
         <jspecify.version>1.0.0</jspecify.version>
         <testcontainers.version>1.20.4</testcontainers.version>
+        <springdoc.version>2.6.0</springdoc.version>
     </properties>
 
     <!--
@@ -107,6 +108,11 @@
                 <groupId>com.networknt</groupId>
                 <artifactId>json-schema-validator</artifactId>
                 <version>1.5.2</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+                <version>${springdoc.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

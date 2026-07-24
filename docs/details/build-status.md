@@ -1,8 +1,8 @@
 # Build status
 
-The living record of **what's built vs pending** across the three source trees. **This file is the source of truth for built-vs-pending** — where the Notion SAD/PRD describe a *target* design (e.g. SAD §6.3 reliability), this file says what actually exists today.
+The living record of **what's built vs pending** across the four source trees. **This file is the source of truth for built-vs-pending** — where the Notion SAD/PRD describe a *target* design (e.g. SAD §6.3 reliability), this file says what actually exists today.
 
-Last verified green: **~725 backend tests + 131 vitest** (2026-07-21). Flyway schema at **`V26`**; Hibernate `ddl-auto: validate`.
+Last verified green: **~725 backend tests + 131 vitest + 21 mcp** (2026-07-24). Flyway schema at **`V26`**; Hibernate `ddl-auto: validate`.
 
 ## Backend (`backend/`)
 
@@ -24,6 +24,8 @@ Spring Boot (Java 21), DDD bounded contexts, organized as a **COLA multi-module 
 
 **Programmatic API-key channel built (Phase 3 spine + Phase 4 push webhooks).** Machine clients authenticate with API keys, submit idempotently under spend caps, tasks **auto-settle deterministically** on the validation result, and terminal outcomes are pushed as signed webhooks. `V25` (api_keys/idempotency/attribution) + `V26` (webhook subscriptions/deliveries); no money-table change. **Full end-to-end flow, design decisions, and endpoint catalog: [`programmatic-channel.md`](programmatic-channel.md).** Live full-stack E2E verified 2026-07-21 (both event types, HMAC, SSRF guard, both booking modes).
 
+**Phase 5 — MCP server facade + OpenAPI built.** A standalone `mcp/` Python service (official MCP SDK, thin REST client over stdio) exposes four tools (`list_agents`/`submit_task`/`get_task_status`/`get_task_result`) to MCP-native client agents; springdoc publishes a scoped "programmatic" OpenAPI group + Swagger UI. Backend touches: `GET /api/catalogue/**` opened to API-key auth; springdoc added. No migration. See `programmatic-channel.md`.
+
 **Still deferred (Module 4):** builder-side full-refund dispute discovery (no payout row → not on earnings); SSE push (UI polls); routing `adminRule` through the same lock-then-re-read (safe today via `settlements.task_id` UNIQUE).
 
 **Pending:** Module 5 (reputation events + earned reviews + auto-refund on failure — settlement core done).
@@ -35,3 +37,13 @@ Python FastAPI + LangGraph dispute-arbitration microservice (**OpenAI `gpt-4o`**
 ## Frontend (`frontend/`)
 
 Next.js 16 (App Router, TypeScript, Tailwind). **Built:** the **Client + Builder** demo happy-path (login, **email/password register**, **Google OAuth callback** `/auth/callback`, **become-builder upgrade** `/client/become-builder`, agent register/activate, wallet/top-up, task submit via **searchable category picker → match-preview → shortlist → pick → book at the agent's price** (`CategoryCombobox` fed by `/catalogue/categories`; the shortlist opens in a `Modal` popout of ranked agent cards — profile avatars, best-match highlight, star ratings, above-budget near-miss drawer; `localStorage` draft), task-detail polling → result → accept/reject review flow with settled summary) and the **Marketplace + storefront + direct booking + builder manage console + earnings view** over a `/api/*` proxy with a JWT-bearing `api()` client; dual-role `Nav` surface switcher; `roles`/`hasRole`/`activeSurface` auth context; and the **Admin surface** (`/admin` overview + read-only task/user-wallet/agent browsers, `/admin/disputes` queue → `/admin/disputes/[id]` detail with a tier-2 human-backstop ruling); and the **client dispute surfaces** — a `DisputeProgressPanel` reject→arbitrator→admin **timeline** with accept/appeal actions on the task view (replaces the execution pipeline once a task is in dispute; persists after `RESOLVED`), a `/client/disputes` list, and a nav **Disputes** badge counting disputes awaiting the client's decision; and **honest failure panels** (`TaskFailurePanel`) on the task view for `SPEC_VIOLATION`/`TIMED_OUT`/`FAILED`/`CANCELLED` (plain-English cause + `{budget} cr refunded` line + next action; the spec-violation panel fetches the real failing-check reason from `GET /api/tasks/{id}/validation`); and a **client API-key management page** (`/client/keys` — create via a reveal-once `Modal` [raw key shown once + copy + "won't see it again" warning], list, revoke; linked from the CLIENT nav alongside Marketplace · My tasks · Disputes); and a **client webhooks console** (`/client/webhooks` — register/replace an HTTPS callback per API key, reveal/rotate the signing secret, a delivery log with `DELIVERED`/`PENDING`/`DEAD` badges + an account-scoped `DEAD`-failure banner, and manual resend) plus a **per-task webhook delivery indicator** with a resend action on the task view (`WebhookDeliveryStatus`). 131 vitest tests.
+
+## MCP server facade (`mcp/`)
+
+Standalone Python service (uv project, official **MCP SDK / FastMCP**, stdio transport — mirrors `arbitration/` conventions), a thin async `httpx` facade over the programmatic REST channel. **Protocol translation only — no business logic, no persistence, no DB migration; the submit/escrow/routing/validation/settlement core is untouched.**
+
+**Built (Phase 5, on `feat/mcp-server` → PR #25):** four MCP tools — `list_agents` (→ `GET /api/catalogue/agents`), `submit_task` (routed `POST /api/tasks` **or** direct `POST /api/tasks/direct`, auto `Idempotency-Key`), `get_task_status` (→ `GET /api/tasks/{id}`), `get_task_result` (→ `GET /api/tasks/{id}/result`; `NOT_FOUND` = not-ready). Auth is `Authorization: ApiKey <key>` from env (never logged); identity stays server-side (Inv #5). Two **additive** backend touches: `GET /api/catalogue/**` opened to API-key auth (powers `list_agents`, GET-scoped, asserted against the full secured chain); and **springdoc-openapi 2.6.0** publishing a scoped `programmatic` OpenAPI group + Swagger UI (`/v3/api-docs/programmatic`, `/swagger-ui/index.html`), with the default ungrouped doc scoped via `springdoc.paths-to-match` so it never exposes admin routes. `mcp-ci.yml` runs ruff + pytest (21 tests). Full detail: [`programmatic-channel.md`](programmatic-channel.md) §6a.
+
+**Verified:** 21/21 pytest + ruff clean; the two backend integration tests (catalogue-by-API-key, OpenAPI-scoped + admin-leak regression) green under Testcontainers; PR #25 CI green (MCP CI + Backend CI full suite). **Live E2E (2026-07-24):** all four tools driven against a live backend over real HTTP; full happy-path with a real stub agent executing over a signed HTTPS webhook → `RESOLVED/ACCEPTED`, real result payload returned, escrow settled 85/15.
+
+**Out of scope / future:** remote/OAuth MCP transport, push-into-MCP, SDK generation, per-key scopes & rotation.

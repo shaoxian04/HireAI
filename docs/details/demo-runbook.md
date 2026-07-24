@@ -40,7 +40,7 @@ mvn -f backend/pom.xml spring-boot:run -Dspring-boot.run.arguments='--spring.dat
 npm --prefix frontend run dev
 ```
 
-Flyway applies `V1`–`V9` on first backend boot (incl. the seeded demo users).
+Flyway applies `V1`–`V26` on first backend boot (incl. the seeded demo users).
 
 ## Supabase Storage (agent images)
 
@@ -79,12 +79,12 @@ The datasource is env-driven (`application.yml` reads `${DB_URL}` / `${DB_USERNA
    DB_PASSWORD=<db-password>
    ```
 3. Run the backend WITHOUT the datasource args: `mvn -f backend/pom.xml spring-boot:run`.
-   Flyway applies `V1`–`V9` into the project's `public` schema on first boot (incl. demo users).
+   Flyway applies `V1`–`V26` into the project's `public` schema on first boot (incl. demo users).
 
 Migrations are plain DDL + triggers (no extensions/roles), so they run unchanged on Supabase. To
 confirm a boot, watch the log for `Database: jdbc:postgresql://…supabase.com…` followed by Flyway's
 `Successfully applied N migrations … now at version v5`. If `flyway_schema_history` stops short of
-V5 (an interrupted earlier boot), the next boot resumes the remaining migrations. Watch for `now at version v9`.
+V5 (an interrupted earlier boot), the next boot resumes the remaining migrations. Watch for `now at version v26`.
 
 **Security note:** the money tables (`wallets`, `ledger_entries`) live in the `public` schema,
 which Supabase can expose over its Data API to the `anon`/`authenticated` roles. The Spring backend
@@ -110,6 +110,23 @@ Seed logins (from Flyway `V5`), password `DemoPass123!`:
    the agent's `COMPLETED` result. The wallet shows the budget moved into escrow.
 4. → **Accept** the result: the builder's wallet receives 85% of the budget (log in as the builder
    to see the payout in wallet/stats), or **Reject** for a full refund to the client's wallet.
+
+## MCP / programmatic demo (Phase 5)
+
+The same stack also drives the **MCP server facade** — an MCP-native client agent (e.g. Claude Desktop) hiring an Agent through four tools. Infra is identical (Postgres + RabbitMQ + stub agent + HTTPS tunnel + backend); the difference is the *client* is the `mcp/` server, not the browser.
+
+1. **Mint an API key** — log in as the client and create one at `/client/keys` (copy the raw `hk_live_…` once), or `POST /api/keys` with a `CLIENT` JWT.
+2. **Register a bookable Agent** with the tunnel webhook — via the Builder UI, or `POST /api/agents` then `POST /api/agents/{id}/activate`. **The Agent must be *listed* to be catalogue-visible and directly bookable** — catalogue visibility = `status ACTIVE` **AND** storefront `listed`; set it via `PUT /api/agents/{id}/profile` with `"isListed": true` (the Builder UI's publish toggle). The **webhook must be `https://`** even for the demo (invariant #6, enforced at registration) — use the cloudflared URL (`https://<tunnel-host>/run`).
+3. **Run the MCP server** pointed at the backend + key, and call the tools (via MCP Inspector, or wire the `mcpServers.hireai` block from `mcp/README.md` into Claude Desktop and prompt it):
+   ```bash
+   HIREAI_API_BASE_URL=http://localhost:8080 HIREAI_API_KEY=hk_live_… \
+     npx @modelcontextprotocol/inspector uv --directory mcp run hireai-mcp
+   ```
+4. Watch the task walk `QUEUED → EXECUTING → RESOLVED/ACCEPTED`; `get_task_result` returns the agent's payload; escrow settles deterministically (85/15) with **no** accept/reject step (the API channel auto-settles on the validation result). Verified live 2026-07-24.
+
+**Gotchas for this path:**
+- **Booting:** if `spring-boot:run` errors with `Unable to find a suitable main class` (the goal executed against the reactor *parent* pom, which has no main class), boot the bootable module directly instead — `mvn -f backend/pom.xml -pl hireai-main -am -DskipTests install` once, then `mvn -f backend/hireai-main/pom.xml spring-boot:run` with the datasource/broker env vars. This was the reliable path from a fresh checkout in this environment.
+- The programmatic OpenAPI doc is public at `/v3/api-docs/programmatic` + Swagger UI at `/swagger-ui/index.html` (admin routes excluded, incl. from the default `/v3/api-docs`).
 
 ## Teardown
 

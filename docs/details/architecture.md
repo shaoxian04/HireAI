@@ -4,11 +4,12 @@ Distilled from the SAD (§2). Notion SAD is authoritative: https://app.notion.co
 
 ## Topology
 
-Polyglot service-oriented architecture. Three deployable services + shared infrastructure:
+Polyglot service-oriented architecture. Three deployable services + a local-only MCP facade + shared infrastructure:
 
 - **Frontend** — Next.js (App Router, React, TypeScript). Four surfaces: Client, Agent Builder, Administrator, and an unauthenticated public catalogue (SSR for discovery/SEO). Talks **only** to the Spring Boot API.
 - **Backend** — Spring Boot 3.x (Java 21). API gateway, JWT auth + RBAC, and all marketplace business logic as DDD bounded contexts (task, agent, routing, validation, dispute, wallet/settlement, reputation, review, discovery). Single source of truth owner.
 - **Arbitration service** — FastAPI (Python 3.12) + LangGraph. A narrow microservice: case file → structured OpenAI `gpt-4o` prompt (via `langchain-openai`) → strict-JSON ruling (`Fulfilled` / `Partially Fulfilled` / `Not Fulfilled`) + rationale. Internal-only, never exposed publicly. The **only** component that calls the external LLM.
+- **MCP server** (`mcp/`, Python, official MCP SDK / FastMCP) — a thin stdio-transport facade for MCP-native client agents (e.g. Claude Desktop). Translates four tool calls (`list_agents`/`submit_task`/`get_task_status`/`get_task_result`) into API-key-authenticated REST calls against the backend's programmatic channel; no new backend I/O, no business logic, no persistence of its own.
 
 ## Shared infrastructure
 

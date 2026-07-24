@@ -252,4 +252,18 @@ class ProgrammaticSubmissionIntegrationTest {
                 new HttpEntity<>(apiKey(rawKey)), String.class);
         assertThat(redeliver.getStatusCode()).isNotEqualTo(HttpStatus.UNAUTHORIZED);
     }
+
+    /**
+     * Phase 5: the read-only catalogue is reachable by an API_CLIENT key (it powers the MCP
+     * list_agents tool). Public data — owner-private fields are already stripped from the DTOs.
+     */
+    @Test
+    void catalogueBrowseIsReachableByApiKey() throws Exception {
+        String jwt = login();
+        String rawKey = createKey(jwt, "");
+
+        ResponseEntity<String> resp = rest.exchange(url("/api/catalogue/agents"), HttpMethod.GET,
+                new HttpEntity<>(apiKey(rawKey)), String.class);
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
 }

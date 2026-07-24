@@ -10,19 +10,20 @@ Six functional modules: (1) Task Submission, (2) Agent Registration, (3) Routing
 
 ## Repository status
 
-**Early implementation.** Canonical design lives in Notion (PRD + SAD, linked below). Three source trees: **`backend/`** (Spring Boot Java 21, DDD as a COLA multi-module Maven reactor), **`arbitration/`** (Python FastAPI + LangGraph dispute arbitrator, OpenAI `gpt-4o`), **`frontend/`** (Next.js 16, App Router + TypeScript + Tailwind). Modules 1–4 and 6 are substantially built (task submit + escrow, agent registration, routing/execution, validation gate, tiered dispute resolution with arbitrator + admin backstop, discovery/storefront, accept/reject settlement) plus the **programmatic API-key channel** (submit → deterministic auto-settle → signed push webhooks); **Module 5** (reputation) is the main pending work. ~725 backend + 131 vitest tests green.
+**Early implementation.** Canonical design lives in Notion (PRD + SAD, linked below). Four source trees: **`backend/`** (Spring Boot Java 21, DDD as a COLA multi-module Maven reactor), **`arbitration/`** (Python FastAPI + LangGraph dispute arbitrator, OpenAI `gpt-4o`), **`frontend/`** (Next.js 16, App Router + TypeScript + Tailwind), **`mcp/`** (Python MCP-server facade over the programmatic API, stdio; official MCP SDK). Modules 1–4 and 6 are substantially built (task submit + escrow, agent registration, routing/execution, validation gate, tiered dispute resolution with arbitrator + admin backstop, discovery/storefront, accept/reject settlement) plus the **programmatic API-key channel** (submit → deterministic auto-settle → signed push webhooks; **MCP server facade + OpenAPI**); **Module 5** (reputation) is the main pending work. ~725 backend + 131 vitest + 21 mcp tests green.
 
 **The full per-module / per-migration build narrative — the source of truth for what's built vs pending — lives in [`docs/details/build-status.md`](docs/details/build-status.md). Read it before starting any feature, to see what already exists.**
 
 ## Build / run / test
 
-Backend, arbitration service, and frontend are built and tested.
+Backend, arbitration service, frontend, and the MCP server are built and tested.
 
 | Service | Location | Run | Build | Test |
 |---|---|---|---|---|
 | Backend | `backend/` | `mvn -f backend/pom.xml -pl hireai-main -am spring-boot:run` (needs Postgres at `DB_URL` **and** a RabbitMQ broker; JWT auth enforced by default) | `mvn -f backend/pom.xml -q -B package` | `mvn -f backend/pom.xml -B test` |
 | Arbitration | `arbitration/` | `cd arbitration && uv run uvicorn app.main:app` (needs RabbitMQ + `OPENAI_API_KEY` + backend callback reachable) | `cd arbitration && uv sync` | `cd arbitration && uv run pytest` (+ `uv run ruff check .`) |
 | Frontend | `frontend/` | `npm --prefix frontend run dev` (proxies `/api/*` → `:8080`) | `npm --prefix frontend run build` | `npx vitest run` (in `frontend/`) |
+| MCP server | `mcp/` | `HIREAI_API_KEY=hk_live_… uv run hireai-mcp` (stdio facade; needs the backend reachable at `HIREAI_API_BASE_URL`, default `:8080`) | `cd mcp && uv sync` | `cd mcp && uv run pytest` (+ `uv run ruff check .`) |
 | Local stack | repo root | `docker compose up` _(planned)_ | — | — |
 
 Backend notes: JDK 21 + Maven. The `backend/pom.xml` is the reactor **parent** (`packaging=pom`); `package`/`test` there build all seven modules in layer order. The only **bootable** module is `hireai-main` — it owns `HireAiApplication`, the Flyway migrations + `application.yml`/`application-oauth.yml`, the `spring-boot-maven-plugin`, and the **entire test suite** (run against the fully-assembled context); hence `spring-boot:run` must target it (`-pl hireai-main -am`). Integration tests (`*IntegrationTest`) use Testcontainers (Postgres **+ RabbitMQ**) and **skip automatically when no Docker daemon is reachable** — they do not fail the build. The default/`prod` profile **enforces JWT auth**; the `test` profile (applied to existing context-loading tests via `@ActiveProfiles("test")`) is permissive with a fixed dev user. Flyway owns the schema (`V1`–`V26`); Hibernate runs `ddl-auto: validate`.
@@ -61,7 +62,7 @@ Read before making auth, security-config, or controller-test changes — these a
 
 Read the relevant file on demand — don't preload everything.
 
-- **`docs/details/build-status.md`** — the full per-module / per-migration record of what's built vs pending across backend / arbitration / frontend.
+- **`docs/details/build-status.md`** — the full per-module / per-migration record of what's built vs pending across backend / arbitration / frontend / mcp.
   **Read before starting any feature — to see what already exists.**
 - **`docs/details/architecture.md`** — services, polyglot topology, tech stack, communication patterns.
   **Read before any cross-service or infrastructure change.**
@@ -71,8 +72,8 @@ Read the relevant file on demand — don't preload everything.
   **Read before a structural/convention change, or when questioning why something is the way it is.**
 - **`docs/details/data-model.md`** — aggregates, the 3NF schema, the append-only ledger, status enums.
   **Read before changing the schema, an entity, or the settlement/reputation logic.**
-- **`docs/details/programmatic-channel.md`** — the API-key machine channel end to end: key auth, idempotency, the two spend caps, open/direct submit, deterministic auto-settlement, and signed push webhooks (transactional outbox + sweeper + SSRF guard).
-  **Read before touching API keys, the programmatic submit path, auto-settlement, or webhooks.**
+- **`docs/details/programmatic-channel.md`** — the API-key machine channel end to end: key auth, idempotency, the two spend caps, open/direct submit, deterministic auto-settlement, signed push webhooks (transactional outbox + sweeper + SSRF guard), and the **MCP server facade + OpenAPI** (§6a — stdio tools over the same REST surface).
+  **Read before touching API keys, the programmatic submit path, auto-settlement, webhooks, or the MCP facade.**
 - **`docs/details/demo-runbook.md`** — stand up the full local demo stack (Postgres + RabbitMQ + stub agent + HTTPS tunnel + backend + frontend) and the seed logins.
   **Read before running a live end-to-end demo.**
 - **`docs/details/frontend.md`** — Next.js app structure + conventions (the `/api/*` proxy, the `api()` client, the auth context + localStorage scheme, the UI kit, the route map).
