@@ -1,0 +1,499 @@
+# Instincts generated from https://github.com/shaoxian04/HireAI
+# Generated: 2026-06-05T02:17:35.267Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: HireAI-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/shaoxian04/HireAI
+---
+
+# HireAI Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, docs, chore, refactor, test
+
+## Evidence
+
+- 15 commits analyzed
+- Detected conventional commit pattern
+- Examples: docs: add Task Submission implementation plan (Module 1, first slice), chore(backend): add Lombok and JSpecify dependencies
+
+---
+id: HireAI-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/shaoxian04/HireAI
+---
+
+# HireAI Commit Length
+
+## Action
+
+Write moderate-length commit messages (~62 characters)
+
+## Evidence
+
+- Average commit message length: 62 chars
+- Based on 15 commits
+
+---
+id: HireAI-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/shaoxian04/HireAI
+---
+
+# HireAI Naming Files
+
+## Action
+
+Use PascalCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: PascalCase
+
+---
+id: HireAI-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/shaoxian04/HireAI
+---
+
+# HireAI Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: HireAI-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/shaoxian04/HireAI
+---
+
+# HireAI Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: HireAI-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/shaoxian04/HireAI
+---
+
+# HireAI Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.ts
+
+## Evidence
+
+- File pattern: *.test.ts
+- Consistent across test files
+
+---
+id: HireAI-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/shaoxian04/HireAI
+---
+
+# HireAI Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~26x per month
+- Files: **/*.test.*
+
+---
+id: HireAI-workflow-add-new-domain-aggregate-vertical-slice
+trigger: "when doing add new domain aggregate vertical slice"
+confidence: 0.55
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/shaoxian04/HireAI
+---
+
+# HireAI Workflow Add New Domain Aggregate Vertical Slice
+
+## Action
+
+Follow the add-new-domain-aggregate-vertical-slice workflow:
+1. Define enums and value objects in domain model (e.g., enums, OutputSpec, aggregate root).
+2. Add domain service(s), event(s), and repository contract.
+3. Create database migration for new table.
+4. Implement JPA persistence: entity, repository, mapper, implementation.
+5. Add application service interfaces and implementations.
+6. Define request/response DTOs and converter.
+7. Implement controller for API endpoints.
+8. Write integration tests for the new aggregate's main flows.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~1x per month
+- Files: backend/src/main/java/com/hireai/domain/biz/*/enums/*.java, backend/src/main/java/com/hireai/domain/biz/*/model/*.java, backend/src/main/java/com/hireai/domain/biz/*/event/*.java
+
+---
+id: HireAI-workflow-update-enum-and-database-schema
+trigger: "when doing update enum and database schema"
+confidence: 0.55
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/shaoxian04/HireAI
+---
+
+# HireAI Workflow Update Enum And Database Schema
+
+## Action
+
+Follow the update-enum-and-database-schema workflow:
+1. Update the enum definition in the domain model.
+2. Update the corresponding database migration (e.g., CHECK constraint).
+3. Update documentation to reflect the new lifecycle or allowed values.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~1x per month
+- Files: backend/src/main/java/com/hireai/domain/biz/*/enums/*.java, backend/src/main/resources/db/migration/*.sql, docs/details/data-model.md
+
+---
+id: HireAI-workflow-add-app-service-interface-and-implementation
+trigger: "when doing add app service interface and implementation"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/shaoxian04/HireAI
+---
+
+# HireAI Workflow Add App Service Interface And Implementation
+
+## Action
+
+Follow the add-app-service-interface-and-implementation workflow:
+1. Create or split interface(s) for the app service (e.g., Read/Write).
+2. Create or update implementation class(es) in the corresponding impl/ directory.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: backend/src/main/java/com/hireai/application/biz/*/*.java, backend/src/main/java/com/hireai/application/biz/*/impl/*.java
+
+---
+id: hireai-instinct-class-naming
+trigger: "When creating a new Java class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct Class Naming
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.classes
+- Seen in backend/src/main/java/com/hireai/application/biz/wallet/WalletReadAppService.java
+
+---
+id: hireai-instinct-file-naming
+trigger: "When creating a new Java file"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct File Naming
+
+## Action
+
+Name the file using PascalCase
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.files
+- Seen in backend/src/main/java/com/hireai/application/biz/wallet/WalletWriteAppService.java
+
+---
+id: hireai-instinct-function-naming
+trigger: "When defining a function in Java"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct Function Naming
+
+## Action
+
+Use camelCase for function names
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.functions
+
+---
+id: hireai-instinct-constant-naming
+trigger: "When defining a constant in Java"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for constant names
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.constants
+
+---
+id: hireai-instinct-import-style
+trigger: "When importing modules in Java"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct Import Style
+
+## Action
+
+Use relative imports
+
+## Evidence
+
+- Pattern in codeStyle.importStyle
+
+---
+id: hireai-instinct-export-style
+trigger: "When exporting modules/classes in Java"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in codeStyle.exportStyle
+
+---
+id: hireai-instinct-test-file-pattern
+trigger: "When creating a test file"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct Test File Pattern
+
+## Action
+
+Name the file with the pattern *.test.ts
+
+## Evidence
+
+- Pattern in testing.filePattern
+
+---
+id: hireai-instinct-test-type
+trigger: "When writing tests"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct Test Type
+
+## Action
+
+Write unit tests by default
+
+## Evidence
+
+- Pattern in testing.testTypes
+
+---
+id: hireai-instinct-test-location
+trigger: "When placing test files"
+confidence: 0.6
+domain: testing
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct Test Location
+
+## Action
+
+Place test files in both src and test directories (mixed location)
+
+## Evidence
+
+- Pattern in architecture.folderStructure.testLocation
+
+---
+id: hireai-instinct-git-commit-format
+trigger: "When writing a git commit message"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct Git Commit Format
+
+## Action
+
+Use conventional commit prefixes: feat, docs, chore, refactor, test
+
+## Evidence
+
+- Pattern in commits.prefixes
+- Seen in commit 'feat(backend): add Task output-format and status enums'
+
+---
+id: hireai-instinct-git-commit-length
+trigger: "When writing a git commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct Git Commit Length
+
+## Action
+
+Keep commit messages around 62 characters on average
+
+## Evidence
+
+- Pattern in commits.averageLength
+
+---
+id: hireai-instinct-add-new-aggregate
+trigger: "When someone wants to add a new core business entity (aggregate) and expose its API endpoints"
+confidence: 0.92
+domain: workflow
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct Add New Aggregate
+
+## Action
+
+Follow the vertical slice workflow: define enums/value objects, add domain services/events/repository, create DB migration, implement persistence, add app services, define DTOs/converters, implement controller, write integration tests
+
+## Evidence
+
+- Workflow: add-new-domain-aggregate-vertical-slice
+- Seen in files: backend/src/main/java/com/hireai/domain/biz/*/model/*.java, backend/src/main/resources/db/migration/*.sql, backend/src/test/java/com/hireai/domain/biz/*/model/*Test.java
+
+---
+id: hireai-instinct-update-enum-schema
+trigger: "When someone needs to change the allowed values or lifecycle of a domain enum"
+confidence: 0.87
+domain: workflow
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct Update Enum Schema
+
+## Action
+
+Update the enum in the domain model, synchronize the DB migration (e.g., CHECK constraint), and update documentation
+
+## Evidence
+
+- Workflow: update-enum-and-database-schema
+- Seen in files: backend/src/main/java/com/hireai/domain/biz/*/enums/*.java, backend/src/main/resources/db/migration/*.sql, docs/details/data-model.md
+
+---
+id: hireai-instinct-app-service-interface-impl
+trigger: "When someone wants to add or refactor an application service for a domain"
+confidence: 0.85
+domain: workflow
+source: repo-analysis
+source_repo: shaoxian04/HireAI
+---
+
+# Hireai Instinct App Service Interface Impl
+
+## Action
+
+Create or split interface(s) for the app service and create/update implementation class(es) in the impl/ directory
+
+## Evidence
+
+- Workflow: add-app-service-interface-and-implementation
+- Seen in files: backend/src/main/java/com/hireai/application/biz/*/*.java, backend/src/main/java/com/hireai/application/biz/*/impl/*.java
+
