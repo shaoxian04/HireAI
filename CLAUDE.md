@@ -52,6 +52,20 @@ These are needed on every task and are too important to risk being unread. Enfor
 - **`postgres-patterns`** — when writing schema, migrations, or queries.
 - **`api-design`** — when designing REST endpoints.
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues in `shaoxian04/HireAI`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, each label string equal to its name. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the root, alongside the existing `docs/details/`. See `docs/agents/domain.md`.
+
 ## Post-mortems
 
 Read before making auth, security-config, or controller-test changes — these are real mistakes from this project, not hypotheticals.
