@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { server } from "./msw/handlers";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { http } from "msw";
+import { server, ok } from "./msw/handlers";
 import { AuthProvider } from "@/lib/auth";
 import ClientTasksPage from "@/app/client/tasks/page";
 
@@ -50,5 +52,33 @@ describe("client tasks console", () => {
       "href",
       "/client/tasks/new",
     );
+  });
+
+  it("clears and retypes the top-up amount without a stray leading zero, then submits the typed value", async () => {
+    let capturedBody: Record<string, unknown> | null = null;
+    server.use(
+      http.post("*/api/wallet/topup", async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>;
+        return ok({ availableBalance: 1025, escrowBalance: 50 });
+      }),
+    );
+    renderClientTasks();
+    const topupInput = (await screen.findByLabelText(/top-up amount/i)) as HTMLInputElement;
+    expect(topupInput.value).toBe("50");
+    await userEvent.clear(topupInput);
+    expect(topupInput.value).toBe("");
+    await userEvent.type(topupInput, "75");
+    expect(topupInput.value).toBe("75");
+    await userEvent.click(screen.getByRole("button", { name: /add/i }));
+    await waitFor(() => expect(capturedBody).not.toBeNull());
+    expect(capturedBody!.amount).toBe(75);
+  });
+
+  it("shows a validation error instead of submitting 0 when top-up is cleared and left empty", async () => {
+    renderClientTasks();
+    const topupInput = (await screen.findByLabelText(/top-up amount/i)) as HTMLInputElement;
+    await userEvent.clear(topupInput);
+    await userEvent.click(screen.getByRole("button", { name: /add/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/amount/i);
   });
 });

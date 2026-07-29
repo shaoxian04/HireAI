@@ -17,7 +17,7 @@ interface Draft {
   title: string;
   description: string;
   category: string;
-  budget: number;
+  budget: string;
 }
 
 function SubmitTask() {
@@ -25,7 +25,7 @@ function SubmitTask() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
-  const [budget, setBudget] = useState(30);
+  const [budget, setBudget] = useState("30");
   const [preview, setPreview] = useState<MatchPreviewDTO | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [selected, setSelected] = useState<AgentOptionDTO | null>(null);
@@ -43,7 +43,13 @@ function SubmitTask() {
       setTitle(d.title ?? "");
       setDescription(d.description ?? "");
       setCategory(d.category ?? "");
-      setBudget(typeof d.budget === "number" ? d.budget : 30);
+      setBudget(
+        typeof d.budget === "number"
+          ? String(d.budget)
+          : typeof d.budget === "string"
+            ? d.budget
+            : "30",
+      );
     } catch {
       /* ignore a malformed draft */
     }
@@ -66,10 +72,15 @@ function SubmitTask() {
     e.preventDefault();
     setError(null);
     setSelected(null);
+    const budgetNum = budget.trim() === "" ? NaN : Number(budget);
+    if (Number.isNaN(budgetNum)) {
+      setError("Enter a budget");
+      return;
+    }
     setLoading(true);
     try {
       const result = await api<MatchPreviewDTO>(
-        `/tasks/match-preview?category=${encodeURIComponent(category)}&budget=${budget}`,
+        `/tasks/match-preview?category=${encodeURIComponent(category)}&budget=${budgetNum}`,
       );
       setPreview(result);
       setPreviewOpen(true);
@@ -102,6 +113,8 @@ function SubmitTask() {
       setLoading(false);
     }
   }
+
+  const budgetValue = budget.trim() === "" ? 0 : Number(budget);
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
@@ -144,8 +157,8 @@ function SubmitTask() {
               type="number"
               min={0}
               value={budget}
-              onChange={(e) => setBudget(Number(e.target.value))}
-              required
+              onChange={(e) => setBudget(e.target.value)}
+              placeholder="30"
             />
           </Field>
           <Button type="submit" disabled={loading || !category} className="w-full">
@@ -168,7 +181,7 @@ function SubmitTask() {
           open={previewOpen && !selected}
           shortlist={preview.shortlist}
           nearMisses={preview.nearMisses}
-          budget={budget}
+          budget={budgetValue}
           onSelect={(o) => {
             setSelected(o);
             setPreviewOpen(false);
@@ -190,8 +203,8 @@ function SubmitTask() {
             You&apos;ll pay{" "}
             <span className="text-accent">{selected.price} cr</span> to {selected.agentName},
             frozen in escrow.
-            {selected.price > budget && (
-              <> This is above your {budget} cr budget.</>
+            {selected.price > budgetValue && (
+              <> This is above your {budgetValue} cr budget.</>
             )}
           </p>
           <div className="mt-4 flex items-center gap-4">
