@@ -19,10 +19,12 @@ function Harness() {
   );
 }
 
-function makeJwt(roles: string[]): string {
-  const b64 = (o: object) =>
-    btoa(JSON.stringify(o)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  return `${b64({ alg: "HS256" })}.${b64({ sub: "u1", roles })}.sig`;
+function b64(o: object) {
+  return btoa(JSON.stringify(o)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function makeJwt(roles: string[], exp?: number): string {
+  return `${b64({ alg: "HS256" })}.${b64({ sub: "u1", roles, exp })}.sig`;
 }
 
 const loginOk = () =>
@@ -71,11 +73,42 @@ describe("AuthProvider / useAuth", () => {
   });
 
   it("rehydrates a persisted session on mount", () => {
-    localStorage.setItem(TOKEN_KEY, "jwt-xyz");
+    const validToken = makeJwt(["BUILDER"], Math.floor(Date.now() / 1000) + 3600);
+    localStorage.setItem(TOKEN_KEY, validToken);
     localStorage.setItem("hireai.auth", JSON.stringify({ userId: "u9", role: "BUILDER" }));
     render(<AuthProvider><Harness /></AuthProvider>);
-    expect(screen.getByTestId("token").textContent).toBe("jwt-xyz");
+    expect(screen.getByTestId("token").textContent).toBe(validToken);
     expect(screen.getByTestId("role").textContent).toBe("BUILDER");
+  });
+
+  it("self-clears an expired persisted session on mount", () => {
+    const expiredToken = makeJwt(["CLIENT"], Math.floor(Date.now() / 1000) - 60);
+    localStorage.setItem(TOKEN_KEY, expiredToken);
+    localStorage.setItem("hireai.auth", JSON.stringify({ userId: "u9", roles: ["CLIENT"] }));
+    localStorage.setItem("hireai.surface", "CLIENT");
+
+    render(<AuthProvider><Harness /></AuthProvider>);
+
+    expect(screen.getByTestId("token").textContent).toBe("none");
+    expect(screen.getByTestId("role").textContent).toBe("none");
+    expect(screen.getByTestId("userId").textContent).toBe("none");
+    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+    expect(localStorage.getItem("hireai.auth")).toBeNull();
+    expect(localStorage.getItem("hireai.surface")).toBeNull();
+  });
+
+  it("self-clears a JWT-shaped but corrupt persisted token on mount", () => {
+    // Shaped like a JWT (3 segments) but the payload segment isn't valid base64url/JSON — distinct
+    // from the bare placeholder tokens ("t", "jwt", ...) other test files seed as a logged-in
+    // fixture, which are intentionally left untouched (see jwt.ts `isExpiredJwt`).
+    localStorage.setItem(TOKEN_KEY, `${b64({ alg: "HS256" })}.not-valid-base64!!.sig`);
+    localStorage.setItem("hireai.auth", JSON.stringify({ userId: "u9", roles: ["CLIENT"] }));
+
+    render(<AuthProvider><Harness /></AuthProvider>);
+
+    expect(screen.getByTestId("token").textContent).toBe("none");
+    expect(localStorage.getItem(TOKEN_KEY)).toBeNull();
+    expect(localStorage.getItem("hireai.auth")).toBeNull();
   });
 
   it("homeFor routes an admin-only user to /admin", async () => {
