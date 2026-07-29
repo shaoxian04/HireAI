@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api, TOKEN_KEY } from "./api";
-import { decodeJwt } from "./jwt";
+import { decodeJwt, isExpiredJwt } from "./jwt";
 import type { LoginResponse, Role } from "./types";
 
 const SESSION_KEY = "hireai.auth";
@@ -65,6 +65,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const { token: t, session: s, surface: sf } = readPersisted();
+    if (t && isExpiredJwt(t)) {
+      // Self-clear a decayed session before any dependent component (nav, dispute-count fetch,
+      // ...) can observe a "signed in" state from an expired or corrupt JWT.
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(SURFACE_KEY);
+      return;
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- SSR-safe client-only hydration from localStorage; lazy useState would read localStorage during SSR and cause hydration mismatch
     setToken(t);
     setSession(s);
