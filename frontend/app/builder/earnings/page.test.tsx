@@ -15,6 +15,7 @@ import EarningsPage from "@/app/builder/earnings/page";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useParams: () => ({}),
+  usePathname: () => "/builder/earnings",
 }));
 
 // The default earnings handler (handlers.ts) returns payouts with taskId "t-1" and "t-2".

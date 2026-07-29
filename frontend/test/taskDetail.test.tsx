@@ -16,6 +16,7 @@ import TaskDetailPage from "@/app/client/tasks/[id]/page";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useParams: () => ({ id: "t-99" }),
+  usePathname: () => "/client/tasks/t-99",
 }));
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));

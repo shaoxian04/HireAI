@@ -8,6 +8,7 @@ import SubmitTaskPage from "@/app/client/tasks/new/page";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   useParams: () => ({}),
+  usePathname: () => "/client/tasks/new",
 }));
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
