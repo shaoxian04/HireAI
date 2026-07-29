@@ -153,6 +153,36 @@ class CatalogueQueryDaoIntegrationTest {
     }
 
     // -----------------------------------------------------------------------
+    // Test 2b: Free-text search also matches capability category (partial, case-insensitive)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void searchMatchesCategoryEvenWithoutNameOrBuilderMatch() {
+        seedAgent(uniqueEmail("catonly"), "Zylo Widget",
+                "ACTIVE", "legal-research", new BigDecimal("5.00"), true, false);
+        seedAgent(uniqueEmail("catonly2"), "Other Agent",
+                "ACTIVE", "translation", new BigDecimal("5.00"), true, false);
+
+        // "LEGAL" matches neither the agent name nor the builder's email local-part — only the
+        // category — and must still surface the agent (partial, case-insensitive match).
+        List<AgentCardRow> results = catalogueQueryPort.searchCards("LEGAL", "", "newest", 0, 50);
+        assertThat(results).anyMatch(r -> r.name().equals("Zylo Widget"));
+        assertThat(results).noneMatch(r -> r.name().equals("Other Agent"));
+    }
+
+    @Test
+    void searchMatchesCategoryAndNameWithoutDuplicateRows() {
+        // The search term matches both the agent name and its category — the row must come back
+        // exactly once (EXISTS-based category match must not duplicate via a join fan-out).
+        seedAgent(uniqueEmail("catandname"), "Summarisation Pro",
+                "ACTIVE", "summarisation", new BigDecimal("5.00"), true, false);
+
+        List<AgentCardRow> results = catalogueQueryPort.searchCards("summarisation", "", "newest", 0, 50);
+        long matches = results.stream().filter(r -> r.name().equals("Summarisation Pro")).count();
+        assertThat(matches).isEqualTo(1);
+    }
+
+    // -----------------------------------------------------------------------
     // Test 3: Category filter and category counts
     // -----------------------------------------------------------------------
 
