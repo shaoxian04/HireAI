@@ -18,7 +18,6 @@ function BookingForm() {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [budget, setBudget] = useState<number>(0);
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -30,10 +29,7 @@ function BookingForm() {
     setProfile(null);
     setProfileError(null);
     api<AgentProfileDTO>(`/catalogue/agents/${id}`)
-      .then((p) => {
-        setProfile(p);
-        setBudget(p.card.price);
-      })
+      .then((p) => setProfile(p))
       .catch((e) =>
         setProfileError(e instanceof ApiError ? e.message : "Failed to load agent"),
       );
@@ -57,7 +53,7 @@ function BookingForm() {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
-    const body: DirectBookRequest = { title, description, budget, agentId: id };
+    const body: DirectBookRequest = { title, description, budget: card.price, agentId: id };
     try {
       const created = await api<TaskDTO>("/tasks/direct", {
         method: "POST",
@@ -128,24 +124,14 @@ function BookingForm() {
               required
             />
           </Field>
-          <Field label="Budget (credits)" htmlFor="budget">
-            <Input
-              id="budget"
-              type="number"
-              min={card.price}
-              value={budget}
-              onChange={(e) => setBudget(Number(e.target.value))}
-              required
-            />
-          </Field>
-
-          {/* Escrow summary row */}
+          {/* Escrow summary row — the price is fixed and non-editable; this is the exact amount that freezes in escrow on submit. */}
           <p className="font-mono text-xs text-dim">
-            Price{" "}
+            You&apos;ll pay{" "}
             <span className="tabular text-accent">{card.price} cr</span>
+            {", frozen in escrow"}
             {" "}· ≤{" "}
             <span className="tabular">{card.maxExecutionSeconds}s</span>{" "}
-            execution · escrow-protected
+            execution
           </p>
 
           {error && (
