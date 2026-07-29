@@ -9,6 +9,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useParams: () => ({ id: "a-1" }),
   useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/builder/agents/a-1",
 }));
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));

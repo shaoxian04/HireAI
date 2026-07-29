@@ -8,6 +8,7 @@ import ClientDisputesPage from "@/app/client/disputes/page";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useParams: () => ({}),
+  usePathname: () => "/client/disputes",
 }));
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));

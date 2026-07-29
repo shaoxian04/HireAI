@@ -8,6 +8,7 @@ import BuilderPage from "@/app/builder/page";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useParams: () => ({}),
+  usePathname: () => "/builder",
 }));
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));

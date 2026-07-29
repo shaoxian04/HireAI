@@ -12,6 +12,7 @@ import RegisterAgentPage from "@/app/builder/agents/new/page";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useParams: () => ({}),
+  usePathname: () => "/builder/agents/new",
 }));
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));

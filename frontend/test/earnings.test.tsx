@@ -8,6 +8,7 @@ import EarningsPage from "@/app/builder/earnings/page";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useParams: () => ({}),
+  usePathname: () => "/builder/earnings",
 }));
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
