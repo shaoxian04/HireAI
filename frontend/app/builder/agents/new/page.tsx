@@ -15,9 +15,9 @@ function RegisterAgent() {
   const [name, setName] = useState("");
   const [categoriesCsv, setCategoriesCsv] = useState("");
   const [webhookUrl, setWebhookUrl] = useState("");
-  const [maxExecutionSeconds, setMaxExecutionSeconds] = useState(60);
-  const [price, setPrice] = useState(10);
-  const [maxConcurrent, setMaxConcurrent] = useState(5);
+  const [maxExecutionSeconds, setMaxExecutionSeconds] = useState("60");
+  const [price, setPrice] = useState("10");
+  const [maxConcurrent, setMaxConcurrent] = useState("5");
   const [outputSpec, setOutputSpec] = useState<OutputSpecDTO>(EMPTY_OUTPUT_SPEC);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -25,6 +25,22 @@ function RegisterAgent() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const maxExecutionSecondsNum =
+      maxExecutionSeconds.trim() === "" ? NaN : Number(maxExecutionSeconds);
+    if (Number.isNaN(maxExecutionSecondsNum)) {
+      setError("Enter max execution seconds");
+      return;
+    }
+    const priceNum = price.trim() === "" ? NaN : Number(price);
+    if (Number.isNaN(priceNum)) {
+      setError("Enter a price");
+      return;
+    }
+    const maxConcurrentNum = maxConcurrent.trim() === "" ? NaN : Number(maxConcurrent);
+    if (Number.isNaN(maxConcurrentNum)) {
+      setError("Enter max parallel tasks");
+      return;
+    }
     setSubmitting(true);
     const body: CreateAgentRequest = {
       name,
@@ -33,9 +49,9 @@ function RegisterAgent() {
         .map((s) => s.trim())
         .filter(Boolean),
       webhookUrl,
-      maxExecutionSeconds,
-      price,
-      maxConcurrent,
+      maxExecutionSeconds: maxExecutionSecondsNum,
+      price: priceNum,
+      maxConcurrent: maxConcurrentNum,
       outputSpec,
     };
     try {
@@ -95,8 +111,8 @@ function RegisterAgent() {
                 type="number"
                 min={1}
                 value={maxExecutionSeconds}
-                onChange={(e) => setMaxExecutionSeconds(Number(e.target.value))}
-                required
+                onChange={(e) => setMaxExecutionSeconds(e.target.value)}
+                placeholder="60"
               />
             </Field>
             <Field label="Price (credits)" htmlFor="price">
@@ -105,8 +121,8 @@ function RegisterAgent() {
                 type="number"
                 min={0}
                 value={price}
-                onChange={(e) => setPrice(Number(e.target.value))}
-                required
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="10"
               />
             </Field>
             <Field label="Max parallel tasks" htmlFor="maxConcurrent">
@@ -116,8 +132,8 @@ function RegisterAgent() {
                 min={1}
                 max={100}
                 value={maxConcurrent}
-                onChange={(e) => setMaxConcurrent(Number(e.target.value))}
-                required
+                onChange={(e) => setMaxConcurrent(e.target.value)}
+                placeholder="5"
               />
             </Field>
           </div>

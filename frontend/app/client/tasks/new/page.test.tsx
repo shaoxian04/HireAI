@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { http } from "msw";
 import { server, ok } from "../../../../test/msw/handlers";
 import { AuthProvider } from "@/lib/auth";
@@ -123,5 +124,38 @@ describe("submit task — shortlist flow", () => {
     await screen.findByDisplayValue("Restored");
     const stored = JSON.parse(localStorage.getItem("hireai.taskDraft")!) as { title: string };
     expect(stored.title).toBe("Restored");
+  });
+
+  it("clears and retypes the budget field without a stray leading zero, then searches with the typed value", async () => {
+    let calledUrl = "";
+    server.use(
+      http.get("*/api/tasks/match-preview", ({ request }) => {
+        calledUrl = request.url;
+        return ok(previewBody);
+      }),
+    );
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/title/i), { target: { value: "Summarise" } });
+    fireEvent.change(screen.getByLabelText(/description/i), { target: { value: "the report" } });
+    const budgetInput = screen.getByLabelText(/budget/i) as HTMLInputElement;
+    expect(budgetInput.value).toBe("30");
+    await userEvent.clear(budgetInput);
+    expect(budgetInput.value).toBe("");
+    await userEvent.type(budgetInput, "45");
+    expect(budgetInput.value).toBe("45");
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    await waitFor(() => expect(calledUrl).toContain("budget=45"));
+  });
+
+  it("shows a validation error instead of searching with a silently-substituted 0 when budget is left empty", async () => {
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/title/i), { target: { value: "Summarise" } });
+    fireEvent.change(screen.getByLabelText(/description/i), { target: { value: "the report" } });
+    const budgetInput = screen.getByLabelText(/budget/i) as HTMLInputElement;
+    await userEvent.clear(budgetInput);
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/budget/i);
   });
 });
