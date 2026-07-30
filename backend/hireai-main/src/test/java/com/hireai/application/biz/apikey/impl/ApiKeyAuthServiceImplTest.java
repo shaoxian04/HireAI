@@ -1,9 +1,10 @@
 package com.hireai.application.biz.apikey.impl;
 
-import com.hireai.application.biz.apikey.ApiKeyAuthService;
-import com.hireai.application.biz.apikey.ApiKeyPrincipal;
-import com.hireai.domain.biz.apikey.model.ApiKeyModel;
-import com.hireai.domain.biz.apikey.repository.ApiKeyRepository;
+import com.hireai.application.biz.identity.apikey.ApiKeyAuthService;
+import com.hireai.application.biz.identity.apikey.ApiKeyPrincipal;
+import com.hireai.application.biz.identity.apikey.impl.ApiKeyAuthServiceImpl;
+import com.hireai.domain.biz.identity.apikey.model.ApiKeyModel;
+import com.hireai.domain.biz.identity.apikey.repository.ApiKeyRepository;
 import com.hireai.utility.hash.Sha256;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +33,7 @@ class ApiKeyAuthServiceImplTest {
     private ApiKeyModel activeKey(UUID user, UUID id, String rawKey, Instant lastUsed) {
         return ApiKeyModel.rehydrate(id, user, Sha256.hex(rawKey), "hk_live_a1b2c3", "bot",
                 new BigDecimal("100.00"), new BigDecimal("500.00"),
-                com.hireai.domain.biz.apikey.model.ApiKeyStatus.ACTIVE, lastUsed,
+                com.hireai.domain.biz.identity.apikey.model.ApiKeyStatus.ACTIVE, lastUsed,
                 fixed.minusSeconds(86400), null);
     }
 

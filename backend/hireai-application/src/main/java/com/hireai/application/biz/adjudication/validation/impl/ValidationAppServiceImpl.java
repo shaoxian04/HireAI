@@ -2,11 +2,11 @@ package com.hireai.application.biz.adjudication.validation.impl;
 
 import com.hireai.application.biz.adjudication.validation.ValidationAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
-import com.hireai.application.biz.webhook.WebhookOutboxAppService;
+import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
 import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
 import com.hireai.domain.biz.adjudication.repository.ValidationReportRepository;
 import com.hireai.domain.biz.adjudication.service.ValidationDomainService;
-import com.hireai.domain.biz.apikey.repository.ApiKeyTaskRepository;
+import com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;

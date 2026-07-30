@@ -1,11 +1,12 @@
 package com.hireai.application.biz.apikey.impl;
 
-import com.hireai.application.biz.apikey.ApiKeyManagementAppService;
-import com.hireai.domain.biz.apikey.model.ApiKeyModel;
-import com.hireai.domain.biz.apikey.model.IssuedApiKey;
-import com.hireai.domain.biz.apikey.repository.ApiKeyRepository;
-import com.hireai.domain.biz.apikey.service.ApiKeyIssueDomainService;
-import com.hireai.domain.biz.apikey.service.impl.ApiKeyIssueDomainServiceImpl;
+import com.hireai.application.biz.identity.apikey.ApiKeyManagementAppService;
+import com.hireai.application.biz.identity.apikey.impl.ApiKeyManagementAppServiceImpl;
+import com.hireai.domain.biz.identity.apikey.model.ApiKeyModel;
+import com.hireai.domain.biz.identity.apikey.model.IssuedApiKey;
+import com.hireai.domain.biz.identity.apikey.repository.ApiKeyRepository;
+import com.hireai.domain.biz.identity.apikey.service.ApiKeyIssueDomainService;
+import com.hireai.domain.biz.identity.apikey.service.impl.ApiKeyIssueDomainServiceImpl;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 import org.junit.jupiter.api.Test;
@@ -51,14 +52,14 @@ class ApiKeyManagementAppServiceImplTest {
         ApiKeyModel key = ApiKeyModel.issue(owner, "h", "hk_live_a1b2c3", "bot", null, null, fixed);
         when(repo.findById(keyId)).thenReturn(Optional.of(
                 ApiKeyModel.rehydrate(keyId, owner, "h", "hk_live_a1b2c3", "bot", null, null,
-                        com.hireai.domain.biz.apikey.model.ApiKeyStatus.ACTIVE, null, fixed, null)));
+                        com.hireai.domain.biz.identity.apikey.model.ApiKeyStatus.ACTIVE, null, fixed, null)));
         when(repo.save(any())).thenAnswer(i -> i.getArgument(0));
 
         ApiKeyModel revoked = svc.revoke(keyId, owner);
-        assertThat(revoked.status()).isEqualTo(com.hireai.domain.biz.apikey.model.ApiKeyStatus.REVOKED);
+        assertThat(revoked.status()).isEqualTo(com.hireai.domain.biz.identity.apikey.model.ApiKeyStatus.REVOKED);
         assertThat(revoked.revokedAt()).isEqualTo(fixed);
         verify(repo).save(argThat(
-                k -> k.status() == com.hireai.domain.biz.apikey.model.ApiKeyStatus.REVOKED));
+                k -> k.status() == com.hireai.domain.biz.identity.apikey.model.ApiKeyStatus.REVOKED));
     }
 
     @Test
@@ -66,7 +67,7 @@ class ApiKeyManagementAppServiceImplTest {
         UUID keyId = UUID.randomUUID();
         when(repo.findById(keyId)).thenReturn(Optional.of(
                 ApiKeyModel.rehydrate(keyId, UUID.randomUUID(), "h", "hk_live_a1b2c3", "bot", null, null,
-                        com.hireai.domain.biz.apikey.model.ApiKeyStatus.ACTIVE, null, fixed, null)));
+                        com.hireai.domain.biz.identity.apikey.model.ApiKeyStatus.ACTIVE, null, fixed, null)));
 
         assertThatThrownBy(() -> svc.revoke(keyId, UUID.randomUUID()))
                 .isInstanceOf(DomainException.class)

@@ -34,10 +34,10 @@ class ValidationAppServiceImplTest {
     private final SettlementWriteAppService settlement = mock(SettlementWriteAppService.class);
     private final com.hireai.domain.biz.offering.agent.repository.AgentRepository agentRepository =
             mock(com.hireai.domain.biz.offering.agent.repository.AgentRepository.class);
-    private final com.hireai.domain.biz.apikey.repository.ApiKeyTaskRepository apiKeyTaskRepository =
-            mock(com.hireai.domain.biz.apikey.repository.ApiKeyTaskRepository.class);
-    private final com.hireai.application.biz.webhook.WebhookOutboxAppService webhookOutbox =
-            mock(com.hireai.application.biz.webhook.WebhookOutboxAppService.class);
+    private final com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository apiKeyTaskRepository =
+            mock(com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository.class);
+    private final com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService webhookOutbox =
+            mock(com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService.class);
     private final ValidationAppServiceImpl svc = new ValidationAppServiceImpl(domain, reports, tasks, settlement,
             agentRepository, apiKeyTaskRepository, webhookOutbox);
 

@@ -1,5 +1,6 @@
 package com.hireai.domain.biz.apikey.model;
 
+import com.hireai.domain.biz.identity.apikey.model.SpendCaps;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 import org.junit.jupiter.api.Test;

@@ -1,5 +1,7 @@
 package com.hireai.domain.biz.apikey.model;
 
+import com.hireai.domain.biz.identity.apikey.model.ApiKeyModel;
+import com.hireai.domain.biz.identity.apikey.model.ApiKeyStatus;
 import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.UUID;

@@ -2,7 +2,7 @@ package com.hireai.application.biz.task.callback.impl;
 
 import com.hireai.application.biz.adjudication.validation.ValidationAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
-import com.hireai.application.biz.webhook.WebhookOutboxAppService;
+import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
 import com.hireai.application.port.security.DispatchTokenClaims;
 import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.application.port.security.DispatchTokenService;

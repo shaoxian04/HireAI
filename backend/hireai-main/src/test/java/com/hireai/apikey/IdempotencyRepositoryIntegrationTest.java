@@ -1,7 +1,7 @@
 package com.hireai.apikey;
 
-import com.hireai.domain.biz.apikey.model.IdempotencyRecord;
-import com.hireai.domain.biz.apikey.repository.IdempotencyRepository;
+import com.hireai.domain.biz.task.idempotency.model.IdempotencyRecord;
+import com.hireai.domain.biz.task.idempotency.repository.IdempotencyRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;

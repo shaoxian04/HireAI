@@ -4,14 +4,23 @@ Distilled from SAD §2.3–2.4. Notion SAD has the full schema table + ERD: http
 
 ## Aggregates (fine-grained, one repository per root)
 
-| Aggregate root (`XxxModel`) | Children / value objects | Repository | Key invariant |
-|---|---|---|---|
-| **TaskModel** | TaskAttachmentModel, TaskResultModel; ExpectedDeliverable (VO) | TaskRepository | Legal status transitions only; result exists only after dispatch. |
-| **AgentModel** | AgentVersionModel; OutputSpec, Pricing (VO) | AgentRepository | Exactly one active version; only ACTIVE agents receive tasks. |
-| **WalletModel** | LedgerEntryModel (append-only) | WalletRepository | Balances never negative; escrow = sum of open freezes; ledger immutable. |
-| **DisputeModel** | RulingModel (LLM + admin) | DisputeRepository | One dispute per task; settlement happens exactly once. |
-| **ReputationModel** | ReputationEventModel (append-only) | ReputationRepository | Score in [0,100]; computed only from recorded events with decay. |
-| **ReviewModel** | BuilderResponse (VO) | ReviewRepository | One review per resolved task; published only after content check. |
+Reflects what's actually built (one row per real `XxxRepository`), not the original SAD target list — see `docs/details/build-status.md` for built-vs-pending. `AgentModel`/`ReputationModel` rows are left as they were pending a separate pass.
+
+| Subdomain | Aggregate root (`XxxModel`) | Children / value objects | Repository | Key invariant |
+|---|---|---|---|---|
+| identity | **UserModel** | Credential, OAuthIdentity | UserRepository | Dual-capability: every user holds `CLIENT` and may add `BUILDER`; roles sourced from `user_roles`. |
+| identity | **ApiKeyModel** | SpendCaps (VO) | ApiKeyRepository | The raw key is never persisted — only a SHA-256 hash + display prefix; a revoked key never re-activates. |
+| identity | **WebhookSubscriptionModel** | — | WebhookSubscriptionRepository | ≤1 ACTIVE subscription per key; re-registering deactivates the prior row rather than overwriting it (history-preserving). |
+| ledger | **WalletModel** | LedgerEntryModel (append-only) | WalletRepository | Balances never negative; escrow = sum of open freezes; ledger immutable. |
+| ledger | **SettlementModel** | — | SettlementRepository | One settlement per task; the auditable record of the decision + split — the money itself moves through the append-only ledger, the actual source of truth. |
+| offering | **AgentModel** | AgentVersionModel; OutputSpec, Pricing (VO) | AgentRepository | Exactly one active version; only ACTIVE agents receive tasks. |
+| task | **TaskModel** | TaskAttachmentModel, TaskResultModel; ExpectedDeliverable (VO) | TaskRepository | Legal status transitions only; result exists only after dispatch. |
+| task | **IdempotencyRecord** | — | IdempotencyRepository | `UNIQUE(owner, idempotency key)` inserted in the same transaction as the escrow freeze — a race rolls the freeze back too, never a double-freeze. |
+| task | **WebhookDeliveryModel** | — | WebhookDeliveryRepository | Enqueued only inside the settling transaction (an outbox row, never a second ledger); at-least-once delivery via exponential-with-cap backoff. |
+| adjudication | **DisputeModel** | RulingModel (LLM + admin) | DisputeRepository | One dispute per task; settlement happens exactly once. |
+| adjudication | **ValidationReportModel** | CheckResult (VO) | ValidationReportRepository | Verdict is PASS only if every check passes; validation runs before any client sees a result (Inv #4). |
+| reputation | **ReputationModel** | ReputationEventModel (append-only) | ReputationRepository | Score in [0,100]; computed only from recorded events with decay. |
+| reputation | **ReviewModel** | BuilderResponse (VO) | ReviewRepository | One review per resolved task; published only after content check. |
 
 ## Core tables (3NF; `gmt_create`/`gmt_modified` on every table)
 

@@ -1,6 +1,6 @@
 package com.hireai.webhook;
 
-import com.hireai.domain.biz.webhook.WebhookSignature;
+import com.hireai.domain.biz.task.webhookdelivery.WebhookSignature;
 import com.hireai.utility.hash.HmacSha256;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;

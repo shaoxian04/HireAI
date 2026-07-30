@@ -4,7 +4,7 @@ import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.biz.task.reliability.impl.TaskReliabilityAppServiceImpl;
 import com.hireai.application.biz.task.routing.RoutingAppService;
-import com.hireai.application.biz.webhook.WebhookOutboxAppService;
+import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;

@@ -1,12 +1,12 @@
 package com.hireai.webhook;
 
-import com.hireai.application.biz.webhook.impl.WebhookSubscriptionAppServiceImpl;
+import com.hireai.application.biz.identity.webhooksubscription.impl.WebhookSubscriptionAppServiceImpl;
 import com.hireai.application.port.webhook.WebhookUrlValidatorPort;
-import com.hireai.domain.biz.apikey.model.ApiKeyModel;
-import com.hireai.domain.biz.apikey.repository.ApiKeyRepository;
-import com.hireai.domain.biz.webhook.model.WebhookSubscriptionModel;
-import com.hireai.domain.biz.webhook.repository.WebhookSubscriptionRepository;
-import com.hireai.domain.biz.webhook.service.WebhookSecretGenerator;
+import com.hireai.domain.biz.identity.apikey.model.ApiKeyModel;
+import com.hireai.domain.biz.identity.apikey.repository.ApiKeyRepository;
+import com.hireai.domain.biz.identity.webhooksubscription.model.WebhookSubscriptionModel;
+import com.hireai.domain.biz.identity.webhooksubscription.repository.WebhookSubscriptionRepository;
+import com.hireai.domain.biz.identity.webhooksubscription.service.WebhookSecretGenerator;
 import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

@@ -1,11 +1,11 @@
 package com.hireai.controller.biz.apikey;
 
-import com.hireai.application.biz.apikey.ApiKeyManagementAppService;
+import com.hireai.application.biz.identity.apikey.ApiKeyManagementAppService;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
-import com.hireai.domain.biz.apikey.model.ApiKeyModel;
-import com.hireai.domain.biz.apikey.model.ApiKeyStatus;
-import com.hireai.domain.biz.apikey.model.IssuedApiKey;
+import com.hireai.domain.biz.identity.apikey.model.ApiKeyModel;
+import com.hireai.domain.biz.identity.apikey.model.ApiKeyStatus;
+import com.hireai.domain.biz.identity.apikey.model.IssuedApiKey;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;

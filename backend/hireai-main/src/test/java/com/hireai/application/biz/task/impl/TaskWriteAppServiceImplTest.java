@@ -2,7 +2,7 @@ package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
-import com.hireai.application.biz.webhook.WebhookOutboxAppService;
+import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;

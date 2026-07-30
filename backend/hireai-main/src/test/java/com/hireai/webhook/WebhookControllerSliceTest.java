@@ -1,17 +1,17 @@
 package com.hireai.webhook;
 
-import com.hireai.application.biz.apikey.ApiKeyAuthService;
-import com.hireai.application.biz.webhook.WebhookDeliveryAppService;
-import com.hireai.application.biz.webhook.WebhookSubscriptionAppService;
+import com.hireai.application.biz.identity.apikey.ApiKeyAuthService;
+import com.hireai.application.biz.task.webhookdelivery.WebhookDeliveryAppService;
+import com.hireai.application.biz.identity.webhooksubscription.WebhookSubscriptionAppService;
 import com.hireai.application.port.security.JwtService;
 import com.hireai.controller.biz.webhook.WebhookDeliveryController;
 import com.hireai.controller.biz.webhook.WebhookSubscriptionController;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.controller.config.SecurityConfig;
-import com.hireai.domain.biz.webhook.enums.WebhookDeliveryStatus;
-import com.hireai.domain.biz.webhook.enums.WebhookEventType;
-import com.hireai.domain.biz.webhook.model.WebhookDeliveryModel;
-import com.hireai.domain.biz.webhook.model.WebhookSubscriptionModel;
+import com.hireai.domain.biz.task.webhookdelivery.enums.WebhookDeliveryStatus;
+import com.hireai.domain.biz.task.webhookdelivery.enums.WebhookEventType;
+import com.hireai.domain.biz.task.webhookdelivery.model.WebhookDeliveryModel;
+import com.hireai.domain.biz.identity.webhooksubscription.model.WebhookSubscriptionModel;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;

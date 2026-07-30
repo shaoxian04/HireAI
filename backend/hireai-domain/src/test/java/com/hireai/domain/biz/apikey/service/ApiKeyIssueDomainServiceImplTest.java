@@ -1,8 +1,9 @@
 package com.hireai.domain.biz.apikey.service;
 
-import com.hireai.domain.biz.apikey.model.ApiKeyStatus;
-import com.hireai.domain.biz.apikey.model.IssuedApiKey;
-import com.hireai.domain.biz.apikey.service.impl.ApiKeyIssueDomainServiceImpl;
+import com.hireai.domain.biz.identity.apikey.model.ApiKeyStatus;
+import com.hireai.domain.biz.identity.apikey.model.IssuedApiKey;
+import com.hireai.domain.biz.identity.apikey.service.ApiKeyIssueDomainService;
+import com.hireai.domain.biz.identity.apikey.service.impl.ApiKeyIssueDomainServiceImpl;
 import com.hireai.utility.hash.Sha256;
 import org.junit.jupiter.api.Test;
 import java.security.SecureRandom;

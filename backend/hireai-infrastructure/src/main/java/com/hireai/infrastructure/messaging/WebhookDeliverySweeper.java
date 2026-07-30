@@ -1,6 +1,6 @@
 package com.hireai.infrastructure.messaging;
 
-import com.hireai.application.biz.webhook.WebhookDeliveryAppService;
+import com.hireai.application.biz.task.webhookdelivery.WebhookDeliveryAppService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
