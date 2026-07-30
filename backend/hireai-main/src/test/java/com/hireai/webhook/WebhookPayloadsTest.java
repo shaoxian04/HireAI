@@ -2,8 +2,8 @@ package com.hireai.webhook;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hireai.domain.biz.webhook.WebhookPayloads;
-import com.hireai.domain.biz.webhook.enums.WebhookEventType;
+import com.hireai.domain.biz.task.webhookdelivery.WebhookPayloads;
+import com.hireai.domain.biz.task.webhookdelivery.enums.WebhookEventType;
 import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.Instant;

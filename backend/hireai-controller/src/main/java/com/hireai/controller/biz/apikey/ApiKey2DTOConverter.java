@@ -2,8 +2,8 @@ package com.hireai.controller.biz.apikey;
 
 import com.hireai.controller.biz.apikey.dto.ApiKeyDTO;
 import com.hireai.controller.biz.apikey.dto.CreatedApiKeyDTO;
-import com.hireai.domain.biz.apikey.model.ApiKeyModel;
-import com.hireai.domain.biz.apikey.model.IssuedApiKey;
+import com.hireai.domain.biz.identity.apikey.model.ApiKeyModel;
+import com.hireai.domain.biz.identity.apikey.model.IssuedApiKey;
 
 /** Maps API-key aggregates to their HTTP DTOs. */
 public final class ApiKey2DTOConverter {

@@ -1,10 +1,10 @@
 package com.hireai.controller.biz.webhook;
 
-import com.hireai.application.biz.webhook.WebhookSubscriptionAppService;
+import com.hireai.application.biz.identity.webhooksubscription.WebhookSubscriptionAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.config.CurrentUserProvider;
-import com.hireai.domain.biz.webhook.model.WebhookSubscriptionModel;
+import com.hireai.domain.biz.identity.webhooksubscription.model.WebhookSubscriptionModel;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;

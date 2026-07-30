@@ -1,6 +1,6 @@
 package com.hireai.webhook;
 
-import com.hireai.domain.biz.webhook.IpClassifier;
+import com.hireai.domain.biz.identity.webhooksubscription.IpClassifier;
 import org.junit.jupiter.api.Test;
 import java.net.InetAddress;
 import static org.assertj.core.api.Assertions.assertThat;

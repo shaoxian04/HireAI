@@ -1,7 +1,7 @@
 package com.hireai.infrastructure.webhook;
 
 import com.hireai.application.port.webhook.WebhookUrlValidatorPort;
-import com.hireai.domain.biz.webhook.IpClassifier;
+import com.hireai.domain.biz.identity.webhooksubscription.IpClassifier;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 import org.springframework.beans.factory.annotation.Value;

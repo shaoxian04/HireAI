@@ -28,17 +28,17 @@ No module depends on one to its left. **`hireai-domain` and `hireai-utility` car
 ```
 hireai-utility        utility/result                          ResultCode, shared primitives (no Spring)
                       utility/exception                       DomainException + all exception types (any layer may throw)
-hireai-domain         domain/biz/<aggregate>/{model,repository,service,enums,event,info}
-hireai-application    application/biz/<aggregate>             XxxReadAppService, XxxWriteAppService, OutputSpecJsonMapper
-                      application/port/{messaging,security,storage,query,task}   interfaces infra implements
-hireai-repository     infrastructure/repository/<aggregate>   XxxRepositoryImpl + JPA entities (XxxDO) + read-query ports
-hireai-infrastructure infrastructure/{messaging,security,client}   RabbitMQ, JWT, AgentDispatchClient, storage
+hireai-domain         domain/biz/<subdomain>[/<aggregate>]/{model,repository,service,enums,event,info}
+hireai-application    application/biz/<subdomain>[/<aggregate>]   XxxReadAppService, XxxWriteAppService, OutputSpecJsonMapper
+                      application/port/{messaging,security,storage,query,task,webhook}   interfaces infra implements
+hireai-repository     infrastructure/repository/<subdomain>[/<aggregate>]   XxxRepositoryImpl + JPA entities (XxxDO) + read-query ports
+hireai-infrastructure infrastructure/{messaging,security,client,webhook}   RabbitMQ, JWT, AgentDispatchClient, storage, outbound webhook HTTP
 hireai-controller     controller/base|config                  BaseController, WebResult, SecurityConfig, JwtAuthenticationFilter
                       controller/biz/<route-group>            controller + Request/DTO + converters (grouped by HTTP route)
 hireai-main           HireAiApplication, application.yml, db/migration/V*, the whole test suite
 ```
 
-Domain/application/repository/infrastructure are grouped **by aggregate**; controllers are grouped **by HTTP route group**. `ResultCode` lives in `hireai-utility` (shared by every layer); `WebResult`/`BaseController` stay in `hireai-controller`.
+Domain/application/repository/infrastructure are grouped **by subdomain** (one of the six SAD capabilities: identity, ledger, offering, task, reputation, adjudication); controllers are grouped **by HTTP route group** instead — a different axis, so a route group and a subdomain don't have to share a name (`controller/biz/apikey`/`webhook` are route groups; the domain code they call lives under `identity`/`task`). A subdomain with only one aggregate is flat (e.g. `task`'s own `TaskModel`); one with several nests each under its own `<aggregate>` folder — `ledger/wallet` + `ledger/settlement`, `identity/apikey` + `identity/webhooksubscription`, `task/idempotency` + `task/webhookdelivery` (see `docs/adr/0002-apikey-webhook-nest-under-identity-and-task.md`). `application/port/*` and `infrastructure/*` are grouped by transport **kind** (`webhook` = outbound-HTTP kind), not by subdomain — they don't participate in the aggregate split. `ResultCode` lives in `hireai-utility` (shared by every layer); `WebResult`/`BaseController` stay in `hireai-controller`.
 
 ## Naming suffixes (apply exactly)
 

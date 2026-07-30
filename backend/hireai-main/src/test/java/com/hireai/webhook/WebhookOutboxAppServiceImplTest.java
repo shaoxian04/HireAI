@@ -1,12 +1,12 @@
 package com.hireai.webhook;
 
-import com.hireai.application.biz.webhook.impl.WebhookOutboxAppServiceImpl;
-import com.hireai.domain.biz.apikey.repository.ApiKeyTaskRepository;
-import com.hireai.domain.biz.webhook.enums.WebhookEventType;
-import com.hireai.domain.biz.webhook.model.WebhookDeliveryModel;
-import com.hireai.domain.biz.webhook.model.WebhookSubscriptionModel;
-import com.hireai.domain.biz.webhook.repository.WebhookDeliveryRepository;
-import com.hireai.domain.biz.webhook.repository.WebhookSubscriptionRepository;
+import com.hireai.application.biz.task.webhookdelivery.impl.WebhookOutboxAppServiceImpl;
+import com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository;
+import com.hireai.domain.biz.task.webhookdelivery.enums.WebhookEventType;
+import com.hireai.domain.biz.task.webhookdelivery.model.WebhookDeliveryModel;
+import com.hireai.domain.biz.identity.webhooksubscription.model.WebhookSubscriptionModel;
+import com.hireai.domain.biz.task.webhookdelivery.repository.WebhookDeliveryRepository;
+import com.hireai.domain.biz.identity.webhooksubscription.repository.WebhookSubscriptionRepository;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.shared.model.Money;
 import org.junit.jupiter.api.Test;

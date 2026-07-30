@@ -1,6 +1,6 @@
 package com.hireai.controller.biz.apikey;
 
-import com.hireai.application.biz.apikey.ApiKeyManagementAppService;
+import com.hireai.application.biz.identity.apikey.ApiKeyManagementAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.apikey.dto.ApiKeyDTO;

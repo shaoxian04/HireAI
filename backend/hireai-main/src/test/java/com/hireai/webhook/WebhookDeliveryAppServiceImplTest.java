@@ -1,16 +1,16 @@
 package com.hireai.webhook;
 
-import com.hireai.application.biz.webhook.impl.WebhookDeliveryAppServiceImpl;
+import com.hireai.application.biz.task.webhookdelivery.impl.WebhookDeliveryAppServiceImpl;
 import com.hireai.application.port.webhook.WebhookSendResult;
 import com.hireai.application.port.webhook.WebhookSenderPort;
 import com.hireai.application.port.webhook.WebhookUrlValidatorPort;
-import com.hireai.domain.biz.webhook.WebhookBackoffPolicy;
-import com.hireai.domain.biz.webhook.enums.WebhookDeliveryStatus;
-import com.hireai.domain.biz.webhook.enums.WebhookEventType;
-import com.hireai.domain.biz.webhook.model.WebhookDeliveryModel;
-import com.hireai.domain.biz.webhook.model.WebhookSubscriptionModel;
-import com.hireai.domain.biz.webhook.repository.WebhookDeliveryRepository;
-import com.hireai.domain.biz.webhook.repository.WebhookSubscriptionRepository;
+import com.hireai.domain.biz.task.webhookdelivery.WebhookBackoffPolicy;
+import com.hireai.domain.biz.task.webhookdelivery.enums.WebhookDeliveryStatus;
+import com.hireai.domain.biz.task.webhookdelivery.enums.WebhookEventType;
+import com.hireai.domain.biz.task.webhookdelivery.model.WebhookDeliveryModel;
+import com.hireai.domain.biz.identity.webhooksubscription.model.WebhookSubscriptionModel;
+import com.hireai.domain.biz.task.webhookdelivery.repository.WebhookDeliveryRepository;
+import com.hireai.domain.biz.identity.webhooksubscription.repository.WebhookSubscriptionRepository;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 import org.junit.jupiter.api.Test;

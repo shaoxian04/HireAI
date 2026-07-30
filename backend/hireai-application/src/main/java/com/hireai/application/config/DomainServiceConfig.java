@@ -1,7 +1,7 @@
 package com.hireai.application.config;
 
-import com.hireai.domain.biz.apikey.service.ApiKeyIssueDomainService;
-import com.hireai.domain.biz.apikey.service.impl.ApiKeyIssueDomainServiceImpl;
+import com.hireai.domain.biz.identity.apikey.service.ApiKeyIssueDomainService;
+import com.hireai.domain.biz.identity.apikey.service.impl.ApiKeyIssueDomainServiceImpl;
 import com.hireai.domain.biz.offering.agent.service.AgentActivateDomainService;
 import com.hireai.domain.biz.offering.agent.service.AgentDeactivateDomainService;
 import com.hireai.domain.biz.offering.agent.service.AgentReactivateDomainService;
@@ -20,8 +20,8 @@ import com.hireai.domain.biz.adjudication.service.ValidationDomainService;
 import com.hireai.domain.biz.adjudication.service.impl.ValidationDomainServiceImpl;
 import com.hireai.domain.biz.identity.service.OAuthAccountLinkingDomainService;
 import com.hireai.domain.biz.identity.service.impl.OAuthAccountLinkingDomainServiceImpl;
-import com.hireai.domain.biz.webhook.WebhookBackoffPolicy;
-import com.hireai.domain.biz.webhook.service.WebhookSecretGenerator;
+import com.hireai.domain.biz.task.webhookdelivery.WebhookBackoffPolicy;
+import com.hireai.domain.biz.identity.webhooksubscription.service.WebhookSecretGenerator;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
 import com.hireai.domain.biz.task.service.impl.TaskSubmitDomainServiceImpl;
 import com.hireai.domain.biz.ledger.settlement.service.SettlementDomainService;

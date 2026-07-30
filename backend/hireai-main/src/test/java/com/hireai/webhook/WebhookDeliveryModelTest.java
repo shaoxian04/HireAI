@@ -1,9 +1,9 @@
 package com.hireai.webhook;
 
-import com.hireai.domain.biz.webhook.WebhookBackoffPolicy;
-import com.hireai.domain.biz.webhook.enums.WebhookDeliveryStatus;
-import com.hireai.domain.biz.webhook.enums.WebhookEventType;
-import com.hireai.domain.biz.webhook.model.WebhookDeliveryModel;
+import com.hireai.domain.biz.task.webhookdelivery.WebhookBackoffPolicy;
+import com.hireai.domain.biz.task.webhookdelivery.enums.WebhookDeliveryStatus;
+import com.hireai.domain.biz.task.webhookdelivery.enums.WebhookEventType;
+import com.hireai.domain.biz.task.webhookdelivery.model.WebhookDeliveryModel;
 import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.UUID;

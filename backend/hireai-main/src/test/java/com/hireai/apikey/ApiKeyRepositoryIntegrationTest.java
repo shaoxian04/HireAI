@@ -1,8 +1,8 @@
 package com.hireai.apikey;
 
-import com.hireai.domain.biz.apikey.model.ApiKeyModel;
-import com.hireai.domain.biz.apikey.model.ApiKeyStatus;
-import com.hireai.domain.biz.apikey.repository.ApiKeyRepository;
+import com.hireai.domain.biz.identity.apikey.model.ApiKeyModel;
+import com.hireai.domain.biz.identity.apikey.model.ApiKeyStatus;
+import com.hireai.domain.biz.identity.apikey.repository.ApiKeyRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;

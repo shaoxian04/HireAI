@@ -1,7 +1,7 @@
 package com.hireai.controller.config;
 
-import com.hireai.application.biz.apikey.ApiKeyAuthService;
-import com.hireai.application.biz.apikey.ApiKeyPrincipal;
+import com.hireai.application.biz.identity.apikey.ApiKeyAuthService;
+import com.hireai.application.biz.identity.apikey.ApiKeyPrincipal;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

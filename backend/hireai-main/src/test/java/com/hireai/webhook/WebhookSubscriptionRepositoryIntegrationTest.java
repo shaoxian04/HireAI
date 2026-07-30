@@ -1,9 +1,9 @@
 package com.hireai.webhook;
 
-import com.hireai.domain.biz.apikey.model.ApiKeyModel;
-import com.hireai.domain.biz.apikey.repository.ApiKeyRepository;
-import com.hireai.domain.biz.webhook.model.WebhookSubscriptionModel;
-import com.hireai.domain.biz.webhook.repository.WebhookSubscriptionRepository;
+import com.hireai.domain.biz.identity.apikey.model.ApiKeyModel;
+import com.hireai.domain.biz.identity.apikey.repository.ApiKeyRepository;
+import com.hireai.domain.biz.identity.webhooksubscription.model.WebhookSubscriptionModel;
+import com.hireai.domain.biz.identity.webhooksubscription.repository.WebhookSubscriptionRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;

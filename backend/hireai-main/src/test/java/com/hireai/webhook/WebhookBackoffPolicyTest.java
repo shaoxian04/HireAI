@@ -1,6 +1,6 @@
 package com.hireai.webhook;
 
-import com.hireai.domain.biz.webhook.WebhookBackoffPolicy;
+import com.hireai.domain.biz.task.webhookdelivery.WebhookBackoffPolicy;
 import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;

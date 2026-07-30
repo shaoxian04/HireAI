@@ -1,6 +1,6 @@
 package com.hireai.controller.config;
 
-import com.hireai.application.biz.apikey.ApiKeyAuthService;
+import com.hireai.application.biz.identity.apikey.ApiKeyAuthService;
 import com.hireai.application.port.security.JwtService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

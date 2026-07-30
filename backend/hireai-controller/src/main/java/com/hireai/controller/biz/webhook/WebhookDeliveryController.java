@@ -1,10 +1,10 @@
 package com.hireai.controller.biz.webhook;
 
-import com.hireai.application.biz.webhook.WebhookDeliveryAppService;
+import com.hireai.application.biz.task.webhookdelivery.WebhookDeliveryAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.config.CurrentUserProvider;
-import com.hireai.domain.biz.webhook.model.WebhookDeliveryModel;
+import com.hireai.domain.biz.task.webhookdelivery.model.WebhookDeliveryModel;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;

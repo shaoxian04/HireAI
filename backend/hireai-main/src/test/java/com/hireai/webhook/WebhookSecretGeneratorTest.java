@@ -1,6 +1,6 @@
 package com.hireai.webhook;
 
-import com.hireai.domain.biz.webhook.service.WebhookSecretGenerator;
+import com.hireai.domain.biz.identity.webhooksubscription.service.WebhookSecretGenerator;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
