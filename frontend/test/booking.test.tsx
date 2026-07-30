@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
 import { server } from "./msw/handlers";
 import { AuthProvider } from "@/lib/auth";
 import BookingPage from "@/app/client/agents/[id]/book/page";
@@ -10,6 +11,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace: vi.fn() }),
   useParams: () => ({ id: "ag-1" }),
   useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/client/agents/ag-1/book",
 }));
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -31,10 +33,34 @@ function renderBooking() {
 }
 
 describe("direct booking", () => {
-  it("prefills budget with the agent price, shows the adopted contract read-only, books, redirects", async () => {
+  it("shows the agent's fixed price with no editable budget field, shows the adopted contract read-only, books at that price, redirects", async () => {
+    let capturedBody: unknown = null;
+    server.use(
+      http.post("*/api/tasks/direct", async ({ request }) => {
+        const body = (await request.json()) as { title: string; description: string; budget: number };
+        capturedBody = body;
+        return HttpResponse.json({
+          success: true,
+          code: "OK",
+          message: "",
+          data: {
+            id: "t-direct-1",
+            clientId: "u-1",
+            title: body.title,
+            description: body.description,
+            budget: body.budget,
+            status: "SUBMITTED",
+            outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
+            createdAt: "2026-06-06T10:00:00Z",
+          },
+        });
+      }),
+    );
+
     renderBooking();
     expect(await screen.findByText(/summariser bot/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/budget/i)).toHaveValue(10); // prefilled = price
+    expect(screen.getByText(/you.ll pay/i)).toHaveTextContent(/10 cr/); // fixed price, shown not typed
+    expect(screen.queryByLabelText(/budget/i)).not.toBeInTheDocument(); // no editable budget input at all
     expect(screen.getByText(/valid json/i)).toBeInTheDocument(); // adopted contract, read-only
     expect(screen.queryByLabelText(/category/i)).not.toBeInTheDocument(); // no category/spec inputs
 
@@ -42,16 +68,6 @@ describe("direct booking", () => {
     await userEvent.type(screen.getByLabelText(/description/i), "Summarise the Q2 report");
     await userEvent.click(screen.getByRole("button", { name: /book/i }));
     await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/client/tasks/t-direct-1"));
-  });
-
-  it("surfaces a budget-below-price rejection", async () => {
-    renderBooking();
-    await screen.findByText(/summariser bot/i);
-    await userEvent.type(screen.getByLabelText(/title/i), "T");
-    await userEvent.type(screen.getByLabelText(/description/i), "D");
-    await userEvent.clear(screen.getByLabelText(/budget/i));
-    await userEvent.type(screen.getByLabelText(/budget/i), "5");
-    await userEvent.click(screen.getByRole("button", { name: /book/i }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/below agent price/i);
+    expect(capturedBody).toMatchObject({ budget: 10 }); // always the agent's price, never client-editable
   });
 });

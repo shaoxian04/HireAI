@@ -9,6 +9,7 @@ import Page from "./page";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useParams: () => ({}),
+  usePathname: () => "/client/webhooks",
 }));
 
 const server = setupServer(

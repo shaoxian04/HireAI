@@ -11,7 +11,7 @@ function fakeJwt(payload: object): string {
 describe("decodeJwt", () => {
   it("extracts userId (sub) and the roles array", () => {
     const claims = decodeJwt(fakeJwt({ sub: "u-1", roles: ["CLIENT", "BUILDER"] }));
-    expect(claims).toEqual({ userId: "u-1", roles: ["CLIENT", "BUILDER"] });
+    expect(claims).toEqual({ userId: "u-1", roles: ["CLIENT", "BUILDER"], exp: null });
   });
 
   it("returns null for a malformed token", () => {

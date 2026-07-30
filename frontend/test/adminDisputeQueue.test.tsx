@@ -7,6 +7,7 @@ import AdminDisputesPage from "@/app/admin/disputes/page";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   useParams: () => ({}),
+  usePathname: () => "/admin/disputes",
 }));
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));

@@ -79,7 +79,9 @@ public class JdbcCatalogueQueryDao implements CatalogueQueryPort {
         int bounded = Math.min(Math.max(size, 1), 100);
         String sql = CARD_SELECT + """
                   AND (:q = '' OR a.name ILIKE '%' || :q || '%'
-                       OR split_part(u.email, '@', 1) ILIKE '%' || :q || '%')
+                       OR split_part(u.email, '@', 1) ILIKE '%' || :q || '%'
+                       OR EXISTS (SELECT 1 FROM unnest(v.capability_categories) cat
+                                  WHERE cat ILIKE '%' || :q || '%'))
                   /* NOTE: % and _ in :q act as ILIKE wildcards — intentional; callers may sanitise if needed */
                   AND (:category = '' OR v.capability_categories @> ARRAY[:category]::text[])
                 ORDER BY """ + " " + orderBy + " LIMIT :size OFFSET :offset";

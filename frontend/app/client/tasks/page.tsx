@@ -12,7 +12,7 @@ import { Badge, Button, Input } from "@/components/ui";
 function ClientTasks() {
   const [wallet, setWallet] = useState<WalletDTO | null>(null);
   const [tasks, setTasks] = useState<TaskDTO[] | null>(null);
-  const [topupAmount, setTopupAmount] = useState(50);
+  const [topupAmount, setTopupAmount] = useState("50");
   const [error, setError] = useState<string | null>(null);
   const [toppingUp, setToppingUp] = useState(false);
 
@@ -27,9 +27,14 @@ function ClientTasks() {
   async function topup(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const amount = topupAmount.trim() === "" ? NaN : Number(topupAmount);
+    if (Number.isNaN(amount)) {
+      setError("Enter a top-up amount");
+      return;
+    }
     setToppingUp(true);
     try {
-      const body: TopupRequest = { amount: topupAmount };
+      const body: TopupRequest = { amount };
       const updated = await api<WalletDTO>("/wallet/topup", {
         method: "POST",
         body: JSON.stringify(body),
@@ -120,7 +125,8 @@ function ClientTasks() {
                     min={1}
                     value={topupAmount}
                     aria-label="Top-up amount"
-                    onChange={(e) => setTopupAmount(Number(e.target.value))}
+                    onChange={(e) => setTopupAmount(e.target.value)}
+                    placeholder="50"
                     className="w-28"
                   />
                 </div>

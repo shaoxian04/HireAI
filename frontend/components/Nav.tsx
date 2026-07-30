@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useDisputeCount } from "@/lib/useDisputeCount";
 import { Button } from "@/components/ui";
@@ -19,12 +20,29 @@ function Logo({ href }: { href: string }) {
   );
 }
 
+/** A surface-root link (`/client`, `/builder`, `/admin`) is active only on an exact match; every other link is active on itself or any of its sub-routes. */
+function isActiveHref(pathname: string | null, href: string): boolean {
+  if (!pathname) return false;
+  if (href === "/client" || href === "/builder" || href === "/admin") {
+    return pathname === href;
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** Same accent-highlight contrast already used for the surface-switcher pill and other "selected" affordances. */
+function navLinkClass(active: boolean): string {
+  return `rounded-md px-3 py-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] transition ${
+    active ? "bg-accent/15 text-accent" : "text-muted hover:text-fg"
+  }`;
+}
+
 /**
  * Top bar. When signed in it's the console chrome (live chip, role, log out); when signed out
  * it's the marketing nav (section links + sign-in CTAs). Identity comes from useAuth().
  */
 export function Nav() {
   const { role, activeSurface, setActiveSurface, hasRole, logout } = useAuth();
+  const pathname = usePathname();
   const dual = hasRole("CLIENT") && hasRole("BUILDER");
   const home =
     activeSurface === "BUILDER" ? "/builder" : activeSurface === "ADMIN" ? "/admin" : "/client";
@@ -45,17 +63,13 @@ export function Nav() {
                   { href: "/client/keys", label: "API keys" },
                   { href: "/client/webhooks", label: "Webhooks" },
                 ].map((l) => (
-                  <Link
-                    key={l.href}
-                    href={l.href}
-                    className="rounded-md px-3 py-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted transition hover:text-fg"
-                  >
+                  <Link key={l.href} href={l.href} className={navLinkClass(isActiveHref(pathname, l.href))}>
                     {l.label}
                   </Link>
                 ))}
                 <Link
                   href="/client/disputes"
-                  className="relative rounded-md px-3 py-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted transition hover:text-fg"
+                  className={`relative ${navLinkClass(isActiveHref(pathname, "/client/disputes"))}`}
                 >
                   Disputes
                   {disputeCount > 0 && (
@@ -72,11 +86,7 @@ export function Nav() {
                   { href: "/builder", label: "My agents" },
                   { href: "/builder/earnings", label: "Earnings" },
                 ].map((l) => (
-                  <Link
-                    key={l.href}
-                    href={l.href}
-                    className="rounded-md px-3 py-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted transition hover:text-fg"
-                  >
+                  <Link key={l.href} href={l.href} className={navLinkClass(isActiveHref(pathname, l.href))}>
                     {l.label}
                   </Link>
                 ))}
@@ -88,11 +98,7 @@ export function Nav() {
                   { href: "/admin", label: "Overview" },
                   { href: "/admin/disputes", label: "Disputes" },
                 ].map((l) => (
-                  <Link
-                    key={l.href}
-                    href={l.href}
-                    className="rounded-md px-3 py-2 font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted transition hover:text-fg"
-                  >
+                  <Link key={l.href} href={l.href} className={navLinkClass(isActiveHref(pathname, l.href))}>
                     {l.label}
                   </Link>
                 ))}
