@@ -8,6 +8,7 @@ import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { Button, Card, Field, Input } from "@/components/ui";
 import type { AgentProfileDTO, DirectBookRequest, TaskDTO } from "@/lib/types";
+import { directBookSignature, useIdempotencyKey } from "@/lib/useIdempotencyKey";
 
 function BookingForm() {
   const { id } = useParams<{ id: string }>();
@@ -21,6 +22,13 @@ function BookingForm() {
 
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Built here rather than in onSubmit so the idempotency signature is derived from the very
+  // object that gets sent: retrying the same booking reuses one key (deduped server-side),
+  // while an edited title or description starts a fresh one.
+  const bookingBody: DirectBookRequest | null = profile
+    ? { title, description, budget: profile.card.price, agentId: id }
+    : null;
+  const getIdempotencyKey = useIdempotencyKey(directBookSignature(bookingBody));
 
   useEffect(() => {
     if (!id) return;
@@ -53,11 +61,11 @@ function BookingForm() {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
-    const body: DirectBookRequest = { title, description, budget: card.price, agentId: id };
     try {
       const created = await api<TaskDTO>("/tasks/direct", {
         method: "POST",
-        body: JSON.stringify(body),
+        headers: { "Idempotency-Key": getIdempotencyKey() },
+        body: JSON.stringify(bookingBody),
       });
       router.push(`/client/tasks/${created.id}`);
     } catch (err) {
