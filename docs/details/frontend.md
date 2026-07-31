@@ -128,7 +128,7 @@ directly so it doesn't bounce an authenticated user before context rehydrates.
   `summary`/`select`/`textarea`, Esc-to-close, body scroll-lock). `components/CategoryCombobox.tsx` (strict
   searchable category picker) and `components/TaskFailurePanel.tsx` (per-failure panels) are feature components.
   `lib/outputSpecFields.tsx` is the shared output-spec sub-form.
-- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~118 tests). Auth-dependent tests
+- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~161 tests). Auth-dependent tests
   must seed **both** `hireai.token` and `hireai.auth`. `next build` and `npx tsc --noEmit` must stay clean.
 
 ## Run

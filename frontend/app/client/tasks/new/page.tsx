@@ -9,6 +9,7 @@ import { AppShell } from "@/components/AppShell";
 import { ShortlistPanel } from "@/components/ShortlistPanel";
 import { CategoryCombobox } from "@/components/CategoryCombobox";
 import type { AgentOptionDTO, DirectBookRequest, MatchPreviewDTO, TaskDTO } from "@/lib/types";
+import { directBookSignature, useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { Button, Card, Field, Input } from "@/components/ui";
 
 const DRAFT_KEY = "hireai.taskDraft";
@@ -32,6 +33,13 @@ function SubmitTask() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const firstPersist = useRef(true);
+  // Built here rather than in onBook so the idempotency signature is derived from the very
+  // object that gets sent: a retry of the *same* booking reuses one key (deduped server-side),
+  // while editing a field or picking another agent starts a fresh one.
+  const bookingBody: DirectBookRequest | null = selected
+    ? { title, description, budget: selected.price, agentId: selected.agentId } // the agent's price, not the typed budget
+    : null;
+  const getIdempotencyKey = useIdempotencyKey(directBookSignature(bookingBody));
 
   // Restore the draft once on mount so a reload / re-search never loses the client's work.
   useEffect(() => {
@@ -92,19 +100,14 @@ function SubmitTask() {
   }
 
   async function onBook() {
-    if (!selected) return;
+    if (!bookingBody) return;
     setError(null);
     setLoading(true);
-    const body: DirectBookRequest = {
-      title,
-      description,
-      budget: selected.price, // pay the chosen agent's price
-      agentId: selected.agentId,
-    };
     try {
       const created = await api<TaskDTO>("/tasks/direct", {
         method: "POST",
-        body: JSON.stringify(body),
+        headers: { "Idempotency-Key": getIdempotencyKey() },
+        body: JSON.stringify(bookingBody),
       });
       if (typeof localStorage !== "undefined") localStorage.removeItem(DRAFT_KEY);
       router.push(`/client/tasks/${created.id}`);

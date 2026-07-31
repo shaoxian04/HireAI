@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { http } from "msw";
+import { http, HttpResponse } from "msw";
 import { server, ok } from "../../../../test/msw/handlers";
 import { AuthProvider } from "@/lib/auth";
 import SubmitTaskPage from "@/app/client/tasks/new/page";
@@ -158,5 +158,72 @@ describe("submit task — shortlist flow", () => {
     await pickCategory();
     fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/budget/i);
+  });
+});
+
+// Submitting freezes escrow, so a retry after a post-commit failure must not book twice.
+// The header is what lets the backend dedupe (UNIQUE(owner_id, idempotency_key)).
+describe("submit task — idempotency", () => {
+  /** Drives the form up to a booked in-budget pick, collecting each POST's Idempotency-Key. */
+  async function bookOnce(keys: string[], status: number) {
+    server.use(
+      http.get("*/api/tasks/match-preview", () => ok(previewBody)),
+      http.post("*/api/tasks/direct", ({ request }) => {
+        keys.push(request.headers.get("Idempotency-Key") ?? "");
+        return status === 200
+          ? ok({ id: "t-9", status: "SUBMITTED" })
+          : HttpResponse.json(
+              { success: false, code: "INTERNAL_ERROR", message: "Unexpected error" },
+              { status },
+            );
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    await screen.findByRole("dialog", { name: /pick your agent/i });
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    await screen.findByText(/confirm booking/i);
+    fireEvent.click(screen.getByRole("button", { name: /confirm & book/i }));
+    await waitFor(() => expect(keys.length).toBeGreaterThan(0));
+  }
+
+  it("sends an Idempotency-Key when booking", async () => {
+    const keys: string[] = [];
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    await bookOnce(keys, 200);
+    expect(keys[0]).toBeTruthy();
+  });
+
+  it("reuses the same key when retrying an unchanged booking", async () => {
+    // The real scenario: the task committed and escrow froze, but after-commit routing threw,
+    // so the client saw a 500 and clicked book again. One key => one task, one freeze.
+    const keys: string[] = [];
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    await bookOnce(keys, 500);
+    await screen.findByRole("alert");
+
+    fireEvent.click(screen.getByRole("button", { name: /confirm & book/i }));
+    await waitFor(() => expect(keys).toHaveLength(2));
+    expect(keys[0]).toBeTruthy(); // else two *absent* headers would trivially match
+    expect(keys[1]).toBe(keys[0]);
+  });
+
+  it("issues a new key once the payload changes", async () => {
+    // Editing after a failure is a new intent; reusing the key would be the same key with a
+    // different request fingerprint, which the backend rejects as 409 IDEMPOTENCY_CONFLICT.
+    const keys: string[] = [];
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    await bookOnce(keys, 500);
+    await screen.findByRole("alert");
+
+    fireEvent.change(screen.getByLabelText(/title/i), { target: { value: "Summarise v2" } });
+    fireEvent.click(screen.getByRole("button", { name: /confirm & book/i }));
+    await waitFor(() => expect(keys).toHaveLength(2));
+    expect(keys[1]).not.toBe(keys[0]);
   });
 });
