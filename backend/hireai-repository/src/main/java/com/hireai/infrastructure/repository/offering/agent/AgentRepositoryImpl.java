@@ -3,7 +3,9 @@ package com.hireai.infrastructure.repository.offering.agent;
 import com.hireai.domain.biz.offering.agent.enums.AgentStatus;
 import com.hireai.domain.biz.offering.agent.enums.AgentVersionStatus;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
+import com.hireai.domain.biz.offering.agent.info.AgentReputationTarget;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
+import com.hireai.domain.biz.reputation.info.ReputationAggregates;
 import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
 import com.hireai.domain.biz.offering.agent.model.Pricing;
 import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
@@ -107,6 +109,38 @@ public class AgentRepositoryImpl implements AgentRepository {
     @Override
     public Optional<UUID> findOwnerByVersionId(UUID agentVersionId) {
         return versionJpa.findOwnerByVersionId(agentVersionId);
+    }
+
+    @Override
+    public Optional<AgentReputationTarget> findReputationTargetByVersionId(UUID agentVersionId) {
+        return versionJpa.findReputationTargetByVersionId(agentVersionId)
+                .map(row -> new AgentReputationTarget(row.getAgentId(), row.getOwnerId()));
+    }
+
+    @Override
+    public Optional<ReputationAggregates> lockReputationAggregates(UUID agentId) {
+        return agentJpa.lockReputationAggregates(agentId).map(AgentRepositoryImpl::toAggregates);
+    }
+
+    @Override
+    public Optional<ReputationAggregates> findReputationAggregates(UUID agentId) {
+        return agentJpa.findReputationAggregates(agentId).map(AgentRepositoryImpl::toAggregates);
+    }
+
+    @Override
+    public void updateReputation(UUID agentId, ReputationAggregates aggregates, BigDecimal score) {
+        int updated = agentJpa.updateReputation(agentId,
+                aggregates.reliabilitySum(), aggregates.reliabilityCount(),
+                aggregates.satisfactionSum(), aggregates.satisfactionCount(), score);
+        if (updated != 1) {
+            throw new DomainException(ResultCode.NOT_FOUND, "No agent to score: " + agentId);
+        }
+    }
+
+    private static ReputationAggregates toAggregates(AgentJpaRepository.ReputationAggregateRow row) {
+        return new ReputationAggregates(
+                row.getReliabilitySum(), row.getReliabilityCount(),
+                row.getSatisfactionSum(), row.getSatisfactionCount());
     }
 
     private AgentCandidate rowToCandidate(AgentVersionJpaRepository.AgentCandidateRow row) {

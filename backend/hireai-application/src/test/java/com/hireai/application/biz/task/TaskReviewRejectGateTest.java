@@ -1,6 +1,7 @@
 package com.hireai.application.biz.task;
 
 import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
+import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.task.impl.TaskReviewAppServiceImpl;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
@@ -31,6 +32,7 @@ class TaskReviewRejectGateTest {
     AgentRepository agentRepository;
     SettlementWriteAppService settlement;
     DisputeAppService disputeAppService;
+    ReputationWriteAppService reputationWriteAppService;
     TaskReviewAppServiceImpl service;
 
     UUID clientId = UUID.randomUUID();
@@ -44,7 +46,9 @@ class TaskReviewRejectGateTest {
         agentRepository = mock(AgentRepository.class);
         settlement = mock(SettlementWriteAppService.class);
         disputeAppService = mock(DisputeAppService.class);
-        service = new TaskReviewAppServiceImpl(taskRepository, agentRepository, settlement, disputeAppService);
+        reputationWriteAppService = mock(ReputationWriteAppService.class);
+        service = new TaskReviewAppServiceImpl(taskRepository, agentRepository, settlement,
+                disputeAppService, reputationWriteAppService);
 
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         when(agentRepository.findOwnerByVersionId(agentVersionId)).thenReturn(Optional.of(builderId));

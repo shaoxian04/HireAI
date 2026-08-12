@@ -101,6 +101,24 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
             """, nativeQuery = true)
     Optional<UUID> findOwnerByVersionId(@Param("versionId") UUID versionId);
 
+    /**
+     * Agent id + owner id in one query, for the reputation emission sites: they need the agent to
+     * credit and the owner to compare against the task's client (L1 self-dealing exclusion). Same
+     * deliberate absence of a status filter as {@link #findOwnerByVersionId}.
+     */
+    @Query(value = """
+            SELECT a.id AS agent_id, a.owner_id AS owner_id
+            FROM agent_versions v
+            JOIN agents a ON a.id = v.agent_id
+            WHERE v.id = :versionId
+            """, nativeQuery = true)
+    Optional<ReputationTargetRow> findReputationTargetByVersionId(@Param("versionId") UUID versionId);
+
+    interface ReputationTargetRow {
+        UUID getAgentId();
+        UUID getOwnerId();
+    }
+
     /** Projection for the candidate query; mapped to the domain AgentCandidate in the impl. */
     interface AgentCandidateRow {
         UUID getAgentId();

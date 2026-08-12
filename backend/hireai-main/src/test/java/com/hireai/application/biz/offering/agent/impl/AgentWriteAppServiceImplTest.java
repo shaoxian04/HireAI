@@ -77,6 +77,40 @@ class AgentWriteAppServiceImplTest {
                     .map(AgentModel::ownerId)
                     .findFirst();
         }
+
+        @Override
+        public java.util.Optional<com.hireai.domain.biz.offering.agent.info.AgentReputationTarget>
+                findReputationTargetByVersionId(UUID agentVersionId) {
+            return store.values().stream()
+                    .filter(a -> a.currentVersion() != null
+                            && a.currentVersion().id().equals(agentVersionId))
+                    .map(a -> new com.hireai.domain.biz.offering.agent.info.AgentReputationTarget(
+                            a.id(), a.ownerId()))
+                    .findFirst();
+        }
+
+        // Reputation is not exercised by this test's subject; the aggregates stay at the prior.
+        @Override
+        public java.util.Optional<com.hireai.domain.biz.reputation.info.ReputationAggregates>
+                lockReputationAggregates(UUID agentId) {
+            return store.containsKey(agentId)
+                    ? java.util.Optional.of(
+                            com.hireai.domain.biz.reputation.info.ReputationAggregates.empty())
+                    : java.util.Optional.empty();
+        }
+
+        @Override
+        public java.util.Optional<com.hireai.domain.biz.reputation.info.ReputationAggregates>
+                findReputationAggregates(UUID agentId) {
+            return lockReputationAggregates(agentId);
+        }
+
+        @Override
+        public void updateReputation(UUID agentId,
+                                     com.hireai.domain.biz.reputation.info.ReputationAggregates aggregates,
+                                     java.math.BigDecimal score) {
+            // no-op
+        }
     }
 
     /** In-memory fake of the AgentProfile repository. */
