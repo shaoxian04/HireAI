@@ -32,8 +32,8 @@ Reflects what's actually built (one row per real `XxxRepository`), not the origi
 - **tasks** — id, client_id, agent_version_id, category, expected_deliverable (jsonb), status, estimated_cost, retry_count, timestamps; `resolution` (ACCEPTED/REJECTED, V9), `resolved_at`, `rejection_reason` — set exactly once by client review (pessimistic row lock serializes concurrent attempts); `match_attempts`, `execution_deadline`, `pinned_agent_version_id` (V24 — the reliability-sweeper bookkeeping columns; deliberately **unmapped on the JPA entity**, written only by targeted native UPDATEs so a full-row save never nulls them).
 - **task_attachments** / **task_results** — children of tasks; binaries in object storage, rows store the URL reference.
 - **disputes** — task_id (UK), raised_by, reason_category, status, llm_ruling, llm_rationale, admin_ruling, admin_rationale, admin_agreed_with_llm.
-- **reputation_events** — append-only. agent_id, event_type (TASK_SUCCESS/SPEC_VIOLATION/TIMEOUT/DISPUTE_LOSS), weight, occurred_at.
-- **reviews** — task_id (UK), client_id, agent_id, rating (1–5), review_text, builder_response, is_published.
+- **reputation_events** — append-only. agent_id, task_id (soft ref), event_type (TASK_ACCEPTED/SPEC_VIOLATION/EXECUTION_FAILED/EXECUTION_TIMEOUT/DISPUTE_WON/DISPUTE_PARTIAL/DISPUTE_LOST/RATING), **quality** `NUMERIC(4,3)` in [0,1], weight, occurred_at. **DB triggers raise on UPDATE/DELETE.** `quality` (what the sample asserts, as distinct from `weight` = how much it counts) is an addition made by ADR 0003: the earlier spec listed only `weight` because it assumed a points-balance model, which was rejected. Agents carries the derived cache — `reliability_sum/count`, `satisfaction_sum/count` — reconcilable by replaying this stream.
+- **reviews** — task_id (UK, **NOT NULL** once the earned-review flow lands), client_id, agent_id, rating (1–5), review_text, builder_response, is_published.
 
 ## Implemented so far (vs the design above)
 
@@ -61,6 +61,12 @@ The schema above is the **design target**. What's actually in Flyway today:
   - **`webhook_deliveries`** — the transactional outbox. `id` (PK, doubles as the client-facing `event_id`), `task_id (FK), owner_id (FK), subscription_id (FK), event_type` (`task.completed`/`task.failed`), `payload TEXT` (the whole signed body is built/stored/sent as a string — same TEXT-not-jsonb rationale as V20 `task_results.result_payload`), `target_url, status` (`PENDING`/`DELIVERED`/`DEAD`), `attempts, next_attempt_at, last_error, created_at, delivered_at`. Index `(status, next_attempt_at)` is the sweeper claim key (`FOR UPDATE SKIP LOCKED`); `(owner_id, created_at DESC)` backs the delivery-log read; `(task_id)` the per-task lookup.
 
   See `docs/details/architecture.md` (outbound webhook outbox + sweeper) and `docs/superpowers/specs/2026-07-19-push-webhooks-design.md` for the design.
+
+- **V27** — **Module 5 reputation.** Gives `agents.reputation_score` a source: it had been `NUMERIC(5,2)` frozen at `50.00` since V3, written once at registration and updated by nothing, while the matcher weighted it at `0.40` — its largest factor — so every candidate contributed an identical `0.20` and reputation ranked nothing.
+  - **`reputation_events`** — `id, agent_id (FK agents), task_id` (**soft** ref, no cross-context FK, per V16 `validation_reports`), `event_type` (CHECK-constrained to the eight kinds), `quality NUMERIC(4,3) CHECK (0..1)`, `weight NUMERIC(4,3) CHECK (> 0)`, `occurred_at`. Append-only: `trg_reputation_events_no_update` / `_no_delete` raise, exactly as `ledger_entries` (Invariant #2). Index `(agent_id, occurred_at DESC)`; partial UNIQUE `(task_id, event_type) WHERE task_id IS NOT NULL` makes emission exactly-once per outcome while still allowing one task to yield both an outcome and a later `RATING`.
+  - **`agents` + four aggregate columns** — `reliability_sum/count`, `satisfaction_sum/count`, all `DEFAULT 0`. A **derived cache** that makes the settlement-time rescore O(1) instead of re-reading an agent's whole history; `reputation_events` stays the source of truth and `reconcile()` replays it to prove they agree. The zero defaults backfill every existing agent to a score of exactly `50.00`, so **no routing shifts on migration day** until agents earn events.
+
+  Written only by a targeted native `UPDATE` of those five columns — never a full-row `save()` — so a builder publishing a version mid-settlement cannot lose the update. See `docs/adr/0003-two-component-shrinkage-reputation.md` and `docs/superpowers/specs/2026-08-12-module5-reputation-design.md`.
 
 ## Status enums
 
