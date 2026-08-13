@@ -83,12 +83,16 @@ describe("manage agent console", () => {
     // Review text is visible
     expect(await screen.findByText(/output matched the spec exactly/i)).toBeInTheDocument();
 
+    // The editor is collapsed until asked for — a page of reviews is not a page of textareas.
+    expect(screen.queryByRole("textbox", { name: /response/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^reply$/i }));
+
     // Type a response
     const responseTextarea = await screen.findByRole("textbox", { name: /response/i });
     await userEvent.type(responseTextarea, "Thanks — glad it helped!");
 
     // Submit
-    await userEvent.click(screen.getByRole("button", { name: /respond/i }));
+    await userEvent.click(screen.getByRole("button", { name: /publish reply/i }));
 
     // Response should appear
     expect(await screen.findByText(/thanks — glad it helped/i)).toBeInTheDocument();

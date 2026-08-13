@@ -46,7 +46,21 @@ public class ReputationScoringDomainServiceImpl implements ReputationScoringDoma
                 satisfaction,
                 HUNDRED.multiply(blended).setScale(SCORE_SCALE, RoundingMode.HALF_UP),
                 aggregates.reliabilityCount(),
-                aggregates.satisfactionCount());
+                aggregates.satisfactionCount(),
+                priorWeight(aggregates.reliabilityCount(), policy.reliabilityPriorStrength()),
+                priorWeight(aggregates.satisfactionCount(), policy.satisfactionPriorStrength()),
+                alpha);
+    }
+
+    /**
+     * k / (k + n) — the share of a component that is still the neutral prior rather than witnessed
+     * performance. Exactly 1 at zero samples (the whole number is the prior), falling toward 0 as
+     * evidence accumulates. Callers use it to tell "we don't know yet" apart from "we know, and it
+     * is bad" — the two readings a bare component value cannot distinguish.
+     */
+    private BigDecimal priorWeight(long count, double priorStrength) {
+        BigDecimal k = BigDecimal.valueOf(priorStrength);
+        return k.divide(k.add(BigDecimal.valueOf(count)), COMPONENT_SCALE, RoundingMode.HALF_UP);
     }
 
     /**

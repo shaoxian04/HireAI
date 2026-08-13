@@ -513,6 +513,15 @@ export type ReputationComponentDTO = {
   value: number;
   /** The confidence behind it — 90 over 40 tasks is a far stronger claim than over three. */
   sampleCount: number;
+  /**
+   * The share of `value` that is still the neutral starting point rather than witnessed
+   * performance: 1 at zero samples, decaying as evidence lands. Comes from the server so the UI
+   * never has to restate kR/kS — a duplicated threshold here would quietly start lying the moment
+   * the policy was tuned.
+   */
+  priorWeight: number;
+  /** This component's share of the blended score (α for Reliability, 1−α for Satisfaction). */
+  weight: number;
 };
 
 export type ReputationEventDTO = {

@@ -28,8 +28,18 @@ public record AgentReputationDTO(BigDecimal score,
 
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private static final int DISPLAY_SCALE = 1;
+    private static final int SHARE_SCALE = 3;
 
-    public record Component(BigDecimal value, long sampleCount) {
+    /**
+     * @param value       the component on the 0–100 scale
+     * @param sampleCount how many samples stand behind it
+     * @param priorWeight the share of {@code value} that is still the neutral starting point —
+     *                    1.000 at zero samples, falling as evidence lands. Sent so the UI can say
+     *                    "we do not know yet" without hardcoding kR/kS.
+     * @param weight      this component's share of the blended score (α or 1−α)
+     */
+    public record Component(BigDecimal value, long sampleCount, BigDecimal priorWeight,
+                            BigDecimal weight) {
     }
 
     public record Event(UUID id, UUID taskId, String eventType, BigDecimal quality,
@@ -43,15 +53,23 @@ public record AgentReputationDTO(BigDecimal score,
 
     public static AgentReputationDTO from(ReputationReadAppService.Breakdown breakdown) {
         var s = breakdown.score();
+        BigDecimal satisfactionWeight = BigDecimal.ONE.subtract(s.alpha());
         return new AgentReputationDTO(
                 s.score(),
-                new Component(onHundredScale(s.reliability()), s.reliabilityCount()),
-                new Component(onHundredScale(s.satisfaction()), s.satisfactionCount()),
+                new Component(onHundredScale(s.reliability()), s.reliabilityCount(),
+                        share(s.reliabilityPriorWeight()), share(s.alpha())),
+                new Component(onHundredScale(s.satisfaction()), s.satisfactionCount(),
+                        share(s.satisfactionPriorWeight()), share(satisfactionWeight)),
                 s.isUnproven(),
                 breakdown.recentEvents().stream().map(Event::from).toList());
     }
 
     private static BigDecimal onHundredScale(BigDecimal component) {
         return component.multiply(HUNDRED).setScale(DISPLAY_SCALE, java.math.RoundingMode.HALF_UP);
+    }
+
+    /** A [0,1] share, trimmed to the 3dp a UI can meaningfully render as a percentage. */
+    private static BigDecimal share(BigDecimal fraction) {
+        return fraction.setScale(SHARE_SCALE, java.math.RoundingMode.HALF_UP);
     }
 }

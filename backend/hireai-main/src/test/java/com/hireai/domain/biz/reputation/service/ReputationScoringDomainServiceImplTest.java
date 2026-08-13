@@ -221,4 +221,70 @@ class ReputationScoringDomainServiceImplTest {
         assertThat(service.score(aggregates(7.0, 9, BigDecimal.ZERO, 3)).score().scale())
                 .isEqualTo(2);
     }
+
+    // ------------------------------------------------------- prior weight (the UI's "confidence")
+
+    /**
+     * With nothing witnessed, the component IS the prior — so the reported prior weight has to be
+     * exactly 1. A UI reading anything less would present a number it has no evidence for as
+     * partially earned.
+     */
+    @Test
+    void anUnprovenAgentIsEntirelyPrior() {
+        ReputationScore s = service.score(ReputationAggregates.empty());
+
+        assertThat(s.reliabilityPriorWeight()).isEqualByComparingTo("1");
+        assertThat(s.satisfactionPriorWeight()).isEqualByComparingTo("1");
+    }
+
+    /**
+     * The live-run regression, expressed as the quantity the UI actually keys off. One flawless
+     * task reads 58.3 — and 5/(5+1) = 83% of that is the starting prior, not performance. This is
+     * what lets the panel say "not enough evidence" instead of "failing to deliver".
+     */
+    @Test
+    void oneOutcomeLeavesTheComponentMostlyPrior() {
+        ReputationScore s = service.score(aggregates(1.0, 1, BigDecimal.ZERO, 0));
+
+        assertThat(s.reliabilityPriorWeight().doubleValue()).isCloseTo(0.833, within(0.001));
+        assertThat(s.reliability().doubleValue()).isCloseTo(0.583, within(0.001));
+    }
+
+    /** At n = k the evidence exactly balances the prior — the tipping point at kR = 5. */
+    @Test
+    void priorWeightHitsAHalfWhenSamplesEqualPriorStrength() {
+        ReputationScore s = service.score(aggregates(5.0, 5, BigDecimal.valueOf(10), 10));
+
+        assertThat(s.reliabilityPriorWeight()).isEqualByComparingTo("0.5");
+        assertThat(s.satisfactionPriorWeight()).isEqualByComparingTo("0.5");
+    }
+
+    /** Prior weight must fall monotonically as evidence lands, never rise. */
+    @Test
+    void priorWeightDecaysAsEvidenceAccumulates() {
+        double atOne = service.score(aggregates(1.0, 1, BigDecimal.ZERO, 0))
+                .reliabilityPriorWeight().doubleValue();
+        double atTen = service.score(aggregates(10.0, 10, BigDecimal.ZERO, 0))
+                .reliabilityPriorWeight().doubleValue();
+        double atForty = service.score(aggregates(40.0, 40, BigDecimal.ZERO, 0))
+                .reliabilityPriorWeight().doubleValue();
+
+        assertThat(atOne).isGreaterThan(atTen);
+        assertThat(atTen).isGreaterThan(atForty);
+        assertThat(atForty).isLessThan(0.15);
+    }
+
+    /**
+     * α is reported so a UI can label the 70/30 split without re-declaring the constant — the
+     * duplication that would silently lie the moment the policy was tuned.
+     */
+    @Test
+    void alphaIsReportedSoClientsNeedNotHardcodeTheBlend() {
+        assertThat(service.score(ReputationAggregates.empty()).alpha())
+                .isEqualByComparingTo("0.7");
+
+        ReputationScore ratingsHeavy = new ReputationScoringDomainServiceImpl(
+                new ReputationPolicy(0.3, 5.0, 10.0, 0.5)).score(ReputationAggregates.empty());
+        assertThat(ratingsHeavy.alpha()).isEqualByComparingTo("0.3");
+    }
 }
