@@ -19,8 +19,8 @@ Reflects what's actually built (one row per real `XxxRepository`), not the origi
 | task | **WebhookDeliveryModel** | — | WebhookDeliveryRepository | Enqueued only inside the settling transaction (an outbox row, never a second ledger); at-least-once delivery via exponential-with-cap backoff. |
 | adjudication | **DisputeModel** | RulingModel (LLM + admin) | DisputeRepository | One dispute per task; settlement happens exactly once. |
 | adjudication | **ValidationReportModel** | CheckResult (VO) | ValidationReportRepository | Verdict is PASS only if every check passes; validation runs before any client sees a result (Inv #4). |
-| reputation | **ReputationModel** | ReputationEventModel (append-only) | ReputationRepository | Score in [0,100]; computed only from recorded events with decay. |
-| reputation | **ReviewModel** | BuilderResponse (VO) | ReviewRepository | One review per resolved task; published only after content check. |
+| reputation | **ReputationEventModel** | — (append-only stream) | ReputationEventRepository | One event per terminal outcome, UPDATE/DELETE blocked by trigger. There is deliberately **no `ReputationModel` aggregate**: the score is not stored state but a pure fold over this stream (`ReputationScoringDomainServiceImpl`), with `agents.*_sum/_count` as a reconcilable cache. |
+| reputation | **ReviewModel** | — | ReviewRepository | One review per **accepted** task (`task_id NOT NULL UNIQUE`, V28) — a review detached from paid work is not representable. `respond()` sets **or replaces** the builder's reply. |
 
 ## Core tables (3NF; `gmt_create`/`gmt_modified` on every table)
 
@@ -85,7 +85,7 @@ The schema above is the **design target**. What's actually in Flyway today:
 - **Disputes settle late (delayed settlement).** An `A/B/C` reject opens a dispute; the arbitrator's ruling is only a *proposal* (dispute rests at `RULED`, escrow held). The client then `POST /api/disputes/{id}/accept-ruling` or `/appeal` (→ admin tier-2), or an `@Scheduled RulingAcceptSweeper` auto-accepts a stale `RULED` proposal after `ruling-accept-after`. `settleFromEffective` moves money **exactly once**, from the highest-tier ruling, under the same `SELECT … FOR UPDATE` task lock — the arbitrator callback never settles. Reuses existing dispute statuses (no migration).
 - Spec-violation after one retry: **80% refund to client, 20% platform fee** (pending — Module 4).
 - Escrow invariant is reconstructable from `ledger_entries` at any time (used by the settlement reconstruction test).
-- Reputation: rolling 30-day window — success rate (50%), spec-violation (−20%), timeout (−20%), dispute-loss (−10%) with temporal decay. Below threshold (or >30% dispute-loss) → auto-suspend via `ReputationDroppedBelowThresholdDomainEvent`.
+- **Reputation** (ADR 0003, as built — this replaced an earlier sketch of a rolling 30-day window with percentage penalties, temporal decay and auto-suspend, **none of which exists**; there is no `ReputationDroppedBelowThresholdDomainEvent`): two independent shrinkage estimators over `reputation_events`, blended by α. `Reliability = (kR·p₀ + Σq)/(kR + n)` over platform-witnessed outcomes; `Satisfaction = (kS·p₀ + Σq)/(kS + n)` over client ratings; `score = 100 × (α·Rel + (1−α)·Sat)`. Defaults `α = 0.70`, `kR = 5`, `kS = 10`, `p₀ = 0.50`, so a zero-event agent scores exactly `50.00`. Keeping the streams apart is load-bearing: blended, an unreviewed accept would count as maximum quality, making silence indistinguishable from perfection and review-suppression the rational builder strategy. Emission is explicit per outcome site and folded O(1) into the `agents` cache inside the settling transaction — **never derived from how money moved** (`chargeChangedMind` pays the builder in full while writing `REJECTED`). No decay, no auto-suspend, no time window.
 
 ## Known concurrency backlog
 

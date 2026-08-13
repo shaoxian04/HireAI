@@ -19,8 +19,9 @@ Satisfaction = (10·0.5 + Σ rating samples)  / (10 + n_ratings)      client-aut
 reputation_score = 100 × (0.7 × Reliability + 0.3 × Satisfaction)
 ```
 
-Each event carries a **quality** in `[0,1]` (what the sample says) and a **weight** (how much it counts) —
-`quality` is an addition to the `data-model.md` target schema, which specifies only `weight`.
+Each event carries a **quality** in `[0,1]` (what the sample says) and a **weight** (how much it counts).
+`quality` was an addition to the `data-model.md` target schema, which specified only `weight` because it
+assumed the points-balance model rejected below; that doc now carries both.
 
 ## Considered options
 
@@ -54,6 +55,16 @@ re-normalisation, no routing migration.
   real work; Satisfaction is sparse, subjective, opt-in and forgeable. `k = 10` for Satisfaction versus
   `k = 5` for Reliability applies the same asymmetry — the forgeable signal is held to a higher evidential
   bar. Both are bound from `hireai.reputation.*` config, tunable without a migration.
+
+- **Because they are tunable, no client may restate them.** α, kR and kS are policy, so any surface that
+  hardcodes "70% of the score" or "5 samples means we trust it" becomes silently wrong the moment the config
+  changes — wrong in copy a builder reads as fact, with no test failing. The reputation read endpoint
+  therefore reports **α as each component's `weight`** and **k/(k+n) as its `priorWeight`** (the share of the
+  value that is still the neutral prior), and the UI derives its labels and its "too early to tell" threshold
+  from those. This also gives the interface the one thing a bare component value cannot express: the
+  difference between *we do not know yet* and *we know, and it is bad*. Conflating them is not hypothetical —
+  the first builder-facing breakdown told a builder whose agent had delivered 1 of 1 tasks successfully that
+  it was "failing to deliver", because shrinkage correctly held that single sample at 58.3.
 
 - **A zero-event agent scores exactly `50.00`**, identical to the existing `DEFAULT_REPUTATION`. Nothing
   changes on migration day until agents earn events.
