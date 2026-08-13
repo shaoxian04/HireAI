@@ -12,6 +12,7 @@ import WebhookDeliveryStatus from "@/components/WebhookDeliveryStatus";
 import type { TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO, ValidationReportDTO } from "@/lib/types";
 import { Badge, Card } from "@/components/ui";
 import { ResultReviewBar } from "@/components/ResultReviewBar";
+import { RatingPrompt } from "@/components/RatingPrompt";
 import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
 
 const POLL_MS = 2000;
@@ -298,9 +299,15 @@ function TaskDetail() {
           <section aria-live="polite" className="space-y-1 border-t border-line pt-5">
             <p className="eyebrow">Settled</p>
             {task.resolution === "ACCEPTED" ? (
-              <p className="font-mono text-sm text-accent">
-                {task.payoutAmount} cr paid to the builder
-              </p>
+              <>
+                <p className="font-mono text-sm text-accent">
+                  {task.payoutAmount} cr paid to the builder
+                </p>
+                {/* Rating is a separate call, so it can be skipped here and left later. */}
+                <div className="pt-3">
+                  <RatingPrompt taskId={task.id} />
+                </div>
+              </>
             ) : (
               <p className="font-mono text-sm text-red">
                 {task.refundAmount} cr refunded to your wallet
