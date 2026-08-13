@@ -3,12 +3,14 @@ package com.hireai.controller.biz.agent;
 import com.hireai.application.biz.offering.agent.AgentReadAppService;
 import com.hireai.application.biz.offering.agent.AgentStorefrontAppService;
 import com.hireai.application.biz.offering.agent.AgentWriteAppService;
+import com.hireai.application.biz.reputation.ReputationReadAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.agent.converter.AgentModel2DTOConverter;
 import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.controller.biz.agent.dto.AgentDTO;
 import com.hireai.controller.biz.agent.dto.AgentProfileViewDTO;
+import com.hireai.controller.biz.agent.dto.AgentReputationDTO;
 import com.hireai.controller.biz.agent.dto.AgentStatsDTO;
 import com.hireai.controller.biz.agent.dto.PublishVersionRequest;
 import com.hireai.controller.biz.agent.dto.RegisterAgentRequest;
@@ -54,17 +56,20 @@ public class AgentController extends BaseController {
     private final AgentWriteAppService writeAppService;
     private final AgentReadAppService readAppService;
     private final AgentStorefrontAppService storefrontAppService;
+    private final ReputationReadAppService reputationReadAppService;
     private final CurrentUserProvider currentUser;
     private final int defaultMaxConcurrent;
 
     public AgentController(AgentWriteAppService writeAppService,
                            AgentReadAppService readAppService,
                            AgentStorefrontAppService storefrontAppService,
+                           ReputationReadAppService reputationReadAppService,
                            CurrentUserProvider currentUser,
                            @Value("${hireai.matching.default-max-concurrent:5}") int defaultMaxConcurrent) {
         this.writeAppService = writeAppService;
         this.readAppService = readAppService;
         this.storefrontAppService = storefrontAppService;
+        this.reputationReadAppService = reputationReadAppService;
         this.currentUser = currentUser;
         this.defaultMaxConcurrent = defaultMaxConcurrent;
     }
@@ -198,6 +203,17 @@ public class AgentController extends BaseController {
                                         @Valid @RequestBody RespondReviewRequest request) {
         return ok(ReviewDTO.from(storefrontAppService.respondToReview(
                 agentId, currentUser.currentUserId(), reviewId, request.response())));
+    }
+
+    /**
+     * The builder-facing reputation breakdown: both components with their sample counts, plus the
+     * recent event stream. Owner-gated by the app service — a foreign agent is indistinguishable
+     * from a missing one.
+     */
+    @GetMapping("/{agentId}/reputation")
+    public WebResult<AgentReputationDTO> reputation(@PathVariable("agentId") UUID agentId) {
+        return ok(AgentReputationDTO.from(
+                reputationReadAppService.getForOwner(agentId, currentUser.currentUserId())));
     }
 
     @GetMapping("/{agentId}/stats")

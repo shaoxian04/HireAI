@@ -265,9 +265,9 @@ class CatalogueQueryDaoIntegrationTest {
 
         // Insert a published review
         UUID reviewId = UUID.randomUUID();
-        jdbc.update("INSERT INTO reviews (id, client_id, agent_id, rating, review_text, is_published) " +
-                        "VALUES (?, ?, ?, 5, 'great', true)",
-                reviewId, clientId, agentId);
+        jdbc.update("INSERT INTO reviews (id, task_id, client_id, agent_id, rating, review_text, is_published) " +
+                        "VALUES (?, ?, ?, ?, 5, 'great', true)",
+                reviewId, UUID.randomUUID(), clientId, agentId);
 
         List<ReviewRow> reviews = catalogueQueryPort.reviewsForAgent(agentId, 10);
         assertThat(reviews).hasSize(1);
@@ -311,15 +311,15 @@ class CatalogueQueryDaoIntegrationTest {
 
         // Published review
         UUID publishedId = UUID.randomUUID();
-        jdbc.update("INSERT INTO reviews (id, client_id, agent_id, rating, review_text, is_published) " +
-                        "VALUES (?, ?, ?, 4, 'published review', true)",
-                publishedId, clientId, agentId);
+        jdbc.update("INSERT INTO reviews (id, task_id, client_id, agent_id, rating, review_text, is_published) " +
+                        "VALUES (?, ?, ?, ?, 4, 'published review', true)",
+                publishedId, UUID.randomUUID(), clientId, agentId);
 
         // Unpublished review (explicitly false)
         UUID unpublishedId = UUID.randomUUID();
-        jdbc.update("INSERT INTO reviews (id, client_id, agent_id, rating, review_text, is_published) " +
-                        "VALUES (?, ?, ?, 1, 'unpublished review', false)",
-                unpublishedId, clientId, agentId);
+        jdbc.update("INSERT INTO reviews (id, task_id, client_id, agent_id, rating, review_text, is_published) " +
+                        "VALUES (?, ?, ?, ?, 1, 'unpublished review', false)",
+                unpublishedId, UUID.randomUUID(), clientId, agentId);
 
         List<ReviewRow> reviews = catalogueQueryPort.reviewsForAgent(agentId, 10);
         assertThat(reviews).hasSize(1);

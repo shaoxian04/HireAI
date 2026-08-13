@@ -164,7 +164,9 @@ function BuilderDashboard() {
                       Rep
                     </dt>
                     <dd className="tabular mt-1 font-mono text-sm text-fg">
-                      {a.reputationScore}
+                      {/* 1dp, matching the Reputation tab — the stored 2dp is false precision on a
+                          shrunk score, and "50" beside "56.52" read as two different scales. */}
+                      {a.reputationScore.toFixed(1)}
                     </dd>
                   </div>
                   <div>

@@ -2,7 +2,9 @@ package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
+import com.hireai.domain.biz.reputation.enums.ReputationEventType;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.model.TaskModel;
@@ -27,6 +29,7 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
     private final AgentRepository agentRepository;
     private final SettlementWriteAppService settlementWriteAppService;
     private final DisputeAppService disputeAppService;
+    private final ReputationWriteAppService reputationWriteAppService;
 
     @Override
     public UUID accept(UUID taskId, UUID clientId) {
@@ -39,6 +42,11 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
 
         SettlementBreakdown breakdown =
                 settlementWriteAppService.settleAccepted(taskId, clientId, builderId, task.budget());
+
+        // Same transaction as the settlement: the score is never stale, so routing cannot act on a
+        // number that predates the outcome. No sweeper, no cache invalidation (ADR 0003).
+        reputationWriteAppService.recordOutcome(taskId, task.agentVersionId(), clientId,
+                ReputationEventType.TASK_ACCEPTED);
 
         taskRepository.save(resolved);
         log.info("Task {} accepted by client {}; payout {} to builder {}, commission {}",

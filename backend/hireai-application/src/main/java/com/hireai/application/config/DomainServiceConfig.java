@@ -12,6 +12,9 @@ import com.hireai.domain.biz.offering.agent.service.impl.AgentDeactivateDomainSe
 import com.hireai.domain.biz.offering.agent.service.impl.AgentReactivateDomainServiceImpl;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentRegisterDomainServiceImpl;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentSuspendDomainServiceImpl;
+import com.hireai.domain.biz.reputation.service.ReputationPolicy;
+import com.hireai.domain.biz.reputation.service.ReputationScoringDomainService;
+import com.hireai.domain.biz.reputation.service.impl.ReputationScoringDomainServiceImpl;
 import com.hireai.domain.biz.task.routing.service.MatchingPolicy;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.task.routing.service.impl.RoutingMatchDomainServiceImpl;
@@ -73,6 +76,21 @@ public class DomainServiceConfig {
     @Bean
     public RoutingMatchDomainService routingMatchDomainService(MatchingPolicy matchingPolicy) {
         return new RoutingMatchDomainServiceImpl(matchingPolicy, new SecureRandom());
+    }
+
+    @Bean
+    public ReputationPolicy reputationPolicy(
+            @Value("${hireai.reputation.alpha:0.70}") double alpha,
+            @Value("${hireai.reputation.reliability-prior-strength:5.0}") double reliabilityPriorStrength,
+            @Value("${hireai.reputation.satisfaction-prior-strength:10.0}") double satisfactionPriorStrength,
+            @Value("${hireai.reputation.prior:0.50}") double prior) {
+        // ReputationPolicy's compact constructor validates; bad config = startup crash (ADR 0003).
+        return new ReputationPolicy(alpha, reliabilityPriorStrength, satisfactionPriorStrength, prior);
+    }
+
+    @Bean
+    public ReputationScoringDomainService reputationScoringDomainService(ReputationPolicy reputationPolicy) {
+        return new ReputationScoringDomainServiceImpl(reputationPolicy);
     }
 
     @Bean

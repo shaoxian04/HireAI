@@ -5,14 +5,17 @@ import com.hireai.application.biz.task.MatchPreviewAppService;
 import com.hireai.application.biz.task.SubmitContext;
 import com.hireai.application.biz.task.SubmitOrchestrationAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
+import com.hireai.application.biz.reputation.ReviewAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.controller.base.BaseController;
+import com.hireai.controller.biz.agent.dto.ReviewDTO;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.adjudication.ValidationReport2DTOConverter;
 import com.hireai.controller.biz.adjudication.dto.ValidationReportDTO;
 import com.hireai.controller.biz.task.converter.MatchPreview2DTOConverter;
 import com.hireai.controller.biz.task.converter.TaskModel2DTOConverter;
 import com.hireai.controller.biz.task.converter.TaskResult2DTOConverter;
+import com.hireai.controller.biz.task.dto.CreateReviewRequest;
 import com.hireai.controller.biz.task.dto.DirectBookRequest;
 import com.hireai.controller.biz.task.dto.MatchPreviewDTO;
 import com.hireai.controller.biz.task.dto.RejectTaskRequest;
@@ -61,6 +64,8 @@ public class TaskController extends BaseController {
     private final TaskReviewAppService reviewAppService;
     private final MatchPreviewAppService matchPreviewAppService;
     private final ValidationReadAppService validationReadAppService;
+    /** The client's star rating — distinct from reviewAppService, which is accept/reject. */
+    private final ReviewAppService ratingAppService;
 
     public TaskController(SubmitOrchestrationAppService submitOrchestrationAppService,
                           TaskReadAppService readAppService,
@@ -68,7 +73,8 @@ public class TaskController extends BaseController {
                           CurrentApiKeyProvider currentApiKey,
                           TaskReviewAppService reviewAppService,
                           MatchPreviewAppService matchPreviewAppService,
-                          ValidationReadAppService validationReadAppService) {
+                          ValidationReadAppService validationReadAppService,
+                          ReviewAppService ratingAppService) {
         this.submitOrchestrationAppService = submitOrchestrationAppService;
         this.readAppService = readAppService;
         this.currentUser = currentUser;
@@ -76,6 +82,7 @@ public class TaskController extends BaseController {
         this.reviewAppService = reviewAppService;
         this.matchPreviewAppService = matchPreviewAppService;
         this.validationReadAppService = validationReadAppService;
+        this.ratingAppService = ratingAppService;
     }
 
     @PostMapping
@@ -171,6 +178,19 @@ public class TaskController extends BaseController {
         UUID clientId = currentUser.currentUserId();
         reviewAppService.reject(id, clientId, request.reasonCategory(), request.reason());
         return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
+    }
+
+    /**
+     * Rate a task you accepted. Deliberately a separate call from accept rather than a field on
+     * it, so the prompt can be skipped at the moment of acceptance and answered later — a client
+     * forced into a snap judgment to get on with their day mostly just skips it.
+     */
+    @PostMapping("/{id}/review")
+    public WebResult<ReviewDTO> review(@PathVariable("id") UUID id,
+                                       @Valid @RequestBody CreateReviewRequest request) {
+        UUID clientId = currentUser.currentUserId();
+        return ok(ReviewDTO.from(
+                ratingAppService.review(id, clientId, request.rating(), request.reviewText())));
     }
 
     @GetMapping("/match-preview")

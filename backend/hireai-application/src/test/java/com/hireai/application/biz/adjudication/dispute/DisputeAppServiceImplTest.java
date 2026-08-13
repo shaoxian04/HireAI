@@ -4,6 +4,7 @@ import com.hireai.application.biz.adjudication.dispute.impl.DisputeAppServiceImp
 import com.hireai.application.biz.adjudication.port.ArbitrationGateway;
 import com.hireai.application.biz.adjudication.port.RulingInfo;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.domain.biz.adjudication.enums.DisputeStatus;
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
 import com.hireai.domain.biz.adjudication.enums.RulingDecidedBy;
@@ -42,6 +43,7 @@ class DisputeAppServiceImplTest {
     AgentRepository agentRepository;
     SettlementWriteAppService settlement;
     ArbitrationGateway gateway;
+    ReputationWriteAppService reputationWriteAppService;
     DisputeAppServiceImpl service;
 
     UUID clientId = UUID.randomUUID();
@@ -56,7 +58,9 @@ class DisputeAppServiceImplTest {
         agentRepository = mock(AgentRepository.class);
         settlement = mock(SettlementWriteAppService.class);
         gateway = mock(ArbitrationGateway.class);
-        service = new DisputeAppServiceImpl(disputeRepository, taskRepository, agentRepository, settlement, gateway);
+        reputationWriteAppService = mock(ReputationWriteAppService.class);
+        service = new DisputeAppServiceImpl(disputeRepository, taskRepository, agentRepository,
+                settlement, gateway, reputationWriteAppService);
 
         when(disputeRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));

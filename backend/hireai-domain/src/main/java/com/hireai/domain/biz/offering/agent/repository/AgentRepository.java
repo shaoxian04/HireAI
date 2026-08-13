@@ -1,7 +1,9 @@
 package com.hireai.domain.biz.offering.agent.repository;
 
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
+import com.hireai.domain.biz.offering.agent.info.AgentReputationTarget;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
+import com.hireai.domain.biz.reputation.info.ReputationAggregates;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -44,4 +46,27 @@ public interface AgentRepository {
      * executing the task.
      */
     Optional<UUID> findOwnerByVersionId(UUID agentVersionId);
+
+    /**
+     * Agent id + owner id for a version, in one query. Every reputation emission site needs both:
+     * the agent to attach the event to, and the owner to compare against the task's client for the
+     * L1 self-dealing exclusion. Same no-status-filter rule as {@link #findOwnerByVersionId}.
+     */
+    Optional<AgentReputationTarget> findReputationTargetByVersionId(UUID agentVersionId);
+
+    /**
+     * Reads an agent's running reputation aggregates under a row lock, so concurrent settlements
+     * on the same agent serialize instead of losing one another's increment.
+     */
+    Optional<ReputationAggregates> lockReputationAggregates(UUID agentId);
+
+    /**
+     * Targeted update of the five reputation columns only — never a full-row save. A builder
+     * publishing a new version mid-settlement writes different columns, so neither write can lose
+     * the other.
+     */
+    void updateReputation(UUID agentId, ReputationAggregates aggregates, BigDecimal score);
+
+    /** The aggregates as currently cached on the agent row (no lock) — for read-only breakdowns. */
+    Optional<ReputationAggregates> findReputationAggregates(UUID agentId);
 }

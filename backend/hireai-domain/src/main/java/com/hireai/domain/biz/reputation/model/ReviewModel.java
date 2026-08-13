@@ -7,10 +7,14 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * A client's rating of an agent. In this slice reviews are SEEDED (taskId nullable) because
- * the rate-a-settled-task flow needs Modules 4/5. Builder may set or replace a response via
- * respond(); each call returns a new copy with the updated response.
- * Immutable; respond() returns a copy.
+ * A client's rating of an agent, always attached to the task it is about.
+ *
+ * <p>{@code taskId} is mandatory and unique (V28). Until Module 5 landed, reviews were fabricated
+ * demo rows with no task linkage; the earned-review flow replaces them, so a review that names no
+ * task is no longer representable. Every star on the site now belongs to work a client accepted
+ * and paid for in full.
+ *
+ * <p>Immutable; {@link #respond(String)} returns a copy.
  */
 public final class ReviewModel {
 
@@ -26,6 +30,8 @@ public final class ReviewModel {
 
     public ReviewModel(UUID id, UUID taskId, UUID clientId, UUID agentId, int rating,
                        String reviewText, String builderResponse, boolean published, Instant createdAt) {
+        requireIdentity(taskId, clientId, agentId);
+        requireRating(rating);
         this.id = id;
         this.taskId = taskId;
         this.clientId = clientId;
@@ -37,16 +43,31 @@ public final class ReviewModel {
         this.createdAt = createdAt;
     }
 
-    /** Factory for demo-seeded reviews (no task linkage). */
-    public static ReviewModel seeded(UUID clientId, UUID agentId, int rating, String reviewText) {
+    /**
+     * A client rating the task they accepted. The only way a review comes into existence — there
+     * is deliberately no factory for a review detached from a task.
+     */
+    public static ReviewModel forTask(UUID taskId, UUID clientId, UUID agentId, int rating,
+                                      String reviewText) {
+        return new ReviewModel(UUID.randomUUID(), taskId, clientId, agentId, rating,
+                reviewText == null || reviewText.isBlank() ? null : reviewText.trim(),
+                null, true, Instant.now());
+    }
+
+    private static void requireIdentity(UUID taskId, UUID clientId, UUID agentId) {
+        if (taskId == null) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "a review must name the task it is about");
+        }
         if (clientId == null || agentId == null) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "client id and agent id are required");
         }
+    }
+
+    private static void requireRating(int rating) {
         if (rating < 1 || rating > 5) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "rating must be between 1 and 5");
         }
-        return new ReviewModel(UUID.randomUUID(), null, clientId, agentId, rating,
-                reviewText, null, true, Instant.now());
     }
 
     /** Builder sets or replaces their response to the review. Returns a new ReviewModel copy. */

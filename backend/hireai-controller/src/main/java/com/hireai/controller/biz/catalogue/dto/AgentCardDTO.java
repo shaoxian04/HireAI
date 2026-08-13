@@ -23,6 +23,14 @@ public record AgentCardDTO(
         BigDecimal ratingAvg,
         int ratingCount,
         int requestCount,
+        /**
+         * The platform-witnessed delivery record. The storefront renders these as plain language
+         * ("completed 38 of 40 tasks successfully") instead of {@code reputationScore}, which is a
+         * routing input, not a shopping signal — a raw 0-100 composite is uninterpretable to a
+         * client, and pairing it with stars publishes two numbers that look contradictory.
+         */
+        BigDecimal reliabilitySum,
+        long reliabilityCount,
         boolean featured,
         Instant createdAt
 ) {

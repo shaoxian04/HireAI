@@ -37,7 +37,7 @@ public class JdbcCatalogueQueryDao implements CatalogueQueryPort {
 
     private static final String CARD_SELECT = """
             SELECT a.id, a.name, split_part(u.email, '@', 1) AS builder_name,
-                   a.reputation_score, a.gmt_create,
+                   a.reputation_score, a.reliability_sum, a.reliability_count, a.gmt_create,
                    p.tagline, p.logo_url, p.cover_url, p.is_featured,
                    v.capability_categories, v.price, v.max_execution_seconds,
                    r.rating_avg, COALESCE(r.rating_count, 0) AS rating_count,
@@ -97,7 +97,7 @@ public class JdbcCatalogueQueryDao implements CatalogueQueryPort {
     public Optional<AgentProfileRow> findProfile(UUID agentId) {
         String sql = """
                 SELECT a.id, a.name, split_part(u.email, '@', 1) AS builder_name,
-                       a.reputation_score, a.gmt_create,
+                       a.reputation_score, a.reliability_sum, a.reliability_count, a.gmt_create,
                        p.tagline, p.logo_url, p.cover_url, p.is_featured,
                        p.description, p.sample_output, p.gallery_urls,
                        v.capability_categories, v.price, v.max_execution_seconds,
@@ -189,6 +189,7 @@ public class JdbcCatalogueQueryDao implements CatalogueQueryPort {
                 stringList(rs.getArray("capability_categories")), rs.getBigDecimal("price"),
                 rs.getInt("max_execution_seconds"), rs.getBigDecimal("rating_avg"),
                 rs.getInt("rating_count"), rs.getInt("request_count"),
+                rs.getBigDecimal("reliability_sum"), rs.getLong("reliability_count"),
                 toInstant(rs.getTimestamp("gmt_create")));
     }
 

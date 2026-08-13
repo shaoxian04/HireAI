@@ -51,6 +51,11 @@ public class ReviewRepositoryImpl implements ReviewRepository {
                 .toList();
     }
 
+    @Override
+    public boolean existsByTaskId(UUID taskId) {
+        return taskId != null && jpa.existsByTaskId(taskId);
+    }
+
     private ReviewModel toModel(ReviewDO entity) {
         return new ReviewModel(
                 entity.getId(), entity.getTaskId(), entity.getClientId(), entity.getAgentId(),

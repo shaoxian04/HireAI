@@ -85,14 +85,24 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   view (lifetime/pending totals from `GET /api/builder/earnings`, per-agent breakdown, payout
   history; amounts derived server-side from `SettlementPolicy`); `builder/agents/new` — register
   an agent; `builder/agents/[id]` — manage console (tabs: Storefront · Pricing & tags · Stats ·
-  Reviews; image uploader via `apiUpload`).
+  **Reputation** · Reviews; image uploader via `apiUpload`). **Reputation** renders the owner-only
+  breakdown from `GET /api/agents/{id}/reputation`: the score on a marked 0–100 scale (50 = the
+  neutral start), Reliability and Satisfaction as separate meters, and the event stream with each
+  event's contribution on the same 0–100 scale. The component's `priorWeight` and `weight` come from
+  the server — **never restate kR/kS/α in the UI**, or the copy starts lying the moment the policy is
+  tuned. **Reviews** shows the rating distribution, a needs-reply filter, and a collapsed reply
+  editor that also *edits* an already-published reply (`PUT …/reviews/{id}/response` replaces).
 - `client/` — **Marketplace** (search/category/sort/hot strip/agent grid); `client/tasks` — task list +
   wallet (resolution badges on each task row); `client/tasks/new` — **searchable category picker** (`CategoryCombobox` from `/catalogue/categories`, strict —
   Find-agents gated on a real category) → match-preview **shortlist → pick → book** at the
   agent's price (the `ShortlistPanel` opens in a `Modal` popout of ranked agent cards: profile avatars,
-  best-match highlight, star ratings, above-budget near-miss drawer; `localStorage` draft); `client/tasks/[id]` — polls
+  best-match highlight, a plain-language `DeliveryRecord`, above-budget near-miss drawer; `localStorage`
+  draft — **no reputation number and no stars**: the shortlist once divided the routing composite by 20
+  and drew it as a five-star client rating, which is a different quantity entirely); `client/tasks/[id]` — polls
   result; at `PENDING_REVIEW` renders the `ResultReviewBar` (accept / reject with an A/B/C reason), then on
-  `RESOLVED` shows the settled summary. On a **terminal failure** (`SPEC_VIOLATION`/`TIMED_OUT`/`FAILED`/`CANCELLED`)
+  `RESOLVED` shows the settled summary plus a dismissible `RatingPrompt` (`POST /api/tasks/{id}/review`,
+  accepted-only and once per task — a rating left later beats one never given, so it must stay skippable).
+  On a **terminal failure** (`SPEC_VIOLATION`/`TIMED_OUT`/`FAILED`/`CANCELLED`)
   it renders a `TaskFailurePanel` (plain-English cause + `{budget} cr refunded` line; the spec-violation panel
   fetches the real failing-check reason from `GET /api/tasks/{id}/validation`). **Once the task is in a dispute** the execution pipeline is replaced by a
   `DisputeProgressPanel` — a reject→arbitrator→admin **timeline** with Accept-ruling / Appeal actions while a
@@ -127,9 +137,13 @@ directly so it doesn't bounce an authenticated user before context rehydrates.
   takes a `status` prop and colours itself; `Modal` is an accessible overlay dialog (focus-trap incl.
   `summary`/`select`/`textarea`, Esc-to-close, body scroll-lock). `components/CategoryCombobox.tsx` (strict
   searchable category picker) and `components/TaskFailurePanel.tsx` (per-failure panels) are feature components.
-  `lib/outputSpecFields.tsx` is the shared output-spec sub-form.
-- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~161 tests). Auth-dependent tests
-  must seed **both** `hireai.token` and `hireai.auth`. `next build` and `npx tsc --noEmit` must stay clean.
+  `lib/outputSpecFields.tsx` is the shared output-spec sub-form. `components/manage/Tab*.tsx` are the
+  builder manage-console panels; `components/DeliveryRecord.tsx` (client-facing delivery facts, no score)
+  and `components/RatingPrompt.tsx` are the Module 5 client surfaces.
+- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~190 tests). Auth-dependent tests
+  must seed **both** `hireai.token` and `hireai.auth`. The gate is **all three** of `npm run lint`,
+  `npx vitest run` and `npm run build` — CI enforces eslint, and `build` has caught a missing type
+  import that lint and vitest both passed.
 
 ## Run
 
@@ -139,5 +153,5 @@ check the official Next 16 docs when an API differs from what you expect.
 
 ## Pending / demo-grade
 
-Admin surface (not built); JWT in `localStorage` (httpOnly cookie is the hardening);
-status via polling (no websockets).
+JWT in `localStorage` (httpOnly cookie is the hardening); status via polling (no websockets).
+(The admin surface **is** built — `app/admin/` + `app/admin/disputes/[id]`, the tier-2 human backstop.)

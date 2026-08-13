@@ -2,6 +2,7 @@ package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
@@ -40,6 +41,7 @@ class TaskReviewAppServiceImplTest {
     @Mock AgentRepository agentRepository;
     @Mock SettlementWriteAppService settlementWriteAppService;
     @Mock DisputeAppService disputeAppService;
+    @Mock ReputationWriteAppService reputationWriteAppService;
 
     TaskReviewAppServiceImpl service;
 
@@ -49,8 +51,8 @@ class TaskReviewAppServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new TaskReviewAppServiceImpl(
-                taskRepository, agentRepository, settlementWriteAppService, disputeAppService);
+        service = new TaskReviewAppServiceImpl(taskRepository, agentRepository,
+                settlementWriteAppService, disputeAppService, reputationWriteAppService);
     }
 
     /** Build a task in PENDING_REVIEW (passed the validation gate) so accept/reject are legal. */

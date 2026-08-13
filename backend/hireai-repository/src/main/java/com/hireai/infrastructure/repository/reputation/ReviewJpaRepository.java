@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface ReviewJpaRepository extends JpaRepository<ReviewDO, UUID> {
 
     List<ReviewDO> findByAgentIdAndIsPublishedTrueOrderByGmtCreateDesc(UUID agentId, Pageable page);
+
+    boolean existsByTaskId(UUID taskId);
 }

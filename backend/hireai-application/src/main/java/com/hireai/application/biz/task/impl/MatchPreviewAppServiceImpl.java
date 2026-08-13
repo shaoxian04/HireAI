@@ -69,6 +69,6 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
         boolean available = r.inFlight() < r.maxConcurrent();
         return new AgentOption(r.agentId(), r.agentVersionId(), r.agentName(), r.tagline(),
                 r.logoUrl(), r.price(), r.reputationScore(), available, r.outputFormat(),
-                r.capabilityCategories());
+                r.capabilityCategories(), r.reliabilitySum(), r.reliabilityCount());
     }
 }

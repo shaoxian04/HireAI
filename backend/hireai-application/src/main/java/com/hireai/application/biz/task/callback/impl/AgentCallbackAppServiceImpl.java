@@ -2,7 +2,9 @@ package com.hireai.application.biz.task.callback.impl;
 
 import com.hireai.application.biz.adjudication.validation.ValidationAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.callback.AgentCallbackAppService;
+import com.hireai.domain.biz.reputation.enums.ReputationEventType;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
 import com.hireai.application.port.security.DispatchTokenClaims;
 import com.hireai.utility.exception.DispatchTokenInvalidException;
@@ -41,6 +43,7 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
     private final ValidationAppService validationAppService;
     private final SettlementWriteAppService settlementWriteAppService;
     private final WebhookOutboxAppService webhookOutboxAppService;
+    private final ReputationWriteAppService reputationWriteAppService;
 
     @Override
     public void recordResult(UUID taskId, String bearerToken, AgentResultInfo result) {
@@ -71,6 +74,9 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
             TaskModel failed = task.markFailed();
             taskRepository.save(failed);
             settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
+            // The agent itself reported it could not deliver — a zero-quality sample.
+            reputationWriteAppService.recordOutcome(taskId, failed.agentVersionId(),
+                    failed.clientId(), ReputationEventType.EXECUTION_FAILED);
             webhookOutboxAppService.enqueueFailed(failed, "FAILED");
             log.info("Task {} agent reported {} -> FAILED (refunded)", taskId, result.agentStatus());
             return;

@@ -85,6 +85,7 @@ public class CatalogueController extends BaseController {
                 c.id(), c.name(), c.builderName(), c.tagline(), c.logoUrl(), c.coverUrl(),
                 c.categories(), c.price(), c.maxExecutionSeconds(),
                 c.reputationScore(), c.ratingAvg(), c.ratingCount(), c.requestCount(),
+                c.reliabilitySum(), c.reliabilityCount(),
                 c.featured(), c.createdAt());
     }
 }

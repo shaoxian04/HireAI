@@ -19,8 +19,8 @@ Reflects what's actually built (one row per real `XxxRepository`), not the origi
 | task | **WebhookDeliveryModel** | — | WebhookDeliveryRepository | Enqueued only inside the settling transaction (an outbox row, never a second ledger); at-least-once delivery via exponential-with-cap backoff. |
 | adjudication | **DisputeModel** | RulingModel (LLM + admin) | DisputeRepository | One dispute per task; settlement happens exactly once. |
 | adjudication | **ValidationReportModel** | CheckResult (VO) | ValidationReportRepository | Verdict is PASS only if every check passes; validation runs before any client sees a result (Inv #4). |
-| reputation | **ReputationModel** | ReputationEventModel (append-only) | ReputationRepository | Score in [0,100]; computed only from recorded events with decay. |
-| reputation | **ReviewModel** | BuilderResponse (VO) | ReviewRepository | One review per resolved task; published only after content check. |
+| reputation | **ReputationEventModel** | — (append-only stream) | ReputationEventRepository | One event per terminal outcome, UPDATE/DELETE blocked by trigger. There is deliberately **no `ReputationModel` aggregate**: the score is not stored state but a pure fold over this stream (`ReputationScoringDomainServiceImpl`), with `agents.*_sum/_count` as a reconcilable cache. |
+| reputation | **ReviewModel** | — | ReviewRepository | One review per **accepted** task (`task_id NOT NULL UNIQUE`, V28) — a review detached from paid work is not representable. `respond()` sets **or replaces** the builder's reply. |
 
 ## Core tables (3NF; `gmt_create`/`gmt_modified` on every table)
 
@@ -32,8 +32,8 @@ Reflects what's actually built (one row per real `XxxRepository`), not the origi
 - **tasks** — id, client_id, agent_version_id, category, expected_deliverable (jsonb), status, estimated_cost, retry_count, timestamps; `resolution` (ACCEPTED/REJECTED, V9), `resolved_at`, `rejection_reason` — set exactly once by client review (pessimistic row lock serializes concurrent attempts); `match_attempts`, `execution_deadline`, `pinned_agent_version_id` (V24 — the reliability-sweeper bookkeeping columns; deliberately **unmapped on the JPA entity**, written only by targeted native UPDATEs so a full-row save never nulls them).
 - **task_attachments** / **task_results** — children of tasks; binaries in object storage, rows store the URL reference.
 - **disputes** — task_id (UK), raised_by, reason_category, status, llm_ruling, llm_rationale, admin_ruling, admin_rationale, admin_agreed_with_llm.
-- **reputation_events** — append-only. agent_id, event_type (TASK_SUCCESS/SPEC_VIOLATION/TIMEOUT/DISPUTE_LOSS), weight, occurred_at.
-- **reviews** — task_id (UK), client_id, agent_id, rating (1–5), review_text, builder_response, is_published.
+- **reputation_events** — append-only. agent_id, task_id (soft ref), event_type (TASK_ACCEPTED/SPEC_VIOLATION/EXECUTION_FAILED/EXECUTION_TIMEOUT/DISPUTE_WON/DISPUTE_PARTIAL/DISPUTE_LOST/RATING), **quality** `NUMERIC(4,3)` in [0,1], weight, occurred_at. **DB triggers raise on UPDATE/DELETE.** `quality` (what the sample asserts, as distinct from `weight` = how much it counts) is an addition made by ADR 0003: the earlier spec listed only `weight` because it assumed a points-balance model, which was rejected. Agents carries the derived cache — `reliability_sum/count`, `satisfaction_sum/count` — reconcilable by replaying this stream.
+- **reviews** — task_id (UK, **NOT NULL** once the earned-review flow lands), client_id, agent_id, rating (1–5), review_text, builder_response, is_published.
 
 ## Implemented so far (vs the design above)
 
@@ -62,6 +62,12 @@ The schema above is the **design target**. What's actually in Flyway today:
 
   See `docs/details/architecture.md` (outbound webhook outbox + sweeper) and `docs/superpowers/specs/2026-07-19-push-webhooks-design.md` for the design.
 
+- **V27** — **Module 5 reputation.** Gives `agents.reputation_score` a source: it had been `NUMERIC(5,2)` frozen at `50.00` since V3, written once at registration and updated by nothing, while the matcher weighted it at `0.40` — its largest factor — so every candidate contributed an identical `0.20` and reputation ranked nothing.
+  - **`reputation_events`** — `id, agent_id (FK agents), task_id` (**soft** ref, no cross-context FK, per V16 `validation_reports`), `event_type` (CHECK-constrained to the eight kinds), `quality NUMERIC(4,3) CHECK (0..1)`, `weight NUMERIC(4,3) CHECK (> 0)`, `occurred_at`. Append-only: `trg_reputation_events_no_update` / `_no_delete` raise, exactly as `ledger_entries` (Invariant #2). Index `(agent_id, occurred_at DESC)`; partial UNIQUE `(task_id, event_type) WHERE task_id IS NOT NULL` makes emission exactly-once per outcome while still allowing one task to yield both an outcome and a later `RATING`.
+  - **`agents` + four aggregate columns** — `reliability_sum/count`, `satisfaction_sum/count`, all `DEFAULT 0`. A **derived cache** that makes the settlement-time rescore O(1) instead of re-reading an agent's whole history; `reputation_events` stays the source of truth and `reconcile()` replays it to prove they agree. The zero defaults backfill every existing agent to a score of exactly `50.00`, so **no routing shifts on migration day** until agents earn events.
+
+  Written only by a targeted native `UPDATE` of those five columns — never a full-row `save()` — so a builder publishing a version mid-settlement cannot lose the update. See `docs/adr/0003-two-component-shrinkage-reputation.md` and `docs/superpowers/specs/2026-08-12-module5-reputation-design.md`.
+
 ## Status enums
 
 - **Task:** SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED → PENDING_REVIEW → RESOLVED. Off-path: AWAITING_CAPACITY, TIMED_OUT, SPEC_VIOLATION, FAILED, CANCELLED. As of V24 the off-path states have live sweeper triggers: **AWAITING_CAPACITY** (no eligible agent) is re-matched every 10s and, after 3 exhausted attempts, transitions **→ CANCELLED + full refund**; a `QUEUED`/`EXECUTING` task past its `execution_deadline` transitions **→ TIMED_OUT + full refund**. Both were previously dormant/reserved. **Channel split (Phase 4):** a task submitted through the **API-key channel auto-settles on the validation result** — PASS → `RESOLVED` (85/15 payout), FAIL → `SPEC_VIOLATION` (refund) — *skipping* `PENDING_REVIEW` and the human accept/reject + dispute path entirely; a human-submitted task keeps `PENDING_REVIEW → RESOLVED` and the full review/dispute flow.
@@ -79,7 +85,7 @@ The schema above is the **design target**. What's actually in Flyway today:
 - **Disputes settle late (delayed settlement).** An `A/B/C` reject opens a dispute; the arbitrator's ruling is only a *proposal* (dispute rests at `RULED`, escrow held). The client then `POST /api/disputes/{id}/accept-ruling` or `/appeal` (→ admin tier-2), or an `@Scheduled RulingAcceptSweeper` auto-accepts a stale `RULED` proposal after `ruling-accept-after`. `settleFromEffective` moves money **exactly once**, from the highest-tier ruling, under the same `SELECT … FOR UPDATE` task lock — the arbitrator callback never settles. Reuses existing dispute statuses (no migration).
 - Spec-violation after one retry: **80% refund to client, 20% platform fee** (pending — Module 4).
 - Escrow invariant is reconstructable from `ledger_entries` at any time (used by the settlement reconstruction test).
-- Reputation: rolling 30-day window — success rate (50%), spec-violation (−20%), timeout (−20%), dispute-loss (−10%) with temporal decay. Below threshold (or >30% dispute-loss) → auto-suspend via `ReputationDroppedBelowThresholdDomainEvent`.
+- **Reputation** (ADR 0003, as built — this replaced an earlier sketch of a rolling 30-day window with percentage penalties, temporal decay and auto-suspend, **none of which exists**; there is no `ReputationDroppedBelowThresholdDomainEvent`): two independent shrinkage estimators over `reputation_events`, blended by α. `Reliability = (kR·p₀ + Σq)/(kR + n)` over platform-witnessed outcomes; `Satisfaction = (kS·p₀ + Σq)/(kS + n)` over client ratings; `score = 100 × (α·Rel + (1−α)·Sat)`. Defaults `α = 0.70`, `kR = 5`, `kS = 10`, `p₀ = 0.50`, so a zero-event agent scores exactly `50.00`. Keeping the streams apart is load-bearing: blended, an unreviewed accept would count as maximum quality, making silence indistinguishable from perfection and review-suppression the rational builder strategy. Emission is explicit per outcome site and folded O(1) into the `agents` cache inside the settling transaction — **never derived from how money moved** (`chargeChangedMind` pays the builder in full while writing `REJECTED`). No decay, no auto-suspend, no time window.
 
 ## Known concurrency backlog
 

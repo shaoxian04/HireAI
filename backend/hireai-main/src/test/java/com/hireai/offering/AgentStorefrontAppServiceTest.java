@@ -53,7 +53,7 @@ class AgentStorefrontAppServiceTest {
     }
 
     private ReviewModel reviewFor(UUID agentId) {
-        return new ReviewModel(UUID.randomUUID(), null, UUID.randomUUID(), agentId,
+        return new ReviewModel(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), agentId,
                 4, "Good agent", null, true, Instant.now());
     }
 

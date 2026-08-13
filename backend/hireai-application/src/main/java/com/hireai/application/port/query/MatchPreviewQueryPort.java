@@ -16,6 +16,7 @@ public interface MatchPreviewQueryPort {
 
     record ShortlistCandidateRow(UUID agentId, UUID agentVersionId, String agentName, String tagline,
                                  String logoUrl, BigDecimal price, BigDecimal reputationScore,
+                                 BigDecimal reliabilitySum, long reliabilityCount,
                                  List<String> capabilityCategories, String outputSpecJson,
                                  String outputFormat, String webhookUrl, int maxExecutionSeconds,
                                  int maxConcurrent, long inFlight, long sampleCount) {

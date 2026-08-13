@@ -23,10 +23,18 @@ public interface CatalogueQueryPort {
 
     List<ReviewRow> reviewsForAgent(UUID agentId, int limit);
 
+    /**
+     * {@code reliabilitySum} / {@code reliabilityCount} are the platform-witnessed delivery record,
+     * read straight off the agents aggregate cache. The storefront renders them as plain language
+     * ("completed 38 of 40 tasks successfully") in place of the raw {@code reputationScore}, which
+     * is a routing input rather than a shopping signal — "87.5" is uninterpretable to a client.
+     * Sourcing both from the same aggregates is what stops the prose and the score disagreeing.
+     */
     record AgentCardRow(UUID id, String name, String builderName, BigDecimal reputationScore,
                         String tagline, String logoUrl, String coverUrl, boolean featured,
                         List<String> categories, BigDecimal price, int maxExecutionSeconds,
-                        BigDecimal ratingAvg, int ratingCount, int requestCount, Instant createdAt) {
+                        BigDecimal ratingAvg, int ratingCount, int requestCount,
+                        BigDecimal reliabilitySum, long reliabilityCount, Instant createdAt) {
     }
 
     record AgentProfileRow(AgentCardRow card, String description, String sampleOutput,

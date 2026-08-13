@@ -13,13 +13,15 @@ import { TabStorefront } from "@/components/manage/TabStorefront";
 import { TabPricing } from "@/components/manage/TabPricing";
 import { TabStats } from "@/components/manage/TabStats";
 import { TabReviews } from "@/components/manage/TabReviews";
+import { TabReputation } from "@/components/manage/TabReputation";
 
-type Tab = "storefront" | "pricing" | "stats" | "reviews";
+type Tab = "storefront" | "pricing" | "stats" | "reputation" | "reviews";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "storefront", label: "Storefront" },
   { id: "pricing", label: "Pricing" },
   { id: "stats", label: "Stats" },
+  { id: "reputation", label: "Reputation" },
   { id: "reviews", label: "Reviews" },
 ];
 
@@ -33,6 +35,7 @@ function ManageAgentPage() {
 
   const [activeTab, setActiveTab] = useState<Tab>("storefront");
   const [statsLoaded, setStatsLoaded] = useState(false);
+  const [reputationLoaded, setReputationLoaded] = useState(false);
   const [reviewsLoaded, setReviewsLoaded] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
 
@@ -65,6 +68,7 @@ function ManageAgentPage() {
   function handleTabChange(tab: Tab) {
     setActiveTab(tab);
     if (tab === "stats") setStatsLoaded(true);
+    if (tab === "reputation") setReputationLoaded(true);
     if (tab === "reviews") setReviewsLoaded(true);
   }
 
@@ -123,8 +127,9 @@ function ManageAgentPage() {
       </header>
 
       {/* Tab bar */}
+      {/* Five tabs do not fit a phone; scroll the strip rather than the whole page sideways. */}
       <div
-        className="flex gap-1 border-b border-line"
+        className="flex gap-1 overflow-x-auto border-b border-line"
         aria-label="Agent management sections"
       >
         {TABS.map((t) => (
@@ -132,7 +137,7 @@ function ManageAgentPage() {
             key={t.id}
             aria-pressed={activeTab === t.id}
             onClick={() => handleTabChange(t.id)}
-            className={`px-4 pb-2 font-mono text-xs uppercase tracking-wider transition ${
+            className={`shrink-0 px-4 pb-2 font-mono text-xs uppercase tracking-wider transition ${
               activeTab === t.id
                 ? "border-b-2 border-accent text-accent"
                 : "text-muted hover:text-fg"
@@ -156,6 +161,7 @@ function ManageAgentPage() {
           <TabPricing agentId={id} agent={agent} onAgentChange={setAgent} />
         )}
         {activeTab === "stats" && statsLoaded && <TabStats agentId={id} />}
+        {activeTab === "reputation" && reputationLoaded && <TabReputation agentId={id} />}
         {activeTab === "reviews" && reviewsLoaded && <TabReviews agentId={id} />}
       </div>
     </div>

@@ -1,7 +1,9 @@
 package com.hireai.application.biz.task.reliability.impl;
 
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
+import com.hireai.domain.biz.reputation.enums.ReputationEventType;
 import com.hireai.application.biz.task.reliability.TaskReliabilityAppService;
 import com.hireai.application.biz.task.routing.RoutingAppService;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
@@ -33,6 +35,7 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
     private final TaskWriteAppService taskWriteAppService;
     private final SettlementWriteAppService settlementWriteAppService;
     private final WebhookOutboxAppService webhookOutboxAppService;
+    private final ReputationWriteAppService reputationWriteAppService;
     private final int rematchMaxAttempts;
 
     public TaskReliabilityAppServiceImpl(TaskRepository taskRepository,
@@ -40,6 +43,7 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
                                          TaskWriteAppService taskWriteAppService,
                                          SettlementWriteAppService settlementWriteAppService,
                                          WebhookOutboxAppService webhookOutboxAppService,
+                                         ReputationWriteAppService reputationWriteAppService,
                                          @Value("${hireai.matching.rematch-max-attempts:3}") int rematchMaxAttempts) {
         if (rematchMaxAttempts < 1) {
             throw new IllegalStateException("rematch-max-attempts must be >= 1; got " + rematchMaxAttempts);
@@ -49,6 +53,7 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
         this.taskWriteAppService = taskWriteAppService;
         this.settlementWriteAppService = settlementWriteAppService;
         this.webhookOutboxAppService = webhookOutboxAppService;
+        this.reputationWriteAppService = reputationWriteAppService;
         this.rematchMaxAttempts = rematchMaxAttempts;
     }
 
@@ -101,6 +106,9 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
         TaskModel timedOut = task.markTimedOut();
         taskRepository.save(timedOut);
         settlementWriteAppService.settleRejected(taskId, timedOut.clientId(), timedOut.budget());
+        // The deadline passed with no result. Stamped at ASSIGNMENT, so the agent had the work.
+        reputationWriteAppService.recordOutcome(taskId, timedOut.agentVersionId(),
+                timedOut.clientId(), ReputationEventType.EXECUTION_TIMEOUT);
         webhookOutboxAppService.enqueueFailed(timedOut, "TIMED_OUT");
         log.info("Task {} TIMED_OUT past execution deadline; escrow fully refunded", taskId);
     }

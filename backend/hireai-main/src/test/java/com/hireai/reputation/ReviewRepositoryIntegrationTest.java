@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Boots Spring against a real Postgres (Testcontainers) so Flyway applies V1–V7.
- * Verifies the Review persistence slice end-to-end: seeded reviews, ordering, and
+ * Verifies the Review persistence slice end-to-end: earned reviews, ordering, and
  * builder-response round-trip.
  *
  * Each test creates its own user + agent row via JdbcTemplate so the shared container
@@ -83,13 +83,13 @@ class ReviewRepositoryIntegrationTest {
         UUID clientId = seed.clientId();
         UUID agentId = seed.agentId();
 
-        // First review: rating 5, "great" — older (default Instant.now() from seeded())
-        ReviewModel first = ReviewModel.seeded(clientId, agentId, 5, "great");
+        // First review: rating 5, "great" — older (default Instant.now() from forTask())
+        ReviewModel first = ReviewModel.forTask(UUID.randomUUID(), clientId, agentId, 5, "great");
         reviewRepository.save(first);
 
         // Second review: rating 3, "ok" — explicitly later so ordering is deterministic
         ReviewModel second = new ReviewModel(
-                UUID.randomUUID(), null, clientId, agentId, 3,
+                UUID.randomUUID(), UUID.randomUUID(), clientId, agentId, 3,
                 "ok", null, true, Instant.now().plusSeconds(1));
         reviewRepository.save(second);
 
@@ -109,7 +109,7 @@ class ReviewRepositoryIntegrationTest {
         UUID clientId = seed.clientId();
         UUID agentId = seed.agentId();
 
-        ReviewModel review = ReviewModel.seeded(clientId, agentId, 5, "Excellent result.");
+        ReviewModel review = ReviewModel.forTask(UUID.randomUUID(), clientId, agentId, 5, "Excellent result.");
         reviewRepository.save(review);
 
         ReviewModel withResponse = review.respond("Thanks — glad it helped!");
@@ -129,7 +129,7 @@ class ReviewRepositoryIntegrationTest {
         UUID clientId = seed.clientId();
         UUID agentId = seed.agentId();
 
-        ReviewModel review = ReviewModel.seeded(clientId, agentId, 4, "Solid work.");
+        ReviewModel review = ReviewModel.forTask(UUID.randomUUID(), clientId, agentId, 4, "Solid work.");
         reviewRepository.save(review);
 
         // Capture gmt_create after the first write
@@ -154,12 +154,12 @@ class ReviewRepositoryIntegrationTest {
         UUID agentId = seed.agentId();
 
         // Published review — visible
-        ReviewModel published = ReviewModel.seeded(clientId, agentId, 5, "Visible review.");
+        ReviewModel published = ReviewModel.forTask(UUID.randomUUID(), clientId, agentId, 5, "Visible review.");
         reviewRepository.save(published);
 
         // Unpublished review — must be excluded from findPublishedByAgentId
         ReviewModel unpublished = new ReviewModel(
-                UUID.randomUUID(), null, clientId, agentId, 3,
+                UUID.randomUUID(), UUID.randomUUID(), clientId, agentId, 3,
                 "Hidden review.", null, false, Instant.now());
         reviewRepository.save(unpublished);
 

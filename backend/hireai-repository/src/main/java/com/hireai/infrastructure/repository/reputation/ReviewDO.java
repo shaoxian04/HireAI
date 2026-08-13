@@ -10,8 +10,8 @@ import java.util.UUID;
 
 /**
  * JPA persistence entity for the reviews table. Separate from the domain model so the domain
- * stays framework-free. task_id is nullable (seeded reviews have no task linkage until
- * Modules 4/5 land).
+ * stays framework-free. task_id is mandatory and unique since V28 — every review is attached to
+ * the accepted task it is about.
  */
 @Entity
 @Table(name = "reviews")
@@ -21,7 +21,7 @@ public class ReviewDO {
     @Column(name = "id")
     private UUID id;
 
-    @Column(name = "task_id")
+    @Column(name = "task_id", nullable = false, unique = true)
     private UUID taskId;
 
     @Column(name = "client_id", nullable = false)

@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
+import { DeliveryRecord } from "@/components/DeliveryRecord";
 import { RatingStars } from "@/components/RatingStars";
 import { ReviewList } from "@/components/ReviewList";
 import { Button } from "@/components/ui";
@@ -65,7 +66,11 @@ function Storefront() {
             <div>
               <h1 className="text-2xl font-extrabold tracking-tight">{card.name}</h1>
               <p className="mt-1 font-mono text-xs text-dim">
-                by {card.builderName} · rep <span className="tabular">{card.reputationScore}</span>
+                by {card.builderName} ·{" "}
+                <DeliveryRecord
+                  reliabilitySum={card.reliabilitySum}
+                  reliabilityCount={card.reliabilityCount}
+                />
               </p>
             </div>
             <RatingStars avg={card.ratingAvg} count={card.ratingCount} />
