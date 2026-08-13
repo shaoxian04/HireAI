@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
-import type { AgentReputationDTO, ReputationEventDTO } from "@/lib/types";
+import type {
+  AgentReputationDTO,
+  ReputationComponentDTO,
+  ReputationEventDTO,
+} from "@/lib/types";
 import { StatTile } from "@/components/StatTile";
 
 interface Props {
@@ -41,6 +45,48 @@ function toneClass(tone: "accent" | "red" | "amber" | "fg"): string {
   if (tone === "red") return "text-red";
   if (tone === "amber") return "text-amber";
   return "text-fg";
+}
+
+/**
+ * Below this many samples a component is still dominated by the neutral prior, so its VALUE says
+ * more about how little we know than about how the agent performed.
+ */
+const CONFIDENT_SAMPLES = 5;
+
+/** A component reading below this, on enough samples, is genuinely weak rather than just unproven. */
+const WEAK = 60;
+
+/**
+ * Which side is actually the problem, in plain language.
+ *
+ * <p>The sample-count guards are load-bearing, not politeness. Shrinkage holds a component near
+ * the prior until evidence accumulates, so a flawless agent with one delivered task reads ~58 —
+ * diagnosing that as "failing to deliver" mistakes absence of evidence for evidence of failure,
+ * which is the exact error, inverted, that the two-component split exists to prevent.
+ */
+function diagnose(
+  reliability: ReputationComponentDTO,
+  satisfaction: ReputationComponentDTO,
+): string {
+  if (reliability.sampleCount === 0) {
+    return "No delivery record yet.";
+  }
+  if (reliability.sampleCount < CONFIDENT_SAMPLES) {
+    return `Only ${reliability.sampleCount} outcome${reliability.sampleCount === 1 ? "" : "s"} so far, so both components are still close to the neutral starting point. That is missing evidence, not a bad result — the numbers will move as work goes through.`;
+  }
+  if (Number(reliability.value) < WEAK) {
+    return "Reliability is the weak side: the agent is failing to deliver. Look at the failures below before touching anything else.";
+  }
+  if (satisfaction.sampleCount === 0) {
+    return "Delivery looks solid. Nobody has rated the work yet, so Satisfaction is still sitting at the neutral starting point — that is missing evidence, not a bad score.";
+  }
+  if (satisfaction.sampleCount < CONFIDENT_SAMPLES) {
+    return "Delivery looks solid. There are too few ratings yet to read much into Satisfaction.";
+  }
+  if (Number(satisfaction.value) < WEAK) {
+    return "The agent delivers, but clients are unimpressed with the output. That is a quality problem, not a reliability one.";
+  }
+  return "Both sides are healthy.";
 }
 
 /**
@@ -105,17 +151,7 @@ export function TabReputation({ agentId }: Props) {
             <span className="tabular">{satisfaction.sampleCount}</span>{" "}
             {satisfaction.sampleCount === 1 ? "rating" : "ratings"} clients left.
           </p>
-          <p className="mt-3 text-sm leading-relaxed text-muted">
-            {reliability.sampleCount === 0
-              ? "No delivery record yet."
-              : Number(reliability.value) < 60
-                ? "Reliability is the weak side: the agent is failing to deliver. Look at the failures below before touching anything else."
-                : satisfaction.sampleCount === 0
-                  ? "Delivery looks solid. Nobody has rated the work yet, so Satisfaction is still sitting at the neutral starting point — it is missing evidence, not a bad score."
-                  : Number(satisfaction.value) < 60
-                    ? "The agent delivers, but clients are unimpressed with the output. That is a quality problem, not a reliability one."
-                    : "Both sides are healthy."}
-          </p>
+          <p className="mt-3 text-sm leading-relaxed text-muted">{diagnose(reliability, satisfaction)}</p>
           <p className="mt-3 font-mono text-xs text-dim">
             Sample counts carry the confidence — a score over 40 tasks is a far stronger claim than the
             same figure over three.
