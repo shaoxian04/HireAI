@@ -333,10 +333,10 @@ class TaskControllerTest {
                 .thenReturn(new MatchPreview(
                         List.of(new AgentOption(agentId, versionId, "Alpha", "tag", "logo",
                                 new BigDecimal("12.00"), new BigDecimal("80.00"), true, "JSON",
-                                List.of("summarisation"))),
+                                List.of("summarisation"), new BigDecimal("9.000"), 10L)),
                         List.of(new AgentOption(UUID.randomUUID(), UUID.randomUUID(), "Pricey", null, null,
                                 new BigDecimal("40.00"), new BigDecimal("90.00"), false, "JSON",
-                                List.of("summarisation")))));
+                                List.of("summarisation"), new BigDecimal("0.000"), 0L))));
 
         mockMvc.perform(get("/api/tasks/match-preview")
                         .param("category", "summarisation").param("budget", "30"))

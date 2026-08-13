@@ -6,7 +6,7 @@ import type { AgentOptionDTO } from "@/lib/types";
 const opt = (over: Partial<AgentOptionDTO>): AgentOptionDTO => ({
   agentId: "a", agentVersionId: "v", agentName: "Agent", tagline: null, logoUrl: null,
   price: 10, reputationScore: 80, availability: "AVAILABLE", outputFormat: "JSON",
-  capabilityCategories: ["summarisation"], ...over,
+  capabilityCategories: ["summarisation"], reliabilitySum: 9, reliabilityCount: 10, ...over,
 });
 
 const noop = () => {};

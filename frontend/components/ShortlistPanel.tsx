@@ -2,6 +2,7 @@
 
 import type { AgentOptionDTO } from "@/lib/types";
 import { Button, Modal } from "@/components/ui";
+import { DeliveryRecord } from "@/components/DeliveryRecord";
 
 interface Props {
   open: boolean;
@@ -91,16 +92,6 @@ function Avatar({ name, logoUrl, size = 44 }: { name: string; logoUrl: string | 
   );
 }
 
-function Stars({ score }: { score: number }) {
-  const filled = Math.max(0, Math.min(5, Math.round(score / 20)));
-  return (
-    <span aria-label={`${score} reputation`} className="text-sm">
-      <span className="text-accent">{"★".repeat(filled)}</span>
-      <span className="text-line-bright">{"★".repeat(5 - filled)}</span>
-    </span>
-  );
-}
-
 function OptionCard({
   option,
   rank,
@@ -138,8 +129,10 @@ function OptionCard({
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-muted">
-        <Stars score={option.reputationScore} />
-        <span className="tabular">{option.reputationScore} rep</span>
+        <DeliveryRecord
+          reliabilitySum={option.reliabilitySum}
+          reliabilityCount={option.reliabilityCount}
+        />
         {option.outputFormat && (
           <span className="rounded border border-line px-1.5 py-0.5">{option.outputFormat}</span>
         )}
@@ -178,7 +171,12 @@ function NearMissRow({
         <Avatar name={option.agentName} logoUrl={option.logoUrl} size={36} />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{option.agentName}</p>
-          <p className="truncate font-mono text-xs text-dim">★ {option.reputationScore} rep</p>
+          <p className="truncate font-mono text-xs text-dim">
+            <DeliveryRecord
+              reliabilitySum={option.reliabilitySum}
+              reliabilityCount={option.reliabilityCount}
+            />
+          </p>
         </div>
       </div>
       <Button

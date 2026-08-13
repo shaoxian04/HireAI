@@ -23,12 +23,12 @@ const previewBody = {
   shortlist: [{
     agentId: "a-1", agentVersionId: "v-1", agentName: "Alpha", tagline: null, logoUrl: null,
     price: 12, reputationScore: 80, availability: "AVAILABLE", outputFormat: "JSON",
-    capabilityCategories: ["summarisation"],
+    capabilityCategories: ["summarisation"], reliabilitySum: 9, reliabilityCount: 10,
   }],
   nearMisses: [{
     agentId: "a-2", agentVersionId: "v-2", agentName: "Pricey", tagline: null, logoUrl: null,
     price: 40, reputationScore: 90, availability: "BUSY", outputFormat: "JSON",
-    capabilityCategories: ["summarisation"],
+    capabilityCategories: ["summarisation"], reliabilitySum: 0, reliabilityCount: 0,
   }],
 };
 

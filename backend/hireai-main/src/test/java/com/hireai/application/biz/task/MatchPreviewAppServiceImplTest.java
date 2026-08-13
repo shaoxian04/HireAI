@@ -32,14 +32,16 @@ class MatchPreviewAppServiceImplTest {
 
     private ShortlistCandidateRow row(String name, String price, String rep, int maxConc, long inFlight, long samples) {
         return new ShortlistCandidateRow(UUID.randomUUID(), UUID.randomUUID(), name, "tag", "logo",
-                new BigDecimal(price), new BigDecimal(rep), List.of("summarisation"),
+                new BigDecimal(price), new BigDecimal(rep),
+                new BigDecimal("0.000"), 0L, List.of("summarisation"),
                 "{\"format\":\"JSON\"}", "JSON", "https://a/hook", 60, maxConc, inFlight, samples);
     }
 
     private ShortlistCandidateRow row(UUID agentVersionId, String name, String price, String rep,
             int maxConc, long inFlight, long samples) {
         return new ShortlistCandidateRow(UUID.randomUUID(), agentVersionId, name, "tag", "logo",
-                new BigDecimal(price), new BigDecimal(rep), List.of("summarisation"),
+                new BigDecimal(price), new BigDecimal(rep),
+                new BigDecimal("0.000"), 0L, List.of("summarisation"),
                 "{\"format\":\"JSON\"}", "JSON", "https://a/hook", 60, maxConc, inFlight, samples);
     }
 

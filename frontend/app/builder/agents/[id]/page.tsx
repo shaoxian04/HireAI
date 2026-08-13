@@ -13,13 +13,15 @@ import { TabStorefront } from "@/components/manage/TabStorefront";
 import { TabPricing } from "@/components/manage/TabPricing";
 import { TabStats } from "@/components/manage/TabStats";
 import { TabReviews } from "@/components/manage/TabReviews";
+import { TabReputation } from "@/components/manage/TabReputation";
 
-type Tab = "storefront" | "pricing" | "stats" | "reviews";
+type Tab = "storefront" | "pricing" | "stats" | "reputation" | "reviews";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "storefront", label: "Storefront" },
   { id: "pricing", label: "Pricing" },
   { id: "stats", label: "Stats" },
+  { id: "reputation", label: "Reputation" },
   { id: "reviews", label: "Reviews" },
 ];
 
@@ -33,6 +35,7 @@ function ManageAgentPage() {
 
   const [activeTab, setActiveTab] = useState<Tab>("storefront");
   const [statsLoaded, setStatsLoaded] = useState(false);
+  const [reputationLoaded, setReputationLoaded] = useState(false);
   const [reviewsLoaded, setReviewsLoaded] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
 
@@ -65,6 +68,7 @@ function ManageAgentPage() {
   function handleTabChange(tab: Tab) {
     setActiveTab(tab);
     if (tab === "stats") setStatsLoaded(true);
+    if (tab === "reputation") setReputationLoaded(true);
     if (tab === "reviews") setReviewsLoaded(true);
   }
 
@@ -156,6 +160,7 @@ function ManageAgentPage() {
           <TabPricing agentId={id} agent={agent} onAgentChange={setAgent} />
         )}
         {activeTab === "stats" && statsLoaded && <TabStats agentId={id} />}
+        {activeTab === "reputation" && reputationLoaded && <TabReputation agentId={id} />}
         {activeTab === "reviews" && reviewsLoaded && <TabReviews agentId={id} />}
       </div>
     </div>

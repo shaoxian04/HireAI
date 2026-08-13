@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { AgentCardDTO } from "@/lib/types";
 import { RatingStars } from "./RatingStars";
+import { DeliveryRecord } from "@/components/DeliveryRecord";
 
 /** Marketplace unit card → links to the agent storefront. Builder-private fields never appear. */
 export function AgentCard({ agent }: { agent: AgentCardDTO }) {
@@ -47,8 +48,14 @@ export function AgentCard({ agent }: { agent: AgentCardDTO }) {
           <div className="mt-auto flex items-end justify-between border-t border-line pt-3">
             <div className="space-y-1">
               <RatingStars avg={agent.ratingAvg} count={agent.ratingCount} />
+              <p className="font-mono text-[0.6rem] text-dim">
+                <DeliveryRecord
+                  reliabilitySum={agent.reliabilitySum}
+                  reliabilityCount={agent.reliabilityCount}
+                />
+              </p>
               <p className="font-mono text-[0.6rem] uppercase tracking-wider text-dim">
-                {agent.requestCount} requests · rep {agent.reputationScore}
+                {agent.requestCount} requests
               </p>
             </div>
             <p className="tabular font-mono text-sm font-bold text-accent">{agent.price} cr</p>

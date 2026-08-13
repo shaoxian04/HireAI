@@ -20,6 +20,8 @@ const card: AgentCardDTO = {
   ratingAvg: 4.5,
   ratingCount: 3,
   requestCount: 7,
+  reliabilitySum: 6,
+  reliabilityCount: 7,
   featured: true,
   createdAt: "2026-06-06T10:00:00Z",
 };

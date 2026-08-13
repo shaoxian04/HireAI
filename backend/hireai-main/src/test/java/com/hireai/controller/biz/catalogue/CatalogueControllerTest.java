@@ -44,7 +44,8 @@ class CatalogueControllerTest {
     private AgentCardRow card(String name) {
         return new AgentCardRow(UUID.randomUUID(), name, "alice", new BigDecimal("60.00"),
                 "Fast summaries", null, null, false, List.of("summarisation"),
-                new BigDecimal("10.00"), 60, new BigDecimal("4.50"), 3, 7, Instant.now());
+                new BigDecimal("10.00"), 60, new BigDecimal("4.50"), 3, 7,
+                new BigDecimal("6.000"), 7L, Instant.now());
     }
 
     @Test
@@ -110,7 +111,8 @@ class CatalogueControllerTest {
         AgentCardRow cardRow = new AgentCardRow(agentId, "Summariser Bot", "alice",
                 new BigDecimal("60.00"), "Fast summaries", null, null, false,
                 List.of("summarisation"), new BigDecimal("10.00"), 60,
-                new BigDecimal("4.50"), 3, 7, Instant.now());
+                new BigDecimal("4.50"), 3, 7,
+                new BigDecimal("6.000"), 7L, Instant.now());
         AgentProfileRow profileRow = new AgentProfileRow(
                 cardRow, "A detailed description", "sample output here",
                 List.of(), "{\"format\":\"JSON\",\"schema\":\"{}\",\"acceptanceCriteria\":\"valid JSON\"}",

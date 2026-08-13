@@ -161,6 +161,9 @@ export interface AgentCardDTO {
   ratingAvg: number | null;
   ratingCount: number;
   requestCount: number;
+  /** Summed outcome quality and sample count — the plain-language delivery record (#42). */
+  reliabilitySum: number;
+  reliabilityCount: number;
   featured: boolean;
   createdAt: string;
 }
@@ -415,6 +418,9 @@ export interface AgentOptionDTO {
   tagline: string | null;
   logoUrl: string | null;
   price: number;
+  /** Platform-witnessed delivery record — rendered instead of the routing composite (#42). */
+  reliabilitySum: number;
+  reliabilityCount: number;
   reputationScore: number;
   availability: "AVAILABLE" | "BUSY";
   outputFormat: string | null;
@@ -492,4 +498,44 @@ export type WebhookDeliveryDTO = {
   createdAt: string;
   deliveredAt: string | null;
   lastError: string | null;
+};
+
+/**
+ * The builder-facing reputation breakdown (GET /api/agents/{id}/reputation).
+ *
+ * Reliability and Satisfaction stay separate deliberately: a single blended number cannot tell a
+ * builder whether the agent is failing to deliver or delivering work clients dislike. `unproven`
+ * is sent explicitly so the UI never has to re-derive that an agent with no evidence reads as
+ * unproven rather than excellent.
+ */
+export type ReputationComponentDTO = {
+  /** On the same 0–100 scale as the headline score. */
+  value: number;
+  /** The confidence behind it — 90 over 40 tasks is a far stronger claim than over three. */
+  sampleCount: number;
+};
+
+export type ReputationEventDTO = {
+  id: string;
+  taskId: string | null;
+  eventType:
+    | "TASK_ACCEPTED"
+    | "SPEC_VIOLATION"
+    | "EXECUTION_FAILED"
+    | "EXECUTION_TIMEOUT"
+    | "DISPUTE_WON"
+    | "DISPUTE_PARTIAL"
+    | "DISPUTE_LOST"
+    | "RATING";
+  quality: number;
+  weight: number;
+  occurredAt: string;
+};
+
+export type AgentReputationDTO = {
+  score: number;
+  reliability: ReputationComponentDTO;
+  satisfaction: ReputationComponentDTO;
+  unproven: boolean;
+  recentEvents: ReputationEventDTO[];
 };
