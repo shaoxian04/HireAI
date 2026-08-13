@@ -37,6 +37,7 @@ class TaskReliabilityAppServiceImplTest {
     @Mock TaskWriteAppService taskWriteAppService;
     @Mock SettlementWriteAppService settlementWriteAppService;
     @Mock WebhookOutboxAppService webhookOutboxAppService;
+    @Mock com.hireai.application.biz.reputation.ReputationWriteAppService reputationWriteAppService;
 
     private TaskReliabilityAppServiceImpl service;
 
@@ -47,7 +48,8 @@ class TaskReliabilityAppServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new TaskReliabilityAppServiceImpl(taskRepository, routingAppService,
-                taskWriteAppService, settlementWriteAppService, webhookOutboxAppService, 3);
+                taskWriteAppService, settlementWriteAppService, webhookOutboxAppService,
+                reputationWriteAppService, 3);
     }
 
     private TaskModel taskWithStatus(TaskStatus status) {

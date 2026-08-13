@@ -73,10 +73,20 @@ public class ReputationWriteAppServiceImpl implements ReputationWriteAppService 
     private Optional<AgentReputationTarget> resolveEmittableAgent(UUID taskId, UUID agentVersionId,
                                                                  UUID clientId,
                                                                  ReputationEventType type) {
-        AgentReputationTarget target = agentRepository
-                .findReputationTargetByVersionId(agentVersionId)
-                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
-                        "No agent for version " + agentVersionId));
+        Optional<AgentReputationTarget> resolved = agentVersionId == null
+                ? Optional.empty()
+                : agentRepository.findReputationTargetByVersionId(agentVersionId);
+
+        // No resolvable agent means there is nobody to attribute the outcome to — the same
+        // situation as a capacity cancellation. Deliberately NOT an exception: emission is a
+        // side-effect of a settlement, and reputation bookkeeping must never abort the money path
+        // that triggered it (a client's auto-refund is not contingent on us finding an agent row).
+        if (resolved.isEmpty()) {
+            log.warn("Reputation: no agent for version {} on task {}; emitting nothing",
+                    agentVersionId, taskId);
+            return Optional.empty();
+        }
+        AgentReputationTarget target = resolved.get();
 
         if (target.ownerId().equals(clientId)) {
             log.debug("Reputation: task {} client {} owns agent {}; emitting nothing (L1)",

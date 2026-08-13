@@ -38,8 +38,10 @@ class ValidationAppServiceImplTest {
             mock(com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository.class);
     private final com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService webhookOutbox =
             mock(com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService.class);
+    private final com.hireai.application.biz.reputation.ReputationWriteAppService reputationWrite =
+            mock(com.hireai.application.biz.reputation.ReputationWriteAppService.class);
     private final ValidationAppServiceImpl svc = new ValidationAppServiceImpl(domain, reports, tasks, settlement,
-            agentRepository, apiKeyTaskRepository, webhookOutbox);
+            agentRepository, apiKeyTaskRepository, webhookOutbox, reputationWrite);
 
     /** Build a RESULT_RECEIVED TaskModel via the canonical transition chain. */
     private TaskModel resultReceivedTask() {

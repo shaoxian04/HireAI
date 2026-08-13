@@ -1,6 +1,7 @@
 package com.hireai.controller.biz.task;
 
 import com.hireai.application.biz.adjudication.validation.ValidationReadAppService;
+import com.hireai.application.biz.reputation.ReviewAppService;
 import com.hireai.application.biz.task.MatchPreviewAppService;
 import com.hireai.application.biz.task.MatchPreviewAppService.AgentOption;
 import com.hireai.application.biz.task.MatchPreviewAppService.MatchPreview;
@@ -71,6 +72,7 @@ class TaskControllerTest {
     @MockBean TaskReviewAppService taskReviewAppService;
     @MockBean MatchPreviewAppService matchPreviewAppService;
     @MockBean ValidationReadAppService validationReadAppService;
+    @MockBean ReviewAppService reviewAppService;
 
     @BeforeEach
     void noApiKeyByDefault() {

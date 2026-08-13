@@ -14,4 +14,7 @@ public interface ReviewRepository {
 
     /** Published reviews for an agent, newest first. */
     List<ReviewModel> findPublishedByAgentId(UUID agentId, int limit);
+
+    /** A task carries at most one review — the exactly-once rule, enforced by a unique index. */
+    boolean existsByTaskId(UUID taskId);
 }

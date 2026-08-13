@@ -2,6 +2,7 @@ package com.hireai.controller.biz.agent;
 
 import com.hireai.application.biz.offering.agent.AgentReadAppService;
 import com.hireai.application.biz.offering.agent.AgentStorefrontAppService;
+import com.hireai.application.biz.reputation.ReputationReadAppService;
 import com.hireai.application.biz.offering.agent.AgentWriteAppService;
 import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.utility.result.ResultCode;
@@ -64,6 +65,7 @@ class AgentControllerStorefrontTest {
     @MockBean AgentWriteAppService writeAppService;
     @MockBean AgentReadAppService readAppService;
     @MockBean AgentStorefrontAppService storefrontAppService;
+    @MockBean ReputationReadAppService reputationReadAppService;
     @MockBean CurrentUserProvider currentUserProvider;
 
     private static final UUID OWNER_ID = UUID.randomUUID();
@@ -75,7 +77,7 @@ class AgentControllerStorefrontTest {
     }
 
     private ReviewModel reviewWithResponse() {
-        return new ReviewModel(UUID.randomUUID(), null, UUID.randomUUID(), AGENT_ID,
+        return new ReviewModel(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), AGENT_ID,
                 5, "Excellent!", "Thank you!", true, Instant.now());
     }
 

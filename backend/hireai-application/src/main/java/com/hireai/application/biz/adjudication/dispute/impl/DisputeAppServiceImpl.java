@@ -4,6 +4,8 @@ import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.adjudication.port.ArbitrationGateway;
 import com.hireai.application.biz.adjudication.port.RulingInfo;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.application.biz.reputation.ReputationWriteAppService;
+import com.hireai.domain.biz.reputation.enums.ReputationEventType;
 import com.hireai.domain.biz.adjudication.enums.DisputeStatus;
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
 import com.hireai.domain.biz.adjudication.enums.RulingDecidedBy;
@@ -41,6 +43,7 @@ public class DisputeAppServiceImpl implements DisputeAppService {
     private final AgentRepository agentRepository;
     private final SettlementWriteAppService settlementWriteAppService;
     private final ArbitrationGateway arbitrationGateway;
+    private final ReputationWriteAppService reputationWriteAppService;
 
     @Override
     public UUID openDispute(TaskModel disputedTask, UUID raisedBy, RejectReason reasonCategory) {
@@ -182,7 +185,25 @@ public class DisputeAppServiceImpl implements DisputeAppService {
                 taskRepository.save(task.resolveDispute(TaskResolution.REJECTED));
             }
         }
+        // Emitted here, from the EFFECTIVE (highest-tier) ruling, so an administrator's tier-2
+        // override scores the ruling that actually took effect rather than the arbitrator proposal
+        // it superseded. Being complained about is not itself a failure — a builder who wins
+        // records full quality and loses nothing for having been disputed (#38).
+        reputationWriteAppService.recordOutcome(task.id(), task.agentVersionId(), task.clientId(),
+                reputationEventFor(category));
         disputeRepository.save(dispute.resolve());
+    }
+
+    /**
+     * Maps a ruling to what it asserts about the agent, mirroring how each already settles: a
+     * partially-fulfilled ruling is a proportionate consequence, distinct from total failure.
+     */
+    private static ReputationEventType reputationEventFor(RulingCategory category) {
+        return switch (category) {
+            case FULFILLED -> ReputationEventType.DISPUTE_WON;
+            case PARTIALLY_FULFILLED -> ReputationEventType.DISPUTE_PARTIAL;
+            case NOT_FULFILLED -> ReputationEventType.DISPUTE_LOST;
+        };
     }
 
     private TaskModel lockTask(UUID taskId) {
