@@ -1,10 +1,10 @@
 # DDD conventions (backend)
 
-Distilled from the `scaffolding-ddd-spring-boot` skill and SAD §2.4. **Invoke the skill before laying out packages or adding an aggregate.** Base package: `com.hireai`.
+What the backend actually does. **Invoke `scaffolding-ddd-spring-boot` before laying out packages or adding an aggregate.** Base package: `com.hireai`. The reasons behind these choices are in [`architecture-decisions.md`](architecture-decisions.md).
 
 ## The one rule
 
-Dependencies point inward, never back. Since the COLA refactor each layer is its own **Maven module**, so this is now **compiler-enforced** — a wrong-way import won't even resolve:
+Dependencies point inward. Each layer is a Maven module, so a wrong-way import won't compile:
 
 ```
 controller ┐
@@ -12,46 +12,66 @@ infrastructure ┼─→ application ─→ domain ─→ utility      (hireai-m
 repository ┘
 ```
 
-No module depends on one to its left. **`hireai-domain` and `hireai-utility` carry zero Spring on their classpath** — proven at build time, not just by review. Package names did **not** change in the split (repository code is still `com.hireai.infrastructure.repository.*`); only the owning Maven module did.
+`hireai-domain` and `hireai-utility` have no Spring on their classpath. Repository code is still in package `com.hireai.infrastructure.repository.*`, even though its module is `hireai-repository`.
 
-## Layer responsibilities
+## Layers
 
-- **controller** — validate the request, call exactly one app service, wrap the result in `WebResult`. No business logic, no direct repository access. Request→`XxxInfo` mapping is done by the *app service*, not the controller.
-- **application** — orchestrate use cases, CQRS-split: `XxxReadAppService` (returns DTOs directly) and `XxxWriteAppService` (`@Transactional`, returns only the aggregate ID; caller re-reads). **Outbound clients are invoked here**, never in the domain — fetch external data (webhook result, LLM ruling) and pass the *result* into a domain service as a plain `XxxInfo`.
-- **domain** — aggregate roots + child entities (`XxxModel`), value objects, enums, repository **interfaces**, domain events, and one domain service per state transition. Depends on nothing but `utility`.
-- **repository** (`hireai-repository`) — JPA repository impls (`XxxRepositoryImpl`), JPA entities, and read-side query-port impls. Implements interfaces owned by domain + application.
-- **infrastructure** (`hireai-infrastructure`) — the *non-persistence* adapters: messaging (RabbitMQ), security (JWT/dispatch tokens), and outbound clients (`XxxClient`). Implements application ports.
-- **utility** (`hireai-utility`) — cross-cutting primitives shared by every layer (`ResultCode`, all exception types, shared helpers). No Spring, no internal deps.
+- **controller**: validates the request, builds the `XxxInfo`, calls the app service, converts the returned model to a DTO, wraps it in `WebResult`. No business logic and no repository access. A write endpoint may call a write service and then a read service to return the fresh state.
+- **application**: orchestrates use cases: transaction, load, invoke the domain, persist through the domain repository interface, publish events, check ownership. Rules belong in the domain.
+- **domain**: aggregates (`XxxModel`), value objects, enums, repository interfaces, domain events, domain services.
+- **repository**: `XxxRepositoryImpl`, JPA entities (`XxxDO`), `XxxJpaRepository`, read-side query implementations.
+- **infrastructure**: messaging, security, outbound clients, implementing application ports. RabbitMQ consumers live here, so `TaskDispatchConsumer` calls `AgentDispatchClient` directly.
+- **utility**: `ResultCode`, exceptions, hashing helpers.
 
-## Package layout (package → owning module)
+## Package layout
 
 ```
-hireai-utility        utility/result                          ResultCode, shared primitives (no Spring)
-                      utility/exception                       DomainException + all exception types (any layer may throw)
+hireai-utility        utility/{result,exception,hash}
 hireai-domain         domain/biz/<subdomain>[/<aggregate>]/{model,repository,service,enums,event,info}
-hireai-application    application/biz/<subdomain>[/<aggregate>]   XxxReadAppService, XxxWriteAppService, OutputSpecJsonMapper
-                      application/port/{messaging,security,storage,query,task,webhook}   interfaces infra implements
-hireai-repository     infrastructure/repository/<subdomain>[/<aggregate>]   XxxRepositoryImpl + JPA entities (XxxDO) + read-query ports
-hireai-infrastructure infrastructure/{messaging,security,client,webhook}   RabbitMQ, JWT, AgentDispatchClient, storage, outbound webhook HTTP
-hireai-controller     controller/base|config                  BaseController, WebResult, SecurityConfig, JwtAuthenticationFilter
-                      controller/biz/<route-group>            controller + Request/DTO + converters (grouped by HTTP route)
-hireai-main           HireAiApplication, application.yml, db/migration/V*, the whole test suite
+                      domain/shared/model                      Money
+hireai-application    application/biz/<subdomain>[/<aggregate>]   app services + impl/
+                      application/biz/admin                    AdminReadAppService, cross-subdomain admin reads
+                      application/biz/adjudication/port        arbitration ports
+                      application/port/{messaging,query,security,storage,task,webhook}
+                      application/config                       DomainServiceConfig wires domain services
+hireai-repository     infrastructure/repository/<subdomain>[/<aggregate>], infrastructure/repository/admin
+hireai-infrastructure infrastructure/{adjudication,client,messaging,security,webhook}
+hireai-controller     controller/base, controller/config, controller/biz/<route-group>
+hireai-main           HireAiApplication, application.yml, db/migration, integration and most unit tests
 ```
 
-Domain/application/repository/infrastructure are grouped **by subdomain** (one of the six SAD capabilities: identity, ledger, offering, task, reputation, adjudication); controllers are grouped **by HTTP route group** instead — a different axis, so a route group and a subdomain don't have to share a name (`controller/biz/apikey`/`webhook` are route groups; the domain code they call lives under `identity`/`task`). A subdomain with only one aggregate is flat (e.g. `task`'s own `TaskModel`); one with several nests each under its own `<aggregate>` folder — `ledger/wallet` + `ledger/settlement`, `identity/apikey` + `identity/webhooksubscription`, `task/idempotency` + `task/webhookdelivery` (see `docs/adr/0002-apikey-webhook-nest-under-identity-and-task.md`). `application/port/*` and `infrastructure/*` are grouped by transport **kind** (`webhook` = outbound-HTTP kind), not by subdomain — they don't participate in the aggregate split. `ResultCode` lives in `hireai-utility` (shared by every layer); `WebResult`/`BaseController` stay in `hireai-controller`.
+Layer-local unit tests also live in `hireai-domain`, `hireai-application`, `hireai-infrastructure` and `hireai-utility`.
 
-## Naming suffixes (apply exactly)
+**Grouping:** domain, application and repository code is grouped by subdomain: `identity`, `ledger`, `offering`, `task`, `reputation`, `adjudication`. `admin` is an extra read-side group in application and repository. Controllers are grouped by HTTP route, a different axis: `controller/biz/apikey` calls code under `identity`.
 
-`XxxModel` (aggregate root or child entity) · `XxxDO` (JPA persistence entity, in `hireai-repository`) · `XxxRepository` (one per root, interface in domain) · `XxxRepositoryImpl` (infra JPA) · `XxxQuery` (read/pagination) · `Verb+Noun+DomainService` (one per state transition) · `XxxDomainEvent` · `XxxInfo` (domain inbound carrier / event payload) · `XxxReadAppService` / `XxxWriteAppService` · `XxxController` · `XxxRequest` / `XxxDTO` / `XxxModel2DTOConverter` · `XxxClient`.
+**Nesting:** there is no single rule; follow the neighbours. `ledger` and `offering` nest each aggregate. `identity` keeps `UserModel` flat and nests `apikey` and `webhooksubscription` ([ADR 0002](../adr/0002-apikey-webhook-nest-under-identity-and-task.md)). `task` keeps `TaskModel` flat and nests `idempotency`, `webhookdelivery` and `routing`. `adjudication` and `reputation` are flat, with their two aggregates side by side.
 
-## The five rules that matter
+## Naming
 
-1. **Aggregate = boundary.** Group domain code by aggregate. Reach child entities only through the root. Never cross-import between `domain/biz/<aggregate>` packages — go through an app service or a domain event.
-2. **One repository per aggregate root.** Children load/save through the root. App/domain services depend on the **interface**, never the impl.
-3. **CQRS split.** Reads via `XxxReadAppService` (DTOs, cache-safe). Writes via `XxxWriteAppService` (`@Transactional`, return the ID).
-4. **One domain service per state transition** — `TaskSubmitDomainService`, `TaskAcceptDomainService`, not a `TaskDomainService` god-class.
-5. **Controllers do three things only** — validate, call one app service, wrap in `WebResult`.
+| Kind | Pattern | Example |
+|---|---|---|
+| Aggregate or child entity | `XxxModel` | `TaskModel` (value objects have no suffix: `OutputSpec`, `Ruling`) |
+| Persistence entity | `XxxDO` | `AgentDO` |
+| Repository | `XxxRepository`, `XxxRepositoryImpl` | `WalletRepository` |
+| Domain service | Noun + verb | `TaskSubmitDomainService`, `WalletFreezeDomainService` |
+| Domain event | `XxxDomainEvent` | `TaskSubmittedDomainEvent` |
+| Inbound carrier | `XxxInfo` | `TaskSubmitInfo` |
+| App service | `XxxReadAppService`, `XxxWriteAppService`, or use-case named | `TaskReviewAppService`, `RoutingAppService` |
+| Web | `XxxController`, `XxxRequest`, `XxxDTO`, `Xxx2DTOConverter` | `Dispute2DTOConverter` |
+| Outbound client | `XxxClient` | `AgentDispatchClient` |
 
-## HireAI aggregates & their domain services
+## Rules
 
-See `data-model.md` for the aggregate/child/repository map. Routing is **not** an aggregate — it's `RoutingWriteAppService` (application layer) coordinating Task + Agent so the two domains never cross-import. Cross-aggregate flows use domain events: `TaskAcceptedDomainEvent`, `DisputeResolvedDomainEvent`, `ReputationDroppedBelowThresholdDomainEvent`, `SpecViolationDomainEvent`.
+1. **Reach children through the root**, and don't import another aggregate's internals. The allowed cross-subdomain imports in `domain/biz` are shared types only:
+   - `adjudication` uses `task.model.OutputSpec`, `task.model.TaskResultModel`, `task.enums.RejectReason`.
+   - `offering` uses `task.model.OutputSpec`, `reputation.info.ReputationAggregates`.
+   - `task` uses `offering.agent.info.AgentCandidate`.
+
+   Add to this list deliberately. Anything else goes through an app service.
+2. **One repository per aggregate root**, and depend on the interface. Exceptions: `OAuthIdentityRepository` serves a child of `UserModel`, and `ApiKeyTaskRepository` has no aggregate.
+3. **App services are interface + `impl/`.** Use `XxxReadAppService`/`XxxWriteAppService` when a subdomain splits cleanly and a use-case name when a flow spans both. Read services return models; write services return an ID, `void`, or a small result.
+4. **Keep behaviour in the aggregate.** Most transitions are `TaskModel` methods called from app services. Add a domain service when a rule spans objects or needs a pure calculation. Don't build a god-class.
+5. **Cross-aggregate flows are direct app-service calls.** The only domain events are `TaskSubmittedDomainEvent`, `AgentRegisteredDomainEvent` and `AgentActivatedDomainEvent`. Routing is not an aggregate: `RoutingAppService` coordinates Task and Agent.
+6. **Controllers stay thin.** Validate, build the `Info`, call, convert, wrap.
+
+The aggregate, child and repository map is in [`data-model.md`](data-model.md).

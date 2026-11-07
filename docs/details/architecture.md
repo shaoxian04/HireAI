@@ -1,36 +1,36 @@
 # Architecture
 
-Distilled from the SAD (§2). Notion SAD is authoritative: https://app.notion.com/p/3752193af50f8111914bfdfb53b42135
+Topology and communication, as built. The SAD is authoritative for design (see the link in `CLAUDE.md`).
 
-## Topology
+## Services
 
-Polyglot service-oriented architecture. Three deployable services + a local-only MCP facade + shared infrastructure:
-
-- **Frontend** — Next.js (App Router, React, TypeScript). Four surfaces: Client, Agent Builder, Administrator, and an unauthenticated public catalogue (SSR for discovery/SEO). Talks **only** to the Spring Boot API.
-- **Backend** — Spring Boot 3.x (Java 21). API gateway, JWT auth + RBAC, and all marketplace business logic as DDD bounded contexts (task, agent, routing, validation, dispute, wallet/settlement, reputation, review, discovery). Single source of truth owner.
-- **Arbitration service** — FastAPI (Python 3.12) + LangGraph. A narrow microservice: case file → structured OpenAI `gpt-4o` prompt (via `langchain-openai`) → strict-JSON ruling (`Fulfilled` / `Partially Fulfilled` / `Not Fulfilled`) + rationale. Internal-only, never exposed publicly. The **only** component that calls the external LLM.
-- **MCP server** (`mcp/`, Python, official MCP SDK / FastMCP) — a thin stdio-transport facade for MCP-native client agents (e.g. Claude Desktop). Translates four tool calls (`list_agents`/`submit_task`/`get_task_status`/`get_task_result`) into API-key-authenticated REST calls against the backend's programmatic channel; no new backend I/O, no business logic, no persistence of its own.
+- **Frontend** (`frontend/`): Next.js App Router. Client, Builder and Admin surfaces behind login, plus a static landing page. The catalogue is client-rendered and needs a login. Talks only to the Spring Boot API.
+- **Backend** (`backend/`): Spring Boot, Java 21. JWT and API-key auth, and all marketplace logic as DDD subdomains. Owns all state.
+- **Arbitration** (`arbitration/`): FastAPI + LangGraph worker. Consumes dispute jobs from RabbitMQ, calls OpenAI `gpt-4o`, posts a `{category, rationale}` ruling back over an authenticated HTTP callback. Stateless, and the only component that calls an LLM.
+- **MCP server** (`mcp/`): stdio facade translating four tools into API-key REST calls. No logic or storage of its own.
+- **Demo agent** (`demo-agent/`): a stub third-party Agent for local demos. Not part of the product.
 
 ## Shared infrastructure
 
-- **PostgreSQL** — single source of truth for all transactional state and the append-only credit ledger. JPA/Hibernate from the backend; the arbitration service is stateless and owns no tables.
-- **RabbitMQ** — task dispatch queue, dead-letter queue (timeouts/failures), arbitration queue. Decouples slow external calls (Agent webhooks, LLM) from the request path.
-- **Object storage** (S3-compatible / Railway volume) — task attachments and Agent outputs, referenced by URL from PostgreSQL.
-- **OpenAI API (`gpt-4o`)** — LLM reasoning, called only by the arbitration service, metered.
+- **PostgreSQL**: all transactional state and the append-only ledger.
+- **RabbitMQ**: task dispatch, arbitration jobs, and their dead-letter queues.
+- **Supabase Storage**: agent media only (`SupabaseStorageClient`). Task results are stored in `task_results` or referenced by an external `result_url`.
+- **OpenAI**: called only by the arbitration service.
 
-## Communication patterns
+## Communication
 
-- **Synchronous REST/JSON (JWT)** — frontend ↔ backend.
-- **Webhook dispatch + signed callback** — backend ↔ self-hosted third-party Agents. Dispatch carries a structured payload + short-lived signed token; callbacks are token-authenticated.
-- **Outbound push webhooks (transactional outbox + sweeper)** — backend → programmatic clients' HTTPS `callbackUrl`. On an API task's terminal transition the platform writes a `webhook_deliveries` outbox row (`task.completed`/`task.failed`) *inside the settling transaction*, and a single-instance `@Scheduled WebhookDeliverySweeper` claims due rows (`FOR UPDATE SKIP LOCKED`), HMAC-signs Stripe-style, POSTs over a **redirect-disabled, timeout-bounded** `RestClient`, and retries with exponential-with-cap backoff (`PENDING → DELIVERED`/`DEAD`, at-least-once). The callback URL is **SSRF-guarded at registration** (`WebhookUrlValidator`: HTTPS-only, DNS-resolved, blocking loopback/link-local/RFC1918/CGNAT/IPv6-ULA) — **Invariant #6 extended to outbound client I/O**. The webhook is a *doorbell*; the authoritative result stays behind `GET /api/tasks/{id}/result`.
-- **Async messaging (RabbitMQ)** — routing/dispatch, retry/DLQ, and arbitration jobs run off the request thread. Task→agent selection uses a multi-factor weighted score + ε-greedy (`RoutingMatchDomainService`); see `docs/matching-selection-mechanics.md`.
-- **`@Scheduled` reliability sweepers** — periodic jobs (single-instance today) are the safety net that async messaging alone can't cover: re-match held `AWAITING_CAPACITY` tasks (→ cancel + refund on exhaustion), time out silent executors past their `execution_deadline` (→ refund), and auto-accept/escalate stale disputes. Combined with the DLQ-refund path, every escrow exit ends in a recorded settlement.
-- **Correlation IDs** — generated at the gateway, propagated via `X-Correlation-ID` across the Java↔Python boundary and into dispatch metadata.
+- **REST/JSON**: frontend to backend through the `/api/*` proxy, with JWT.
+- **Agent dispatch**: RabbitMQ consumer to a signed HTTPS webhook; the agent answers on a token-authenticated callback.
+- **Arbitration**: RabbitMQ in, HTTP callback out with a shared secret.
+- **Client webhooks**: a transactional outbox plus `WebhookDeliverySweeper`, covering API tasks. See [`programmatic-channel.md`](programmatic-channel.md).
+- **Matching**: multi-factor score with ε-greedy selection in `RoutingMatchDomainService`; see [`matching.md`](matching.md).
+- **`@Scheduled` sweepers**: `CapacityRematchSweeper`, `ExecutionTimeoutSweeper`, `ArbitrationSweeper`, `RulingAcceptSweeper`, `WebhookDeliverySweeper`. They cover what messaging alone can't: stuck tasks, silent agents, stale disputes.
+- **Correlation IDs**: per flow, not global. Dispatch generates one and sends it as `X-Correlation-ID` to the agent; disputes carry their own in the message body; ledger writes record one. There is no inbound correlation filter.
 
-## Why the LLM is isolated to arbitration
+## Why the LLM is isolated
 
-Cost (the LLM is metered → called only at the dispute-arbitration tier) and trust (the money path must stay deterministic and auditable). The LLM never sees balances and never moves credits — it returns a ruling, and the domain layer maps it deterministically to a settlement outcome. The provider can be swapped behind the arbitration HTTP contract without touching the backend.
+Cost: it is metered, so it runs only at the dispute tier. Trust: the money path must stay deterministic. The LLM never sees balances and never moves credits; it returns a ruling and the domain maps that to a settlement. The provider can change behind the arbitration queue and callback contract without touching the backend.
 
 ## Deployment
 
-Docker image per service; Docker Compose locally; Railway in deployment. Arbitration service has no published port. Secrets (OpenAI key, DB/broker creds, JWT signing key, OAuth secrets) injected as env vars, never committed. Lightweight GitHub Actions CI (lint + JUnit/pytest, build, deploy on merge).
+Railway is the target, but the repo holds no deployment config. Only `arbitration/` has a Dockerfile, and there is no compose file. For local runs use [`demo-runbook.md`](demo-runbook.md). GitHub Actions runs lint, test and build; nothing deploys. Secrets come from env vars and are never committed.

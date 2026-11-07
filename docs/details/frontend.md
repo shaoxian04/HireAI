@@ -1,8 +1,7 @@
 # Frontend (Next.js demo UI)
 
-The `frontend/` app — **Next.js 16** (App Router) + TypeScript + Tailwind — is the **Client + Builder**
-happy-path for the marketplace demo. It talks **only** to the Spring Boot API. Distilled from the build;
-read before changing `frontend/`.
+The `frontend/` app — **Next.js 16** (App Router) + TypeScript + Tailwind — has three surfaces:
+**Client**, **Builder** and **Admin**. It talks **only** to the Spring Boot API.
 
 ## How it reaches the API (no CORS)
 
@@ -11,8 +10,8 @@ browser calls **same-origin** `/api/...`; Next forwards to the backend and the `
 passes through — so there is **no CORS config** on the backend. Set `BACKEND_URL` per environment.
 
 For Google OAuth (backend-driven), the browser must reach the backend directly. Set
-`NEXT_PUBLIC_API_ORIGIN` (default `http://localhost:8080`) — login and register pages link to
-`${NEXT_PUBLIC_API_ORIGIN}/oauth2/authorization/google` to start the OAuth dance.
+`NEXT_PUBLIC_API_ORIGIN` (default `http://localhost:8080`). `GoogleSignInButton` stores a random nonce in
+`sessionStorage`, then navigates to `${NEXT_PUBLIC_API_ORIGIN}/oauth2/authorization/google?cb_nonce=<nonce>`.
 
 ## The one HTTP chokepoint — `lib/api.ts`
 
@@ -48,43 +47,45 @@ agents calling the REST API directly; the browser always authenticates with the 
 Three localStorage keys, kept in sync:
 - **`hireai.token`** — the raw JWT (what `api()` reads);
 - **`hireai.auth`** — the session `{ userId, roles }` (NOT the token);
-- **`hireai.surface`** — the active surface (`"CLIENT"` or `"BUILDER"`), persisted across reloads.
+- **`hireai.surface`** — the active surface (`"CLIENT"`, `"BUILDER"` or `"ADMIN"`), persisted across reloads.
 
 `login` POSTs `/auth/login`; `register` POSTs `/auth/register {email, password, displayName?}`;
-`becomeBuilder` POSTs `/auth/become-builder {acceptTerms:true}` — all three write both keys and update
+`becomeBuilder` POSTs `/auth/become-builder {acceptTerms:true}` — all three write all three keys and update
 state. `loginWithToken(token)` stores a JWT received from the OAuth callback (returns `false` if the
 token is unparsable or carries no roles). State rehydrates in a mount effect (avoids an SSR hydration
-mismatch). A backward-compatible `readPersisted` normalises the legacy `{role}` session shape into
+mismatch), which first clears all three keys if the JWT is expired or corrupt (`isExpiredJwt`). A backward-compatible `readPersisted` normalises the legacy `{role}` session shape into
 `{roles:[role]}` so old localStorage sessions still work.
 
 **`roles`** is the full `Role[]` set; **`hasRole(r)`** tests membership; **`activeSurface`** is the
-currently displayed surface (`CLIENT` or `BUILDER`), derived from the persisted `hireai.surface` key
-or defaulting to the first role; **`setActiveSurface(r)`** updates it. **`role`** is a back-compat
-alias for `activeSurface` (used by `RoleGuard`).
+currently displayed surface, read from `hireai.surface`; on login it is `CLIENT` if held, otherwise the
+first role. **`setActiveSurface(r)`** updates it. **`role`** is a back-compat alias for `activeSurface`
+(used by `Nav`).
 
 ## `lib/jwt.ts` — client-side decode
 
-`decodeJwt(token): JwtClaims | null` base64-decodes the JWT payload and extracts `{ userId, roles }`.
+`decodeJwt(token): JwtClaims | null` base64-decodes the JWT payload and extracts `{ userId, roles, exp }`.
 This is **not a signature verification** — only for UI gating. It tolerates both the new `roles` array
 claim and the legacy `role` string claim. Returns `null` if the token is unparsable.
 
 ## Routes (`app/`)
 
-- `login/` — email + password → `useAuth().login` → redirect by role (CLIENT→`/client`, BUILDER→`/builder`).
-  Also shows a "Continue with Google" button linking to `${NEXT_PUBLIC_API_ORIGIN}/oauth2/authorization/google`.
+- `/` — static marketing landing page.
+- `login/` — email + password → `useAuth().login` → redirect by `homeFor` (`/client` if CLIENT, else
+  `/builder`, else `/admin`, so dual-role users land on `/client`). Also shows `GoogleSignInButton`.
 - `register/` — email + password + display name → `useAuth().register` → redirect to `/client`. Also
-  shows the same "Continue with Google" button.
+  shows `GoogleSignInButton`.
 - `auth/callback/` — landing page for the backend OAuth success redirect
-  (`/auth/callback#token=<jwt>`). Reads the token from the URL fragment (never sent to a server),
-  calls `loginWithToken`, scrubs the fragment from history with `replaceState`, and routes by role.
-  On any `?error=` param redirects to `/login?error=oauth`.
+  (`/auth/callback#token=<jwt>&nonce=<nonce>`). Reads both from the URL fragment (never sent to a server)
+  and requires the nonce to match `sessionStorage` (login-CSRF guard), then calls `loginWithToken`, scrubs
+  the fragment with `replaceState`, and routes by role. A mismatch or any `?error=` param redirects to
+  `/login?error=oauth`.
 - `client/become-builder/` — terms acceptance page; calls `useAuth().becomeBuilder()` on confirm,
   which adds the `BUILDER` role and re-issues the token; switches `activeSurface` to `BUILDER` and
   routes to `/builder`.
 - `builder/` — portfolio dashboard (wallet tile links to earnings); `builder/earnings` — earnings
   view (lifetime/pending totals from `GET /api/builder/earnings`, per-agent breakdown, payout
   history; amounts derived server-side from `SettlementPolicy`); `builder/agents/new` — register
-  an agent; `builder/agents/[id]` — manage console (tabs: Storefront · Pricing & tags · Stats ·
+  an agent; `builder/agents/[id]` — manage console (tabs: Storefront · Pricing · Stats ·
   **Reputation** · Reviews; image uploader via `apiUpload`). **Reputation** renders the owner-only
   breakdown from `GET /api/agents/{id}/reputation`: the score on a marked 0–100 scale (50 = the
   neutral start), Reliability and Satisfaction as separate meters, and the event stream with each
@@ -96,8 +97,8 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   wallet (resolution badges on each task row); `client/tasks/new` — **searchable category picker** (`CategoryCombobox` from `/catalogue/categories`, strict —
   Find-agents gated on a real category) → match-preview **shortlist → pick → book** at the
   agent's price (the `ShortlistPanel` opens in a `Modal` popout of ranked agent cards: profile avatars,
-  best-match highlight, a plain-language `DeliveryRecord`, above-budget near-miss drawer; `localStorage`
-  draft — **no reputation number and no stars**: the shortlist once divided the routing composite by 20
+  best-match highlight, a plain-language `DeliveryRecord`, above-budget near-miss drawer; booking is
+  `POST /tasks/direct`, so a near-miss pick pays above the typed budget; `localStorage` draft — **no reputation number and no stars**: the shortlist once divided the routing composite by 20
   and drew it as a five-star client rating, which is a different quantity entirely); `client/tasks/[id]` — polls
   result; at `PENDING_REVIEW` renders the `ResultReviewBar` (accept / reject with an A/B/C reason), then on
   `RESOLVED` shows the settled summary plus a dismissible `RatingPrompt` (`POST /api/tasks/{id}/review`,
@@ -114,6 +115,8 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   resend); `client/agents/[id]` — agent storefront; `client/agents/[id]/book` — direct-booking form (adopts
   agent's `output_spec`). The `client/tasks/[id]` view also shows a per-task `WebhookDeliveryStatus`
   indicator with a resend action.
+- `admin/` — overview plus read-only task, user-wallet and agent browsers; `admin/disputes` — the dispute queue; `admin/disputes/[id]` — dispute detail with
+  the tier-2 human-backstop ruling.
 
 **`AgentDTO` is nested** — read `agent.currentVersion.{ capabilityCategories, price, webhookUrl }`, not the root.
 
@@ -122,9 +125,12 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
 `components/Nav.tsx` reads `activeSurface`, `hasRole`, and `setActiveSurface` from `useAuth()`. When the
 signed-in user holds **both** roles (`CLIENT` and `BUILDER`), a pill switcher renders inline — each
 option is a `<Link>` (routes to that surface's home) that also calls `setActiveSurface` on click. Single-
-role users see no switcher; the nav links shown depend on `activeSurface`. The CLIENT surface shows
-Marketplace · My tasks · **API keys** · **Disputes** — the Disputes link carries a count badge of disputes
-awaiting the client's decision (`RULED`), sourced from `lib/useDisputeCount.ts` (`GET /api/disputes/mine`).
+role users see no switcher; the nav links shown depend on `activeSurface`:
+
+- **CLIENT:** Marketplace · My tasks · API keys · Webhooks · Disputes. Disputes carries a count badge of
+  disputes awaiting the client's decision (`RULED`), from `lib/useDisputeCount.ts` (`GET /api/disputes/mine`).
+- **BUILDER:** My agents · Earnings.
+- **ADMIN:** Overview · Disputes.
 
 ## Role guards
 
@@ -139,8 +145,10 @@ directly so it doesn't bounce an authenticated user before context rehydrates.
   searchable category picker) and `components/TaskFailurePanel.tsx` (per-failure panels) are feature components.
   `lib/outputSpecFields.tsx` is the shared output-spec sub-form. `components/manage/Tab*.tsx` are the
   builder manage-console panels; `components/DeliveryRecord.tsx` (client-facing delivery facts, no score)
-  and `components/RatingPrompt.tsx` are the Module 5 client surfaces.
-- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run` (~190 tests). Auth-dependent tests
+  and `components/RatingPrompt.tsx` are the Module 5 client surfaces. `lib/useIdempotencyKey.ts` supplies the
+  `Idempotency-Key` for both booking pages; `lib/taskStage.ts` maps `TaskStatus` to the six-stage pipeline.
+- Tests: **Vitest + React Testing Library + MSW** — `npx vitest run`. `e2e/smoke.spec.ts` is not part of
+  that run and needs Playwright, which is not in `package.json`. Auth-dependent tests
   must seed **both** `hireai.token` and `hireai.auth`. The gate is **all three** of `npm run lint`,
   `npx vitest run` and `npm run build` — CI enforces eslint, and `build` has caught a missing type
   import that lint and vitest both passed.
@@ -154,4 +162,3 @@ check the official Next 16 docs when an API differs from what you expect.
 ## Pending / demo-grade
 
 JWT in `localStorage` (httpOnly cookie is the hardening); status via polling (no websockets).
-(The admin surface **is** built — `app/admin/` + `app/admin/disputes/[id]`, the tier-2 human backstop.)

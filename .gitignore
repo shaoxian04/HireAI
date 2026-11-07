@@ -52,3 +52,6 @@ cloudflared.exe
 
 # Maven build output
 backend/target/
+
+# Stray screenshots from browser testing
+/*.png

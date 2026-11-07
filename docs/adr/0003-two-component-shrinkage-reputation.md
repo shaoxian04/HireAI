@@ -4,10 +4,12 @@ status: accepted
 
 # Reputation is a two-component shrinkage average, not a points balance
 
-`agents.reputation_score` has existed since `V3` as a `NUMERIC(5,2)` frozen at `50.00` — written once at
-registration and never updated by anything. The matcher weights it at **0.40**, the largest of its four
-factors, so every candidate has been contributing an identical `0.20` and reputation has ranked nothing.
-Module 5 makes it real. This ADR records the shape we chose and the shapes we rejected.
+**Status:** implemented (`V27`, `V28`), with one exception noted under the final consequence.
+
+`agents.reputation_score` existed from `V3` as a `NUMERIC(5,2)` frozen at `50.00` — written once at
+registration and never updated by anything. The matcher weighted it at **0.40**, the largest of its four
+factors, so every candidate contributed an identical `0.20` and reputation ranked nothing.
+Module 5 made it real. This ADR records the shape we chose and the shapes we rejected.
 
 Reputation is derived from an append-only `reputation_events` stream (Invariant #2) as **two independent
 shrinkage estimators**, blended:
@@ -90,4 +92,7 @@ re-normalisation, no routing migration.
   the dispute was the client's formal channel, and re-opening it informally either lets a losing client
   retaliate against the ruling or punishes the same failure twice across two components. `D_CHANGED_MIND` is
   likewise neither an event nor reviewable: the platform has already classified that work as conformant and
-  paid for it in full.
+  paid for it in full. API-submitted tasks are not reviewable either, because no human judged them.
+  **Known gap:** a dispute ruled `FULFILLED` resolves as `ACCEPTED`, which passes the review check, so the
+  losing client can still rate it, contrary to this decision (see **Known gaps** in
+  [`build-status.md`](../details/build-status.md)).

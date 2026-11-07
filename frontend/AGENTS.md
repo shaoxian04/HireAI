@@ -1,7 +1,10 @@
-# frontend/ — HireAI demo UI
+# frontend/ — HireAI UI
 
-Next.js 16 (App Router) + TypeScript + Tailwind, Client + Builder demo surfaces; talks only to the Spring
-Boot API. Conventions → ../docs/details/frontend.md · Auth → ../docs/details/identity-and-authz.md
+Next.js 16 (App Router) + TypeScript + Tailwind, with Client, Builder and Admin surfaces; talks only to the
+Spring Boot API.
+
+**Read [`../docs/details/frontend.md`](../docs/details/frontend.md) before changing this app.** Auth
+mechanics: [`../docs/details/identity-and-authz.md`](../docs/details/identity-and-authz.md).
 
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know
