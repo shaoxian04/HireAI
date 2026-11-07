@@ -16,4 +16,4 @@ Edit the right-hand column to match whatever vocabulary you actually use.
 
 ## Repo state
 
-As of setup, only `wontfix` exists in `shaoxian04/HireAI` (it ships with every GitHub repo). The other four are created on first use — `gh label create <name>` — or by `/triage` when it first needs them. The repo's pre-existing `bug` / `enhancement` / `question` / `documentation` labels are orthogonal topic labels and are left alone.
+`wontfix` and `ready-for-agent` exist in `shaoxian04/HireAI`. The other three are created on first use — `gh label create <name>` — or by `/triage` when it first needs them. The repo's pre-existing `bug` / `enhancement` / `question` / `documentation` labels are orthogonal topic labels and are left alone.

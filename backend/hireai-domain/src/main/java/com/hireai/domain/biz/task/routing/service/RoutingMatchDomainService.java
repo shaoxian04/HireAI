@@ -20,7 +20,7 @@ import java.util.UUID;
  *             under-sampled agents occasionally win a real auto-routed job.
  *
  * Exploration randomises SELECTION only — settlement stays deterministic (Hard Invariant #3).
- * Rationale + scenarios: docs/matching-selection-mechanics.md.
+ * Rationale + scenarios: docs/details/matching.md.
  */
 public interface RoutingMatchDomainService {
 

@@ -1,8 +1,6 @@
 # HireAI demo stub Agent
 
-A minimal stand-in for a third-party Agent, used to demo the marketplace spine end-to-end.
-It receives a signed dispatch webhook, simulates ~2s of work, and POSTs a spec-conforming
-result back to the platform's callback URL using the SAME dispatch token it was given.
+A minimal stand-in for a third-party Agent. It receives a signed dispatch webhook, simulates about 2s of work, and POSTs a fixed result to the platform's callback using the same dispatch token. Full stack: [`demo-runbook.md`](../docs/details/demo-runbook.md).
 
 ## Run
 
@@ -14,38 +12,28 @@ pip install -r requirements.txt
 uvicorn app:app --host 127.0.0.1 --port 9000
 ```
 
-The agent listens on `http://localhost:9000/run`.
+The agent listens on `http://localhost:9000/run`. With it running, `python demo-agent/smoke_test.py` from the repo root checks the callback round trip.
 
-## Demo content (staged pairing)
+## What it returns
 
-The stub returns a **hard-coded** summary (`DEMO_SUMMARY` in `app.py`) that matches
-[`demo-article.txt`](demo-article.txt). For a convincing demo, paste that article as the task
-description — the "summarisation" result will genuinely correspond to it. The stub performs no
-real summarisation.
+It ignores the task apart from `taskId` and `callbackUrl`, and always sends a **hard-coded** summary (`DEMO_SUMMARY` in `app.py`) of [`demo-article.txt`](demo-article.txt) as `{"summary": ...}` with `resultUrl: null`. Paste that article as the task description so the result reads as genuine.
 
-## HTTPS is required at registration (Hard Invariant #6)
+It therefore passes `TEXT`, or `JSON` with no conflicting schema. It fails `FILE` format and any schema requiring other fields, ending in `SPEC_VIOLATION`.
 
-The platform enforces HTTPS for Agent webhooks **at registration** (`AgentVersionModel.create`
-rejects any non-`https://` URL) *and* at dispatch (`AgentDispatchClient`). The registration check
-is **unconditional**: `DISPATCH_ALLOW_INSECURE_LOCALHOST` relaxes only the *dispatch-time*
-transport check, **not** registration. So `webhook_url = http://localhost:9000/run` **cannot be
-registered** — the API rejects it with `Webhook URL must be HTTPS`, before dispatch is ever
-reached. (That flag is therefore effectively unreachable for the Agent-webhook path.)
+Because it ignores the task, a demo with this stub cannot show whether real task content reaches an agent. See [Known gaps](../docs/details/build-status.md#known-gaps).
 
-For a local demo, expose this stub over HTTPS with a tunnel and register the Agent with the
-resulting `https://…` URL — no backend flag needed (the dispatch is HTTPS too):
+## HTTPS is required (Hard Invariant #6)
+
+Registration rejects any non-`https://` webhook with `Webhook URL must be HTTPS`, unconditionally (`AgentVersionModel`). `DISPATCH_ALLOW_INSECURE_LOCALHOST` relaxes only the dispatch-time check in `AgentDispatchClient`, so `http://localhost:9000/run` can't be registered at all.
+
+Expose the stub over a tunnel and register `https://<tunnel-host>/run`:
 
 ```
 cloudflared tunnel --url http://localhost:9000     # -> https://<random>.trycloudflare.com
 # or: ngrok http 9000
 ```
 
-Register the Agent with `webhook_url = https://<tunnel-host>/run`. The signed dispatch token is
-still issued on dispatch and verified on the callback.
-
 ## Wire contracts
 
-- **Receives** (body B): `{ taskId, category, title, description, expectedDeliverable, outputSpec, callbackUrl }`
-  with headers `Authorization: Bearer <token>`, `X-Correlation-ID: <id>`.
-- **Sends** (body A) to `callbackUrl`: `{ agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }`
-  with header `Authorization: Bearer <same token>`.
+- **Receives:** `{ taskId, category, title, description, expectedDeliverable, outputSpec, callbackUrl }` with headers `Authorization: Bearer <token>` and `X-Correlation-ID: <id>`.
+- **Sends** to `callbackUrl`: `{ agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }` with `Authorization: Bearer <same token>`.

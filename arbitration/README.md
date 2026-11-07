@@ -1,79 +1,51 @@
 # HireAI Arbitration Worker
 
-A standalone Python microservice that consumes dispute requests from RabbitMQ,
-runs a LangGraph arbitration graph (backed by OpenAI), and posts a structured
-ruling back to the Spring backend via a shared-secret callback.
+A Python service that consumes dispute requests from RabbitMQ, runs a LangGraph arbitration graph on OpenAI, and posts a structured ruling back to the Spring backend.
 
-## Architecture
+## How it works
 
-### Inbound queue
+**Inbound.** Consumes `task.dispute.requested`. The Java backend owns the topology; this service declares only the queue, passively, so it must start **after** the backend. If the queue is missing, the consumer task dies while `/health` keeps returning OK.
 
-- **Queue:** `task.dispute.requested`
-- **Topology owner:** The Java backend declares the exchange and queue; this
-  service declares them *passively* (consume-only, no declare). The worker must
-  start **after** the backend has already declared the topology.
+**Graph.** `gather_evidence → deliberate → classify → critique` (`app/graph/build.py`).
 
-### Outbound callback
+**Outbound.** `POST {BACKEND_BASE_URL}/api/arbitration-callbacks/{disputeId}/ruling` with `Authorization: Bearer <ARBITRATION_CALLBACK_SECRET>` and:
 
-`POST {BACKEND_BASE_URL}/api/arbitration-callbacks/{disputeId}/ruling`
-
-Headers:
-- `Authorization: Bearer <ARBITRATION_CALLBACK_SECRET>`
-- `Content-Type: application/json`
-
-Body (JSON):
 ```json
-{
-  "category": "FULFILLED | PARTIALLY_FULFILLED | NOT_FULFILLED",
-  "rationale": "..."
-}
+{ "category": "FULFILLED | PARTIALLY_FULFILLED | NOT_FULFILLED", "rationale": "..." }
 ```
 
-The arbitrator returns **only** a category and a rationale string. All credit
-movement (settlement, refunds, splits) is computed deterministically by the Java
-domain layer from the ruling category — the arbitrator never touches money
-(Invariant #3).
+The arbitrator returns only a category and rationale. All credit movement is computed by the Java domain layer from the category; it never touches money (Invariant #3).
 
-## Environment variables
+**Failure handling** (`app/consumer.py`). Up to 3 attempts with 1s and 2s backoff; a 4xx from the callback is not retried. The message is acked only after a 2xx. Persistent failure nacks to `task.dispute.requested.dlq`, and Java then escalates the dispute to the admin.
+
+## Configuration
+
+Read from the environment or a local `.env` in this directory (git-ignored). `OPENAI_API_KEY` and `ARBITRATION_CALLBACK_SECRET` are needed for the service to do anything: if either is empty the app still starts, logs a warning and **runs no consumer**, and `/health` stays OK.
 
 | Variable | Default | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | *(required)* | OpenAI API key |
+| `OPENAI_API_KEY` | empty | OpenAI API key |
+| `ARBITRATION_CALLBACK_SECRET` | empty | Must match the backend's value |
 | `OPENAI_MODEL` | `gpt-4o` | Model for arbitration |
 | `RABBITMQ_URL` | `amqp://guest:guest@localhost:5672/` | RabbitMQ connection URL |
-| `ARBITRATION_CALLBACK_SECRET` | *(required)* | Shared secret sent to backend callback |
 | `BACKEND_BASE_URL` | `http://localhost:8080` | Backend base URL |
 | `DISPUTE_QUEUE` | `task.dispute.requested` | Queue to consume from |
-| `FETCH_MAX_BYTES` | `5000000` | Max bytes for fetching task results |
-| `FETCH_TIMEOUT_SECONDS` | `10.0` | HTTP fetch timeout (seconds) |
-| `CALLBACK_TIMEOUT_SECONDS` | `10.0` | Callback HTTP timeout (seconds) |
-
-Copy `.env.example` → `.env` and fill in the required values before running locally.
+| `FETCH_MAX_BYTES` | `5000000` | Max bytes when fetching task results |
+| `FETCH_TIMEOUT_SECONDS` | `10.0` | Fetch timeout |
+| `CALLBACK_TIMEOUT_SECONDS` | `10.0` | Callback timeout |
 
 ## Development
 
-### Setup
-
 ```bash
 uv sync --dev
-```
-
-### Run tests
-
-```bash
-uv run pytest
-```
-
-### Lint
-
-```bash
+uv run uvicorn app.main:app --reload    # /health at http://localhost:8000/health
 uv run ruff check .
 ```
 
-### Run locally
+Run tests with the keys blanked:
 
 ```bash
-uv run uvicorn app.main:app --reload
+OPENAI_API_KEY= ARBITRATION_CALLBACK_SECRET= uv run pytest
 ```
 
-The `/health` endpoint will be available at `http://localhost:8000/health`.
+Plain `uv run pytest` hangs if `.env` holds real keys: `test_health_ok` assumes empty config, so it starts a live consumer against whatever broker `RABBITMQ_URL` points at. CI has no keys and doesn't hit this.

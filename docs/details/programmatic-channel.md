@@ -1,129 +1,126 @@
 # The programmatic (API-key) channel
 
-How a **machine client** — a client agent or third-party system, no human in the loop — submits tasks and consumes results. It is a distinct channel that runs over the **unchanged submit / escrow / routing / validation core**; it adds only edge adapters (API-key auth, idempotency, spend caps, deterministic settlement, push webhooks). No money-table changes.
+How a **machine client** (a client agent or third-party system, no human in the loop) submits tasks and consumes results. Read before touching API keys, programmatic submit, auto-settlement, webhooks, or the MCP facade.
 
-Two build phases, both live: **Phase 3** — the submission spine (API keys, idempotency, spend caps, `V25`); **Phase 4** — deterministic auto-settlement + signed push webhooks (`V26`). Live full-stack E2E verified 2026-07-21 (both event types, HMAC, SSRF guard, open + direct booking).
+It widens HireAI's entry point from "a human submits a task" to "any authenticated client does", the first step toward agents hiring agents. A key is a **credential of a client account**, not a new identity: it shares that account's wallet and ownership. The channel is edge adapters (key auth, idempotency, spend caps, deterministic settlement, push webhooks) over the unchanged submit, escrow, routing and validation core. It touches no money table.
 
-**Design depth (point-in-time specs):** `docs/superpowers/specs/2026-07-14-programmatic-spine-design.md` (Phase 3), `docs/superpowers/specs/2026-07-19-push-webhooks-design.md` (Phase 4), and the product/requirements roadmap `docs/programmatic-task-submission.md`. **Slices:** auth in `identity-and-authz.md`; schema in `data-model.md` (`V25`/`V26`).
+Auth internals and the allow-list: [`identity-and-authz.md`](identity-and-authz.md). Schema: [`data-model.md`](data-model.md). Design history: `docs/superpowers/specs/2026-07-14-programmatic-spine-design.md`, `2026-07-19-push-webhooks-design.md`, `2026-07-22-mcp-server-design.md`.
 
-## End-to-end flow (happy path)
+## End-to-end flow
 
 ```
-API key  ──(Authorization: ApiKey <raw>)──►  submit (open|direct)
-  → idempotency check + spend-cap check      [reject: 409 IDEMPOTENCY_CONFLICT / SPEND_CAP_EXCEEDED]
-  → atomic escrow freeze                      (Inv #1)
-  → routing/matching → RabbitMQ dispatch → signed HTTPS webhook to the Agent
-  → Agent callback (POST /api/agent-callbacks/{taskId}/result, dispatch-token auth)
-  → validation gate against the frozen output_spec   (Inv #4)
-        PASS → settleAccepted (85/15 payout) → task RESOLVED
-        FAIL → refund → task SPEC_VIOLATION
-  → webhook enqueued to the outbox *in the same transaction as settlement*   (Inv #2)
-  → @Scheduled WebhookDeliverySweeper signs + POSTs the event to the client's callbackUrl
+API key ──(Authorization: ApiKey <raw>)──► submit (open | direct)
+  → idempotency + spend-cap checks       [409 IDEMPOTENCY_CONFLICT / SPEND_CAP_EXCEEDED]
+  → atomic escrow freeze                 (Inv #1)
+  → routing → RabbitMQ dispatch → signed HTTPS webhook to the Agent
+  → Agent callback (dispatch-token auth)
+  → validation gate on the frozen output_spec
+        PASS → settleAccepted (85/15) → RESOLVED
+        FAIL → refund → SPEC_VIOLATION
+  → outbox row written in the settling transaction
+  → WebhookDeliverySweeper signs and POSTs to the client's callback
   → client verifies the HMAC, then GETs the real result
 ```
 
-The webhook is a **doorbell**, not the payload: the client always fetches the authoritative result through the existing `GET /api/tasks/{id}/result`. **Polling is the always-available reconciliation path underneath** — webhooks are an optimization, never the only way to learn an outcome.
+The webhook is a **doorbell**, not the payload: the client fetches the result with `GET /api/tasks/{id}/result`. **Polling is the always-available path**; webhooks are an optimization, and some outcomes produce none (§6).
 
-## 1. Authentication — API keys
+## 1. Authentication
 
-- **`ApiKeyAuthenticationFilter`** runs alongside the JWT filter and sets the **same UUID principal** under a single **`ROLE_API_CLIENT`** authority. It **never overrides an existing JWT auth** (a human session wins).
-- Header: **`Authorization: ApiKey <rawKey>`**.
-- Keys are stored as a **hex SHA-256 hash** + a display prefix (e.g. `hk_live_a1b2c3`); the raw key is shown **once** at creation and never again. `last_used_at` is bumped throttled.
-- **Key management is JWT-only** (`POST`/`GET /api/keys`, `POST /api/keys/{id}/revoke`, owner-scoped; dashboard `/client/keys`) — a leaked key can submit/spend but can never mint or revoke keys. Revoking a key you don't own is `NOT_FOUND` (no existence leak).
+- Header `Authorization: ApiKey <rawKey>` or `X-API-Key: <rawKey>`.
+- Stored as a hex SHA-256 hash plus a display prefix (`hk_live_…`). The raw key is shown once, at creation.
+- **Key management is JWT-only** (`/client/keys` dashboard): a leaked key can submit and spend, but never mint or revoke keys.
 
-See `identity-and-authz.md` for the filter internals and the full allow-list.
+## 2. Idempotency
 
-## 2. Idempotency (retry-safe submit)
+Optional `Idempotency-Key` header. `idempotency_keys` is `UNIQUE (owner_id, idempotency_key)`, so a racing duplicate hits the constraint **in the same transaction as the escrow freeze**: the whole submit rolls back, with no double-freeze, and the loser re-reads the winning task. The same key with a different request fingerprint is `409 IDEMPOTENCY_CONFLICT`.
 
-Optional **`Idempotency-Key`** header. `idempotency_keys` has **`UNIQUE (owner_id, idempotency_key)`**: a duplicate submit racing under the same key hits the constraint **inside the same transaction as the escrow freeze**, so the whole submit (freeze included) rolls back — **no double-freeze** — and the loser re-reads the winning task in a fresh transaction and returns it. A same-key submit with a *different* request fingerprint (SHA-256 of the normalized payload) is a `409 IDEMPOTENCY_CONFLICT`. This is what makes Invariant #1 safe under client retries.
+## 3. Spend caps
 
-## 3. Spend caps (per key, optional)
+Two independent optional caps per key; exceeding either is `409 SPEND_CAP_EXCEEDED`. Null means uncapped.
+- `spend_cap`: the sum of currently frozen escrow across the key's in-flight tasks.
+- `daily_spend_cap`: budget committed in the rolling last 24h.
 
-Two **independent** optional caps on each API key, either exceeded → **`409 SPEND_CAP_EXCEEDED`**:
-- **Concurrent frozen escrow** (`spend_cap`) — cap on the sum of currently-frozen escrow across the key's in-flight tasks.
-- **Rolling-24h daily spend** (`daily_spend_cap`) — cap on budget committed in the last 24h.
+Both are an authorization **read** over `api_key_task`, never a second ledger (Inv #2).
 
-Both are computed as an **authorization *read*** over `api_key_task` — never a second ledger (Invariant #2). Null = uncapped.
+## 4. Submit modes
 
-## 4. Submit modes — open vs direct
+Both go through `SubmitOrchestrationAppService` (idempotency, caps, attribution) and accept a `CLIENT` JWT or an `API_CLIENT` key.
 
-Both submit endpoints are fronted by **`SubmitOrchestrationAppService`** (which owns the idempotency + spend-cap + attribution logic) and are reachable by a `CLIENT` JWT **or** an `API_CLIENT` key.
-
-| Mode | Endpoint | Body | Routing | Spec source |
+| Mode | Endpoint | Body | Agent | Spec |
 |---|---|---|---|---|
-| **Open** | `POST /api/tasks` | `{title, description, category, budget, outputSpec}` | matcher picks the agent | the **task's** submitted `output_spec` |
-| **Direct** | `POST /api/tasks/direct` | `{title, description, budget, agentId}` | pinned to `agentId` | **inherits the agent's** registered `output_spec` |
+| **Open** | `POST /api/tasks` | `{title, description, category, budget, outputSpec}` | Matcher picks | The client's submitted spec |
+| **Direct** | `POST /api/tasks/direct` | `{title, description, budget, agentId}` | Pinned | Inherits the agent's spec |
 
-Direct booking is **pay-the-price** and requires the target agent to be **`ACTIVE` + listed** — an unlisted or missing agent surfaces as **`404 NOT_FOUND`** (deliberate anti-enumeration, the Inv #5 no-leak pattern), *not* 403.
+- **Open mode is API and MCP only.** The web UI always books direct, after a shortlist from `GET /api/tasks/match-preview`.
+- **Open mode routes unlisted agents too:** candidates need only be `ACTIVE`, in category and within budget.
+- **Direct mode needs `ACTIVE` and listed.** Anything else is `404 NOT_FOUND`, deliberately, to avoid leaking existence.
+- **Direct budget:** must be at least the agent's price, or `400 VALIDATION_ERROR`. **The submitted budget is what freezes and settles**, so a caller who over-budgets pays that amount. Only the web UI sends `budget = price`. See [Known gaps](build-status.md#known-gaps).
 
-## 5. Deterministic auto-settlement (the design pivot)
+## 5. Deterministic auto-settlement
 
-A machine client must **not** be asked to do a human-style "review → accept/reject". So for the API channel, **validation is the settlement trigger** (`ValidationAppServiceImpl` detects the channel via `apiKeyTaskRepository.findApiKeyIdByTask`):
+A machine client must not be asked for a human "review, then accept or reject". So on this channel **validation is the settlement trigger** (`ValidationAppServiceImpl`, branching on `apiKeyTaskRepository.findApiKeyIdByTask`):
 
-- **PASS → `settleAccepted` (85/15 payout) → `RESOLVED`.**
-- **FAIL → refund → `SPEC_VIOLATION`.**
+- **PASS:** `settleAccepted`, `RESOLVED`, and reputation `TASK_ACCEPTED`.
+- **FAIL:** refund, `SPEC_VIOLATION`, and reputation `SPEC_VIOLATION`.
 
-This **skips `PENDING_REVIEW`, accept/reject, and the entire dispute/arbitration/appeal path**. Consequences:
-- `POST /api/tasks/*/accept`/`/reject` are **dropped from the API allow-list** (an `API_CLIENT` key hitting them is 401 — there is nothing to accept).
-- There is **no dispute path for API-submitted tasks** (immediate auto-settle makes them terminal; post-settlement clawback is out of scope).
-- **Human-submitted tasks are unchanged** — they keep `PENDING_REVIEW → RESOLVED`, accept/reject, and the full dispute flow.
+This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject are denied to API keys (401), API tasks have no dispute path, and they can't be reviewed, so they never produce a Satisfaction event. Human-submitted tasks are unchanged. Settlement is fully deterministic with no LLM (Inv #3).
 
-**Honest limitation (accepted):** a fully autonomous client has **no recourse** for output that is spec-valid but semantically poor — it pays. Its levers are (a) a **stricter `output_spec`** and (b) **agent selection / reputation** over time. Subjective recourse needs a subject; the machine channel has none. A programmatic dispute API is explicitly future/out-of-scope.
+**What the gate actually checks** (`ValidationDomainServiceImpl`) is format and JSON Schema only:
+- `TEXT` passes on any non-blank payload.
+- `JSON` must parse, and a blank or non-JSON-Schema `schema` is skipped.
+- `FILE` needs a valid HTTPS URL.
+- `acceptanceCriteria` is **never evaluated** here. It is only arbitration evidence, and API tasks don't reach arbitration.
 
-This **reinforces Invariant #3** (settlement is 100% deterministic, no LLM) and makes **Invariant #4** (the frozen `output_spec`) the *sole* acceptance test for the channel.
+**Accepted limitation:** a fully autonomous client has no recourse for output that is spec-valid but poor; it pays. Its levers are a real JSON Schema (or a stricter format) and agent choice. A programmatic dispute API is out of scope.
 
 ## 6. Push webhooks
 
-**Subscription (per API key, JWT-only):** `POST`/`GET /api/webhooks/subscription`, `POST /api/webhooks/subscription/rotate-secret`, `POST /api/webhooks/subscription/deactivate`. Registers one HTTPS `callbackUrl` + a `signingSecret`; **≤1 ACTIVE subscription per key** (partial UNIQUE index).
+**Subscription (per API key, JWT-only):**
+- `POST /api/webhooks/subscription` with `{apiKeyId, callbackUrl}`. The signing secret is server-generated. Re-registering replaces the active subscription, and there is at most one per key.
+- `GET` with `?apiKeyId=`, and `POST …/rotate-secret`, `POST …/deactivate`, likewise `?apiKeyId=`.
 
-**SSRF guard at registration** (`WebhookUrlValidator`) — **Invariant #6 extended to outbound client I/O**: HTTPS-only, the host is **DNS-resolved**, and loopback / link-local (incl. cloud-metadata `169.254.169.254`) / RFC1918 / **CGNAT 100.64/10** / **IPv6-ULA** are blocked.
+**SSRF guard** (`WebhookUrlValidator`, Inv #6 outbound), checked **at registration and before every delivery attempt**: HTTPS only; the host is DNS-resolved; loopback, link-local (incl. cloud metadata), RFC1918, CGNAT and IPv6 ULA are blocked. `WEBHOOKS_ALLOW_INSECURE_LOCALHOST` exempts `http://localhost` for dev.
 
-**Two events, both thin:** `task.completed` (doorbell) and `task.failed` (doorbell + inline `reason` + `refunded`).
+**Events:** `task.completed` (doorbell) and `task.failed` (doorbell plus `reason` and `refunded`). `reason` is one of `SPEC_VIOLATION`, `FAILED`, `TIMED_OUT`, `CANCELLED`.
 
-**Transactional outbox + sweeper (at-least-once):**
-- On the terminal transition the platform writes a `webhook_deliveries` row **inside the settling transaction** (Inv #1/#2 safe — an outbox row, never a second ledger). Its `id` doubles as the client-facing `event_id`.
-- **`@Scheduled WebhookDeliverySweeper`** (PT5S) claims due rows `FOR UPDATE SKIP LOCKED`, signs, POSTs over a **dedicated redirect-disabled `RestClient`** with connect/read timeouts, then applies **exponential-with-cap backoff** → `DELIVERED` / `PENDING` / `DEAD`. Single-instance today (like the other reliability sweepers).
+**Outbox and sweeper (at-least-once):**
+- The terminal transition writes a `webhook_deliveries` row in the settling transaction. Its `id` doubles as the client-facing event id.
+- An API task whose key has no active subscription gets no row, and registering later does not replay it.
+- A dispatch that dead-letters ends `FAILED` with a refund and **no event**: polling is the only signal. See [Known gaps](build-status.md#known-gaps).
+- `WebhookDeliverySweeper` claims due rows with `FOR UPDATE SKIP LOCKED`, which is safe across instances, then signs and POSTs over a redirect-disabled `RestClient`. Failures back off exponentially with a cap until `DEAD`. Values: `hireai.webhooks.*` in `application.yml`.
 
-**Signature (Stripe-style):** header `X-HireAI-Signature: t=<unix-ts>,v1=<hex hmac-sha256(secret,"{ts}.{body}")>` alongside `X-HireAI-Event-Id` and `X-HireAI-Event-Type`. The client verifies by recomputing the HMAC over `"{t}.{rawBody}"` and constant-time-comparing `v1`. The platform authenticates *itself to the client* with the HMAC — no JWT, no dispatch token on the outbound call.
+**Signature:** `X-HireAI-Signature: t=<unix-ts>,v1=<hex hmac-sha256(secret,"{ts}.{body}")>`, with `X-HireAI-Event-Id` and `X-HireAI-Event-Type`. The client recomputes over `"{t}.{rawBody}"` and constant-time-compares `v1`.
 
-**Reconciliation & failure surface:** `GET /api/webhooks/deliveries` (log) + `POST /api/webhooks/deliveries/{id}/redeliver` (manual resend), both reachable by `CLIENT` or `API_CLIENT`; the dashboard shows per-delivery `DELIVERED`/`PENDING`/`DEAD` badges and an account-scoped `DEAD`-failure banner. A row goes `DEAD` after the retry window is exhausted; the client can always fall back to polling.
+**Reconciliation:** `GET /api/webhooks/deliveries` (filters `since`, `status`, `taskId`; defaults to the last 7 days, so the dashboard's `DEAD` banner has the same window) and `POST /api/webhooks/deliveries/{id}/redeliver`.
 
-## 6a. MCP server facade (Phase 5)
+## 6a. MCP server facade
 
-A standalone `mcp/` Python service (official MCP SDK / FastMCP) exposes the channel as four stdio tools — `list_agents` (→ `GET /api/catalogue/agents`), `submit_task` (routed `POST /api/tasks` or direct `POST /api/tasks/direct`, auto `Idempotency-Key`), `get_task_status`, `get_task_result` (polling; `NOT_FOUND` = not ready). It authenticates with an API key from env and holds **no business logic** (identity is still resolved server-side — Inv #5). An OpenAPI document (springdoc, scoped "programmatic" group) + Swagger UI describe the REST surface. Local/stdio only; remote/OAuth MCP and SDK generation stay future.
+`mcp/` (official MCP SDK, stdio) exposes this channel as four tools with no business logic, authenticating with an API key from env. Tools, arguments and caveats: [`mcp/README.md`](../../mcp/README.md). springdoc publishes the REST surface as the `programmatic` group at `/v3/api-docs/programmatic`, with Swagger UI at `/swagger-ui/index.html`.
 
 ## 7. Endpoint catalog
 
 | Method · Path | Auth | Purpose |
 |---|---|---|
-| `POST /api/keys`, `GET /api/keys`, `POST /api/keys/{id}/revoke` | JWT (`CLIENT`) | key management |
-| `POST /api/tasks` | `CLIENT` or `API_CLIENT` | open submit (category → matcher) |
-| `POST /api/tasks/direct` | `CLIENT` or `API_CLIENT` | direct submit (pin `agentId`) |
-| `GET /api/tasks`, `/api/tasks/{id}`, `/api/tasks/{id}/result`, `/api/tasks/{id}/validation` | `CLIENT` or `API_CLIENT` | track / result / failing-check |
-| `GET /api/catalogue/**` (e.g. `/api/catalogue/agents`) | `CLIENT`/`BUILDER`/`ADMIN` or `API_CLIENT` | browse the agent catalogue (powers the MCP `list_agents` tool); GET-only, owner-private fields stripped |
-| `POST /api/webhooks/subscription`, `GET …`, `POST …/rotate-secret`, `POST …/deactivate` | JWT (`CLIENT`) | webhook subscription |
-| `GET /api/webhooks/deliveries`, `POST /api/webhooks/deliveries/{id}/redeliver` | `CLIENT` or `API_CLIENT` | delivery log / resend |
+| `POST /api/keys`, `GET /api/keys`, `POST /api/keys/{id}/revoke` | JWT `CLIENT` | Key management |
+| `POST /api/tasks` | `CLIENT`, `API_CLIENT` | Open submit |
+| `POST /api/tasks/direct` | `CLIENT`, `API_CLIENT` | Direct submit |
+| `GET /api/tasks`, `/api/tasks/{id}`, `/result`, `/validation` | `CLIENT`, `API_CLIENT` | Track, result, failing check |
+| `GET /api/tasks/match-preview?category=&budget=` | `CLIENT`, `API_CLIENT` | Ranked shortlist; creates no task |
+| `GET /api/catalogue/**` | Any human role, `API_CLIENT` | Browse agents |
+| `/api/webhooks/subscription/**` | JWT `CLIENT` | Subscription |
+| `GET /api/webhooks/deliveries`, `POST …/{id}/redeliver` | `CLIENT`, `API_CLIENT` | Delivery log, resend |
 
-`POST /api/tasks/*/accept`/`/reject` are **human-only** (`CLIENT`/`BUILDER`/`ADMIN`) — see §5.
+## 8. Code map
 
-## 8. Schema
+- **Auth:** `ApiKeyAuthenticationFilter`, `HttpCurrentApiKeyProvider` (`hireai-controller`); `ApiKeyAuthService` (`hireai-application`); `ApiKeyModel`, `SpendCaps` (`hireai-domain`).
+- **Orchestration:** `SubmitOrchestrationAppService`, `SubmitFingerprint`.
+- **Settlement gate:** `ValidationAppServiceImpl`, `AgentCallbackAppServiceImpl`.
+- **Webhooks:** `WebhookOutboxAppService`, `WebhookDeliveryAppService`, `WebhookDeliverySweeper`, `WebhookSubscriptionAppService`; domain `WebhookSignature`, `WebhookPayloads`, `WebhookBackoffPolicy`, `IpClassifier`; infra `WebhookSender`, `WebhookUrlValidator`, `WebhookRestClientConfig`.
 
-`V25` — `api_keys`, `idempotency_keys`, `api_key_task` (attribution + spend-cap read source). `V26` — `client_webhook_subscriptions`, `webhook_deliveries` (the outbox). Full column-level detail in `data-model.md`.
+## 9. Not built, and open questions
 
-## 9. Code map
+**Not built:** key rotation with a grace period and per-key scopes (a key has a name and two caps; create, list, revoke only); a per-submission `callbackUrl`; a callback ownership or reachability check beyond the SSRF guard.
 
-- Auth: `ApiKeyAuthenticationFilter`, `ApiKeyAuthService`, `HttpCurrentApiKeyProvider` (`hireai-controller` config); `ApiKeyModel`/`SpendCaps` (`hireai-domain`).
-- Orchestration: `SubmitOrchestrationAppService` (idempotency + spend caps + attribution), `SubmitFingerprint`.
-- Settlement gate: `ValidationAppServiceImpl` (channel branch), `AgentCallbackAppServiceImpl`.
-- Webhooks: `WebhookOutboxAppService` (enqueue), `WebhookDeliveryAppService` + `WebhookDeliverySweeper` (deliver), `WebhookSubscriptionAppService`; domain `WebhookSignature`/`WebhookPayloads`/`WebhookBackoffPolicy`/`IpClassifier`; infra `WebhookSender`/`WebhookUrlValidator`/`WebhookRestClientConfig`.
+**Out of scope:** agent-to-agent chaining by an executing agent, executor-side MCP/A2A, remote OAuth-secured MCP, official SDKs, real-money settlement.
 
-## 10. Invariant mapping
-
-| Invariant | How this channel honours it |
-|---|---|
-| #1 escrow before execution | atomic freeze on submit; idempotency prevents double-freeze under retries |
-| #2 append-only money | spend caps are reads; a webhook is an outbox row, never a ledger entry |
-| #3 deterministic money path | auto-settlement is 100% deterministic on the validation result (no LLM) |
-| #4 output-spec is the contract | the frozen `output_spec` is the *sole* acceptance test for the channel |
-| #5 identity + ownership | UUID principal from the key; unlisted/foreign agent → `NOT_FOUND` |
-| #6 signed, HTTPS-only I/O | outbound callback is SSRF-guarded + HMAC-signed (the outbound half of #6) |
+**Open questions:** whether caps should also exist per account or per target agent; when to graduate from API keys to OAuth2 client credentials; whether callbacks should support per-event-type subscriptions.

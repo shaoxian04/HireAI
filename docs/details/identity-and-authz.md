@@ -1,188 +1,99 @@
 # Identity & authorization
 
-How HireAI enforces **Hard Invariant #5 (server-side identity from JWT)**. Distilled from the auth slice;
-read before touching auth, `SecurityConfig`, or anything that derives the current user.
+How HireAI enforces **Hard Invariant #5 (server-side identity)**. Read before touching auth, `SecurityConfig`, or anything that derives the current user. Schema: [`data-model.md`](data-model.md). The machine channel's behaviour: [`programmatic-channel.md`](programmatic-channel.md).
 
-## The seam — `CurrentUserProvider`
+## The seam: `CurrentUserProvider`
 
-Every controller obtains the caller's id via `currentUser.currentUserId()` — **never** from a path or
-body. Two implementations, selected by profile:
-- **`JwtCurrentUserProvider`** (`@Profile("!test")`) — returns the UUID principal placed in the
-  `SecurityContext` by the JWT filter; throws if there is no authenticated principal.
-- **`DevCurrentUserProvider`** (`@Profile("test")`) — a fixed dev user, so business-logic tests don't mint tokens.
+Every controller gets the caller's id from `currentUser.currentUserId()`, **never** from a path or body.
+- **`JwtCurrentUserProvider`** (`@Profile("!test")`) returns the UUID principal in the `SecurityContext`, and throws if there is none. API-key requests set the same principal, so this covers them too.
+- **`DevCurrentUserProvider`** (`@Profile("test")`) returns a fixed dev user, so business-logic tests don't mint tokens.
 
-Per-resource ownership is then checked in the **app services** (a builder acts only on agents they own;
-a client only on their own tasks/wallet). Identity (#5) and ownership are separate concerns: the chain
-authenticates, the app service authorizes the specific resource.
+The chain authenticates; **app services** then authorize the specific resource (a builder acts only on agents they own, a client only on their own tasks and wallet). A foreign resource surfaces as `NOT_FOUND`, not a denial, so existence doesn't leak.
 
-## RBAC — `user_roles` join table + `roles` JWT claim
+## Roles
 
-Roles are stored in a `user_roles` join table (not a single `users.role` column — see migration `V10`).
-A user may hold multiple roles simultaneously (`CLIENT`, `BUILDER`, or both). The JWT carries a `roles`
-claim (a JSON array of role names); `JwtAuthenticationFilter` maps each name to a `ROLE_<name>`
-Spring authority. The `sub` claim is still the userId (UUID) — `CurrentUserProvider` reads from there.
-Hard Invariant #5 is fully intact: ownership checks remain per-user from the JWT subject.
+Stored in the `user_roles` join table; a user may hold several of `CLIENT`, `BUILDER`, `ADMIN`. The JWT `roles` claim is a sorted array of names, and `sub` is the userId. `JwtAuthenticationFilter` maps each name to a `ROLE_<name>` authority. `ADMIN` has no public path: it is seeded only.
 
-New schema objects from the RBAC work:
-- **`user_roles`** — join table (`user_id`, `role`) with a `UNIQUE (user_id, role)` guard; backfilled from
-  the old `users.role` column then the column is dropped (`V10`).
-- **`user_identities`** — OAuth identity links (`user_id`, `provider`, `provider_subject`, `email`) (`V11`).
-- **`users.display_name`** — added in `V12`.
+## Security chains (`SecurityConfig`)
 
-## Three security chains (profile/flag-gated)
+1. **`oauthFilterChain`** (`@Order(1)`, `!test`, `@ConditionalOnProperty hireai.auth.oauth2.enabled=true`): scoped to `/oauth2/**` and `/login/oauth2/**`, and allows the session Spring's authorization-request repository needs. Loads only under the `oauth` profile.
+2. **`securedFilterChain`** (`@Order(2)`, `!test`): stateless, CSRF off.
+   - **Public:** `POST /api/auth/login`, `POST /api/auth/register`, `/api/agent-callbacks/**`, `/api/arbitration-callbacks/**`, `/actuator/health`, `/v3/api-docs/**`, `/swagger-ui/**`, `/swagger-ui.html`. The two callback routes have their own credentials (see below).
+   - **Everything else** needs a valid JWT or API key plus a role. See the role rules below.
+3. **`permissiveFilterChain`** (`test`): `permitAll`, for tests with `@ActiveProfiles("test")`.
 
-All three live in `SecurityConfig`:
+### Role rules on `securedFilterChain`
 
-1. **`oauthFilterChain`** (`@Order(1)`, `@Profile("!test")`, `@ConditionalOnProperty hireai.auth.oauth2.enabled=true`)  
-   Scoped to `/oauth2/**` and `/login/oauth2/**` only. Allows the session that Spring's
-   authorization-request repository needs. Loads **only** when the `oauth` profile is active.
+| Route | Allowed |
+|---|---|
+| `POST /api/tasks`, `/api/tasks/direct`; `GET /api/tasks`, `/api/tasks/*`, `/api/tasks/*/result`, `/api/tasks/*/validation` | `CLIENT`, `API_CLIENT` |
+| `GET /api/webhooks/deliveries`, `POST /api/webhooks/deliveries/*/redeliver` | `CLIENT`, `API_CLIENT` |
+| `POST /api/tasks/*/accept`, `/reject` | `CLIENT`, `BUILDER`, `ADMIN` (human-only) |
+| `/api/keys/**`, `/api/webhooks/subscription/**` | `CLIENT` (JWT-only: a leaked key cannot mint keys or repoint a callback) |
+| `/api/admin/**` | `ADMIN` |
+| `GET /api/catalogue/**` | `CLIENT`, `BUILDER`, `ADMIN`, `API_CLIENT` |
+| Anything else | `CLIENT`, `BUILDER`, `ADMIN` |
 
-2. **`securedFilterChain`** (`@Order(2)`, `@Profile("!test")`) — stateless, CSRF off, JWT-authenticated.  
-   Public routes: `POST /api/auth/login`, `POST /api/auth/register`, `/api/agent-callbacks/**`,
-   `/actuator/health`. Everything else requires a valid JWT. `JwtAuthenticationFilter` runs before
-   `UsernamePasswordAuthenticationFilter`; an unauthenticated request to a protected route returns **401**.
+Consequences worth knowing:
+- The catalogue needs a role; "public" in these docs means "any signed-in role", not anonymous.
+- The `GET /api/tasks/*` wildcard also matches `GET /api/tasks/match-preview`, so API keys can reach it, while a BUILDER-only or ADMIN-only JWT cannot.
+- The final rule only *adds* the API-key lockout; every human already holds one of those roles. So most builder routes are not gated to `BUILDER`: a CLIENT passes the chain and only ownership applies. See [Known gaps](build-status.md#known-gaps).
 
-3. **`permissiveFilterChain`** (`@Profile("test")`) — `permitAll`. Existing integration / `@WebMvcTest`
-   tests carry `@ActiveProfiles("test")` so they run permissively with `DevCurrentUserProvider`.
+### Denied means 401 in the full app
 
-## Login & tokens
+The chain sets an `authenticationEntryPoint` (401) and no `accessDeniedHandler`, so an authenticated caller lacking a role gets **401, not 403**. `@WebMvcTest` slices render the same denial as 403. Assert denied status against the full app. Why, and what a fix must do: [post-mortem](../post-mortem/2026-07-17-api-key-lockout-401-vs-403.md).
 
-`POST /api/auth/login {email,password}` → `AuthAppService.login`: look up the user, check active,
-**BCrypt**-verify the password, and issue an **HS256 JWT** via `JjwtService` (secret
-`hireai.auth.jwt-secret`, TTL `hireai.auth.jwt-ttl-seconds`, default 86400 s). Claims: `sub` = userId,
-`roles` = sorted list of role names. Any failure (unknown email, wrong password, inactive account)
-collapses to a generic **401** — no user enumeration. `JwtAuthenticationFilter` sets the principal to
-the userId and maps each role name to one `ROLE_<name>` authority.
+## Login, registration, become-builder
 
-## Email/password registration
-
-`POST /api/auth/register {email,password,displayName}` (`permitAll`) → `AuthAppService.register`:
-- Checks for duplicate email — throws `EmailAlreadyRegisteredException` → **HTTP 409** with code
-  `EMAIL_ALREADY_REGISTERED`.
-- BCrypt-hashes the password, creates a `CLIENT` user + a zero-balance wallet **atomically** in one
-  transaction (`UserModel.newClient`).
-- Issues a JWT and returns `{token, userId, roles}` (same `LoginResponse` shape as `/login`).
-
-## Become a builder — `POST /api/auth/become-builder`
-
-JWT-gated (must be logged in). Body: `{acceptTerms:true}`. Identity is read from `CurrentUserProvider`
-(Hard Invariant #5 — body carries no user id). Idempotently adds the `BUILDER` role via
-`UserRepository.addRole` (guarded by the `UNIQUE (user_id, role)` constraint) and re-issues an expanded
-token containing both roles. Returns `{token, userId, roles}`.
+- **`POST /api/auth/login {email,password}`** (`AuthAppService.login`): checks the account is active, BCrypt-verifies, and issues an HS256 JWT via `JjwtService` (`hireai.auth.*`). Any failure collapses to a generic 401, so there is no user enumeration.
+- **`POST /api/auth/register {email,password,displayName}`**: a duplicate email is 409 `EMAIL_ALREADY_REGISTERED`. Creates a `CLIENT` user and zero-balance wallet atomically and returns `{token, userId, roles}`.
+- **`POST /api/auth/become-builder {acceptTerms:true}`**: idempotently adds `BUILDER` (`UserRepository.addRole`, `ON CONFLICT DO NOTHING`) and re-issues the token.
 
 ## Google OAuth (flag-gated)
 
-OAuth is **disabled by default**. Enable by activating the `oauth` Spring profile
-(`SPRING_PROFILES_ACTIVE=oauth`) which loads `application-oauth.yml`. That file activates
-`hireai.auth.oauth2.enabled=true` and wires the Google client registration — it intentionally
-**has no defaults for the credentials** (`${GOOGLE_CLIENT_ID}` / `${GOOGLE_CLIENT_SECRET}`), so the app
-fails fast if the creds are missing rather than starting silently broken.
+Disabled by default. `SPRING_PROFILES_ACTIVE=oauth` loads `application-oauth.yml`, which has no defaults for `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, so missing credentials fail at startup. Redirect targets: `OAUTH2_SUCCESS_REDIRECT_URL`, `OAUTH2_FAILURE_REDIRECT_URL`.
 
-**Handshake flow:**
-1. Frontend links to `<backend>/oauth2/authorization/google` (Spring initiates the Google OAuth dance).
-2. Google redirects to `<backend>/login/oauth2/code/google` (Spring exchanges the code).
-3. `OAuth2AuthenticationSuccessHandler` resolves the local account and mints our JWT.
-4. Redirects to `${OAUTH2_SUCCESS_REDIRECT_URL:http://localhost:3000/auth/callback}#token=<jwt>`.
-   The token is in the **URL fragment** — never sent to any server in Referer or logs.
-5. On any error: redirects to `${OAUTH2_FAILURE_REDIRECT_URL:http://localhost:3000/login}?error=oauth`.
+**Handshake:**
+1. The frontend generates a nonce, keeps it in `sessionStorage`, and goes to `<backend>/oauth2/authorization/google?cb_nonce=<nonce>`. `NonceCarryingAuthorizationRequestResolver` stores it in the session.
+2. Spring completes the Google exchange at `/login/oauth2/code/google`.
+3. `OAuth2AuthenticationSuccessHandler` resolves the account, mints the JWT, and redirects to `<success-url>#token=<jwt>&nonce=<nonce>`. The fragment keeps the token out of Referer and logs.
+4. `/auth/callback` accepts the token only if the nonce matches, which binds the callback to the browser that started it (login-CSRF guard). Any failure goes to `<failure-url>?error=oauth`.
 
-**Account-resolution logic** (in `OAuthAppServiceImpl.loginWithOAuth`):
-- Requires `email_verified`; rejects unverified emails immediately.
-- Existing identity link (`user_identities` row for this `provider`/`subject`) → load and log in.
-- A pre-existing **local account with the same email but no link → REFUSE** (no silent linking).
-  Account-takeover guard: local emails are **not** independently verified (registration does not prove
-  ownership), so silently linking would let an attacker who pre-registered a victim's email capture the
-  victim's later Google sign-in. The rule lives in the framework-free `OAuthAccountLinkingDomainService`;
-  the user must sign in with their password first (an explicit, re-authenticated link flow is a follow-up).
-- No link and no account for the email → create a new `CLIENT` + wallet + identity link atomically.
-- Inactive account → reject (`Account is disabled`).
+**Account resolution** (`OAuthAppServiceImpl.loginWithOAuth`):
+- Requires `email_verified`.
+- Existing `user_identities` link: log in.
+- **Local account with the same email and no link: REFUSE.** Local emails aren't verified at registration, so silent linking would let someone who pre-registered a victim's email capture the victim's Google sign-in. The rule lives in `OAuthAccountLinkingDomainService`. An explicit re-authenticated link flow is a follow-up.
+- No link and no account: create `CLIENT`, wallet and link atomically.
+- Inactive account: reject.
 
-**New environment variables for OAuth:**
+## API keys
 
-| Variable | Default | Purpose |
+`ApiKeyAuthenticationFilter` reads `Authorization: ApiKey <raw>` or `X-API-Key: <raw>` and resolves it through `ApiKeyAuthService` (hash, `findActiveByHash`, throttled `last_used_at` bump). It sets the same token shape as the JWT filter (principal = owning user's UUID), so ownership checks work unchanged. It differs in two ways:
+- a single `ROLE_API_CLIENT` authority, never a human role;
+- an `ApiKeyContext(keyId, spendCap, dailySpendCap)` as the `Authentication`'s details, exposed by `CurrentApiKeyProvider` (`HttpCurrentApiKeyProvider`, `!test`; `NoApiKeyProvider`, `test`). `SubmitOrchestrationAppService` uses it to apply caps and attribution.
+
+**Both credentials on one request:** the API-key filter runs first, then the JWT filter, which overwrites unconditionally. So a valid JWT always wins and the request is treated as human, with no caps or attribution. An invalid JWT leaves the key's authentication standing.
+
+Lookup checks key status only, so a deactivated user's keys keep authenticating. See [Known gaps](build-status.md#known-gaps).
+
+Key endpoints (`ApiKeyController`) are owner-scoped: revoking a key you don't own is `NOT_FOUND`.
+
+## Other credentials
+
+Keep these distinct from the user JWT:
+
+| Credential | Secures | Check |
 |---|---|---|
-| `GOOGLE_CLIENT_ID` | _(required when oauth profile active)_ | Google OAuth client ID |
-| `GOOGLE_CLIENT_SECRET` | _(required when oauth profile active)_ | Google OAuth client secret |
-| `OAUTH2_SUCCESS_REDIRECT_URL` | `http://localhost:3000/auth/callback` | Frontend callback page |
-| `OAUTH2_FAILURE_REDIRECT_URL` | `http://localhost:3000/login` | Frontend login on failure |
+| **Signed dispatch token** (Inv #6) | `POST /api/agent-callbacks/{taskId}/result`, called by the Agent | `taskId` and `agentVersionId` must match the assignment; invalid, expired or mismatched is 401 |
+| **Shared bearer secret** (`ARBITRATION_CALLBACK_SECRET`) | `POST /api/arbitration-callbacks/{disputeId}/ruling`, called by the arbitrator | Constant-time compare in `ArbitrationCallbackController`; mismatch is 401 |
+| **HMAC signature** (outbound) | Push webhooks to a client's callback; the platform authenticates itself to the client | See [`programmatic-channel.md` §6](programmatic-channel.md#6-push-webhooks) |
 
-## API keys — the programmatic submission channel (Phase 3)
+## Seed users
 
-A second, independent credential lets an external **client agent** submit/track/settle tasks without a
-human login. `ApiKeyAuthenticationFilter` reads `Authorization: ApiKey <raw>` or `X-API-Key: <raw>`,
-resolves it via `ApiKeyAuthService` (hash → `findActiveByHash`, throttled `last_used_at` bump), and — if
-no authentication is already set (it never overrides a JWT that ran first) — sets the **same**
-`UsernamePasswordAuthenticationToken` shape as `JwtAuthenticationFilter`: principal = the owning user's
-UUID, so `CurrentUserProvider.currentUserId()` and every downstream ownership check work **unchanged**
-(Hard Invariant #5 holds for API-key requests too). The differences from a JWT authority are:
-- a single `ROLE_API_CLIENT` authority (never `CLIENT`/`BUILDER`/`ADMIN`); and
-- an `ApiKeyContext(keyId, spendCap, dailySpendCap)` record set as the `Authentication`'s **details**.
+`client@hireai.local` (CLIENT, funded wallet), `builder@hireai.local` (BUILDER) and `admin@hireai.local` (ADMIN), all with password `DemoPass123!`. These are throwaway demo credentials seeded by Flyway. Seeded accounts need not hold `CLIENT`: only self-registered users do.
 
-**`CurrentApiKeyProvider`** (mirrors `CurrentUserProvider`) exposes that context: `HttpCurrentApiKeyProvider`
-(`@Profile("!test")`) reads it off the `SecurityContext` — present iff the request was API-key
-authenticated, empty for JWT/human requests; `NoApiKeyProvider` (`@Profile("test")`) is always empty.
-`SubmitOrchestrationAppService` reads it to decide whether a submission is subject to the two per-key
-spend caps at all.
+## Known limits
 
-**Submit-scoped allow-list** (`securedFilterChain`, `SecurityConfig`): `ROLE_API_CLIENT` may reach only
-submit/track — `POST /api/tasks`, `/api/tasks/direct`; `GET /api/tasks`, `/api/tasks/*`,
-`/api/tasks/*/result`, `/api/tasks/*/validation` (each `hasAnyRole("CLIENT","API_CLIENT")`), plus the
-webhook delivery log + redeliver (`GET /api/webhooks/deliveries`,
-`POST /api/webhooks/deliveries/*/redeliver`). **Phase 4 dropped `POST /api/tasks/*/accept`/`/reject` from
-the API allow-list** — those routes are now `hasAnyRole("CLIENT","BUILDER","ADMIN")` (human-only): an
-API task **auto-settles on the validation result**, so there is nothing for a script to accept or reject,
-and an `API_CLIENT` key hitting them is 401. Webhook **subscription** management
-(`/api/webhooks/subscription/**`) is `hasRole("CLIENT")` — **JWT-only**, like key management. Everything
-else falls through to
-`anyRequest().hasAnyRole("CLIENT","BUILDER","ADMIN")` — a default-deny that only *adds* the API-key
-lockout (a human JWT already holds one of those roles, so this is a no-op for them) — so e.g.
-`GET /api/wallet` is denied for an API-key caller. (This chain sets an `authenticationEntryPoint`
-(`HttpStatusEntryPoint` UNAUTHORIZED) but no `accessDeniedHandler`, so the full application renders an
-authenticated-but-unauthorized request as **401**, not 403 — the same way a JWT `CLIENT` hitting
-`/api/admin/**` returns 401; the `@WebMvcTest` slices render the same denial as 403.) **Key management is JWT-only**:
-`/api/keys/**` is `hasRole("CLIENT")`, deliberately excluding `ROLE_API_CLIENT` — a leaked key can be used
-to submit/spend but can never mint or revoke keys itself. `ApiKeyController` (`POST /api/keys`,
-`GET /api/keys`, `POST /api/keys/{id}/revoke`) is owner-scoped like every other resource: revoking a
-key you don't own is a `NOT_FOUND`, not a 403 (no existence leak).
-
-Both filters are wired on the same chain via `addFilterBefore(..., UsernamePasswordAuthenticationFilter.class)`
-— API-key first, then JWT — so a request carrying both an API key and a JWT is authenticated by whichever
-runs first and wins the race to set the context; in practice a caller sends exactly one. See
-`docs/details/data-model.md` (`V25` — `api_keys`/`idempotency_keys`/`api_key_task`) and
-`docs/programmatic-task-submission.md` for the schema and the feature design.
-
-## The Agent callback is NOT JWT-authenticated
-
-`POST /api/agent-callbacks/{taskId}/result` is `permitAll` in the chain because the **Agent** (not a
-logged-in user) calls it. It is gated instead by the short-lived **signed dispatch token** (Hard
-Invariant #6): the callback app service verifies the token — its `taskId` and `agentVersionId` must match
-the task's assignment — and returns **401** on an invalid / expired / mismatched token. Keep the two token
-systems distinct: the user **JWT** secures the UI/API; the **dispatch token** secures Agent I/O.
-
-## Outbound webhooks: HMAC signature (Phase 4, Inv #6 outbound side)
-
-Push webhooks to a programmatic client's `callbackUrl` carry **no JWT and no dispatch token** — the
-platform authenticates *itself to the client* with an HMAC. Each delivery is signed Stripe-style with the
-subscription's `signingSecret`: `X-HireAI-Signature: t=<unix-ts>,v1=<hex hmac-sha256(secret,"{ts}.{body}")>`
-alongside `X-HireAI-Event-Id` (idempotency key) and `X-HireAI-Event-Type`. The client verifies by
-recomputing the HMAC over `"{t}.{rawBody}"` and constant-time-comparing `v1`. The secret is created on
-subscription registration, revealed on request, and rotatable (`/rotate-secret`). The outbound target is
-**SSRF-guarded at registration** (`WebhookUrlValidator`) — this is the outbound half of Invariant #6,
-mirroring the inbound dispatch-token gate above. See `docs/details/architecture.md` and
-`docs/details/data-model.md` (`V26`).
-
-## Seed users (Flyway `V5`)
-
-`client@hireai.local` (CLIENT, wallet pre-funded) and `builder@hireai.local` (BUILDER); password
-`DemoPass123!` (throwaway demo credentials, BCrypt-hashed in the migration). Both are seeded with rows
-in `user_roles` (not the old `role` column, which was dropped in `V10`).
-
-## Status / gaps
-
-- **RBAC gating is coarse-grained.** `securedFilterChain` now does route-level `hasRole`/`hasAnyRole`
-  gating (admin routes, key management, the API-key submit allow-list — see above), but most
-  CLIENT/BUILDER endpoints are only gated to "any signed-in human role"; per-resource ownership
-  (a builder's own agent, a client's own task/wallet) is still enforced in the app services, not via
-  `@PreAuthorize`.
-- No **fail-fast** guard if the `test` profile is launched in prod (it would disable auth).
-- Frontend token storage is `localStorage` (demo-grade; an httpOnly cookie is the hardening).
+- Role gating is coarse, as above; there is no `@PreAuthorize`, and ownership lives in app services.
+- No fail-fast guard if the `test` profile is launched in production, which would disable auth.
+- The frontend stores the token in `localStorage` (demo-grade; an httpOnly cookie is the hardening).

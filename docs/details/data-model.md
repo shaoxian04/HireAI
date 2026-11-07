@@ -1,94 +1,105 @@
 # Data model
 
-Distilled from SAD §2.3–2.4. Notion SAD has the full schema table + ERD: https://app.notion.com/p/3752193af50f8111914bfdfb53b42135
+The current schema and domain model, from the code. `backend/hireai-main/src/main/resources/db/migration/` is authoritative for columns; this file records the shape and the reasons. The full ERD is in the SAD (see the link in `CLAUDE.md`). Known defects live in [`build-status.md`](build-status.md#known-gaps).
 
-## Aggregates (fine-grained, one repository per root)
+## Aggregates
 
-Reflects what's actually built (one row per real `XxxRepository`), not the original SAD target list — see `docs/details/build-status.md` for built-vs-pending. `AgentModel`/`ReputationModel` rows are left as they were pending a separate pass.
-
-| Subdomain | Aggregate root (`XxxModel`) | Children / value objects | Repository | Key invariant |
+| Subdomain | Root | Children / value objects | Repository | Key invariant |
 |---|---|---|---|---|
-| identity | **UserModel** | Credential, OAuthIdentity | UserRepository | Dual-capability: every user holds `CLIENT` and may add `BUILDER`; roles sourced from `user_roles`. |
-| identity | **ApiKeyModel** | SpendCaps (VO) | ApiKeyRepository | The raw key is never persisted — only a SHA-256 hash + display prefix; a revoked key never re-activates. |
-| identity | **WebhookSubscriptionModel** | — | WebhookSubscriptionRepository | ≤1 ACTIVE subscription per key; re-registering deactivates the prior row rather than overwriting it (history-preserving). |
-| ledger | **WalletModel** | LedgerEntryModel (append-only) | WalletRepository | Balances never negative; escrow = sum of open freezes; ledger immutable. |
-| ledger | **SettlementModel** | — | SettlementRepository | One settlement per task; the auditable record of the decision + split — the money itself moves through the append-only ledger, the actual source of truth. |
-| offering | **AgentModel** | AgentVersionModel; OutputSpec, Pricing (VO) | AgentRepository | Exactly one active version; only ACTIVE agents receive tasks. |
-| task | **TaskModel** | TaskAttachmentModel, TaskResultModel; ExpectedDeliverable (VO) | TaskRepository | Legal status transitions only; result exists only after dispatch. |
-| task | **IdempotencyRecord** | — | IdempotencyRepository | `UNIQUE(owner, idempotency key)` inserted in the same transaction as the escrow freeze — a race rolls the freeze back too, never a double-freeze. |
-| task | **WebhookDeliveryModel** | — | WebhookDeliveryRepository | Enqueued only inside the settling transaction (an outbox row, never a second ledger); at-least-once delivery via exponential-with-cap backoff. |
-| adjudication | **DisputeModel** | RulingModel (LLM + admin) | DisputeRepository | One dispute per task; settlement happens exactly once. |
-| adjudication | **ValidationReportModel** | CheckResult (VO) | ValidationReportRepository | Verdict is PASS only if every check passes; validation runs before any client sees a result (Inv #4). |
-| reputation | **ReputationEventModel** | — (append-only stream) | ReputationEventRepository | One event per terminal outcome, UPDATE/DELETE blocked by trigger. There is deliberately **no `ReputationModel` aggregate**: the score is not stored state but a pure fold over this stream (`ReputationScoringDomainServiceImpl`), with `agents.*_sum/_count` as a reconcilable cache. |
-| reputation | **ReviewModel** | — | ReviewRepository | One review per **accepted** task (`task_id NOT NULL UNIQUE`, V28) — a review detached from paid work is not representable. `respond()` sets **or replaces** the builder's reply. |
+| identity | `UserModel` | `Credential`, `OAuthIdentity` | `UserRepository`, `OAuthIdentityRepository` | Roles come from `user_roles`. Self-registered users hold `CLIENT` and may add `BUILDER`; the seeded builder and admin hold only their own role. |
+| identity | `ApiKeyModel` | `SpendCaps` | `ApiKeyRepository` | Only a SHA-256 hash and display prefix are stored; a revoked key never re-activates. |
+| identity | `WebhookSubscriptionModel` | | `WebhookSubscriptionRepository` | At most one active per key; re-registering deactivates the old row. |
+| ledger | `WalletModel` | `LedgerEntryModel` | `WalletRepository` | Balances never go negative; the ledger is immutable. |
+| ledger | `SettlementModel` | | `SettlementRepository` | One per task; records the decision. Money moves through the ledger. |
+| offering | `AgentModel` | `AgentVersionModel`, `Pricing` | `AgentRepository` | One active version; only ACTIVE agents receive tasks. |
+| offering | `StorefrontModel` | `Media` | `StorefrontRepository` | Listing is separate from agent status; bookable = ACTIVE and listed. |
+| task | `TaskModel` | `TaskResultModel`, `OutputSpec` | `TaskRepository` | Legal transitions only; a result exists only after dispatch. |
+| task | `IdempotencyRecord` | | `IdempotencyRepository` | `UNIQUE (owner, key)` in the same transaction as the freeze, so a race rolls the freeze back. |
+| task | `WebhookDeliveryModel` | | `WebhookDeliveryRepository` | One row per terminal event, written in the settling transaction and retried until delivered or dead. |
+| adjudication | `DisputeModel` | `Ruling` | `DisputeRepository` | One dispute per task; settles exactly once. |
+| adjudication | `ValidationReportModel` | `CheckResult` | `ValidationReportRepository` | PASS only if every check passes; runs before any client sees a result. |
+| reputation | `ReputationEventModel` | | `ReputationEventRepository` | Append-only. There is no reputation aggregate: the score is a fold over this stream. |
+| reputation | `ReviewModel` | | `ReviewRepository` | One per accepted task; `respond()` sets or replaces the builder's reply. |
 
-## Core tables (3NF; `gmt_create`/`gmt_modified` on every table)
+`ApiKeyTaskRepository` is a read/attribution store for `api_key_task`, not an aggregate. `Money` is in `domain/shared/model`.
 
-- **users** — id, email (UK), password_hash, role (CLIENT/BUILDER/ADMIN), oauth_*, is_active.
-- **wallets** — id, user_id (UK), available_balance, escrow_balance. Money is `NUMERIC`, never float.
-- **ledger_entries** — append-only. entry_type (TOPUP/ESCROW_FREEZE/PAYOUT/REFUND/COMMISSION/SPLIT), amount, balance_after, related_task_id, correlation_id. **DB triggers raise on UPDATE/DELETE.**
-- **agents** — id, owner_id, name, status, current_version_id, reputation_score.
-- **agent_versions** — id, agent_id, version_number, output_spec (jsonb), capability_categories (text[]), webhook_url, max_execution_seconds, price, `max_concurrent` (builder-declared parallel-task cap 1–100, default 5, V24 — feeds the matcher's `loadHeadroom` factor). UNIQUE(agent_id, version_number).
-- **tasks** — id, client_id, agent_version_id, category, expected_deliverable (jsonb), status, estimated_cost, retry_count, timestamps; `resolution` (ACCEPTED/REJECTED, V9), `resolved_at`, `rejection_reason` — set exactly once by client review (pessimistic row lock serializes concurrent attempts); `match_attempts`, `execution_deadline`, `pinned_agent_version_id` (V24 — the reliability-sweeper bookkeeping columns; deliberately **unmapped on the JPA entity**, written only by targeted native UPDATEs so a full-row save never nulls them).
-- **task_attachments** / **task_results** — children of tasks; binaries in object storage, rows store the URL reference.
-- **disputes** — task_id (UK), raised_by, reason_category, status, llm_ruling, llm_rationale, admin_ruling, admin_rationale, admin_agreed_with_llm.
-- **reputation_events** — append-only. agent_id, task_id (soft ref), event_type (TASK_ACCEPTED/SPEC_VIOLATION/EXECUTION_FAILED/EXECUTION_TIMEOUT/DISPUTE_WON/DISPUTE_PARTIAL/DISPUTE_LOST/RATING), **quality** `NUMERIC(4,3)` in [0,1], weight, occurred_at. **DB triggers raise on UPDATE/DELETE.** `quality` (what the sample asserts, as distinct from `weight` = how much it counts) is an addition made by ADR 0003: the earlier spec listed only `weight` because it assumed a points-balance model, which was rejected. Agents carries the derived cache — `reliability_sum/count`, `satisfaction_sum/count` — reconcilable by replaying this stream.
-- **reviews** — task_id (UK, **NOT NULL** once the earned-review flow lands), client_id, agent_id, rating (1–5), review_text, builder_response, is_published.
+## Tables
 
-## Implemented so far (vs the design above)
+Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older tables use `gmt_create`/`gmt_modified`, newer ones `created_at`.
 
-The schema above is the **design target**. What's actually in Flyway today:
+**Identity**
+- `users`: email (unique), `password_hash`, `display_name`, `is_active`.
+- `user_roles`: `PRIMARY KEY (user_id, role)`.
+- `user_identities`: `provider`, `provider_subject`, `email_at_link`.
+- `api_keys`: `key_hash`, `display_prefix`, `spend_cap`, `daily_spend_cap` (null = uncapped), `status`.
+- `client_webhook_subscriptions`: `callback_url`, `signing_secret`, `active`; partial UNIQUE on `api_key_id`.
 
-- **V1** — `users`, `wallets`, `ledger_entries` (append-only triggers). Wallet aggregate.
-- **V2** — `tasks` MVP subset: `id, client_id (FK users), title, description, budget NUMERIC(14,2) CHECK > 0, output_spec JSONB NOT NULL, status, gmt_create/gmt_modified`, index `(client_id, gmt_create DESC)`. `output_spec` holds `{ format, schema, acceptanceCriteria }` (the binding contract, Invariant #4). Submit freezes `budget` in escrow **atomically** with the row insert. Still deferred: `estimated_cost`, `retry_count`, `task_attachments`.
-- **V3** — `agents` (owner_id, name, status, current_version_id, reputation_score) + `agent_versions` (output_spec jsonb, capability_categories `text[]` with a GIN index, webhook_url, max_execution_seconds, price; `UNIQUE(agent_id, version_number)`). **Module 2 — Agent Registration.**
-- **V4** — `ALTER tasks ADD agent_version_id UUID` (unconstrained — cross-track FK deliberately omitted) `+ category TEXT`; `task_results` (task_id UNIQUE FK, result_payload jsonb, result_url, agent_status, received_at). **Module 3 — Routing & Execution.** Task lifecycle now reaches `QUEUED → EXECUTING → RESULT_RECEIVED` (off-path `AWAITING_CAPACITY`/`TIMED_OUT`/`FAILED`).
-- **V5** — seeds two demo users (`client@hireai.local` CLIENT, `builder@hireai.local` BUILDER; throwaway password `DemoPass123!`, BCrypt-hashed) + their wallets (client funded), for the thin JWT auth slice — `users.password_hash` is now used by `POST /api/auth/login`.
-- **V6** — `agent_profiles` (1:1 with `agents`): `tagline, description, sample_output, logo_url, cover_url, gallery_urls text[], is_listed, is_featured`; backfills `is_listed=true` for already-ACTIVE agents. Catalogue visibility rule: `agents.status = ACTIVE AND agent_profiles.is_listed = true`. **Module 6 — Discovery.**
-- **V7** — `reviews`: `task_id UUID NULL` (nullable so seeded demo rows need not reference a resolved task; UNIQUE deferred until the real review flow), `client_id, agent_id, rating (1–5), review_text, builder_response, is_published`. Seeds 3 reviews per demo agent via the demo client. Index `(agent_id, gmt_create DESC)`.
-- **V8** — index `idx_tasks_agent_version ON tasks(agent_version_id)` to speed up per-agent stats queries joining tasks to agent versions.
-- **V9** — `tasks.resolution TEXT CHECK (IN ('ACCEPTED','REJECTED'))`, `tasks.resolved_at TIMESTAMPTZ`, `tasks.rejection_reason TEXT`. **Module 5 settlement core — client review.**
-- **V10–V23** — auth/RBAC (`user_roles`, `user_identities`, `users.display_name`), wallet `@Version`, `settlements` (`task_id` UNIQUE), agent-version status, `validation_reports`, partial resolution, `DISPUTED` status, result-payload text, `dispute_rulings` history, admin seed. (See `docs/details/build-status.md` for the per-migration narrative; these predate the matching-engine branch.)
-- **V24** — **Matching engine + reliability.** `agent_versions.max_concurrent INT NOT NULL DEFAULT 5 CHECK (1..100)`; `tasks.match_attempts INT NOT NULL DEFAULT 0`, `tasks.execution_deadline TIMESTAMPTZ`, `tasks.pinned_agent_version_id UUID`; index `tasks(agent_version_id, status)` (backs the candidate query's per-agent in-flight/sample counts); one-time lowercase backfill of `agent_versions.capability_categories`. Enables the multi-factor scored matcher + the re-match / execution-timeout sweepers (see `docs/details/architecture.md` and `docs/matching-selection-mechanics.md`).
-- **V25** — **Programmatic submission spine (API keys).** Three additive tables; `tasks`/`wallets`/`ledger_entries` untouched (Invariant #2 — spend caps are an authorization *read*, never a second ledger):
-  - **`api_keys`** — `id, user_id (FK users), key_hash TEXT UNIQUE` (hex SHA-256 of the raw key — only the hash + a display prefix are ever stored), `display_prefix` (e.g. `hk_live_a1b2c3`), `name`, `spend_cap NUMERIC(18,2) NULL` (uncapped if null — max concurrent frozen escrow), `daily_spend_cap NUMERIC(18,2) NULL` (uncapped if null — max committed per rolling 24h), `status` (ACTIVE/REVOKED), `last_used_at`, `created_at`, `revoked_at`; index on `user_id`.
-  - **`idempotency_keys`** — `id, owner_id, idempotency_key, request_fingerprint` (SHA-256 of the normalized submit payload), `task_id`, `created_at`, **`UNIQUE (owner_id, idempotency_key)`** — the concurrency arbiter: a duplicate submit racing under the same key hits this constraint inside the same transaction as the escrow freeze, so the whole submit (including the freeze) rolls back — no double-freeze — and the loser re-reads the winning row in a fresh transaction. Mirrors `settlements.task_id UNIQUE` (V14).
-  - **`api_key_task`** — `task_id PK, api_key_id (FK api_keys), budget, created_at` — one row per task submitted via a key; a **soft `task_id` reference** (like `validation_reports`), not a Task-aggregate column, so the Task aggregate stays untouched; also the read source for both per-key spend-cap checks (concurrent + rolling-24h). Index on `api_key_id`.
+**Ledger**
+- `wallets`: `available_balance`, `escrow_balance`, `version` (optimistic lock).
+- `ledger_entries`: `entry_type`, `amount`, `balance_after`, `related_task_id`, `correlation_id`. **Append-only by trigger.**
+- `settlements`: `task_id` UNIQUE, `type`, `net`, `commission`. This UNIQUE is the backstop against double settlement.
 
-  See `docs/details/identity-and-authz.md` for the API-key auth filter and `docs/programmatic-task-submission.md` for the feature design.
-- **V26** — **Push webhooks (Phase 4).** Two additive tables; `tasks`/`wallets`/`ledger_entries` untouched — a webhook is enqueued as an outbox row written *inside the settling transaction*, never a second ledger (Invariant #2):
-  - **`client_webhook_subscriptions`** — `id, api_key_id (FK api_keys), owner_id (FK users), callback_url, signing_secret, active, created_at/updated_at`. Partial UNIQUE `(api_key_id) WHERE active` enforces **≤1 ACTIVE subscription per key**; index on `owner_id`.
-  - **`webhook_deliveries`** — the transactional outbox. `id` (PK, doubles as the client-facing `event_id`), `task_id (FK), owner_id (FK), subscription_id (FK), event_type` (`task.completed`/`task.failed`), `payload TEXT` (the whole signed body is built/stored/sent as a string — same TEXT-not-jsonb rationale as V20 `task_results.result_payload`), `target_url, status` (`PENDING`/`DELIVERED`/`DEAD`), `attempts, next_attempt_at, last_error, created_at, delivered_at`. Index `(status, next_attempt_at)` is the sweeper claim key (`FOR UPDATE SKIP LOCKED`); `(owner_id, created_at DESC)` backs the delivery-log read; `(task_id)` the per-task lookup.
+**Offering**
+- `agents`: `owner_id`, `name`, `status`, `current_version_id`, `reputation_score`, plus the cache columns `reliability_sum/count` and `satisfaction_sum/count`.
+- `agent_versions`: `output_spec` (jsonb), `capability_categories` (`text[]`, stored lowercased), `webhook_url`, `max_execution_seconds`, `price`, `max_concurrent`, `status` (one ACTIVE per agent, by partial unique index).
+- `agent_profiles`: 1:1 with agents; storefront text, media URLs, `is_listed`, `is_featured`.
 
-  See `docs/details/architecture.md` (outbound webhook outbox + sweeper) and `docs/superpowers/specs/2026-07-19-push-webhooks-design.md` for the design.
+**Task**
+- `tasks`: `client_id`, `title`, `description`, `budget`, `output_spec` (jsonb, frozen at submit), `status`, `category`, `agent_version_id`, `resolution`, `resolved_at`, `rejection_reason`, `reject_reason_category`. Sweeper bookkeeping: `match_attempts`, `execution_deadline`, `pinned_agent_version_id`.
+- `task_results`: `task_id` UNIQUE, `result_payload` (TEXT, stored inline), `result_url`, `agent_status`.
+- `idempotency_keys`: `UNIQUE (owner_id, idempotency_key)`, `request_fingerprint`, `task_id`.
+- `api_key_task`: one row per key-submitted task; soft task reference and the read source for spend caps.
+- `webhook_deliveries`: the outbox. `id` is also the client-facing event id; `payload` is TEXT because the signed body is sent byte for byte; `attempts`, `next_attempt_at`, `status`.
 
-- **V27** — **Module 5 reputation.** Gives `agents.reputation_score` a source: it had been `NUMERIC(5,2)` frozen at `50.00` since V3, written once at registration and updated by nothing, while the matcher weighted it at `0.40` — its largest factor — so every candidate contributed an identical `0.20` and reputation ranked nothing.
-  - **`reputation_events`** — `id, agent_id (FK agents), task_id` (**soft** ref, no cross-context FK, per V16 `validation_reports`), `event_type` (CHECK-constrained to the eight kinds), `quality NUMERIC(4,3) CHECK (0..1)`, `weight NUMERIC(4,3) CHECK (> 0)`, `occurred_at`. Append-only: `trg_reputation_events_no_update` / `_no_delete` raise, exactly as `ledger_entries` (Invariant #2). Index `(agent_id, occurred_at DESC)`; partial UNIQUE `(task_id, event_type) WHERE task_id IS NOT NULL` makes emission exactly-once per outcome while still allowing one task to yield both an outcome and a later `RATING`.
-  - **`agents` + four aggregate columns** — `reliability_sum/count`, `satisfaction_sum/count`, all `DEFAULT 0`. A **derived cache** that makes the settlement-time rescore O(1) instead of re-reading an agent's whole history; `reputation_events` stays the source of truth and `reconcile()` replays it to prove they agree. The zero defaults backfill every existing agent to a score of exactly `50.00`, so **no routing shifts on migration day** until agents earn events.
+**Adjudication**
+- `validation_reports`: soft task reference, `attempt_no`, `verdict`, `checks`.
+- `disputes`: `task_id` UNIQUE (soft reference), `raised_by`, `reason_category`, `status`, `correlation_id`, `resolved_at`.
+- `dispute_rulings`: `tier`, `decided_by` (`ARBITRATOR`, `ADMINISTRATOR`, `FALLBACK`), `category`, `rationale`. **Append-only by trigger.**
 
-  Written only by a targeted native `UPDATE` of those five columns — never a full-row `save()` — so a builder publishing a version mid-settlement cannot lose the update. See `docs/adr/0003-two-component-shrinkage-reputation.md` and `docs/superpowers/specs/2026-08-12-module5-reputation-design.md`.
+**Reputation**
+- `reputation_events`: `agent_id`, soft `task_id`, `event_type`, `quality`, `weight`, `occurred_at`. **Append-only by trigger.** Partial UNIQUE `(task_id, event_type)` makes each outcome exactly-once while allowing a later `RATING`.
+- `reviews`: `task_id` NOT NULL UNIQUE, `client_id`, `agent_id`, `rating`, `review_text`, `builder_response`, `is_published`.
+
+**Columns kept off the JPA entities on purpose:** the `tasks` sweeper columns and the `agents` sum/count columns are unmapped and written only by targeted native `UPDATE`s, so a full-row save can't overwrite them. `reputation_score` is mapped (see Known gaps).
 
 ## Status enums
 
-- **Task:** SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED → PENDING_REVIEW → RESOLVED. Off-path: AWAITING_CAPACITY, TIMED_OUT, SPEC_VIOLATION, FAILED, CANCELLED. As of V24 the off-path states have live sweeper triggers: **AWAITING_CAPACITY** (no eligible agent) is re-matched every 10s and, after 3 exhausted attempts, transitions **→ CANCELLED + full refund**; a `QUEUED`/`EXECUTING` task past its `execution_deadline` transitions **→ TIMED_OUT + full refund**. Both were previously dormant/reserved. **Channel split (Phase 4):** a task submitted through the **API-key channel auto-settles on the validation result** — PASS → `RESOLVED` (85/15 payout), FAIL → `SPEC_VIOLATION` (refund) — *skipping* `PENDING_REVIEW` and the human accept/reject + dispute path entirely; a human-submitted task keeps `PENDING_REVIEW → RESOLVED` and the full review/dispute flow.
-- **Agent:** PENDING_VERIFICATION → ACTIVE → SUSPENDED / DEACTIVATED.
-- **Dispute reason:** A_MISMATCH, B_FACTUAL, C_INCOMPLETE, D_CHANGED_MIND. Reason D → deterministic no-refund; A/B/C → LLM arbitration.
-- **Dispute ruling:** Fulfilled → release; Partially Fulfilled → 50/50 split; Not Fulfilled → full refund.
-- **Dispute status:** OPEN → ARBITRATING → **RULED** (arbitrator ruling = *proposal*, escrow still held) → RESOLVED, plus **ESCALATED** (stranded via DLQ/sweeper, or the client's **appeal** of a RULED proposal). The effective ruling is the highest-tier `dispute_rulings` row (arbitrator tier-1, admin override tier-2).
+- **Task:** `SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED → PENDING_REVIEW → RESOLVED`, with `DISPUTED` between review and resolved. Off-path: `AWAITING_CAPACITY`, `TIMED_OUT`, `SPEC_VIOLATION`, `FAILED`, `CANCELLED`.
+  - `AWAITING_CAPACITY`: no eligible agent, or a pinned agent went inactive. Retried by a sweeper, then `CANCELLED` with a refund.
+  - `TIMED_OUT`: past `execution_deadline`, with a refund.
+  - API-key tasks skip review: PASS goes to `RESOLVED`, FAIL to `SPEC_VIOLATION`.
+- **Task resolution:** `ACCEPTED`, `REJECTED`, `PARTIALLY_ACCEPTED`.
+- **Agent:** `PENDING_VERIFICATION → ACTIVE ⇄ SUSPENDED`; `ACTIVE` or `SUSPENDED → DEACTIVATED`.
+- **Agent version:** `DRAFT`, `ACTIVE`, `DEPRECATED`.
+- **Reject reason:** `A_MISMATCH`, `B_FACTUAL`, `C_INCOMPLETE` open a dispute; `D_CHANGED_MIND` charges in full with no dispute.
+- **Dispute:** `OPEN → ARBITRATING → RULED → RESOLVED`, plus `ESCALATED` (appeal, DLQ or timeout). The effective ruling is the highest tier.
+- **Ruling:** `FULFILLED`, `PARTIALLY_FULFILLED`, `NOT_FULFILLED`.
 
 ## Settlement rules
 
-- Platform commission: **15%**, deducted on release to the Agent. **IMPLEMENTED** by `SettlementPolicy` + `SettlementDomainService`:
-  - **Accept** → client escrow releases `PAYOUT` (net 85%) + `COMMISSION` (15%); builder wallet credited net amount (wallet opened on first payout). Endpoint: `POST /api/tasks/{id}/accept`.
-  - **Reject** → client escrow releases full `REFUND`. Endpoint: `POST /api/tasks/{id}/reject`.
-  - Both paths are owner-gated (`TaskReviewAppService`), atomic, and protected against double-settlement by pessimistic task-row lock (`SELECT … FOR UPDATE`).
-- **Disputes settle late (delayed settlement).** An `A/B/C` reject opens a dispute; the arbitrator's ruling is only a *proposal* (dispute rests at `RULED`, escrow held). The client then `POST /api/disputes/{id}/accept-ruling` or `/appeal` (→ admin tier-2), or an `@Scheduled RulingAcceptSweeper` auto-accepts a stale `RULED` proposal after `ruling-accept-after`. `settleFromEffective` moves money **exactly once**, from the highest-tier ruling, under the same `SELECT … FOR UPDATE` task lock — the arbitrator callback never settles. Reuses existing dispute statuses (no migration).
-- Spec-violation after one retry: **80% refund to client, 20% platform fee** (pending — Module 4).
-- Escrow invariant is reconstructable from `ledger_entries` at any time (used by the settlement reconstruction test).
-- **Reputation** (ADR 0003, as built — this replaced an earlier sketch of a rolling 30-day window with percentage penalties, temporal decay and auto-suspend, **none of which exists**; there is no `ReputationDroppedBelowThresholdDomainEvent`): two independent shrinkage estimators over `reputation_events`, blended by α. `Reliability = (kR·p₀ + Σq)/(kR + n)` over platform-witnessed outcomes; `Satisfaction = (kS·p₀ + Σq)/(kS + n)` over client ratings; `score = 100 × (α·Rel + (1−α)·Sat)`. Defaults `α = 0.70`, `kR = 5`, `kS = 10`, `p₀ = 0.50`, so a zero-event agent scores exactly `50.00`. Keeping the streams apart is load-bearing: blended, an unreviewed accept would count as maximum quality, making silence indistinguishable from perfection and review-suppression the rational builder strategy. Emission is explicit per outcome site and folded O(1) into the `agents` cache inside the settling transaction — **never derived from how money moved** (`chargeChangedMind` pays the builder in full while writing `REJECTED`). No decay, no auto-suspend, no time window.
+`SettlementPolicy` and `SettlementDomainService` own the arithmetic. Commission is **15%**.
 
-## Known concurrency backlog
+| Outcome | Client | Builder | Platform |
+|---|---|---|---|
+| Accept, `D_CHANGED_MIND`, API validation PASS, ruling `FULFILLED` | Pays 100% | 85% | 15% |
+| Ruling `PARTIALLY_FULFILLED` | 50% refunded | 42.5% | 7.5% |
+| Ruling `NOT_FULFILLED`, `SPEC_VIOLATION`, `FAILED`, `TIMED_OUT`, `CANCELLED` | 100% refunded | 0 | 0 |
 
-`wallets.version` (`@Version` on `WalletDO`, added V13) makes every wallet write optimistic-locked: freeze, top-up, release, refund, and credit all route through `WalletRepositoryImpl.save()`, which load-then-mutates the JPA-managed entity so the version check fires. Two concurrent mutations to the same wallet (e.g. two simultaneous top-ups, or racing task submissions that both try to freeze) collide on `version`; the loser's `UPDATE` matches zero rows, Hibernate throws `ObjectOptimisticLockingFailureException`, and that loser's whole enclosing `@Transactional` method rolls back — no lost update, no wallet/ledger divergence. That exception isn't translated by `GlobalExceptionConfiguration` today, though: it falls through to the generic `Exception` handler as an opaque `500`, rather than a clean, retryable `409` the way `INSUFFICIENT_BALANCE` gets — a real but small UX gap, not a money-safety one.
+- **Rejecting does not refund by itself.** A/B/C opens a dispute and moves no money until a ruling is final.
+- **Disputes settle late.** The arbitrator's ruling is a proposal, and escrow holds at `RULED` until the client accepts or appeals, or a sweeper auto-accepts. `settleFromEffective` then moves money once, under the task row lock. The arbitrator callback never settles.
+- **There is no retry after a spec violation.** It is an immediate full refund.
+- The builder's wallet opens on first payout. Escrow is reconstructable from `ledger_entries`.
 
-`tasks` still carries **no** `@Version` column, so task saves are last-writer-wins outside the locked path. The settlement path (accept/reject) is protected against double-payout by a pessimistic `SELECT … FOR UPDATE` on the task row instead: the second concurrent transaction blocks on the lock, re-reads the already-RESOLVED row, and the domain state guard throws before any money moves. Elsewhere on the task row, last-writer-wins still applies — tracked as platform hardening: add `@Version` to `TaskDO`. The V24 reliability sweepers (`CapacityRematchSweeper`, `ExecutionTimeoutSweeper`) drive their transition writes through unlocked reads and therefore assume a **single backend instance** (`@Scheduled(fixedDelay)` serializes within one JVM); before scaling to >1 replica, `assignAndQueue` / `cancelAwaitingCapacityWithRefund` must be made status-conditional or row-locked. Money is safe regardless — every escrow exit is a single recorded settlement backstopped by `settlements.task_id` UNIQUE. Likewise, the V25 per-key spend caps (`SubmitOrchestrationAppService.checkSpendCap`) read committed/daily spend with no per-key lock — a documented, accepted TOCTOU where two concurrent submits under the same key can slightly overshoot the cap, matching the matcher sweepers' single-instance assumption above.
+## Reputation
+
+Two independent shrinkage estimators over `reputation_events`, blended 70/30. The formula and the reason for keeping them apart are in [ADR 0003](../adr/0003-two-component-shrinkage-reputation.md); defaults are bound in `DomainServiceConfig`. A zero-event agent scores exactly `50.00`.
+
+Emission is explicit at each outcome site, never derived from how money moved: `chargeChangedMind` pays the builder in full while recording `REJECTED`. Changed-mind rejection, capacity cancellation and self-dealt tasks emit nothing. `agents.*_sum/count` is a cache for O(1) rescoring, updated in the settling transaction. `reconcile()` rebuilds it from the stream; only tests call it today.
+
+## Concurrency
+
+- **Wallets:** `@Version` on `WalletDO`. The loser of a race rolls back its whole transaction.
+- **Settlement:** a pessimistic `SELECT … FOR UPDATE` on the task row. The second transaction re-reads the resolved row and the state guard throws.
+- **Backstop:** every escrow exit is one settlement row, guarded by `settlements.task_id UNIQUE`.
+
+Remaining weaknesses are listed in [Known gaps](build-status.md#concurrency).

@@ -3,11 +3,11 @@
 A lightweight ADR (architecture decision record) log for the structural and convention
 choices behind `backend/` — especially the ones where HireAI **deliberately diverges** from
 the eyebluecn `smart-classroom` COLA reference it was modeled on. Each entry is
-**Context → Decision → Consequence**. Newest decisions dated 2026-06-24.
+**Context → Decision → Consequence**.
 
 > These are the *why*. The *what* lives in [`ddd-conventions.md`](ddd-conventions.md) (layering,
-> naming) and [`identity-and-authz.md`](identity-and-authz.md) (auth). When a convention here
-> conflicts with Notion's SAD, the SAD wins on technical matters — update this file.
+> naming) and [`identity-and-authz.md`](identity-and-authz.md) (auth). Record new decisions in
+> [`docs/adr/`](../adr/).
 
 ---
 
@@ -21,8 +21,8 @@ the eyebluecn `smart-classroom` COLA reference it was modeled on. Each entry is
 
 **Consequence.** Layer dependencies are now **compiler-enforced** — `hireai-domain` and
 `hireai-utility` carry no Spring on their classpath, so the domain is framework-free *by
-construction*, not by discipline. Cost: 7 `pom.xml`s; only `hireai-main` is bootable; the whole
-test suite lives in `hireai-main`. Package names were unchanged in the split.
+construction*, not by discipline. Cost: 7 `pom.xml`s; only `hireai-main` is bootable, so
+integration tests live there. Package names were unchanged in the split.
 
 ## ADR-002 — Aggregate-centric DDD (rich aggregates), not the reference's anemic model
 
@@ -64,15 +64,18 @@ for *other services* to call.
 **Consequence.** No inter-service RPC indirection to maintain. `DTO`/`Request`/`Converter` live in
 `controller`, not a facade module.
 
-## ADR-005 — All exceptions in `hireai-utility`
+## ADR-005 — Shared exceptions in `hireai-utility`
 
 **Context.** Exceptions were scattered: `DomainException` in `domain/shared/exception`, the
 auth/security ones in `application`.
 
-**Decision.** Consolidate every exception type into `com.hireai.utility.exception`.
+**Decision.** Consolidate shared exception types into `com.hireai.utility.exception`.
 
-**Consequence.** Any layer can throw them dependency-free, and the global handler maps them in one
-place. `DomainException` sits next to `ResultCode` (which it already depended on), removing a
+**Consequence.** Any layer can throw them dependency-free, and `GlobalExceptionConfiguration` maps
+them. Three stay local to where they're used: `ArbitrationAuthException` and
+`InvalidRulingCategoryException` (handled on the callback controller), and
+`SubmitOrchestrationAppServiceImpl.IdempotencyRaceException` (internal control flow).
+`DomainException` sits next to `ResultCode` (which it already depended on), removing a
 cross-module reference. Matches the reference's `utility/exception` placement.
 
 ## ADR-006 — JPA persistence entities named `XxxDO`

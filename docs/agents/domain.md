@@ -4,10 +4,10 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root — the glossary / ubiquitous language. May not exist yet.
+- **`CONTEXT.md`** at the repo root — the glossary / ubiquitous language.
 - **`docs/adr/`** — read ADRs that touch the area you're about to work in.
 - **`docs/details/architecture-decisions.md`** — the pre-existing aggregated rationale for the backend's structural choices (COLA modules, rich aggregates, thin app layer, exceptions in `utility`, `DO` naming, OAuth no-silent-link), including where HireAI deliberately diverges from the COLA reference. It predates `docs/adr/`; treat it as a standing set of ADRs. **New** decisions go in `docs/adr/NNNN-*.md`.
-- **`docs/details/`** generally — the read-on-demand detail index that `CLAUDE.md` links, each entry carrying a "Read before X" trigger (build status, architecture, DDD conventions, data model, programmatic channel, frontend, identity & authz, demo runbook). Follow the trigger that matches your task rather than preloading all of them.
+- **`docs/details/`** generally — the read-on-demand detail index that `CLAUDE.md` links, each entry carrying a "Read before X" trigger (build status, architecture, DDD conventions, data model, matching, programmatic channel, frontend, identity & authz, demo runbook). Follow the trigger that matches your task rather than preloading all of them.
 - **`docs/post-mortem/`** — real mistakes from this project. `CLAUDE.md` names which ones are mandatory reading before auth, security-config, or controller-test changes.
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
@@ -28,7 +28,8 @@ This is a **single-context** repo: one `CONTEXT.md` and one `docs/adr/` at the r
 ├── backend/              ← Spring Boot (DDD, COLA multi-module)
 ├── arbitration/          ← Python FastAPI + LangGraph
 ├── frontend/             ← Next.js
-└── mcp/                  ← Python MCP server facade
+├── mcp/                  ← Python MCP server facade
+└── demo-agent/           ← stub Agent for live demos
 ```
 
 The four source trees are separate services, not separate bounded contexts with separate glossaries — they share one domain vocabulary (Task, Agent, Builder, escrow, output spec, ruling, settlement). If that stops being true, switch to multi-context by adding a root `CONTEXT-MAP.md` pointing at a per-tree `CONTEXT.md`, plus `<tree>/docs/adr/` for tree-scoped decisions.

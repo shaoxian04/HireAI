@@ -10,27 +10,29 @@ Six functional modules: (1) Task Submission, (2) Agent Registration, (3) Routing
 
 ## Repository status
 
-**Early implementation.** Canonical design lives in Notion (PRD + SAD, linked below). Four source trees: **`backend/`** (Spring Boot Java 21, DDD as a COLA multi-module Maven reactor), **`arbitration/`** (Python FastAPI + LangGraph dispute arbitrator, OpenAI `gpt-4o`), **`frontend/`** (Next.js 16, App Router + TypeScript + Tailwind), **`mcp/`** (Python MCP-server facade over the programmatic API, stdio; official MCP SDK). Modules 1–4 and 6 are substantially built (task submit + escrow, agent registration, routing/execution, validation gate, tiered dispute resolution with arbitrator + admin backstop, discovery/storefront, accept/reject settlement) plus the **programmatic API-key channel** (submit → deterministic auto-settle → signed push webhooks; **MCP server facade + OpenAPI**) and **Module 5** (two-component shrinkage reputation + earned reviews). All six modules are now substantially built. 645 backend + 190 vitest + 21 mcp tests green.
+All six modules and the programmatic API-key channel are substantially built. Source trees: **`backend/`** (Spring Boot Java 21, DDD as a COLA multi-module Maven reactor), **`arbitration/`** (Python FastAPI + LangGraph dispute arbitrator, OpenAI `gpt-4o`), **`frontend/`** (Next.js 16, App Router + TypeScript + Tailwind), **`mcp/`** (Python MCP-server facade over the programmatic API, stdio), and **`demo-agent/`** (stub Agent for demos).
 
-**The full per-module / per-migration build narrative — the source of truth for what's built vs pending — lives in [`docs/details/build-status.md`](docs/details/build-status.md). Read it before starting any feature, to see what already exists.**
+**[`docs/details/build-status.md`](docs/details/build-status.md) is the source of truth for what's built and for known gaps. Read it before starting any feature.**
 
 ## Build / run / test
-
-Backend, arbitration service, frontend, and the MCP server are built and tested.
 
 | Service | Location | Run | Build | Test |
 |---|---|---|---|---|
 | Backend | `backend/` | `mvn -f backend/hireai-main/pom.xml spring-boot:run` — after a one-off `mvn -f backend/pom.xml -pl hireai-main -am -DskipTests install` (needs Postgres at `DB_URL` **and** a RabbitMQ broker; JWT auth enforced by default) | `mvn -f backend/pom.xml -q -B package` | `mvn -f backend/pom.xml -B test` |
-| Arbitration | `arbitration/` | `cd arbitration && uv run uvicorn app.main:app` (needs RabbitMQ + `OPENAI_API_KEY` + backend callback reachable) | `cd arbitration && uv sync` | `cd arbitration && uv run pytest` (+ `uv run ruff check .`) |
-| Frontend | `frontend/` | `npm --prefix frontend run dev` (proxies `/api/*` → `:8080`) | `npm --prefix frontend run build` | `npx vitest run` (in `frontend/`) |
+| Arbitration | `arbitration/` | `cd arbitration && uv run uvicorn app.main:app` (needs RabbitMQ + `OPENAI_API_KEY` + backend callback reachable) | `cd arbitration && uv sync` | `cd arbitration && OPENAI_API_KEY= ARBITRATION_CALLBACK_SECRET= uv run pytest` (blank keys, or `test_health_ok` hangs on a real `.env`; + `uv run ruff check .`) |
+| Frontend | `frontend/` | `npm --prefix frontend run dev` (proxies `/api/*` → `:8080`) | `npm --prefix frontend run build` | `npm run lint && npx vitest run` (in `frontend/`) |
 | MCP server | `mcp/` | `HIREAI_API_KEY=hk_live_… uv run hireai-mcp` (stdio facade; needs the backend reachable at `HIREAI_API_BASE_URL`, default `:8080`) | `cd mcp && uv sync` | `cd mcp && uv run pytest` (+ `uv run ruff check .`) |
-| Local stack | repo root | `docker compose up` _(planned)_ | — | — |
 
-Backend notes: JDK 21 + Maven. The `backend/pom.xml` is the reactor **parent** (`packaging=pom`); `package`/`test` there build all seven modules in layer order. The only **bootable** module is `hireai-main` — it owns `HireAiApplication`, the Flyway migrations + `application.yml`/`application-oauth.yml`, the `spring-boot-maven-plugin`, and the **entire test suite** (run against the fully-assembled context); hence `spring-boot:run` must target it — but **not** via `-pl hireai-main -am`: `-am` pulls the parent into the reactor and a CLI-invoked goal runs against *every* project in it, so that form dies on the parent with `Unable to find a suitable main class`. Boot the module's own pom directly (install once first, so the sibling modules resolve from the local repo). Note `spring.config.import` is `optional:file:.env[.properties]` — a **relative** path — so booting from `hireai-main` does **not** pick up `backend/.env`; pass `DB_URL`/`DB_USERNAME`/`DB_PASSWORD` (and `SUPABASE_*`) in the environment instead. Integration tests (`*IntegrationTest`) use Testcontainers (Postgres **+ RabbitMQ**) and **skip automatically when no Docker daemon is reachable** — they do not fail the build. The default/`prod` profile **enforces JWT auth**; the `test` profile (applied to existing context-loading tests via `@ActiveProfiles("test")`) is permissive with a fixed dev user. Flyway owns the schema (`V1`–`V28`); Hibernate runs `ddl-auto: validate`.
+Backend notes:
+- `backend/pom.xml` is the reactor **parent**, so `package`/`test` there build every module, but `spring-boot:run` only works on `hireai-main`, using the command above (`-pl hireai-main -am` fails on the parent).
+- `backend/.env` is **not** loaded when booting that way (it's a cwd-relative import, and it points at Supabase). Pass `DB_*` and `SUPABASE_*` as environment variables.
+- `*IntegrationTest` classes use Testcontainers and **skip silently without Docker**, so a green run without Docker proves less than it looks.
+- The default profile enforces auth; the `test` profile is permissive with a fixed dev user.
+- Flyway owns the schema (`backend/hireai-main/src/main/resources/db/migration`); Hibernate only validates.
 
 ## Stack at a glance
 
-Next.js + Spring Boot (DDD) + Python FastAPI/LangGraph arbitrator (OpenAI `gpt-4o`) + PostgreSQL + RabbitMQ, deployed on Railway. Full diagram and rationale: see `docs/details/architecture.md`.
+Next.js + Spring Boot (DDD) + Python FastAPI/LangGraph arbitrator + PostgreSQL + RabbitMQ. Details: `docs/details/architecture.md`.
 
 ## Hard invariants (never compromise)
 
@@ -39,9 +41,19 @@ These are needed on every task and are too important to risk being unread. Enfor
 1. **Escrow before execution.** Credits freeze on task submit and leave escrow only via an explicit, recorded settlement (release / refund / split). No dispatch without a successful freeze.
 2. **Append-only money & audit.** `ledger_entries` and `reputation_events` are append-only (DB triggers raise on UPDATE/DELETE). Corrections are compensating entries. Settlement and reputation must be fully reconstructable.
 3. **Deterministic money path.** The LLM may produce a dispute *ruling* but never moves credits. All settlement is computed deterministically in the domain layer from the ruling category.
-4. **Declared output spec is the binding contract.** An Agent's `output_spec` is the single contract used by both automated validation and arbitration. Validation runs before any client sees a result.
+4. **The task's frozen output spec is the binding contract.** The `output_spec` stored on the task at submit is the single contract used by both automated validation and arbitration: the Agent's own spec on direct bookings, the client's on routed tasks (see #46). Validation runs before any client sees a result.
 5. **Server-side identity from JWT.** Derive the user ID from the JWT principal; path/body IDs require an explicit ownership check. Builders act only on Agents they own; clients only on their own tasks/wallet.
 6. **Signed, HTTPS-only Agent I/O.** Webhook URLs must be HTTPS; dispatch carries a short-lived signed token; result callbacks are rejected (401) unless the token is valid and unexpired. Extended to **outbound** client webhooks: SSRF-guarded target + HMAC signature (see `docs/details/programmatic-channel.md`).
+
+## Doc rules
+
+These keep the docs from going stale. Apply them to every doc edit.
+
+- **Change the doc with the code.** If a change makes a doc wrong, fix it in the same commit.
+- **One home per fact.** Link to it; don't restate it in a second doc.
+- **No fast-changing facts.** No test counts, latest-migration numbers, branch or PR status, or copied config defaults. Point to the file that owns them.
+- **Current behaviour only.** Known defects go in the Known gaps section of `build-status.md`, and plans go in issues or `docs/superpowers/specs/`.
+- **Records stay dated.** ADRs, post-mortems, specs and `docs/reports/` are history: don't use them to learn how the system works today.
 
 ## Skill usage
 
@@ -76,8 +88,10 @@ Read before making auth, security-config, or controller-test changes — these a
 
 Read the relevant file on demand — don't preload everything.
 
-- **`docs/details/build-status.md`** — the full per-module / per-migration record of what's built vs pending across backend / arbitration / frontend / mcp.
+- **`docs/details/build-status.md`** — what's built in each module, and the single list of known gaps.
   **Read before starting any feature — to see what already exists.**
+- **`docs/details/matching.md`** — how agents are ranked, shortlisted and routed, and the re-match and timeout sweepers.
+  **Read before touching matching, routing, or the submit flow.**
 - **`docs/details/architecture.md`** — services, polyglot topology, tech stack, communication patterns.
   **Read before any cross-service or infrastructure change.**
 - **`docs/details/ddd-conventions.md`** — layering (`controller → application → domain ← infrastructure`), aggregate boundaries, naming suffixes, the five rules.
