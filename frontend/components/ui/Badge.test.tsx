@@ -6,7 +6,7 @@ describe("statusColor", () => {
   it("maps every task lifecycle status to a non-empty class string", () => {
     const statuses = [
       "SUBMITTED", "QUEUED", "EXECUTING", "RESULT_RECEIVED", "PENDING_REVIEW",
-      "RESOLVED", "AWAITING_CAPACITY", "TIMED_OUT", "SPEC_VIOLATION", "FAILED", "CANCELLED",
+      "RESOLVED", "AWAITING_AGENT", "TIMED_OUT", "SPEC_VIOLATION", "FAILED", "CANCELLED",
     ];
     for (const s of statuses) expect(statusColor(s).length).toBeGreaterThan(0);
   });
@@ -26,6 +26,7 @@ describe("statusLabel", () => {
   it("gives known statuses a readable label", () => {
     expect(statusLabel("PENDING_REVIEW")).toBe("Needs review");
     expect(statusLabel("SPEC_VIOLATION")).toBe("Failed validation");
+    expect(statusLabel("AWAITING_AGENT")).toBe("Awaiting agent");
   });
 
   it("sentence-cases an unknown status instead of showing the raw enum", () => {

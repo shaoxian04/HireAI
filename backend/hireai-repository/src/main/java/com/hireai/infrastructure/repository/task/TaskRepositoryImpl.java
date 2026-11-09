@@ -86,8 +86,8 @@ public class TaskRepositoryImpl implements TaskRepository {
     }
 
     @Override
-    public List<UUID> findIdsAwaitingCapacity() {
-        return taskJpa.findIdsAwaitingCapacity();
+    public List<UUID> findIdsAwaitingAgent() {
+        return taskJpa.findIdsAwaitingAgent();
     }
 
     @Override

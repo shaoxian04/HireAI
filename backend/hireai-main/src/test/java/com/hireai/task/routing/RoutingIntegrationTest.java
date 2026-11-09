@@ -32,7 +32,7 @@ import static org.awaitility.Awaitility.await;
  * End-to-end marketplace spine: submit a task, let routing match it to a seeded ACTIVE
  * agent, dispatch over RabbitMQ to an in-JVM stub agent, and observe the token-authenticated
  * callback + validation gate drive the task to PENDING_REVIEW with a persisted task_results row.
- * Also asserts the no-match path lands on AWAITING_CAPACITY. Boots a real Postgres (Flyway V1-V16) and a
+ * Also asserts the no-match path lands on AWAITING_AGENT. Boots a real Postgres (Flyway V1-V16) and a
  * real RabbitMQ; auto-skips without Docker. Runs under the 'dev' profile so the localhost
  * stub webhook is allowed (spec invariant #6 local-demo exception); the signed dispatch
  * token is still enforced.
@@ -236,7 +236,7 @@ class RoutingIntegrationTest {
     }
 
     @Test
-    void noMatchingAgentLeavesTaskAwaitingCapacity() {
+    void noMatchingAgentLeavesTaskAwaitingAgent() {
         UUID client = newClient();
         jdbc.update("INSERT INTO wallets (id, user_id, available_balance, escrow_balance) VALUES (?, ?, 100.00, 0.00)",
                 UUID.randomUUID(), client);
@@ -247,7 +247,7 @@ class RoutingIntegrationTest {
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             String status = jdbc.queryForObject("SELECT status FROM tasks WHERE id = ?", String.class, taskId);
-            assertThat(status).isEqualTo("AWAITING_CAPACITY");
+            assertThat(status).isEqualTo("AWAITING_AGENT");
         });
 
         Integer results = jdbc.queryForObject(

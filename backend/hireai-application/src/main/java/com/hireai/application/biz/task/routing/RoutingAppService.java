@@ -9,7 +9,7 @@ import java.util.UUID;
  * Orchestrates the routing decision for a submitted task. Reads the task routing view,
  * asks the AgentRepository for ACTIVE candidates, runs the match, and either
  * assign-and-queues the task (then publishes a dispatch message AFTER that write has
- * committed) or marks it AWAITING_CAPACITY. Invoked from RoutingEventListener after the
+ * committed) or marks it AWAITING_AGENT. Invoked from RoutingEventListener after the
  * submit transaction commits (Hard Invariant #1: routing never precedes a committed escrow
  * freeze).
  */

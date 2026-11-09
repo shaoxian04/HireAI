@@ -97,14 +97,14 @@ class TaskReliabilityQueriesIntegrationTest {
 
     @Test
     @Transactional
-    void findIdsAwaitingCapacityReturnsExactlyTheAwaitingCapacityTaskIds() {
+    void findIdsAwaitingAgentReturnsExactlyTheAwaitingAgentTaskIds() {
         UUID client = newClient();
-        UUID awaiting1 = insertTask(client, "AWAITING_CAPACITY");
-        UUID awaiting2 = insertTask(client, "AWAITING_CAPACITY");
+        UUID awaiting1 = insertTask(client, "AWAITING_AGENT");
+        UUID awaiting2 = insertTask(client, "AWAITING_AGENT");
         insertTask(client, "QUEUED");
         insertTask(client, "RESOLVED");
 
-        List<UUID> ids = taskRepository.findIdsAwaitingCapacity();
+        List<UUID> ids = taskRepository.findIdsAwaitingAgent();
 
         assertThat(ids).containsExactlyInAnyOrder(awaiting1, awaiting2);
     }
@@ -140,7 +140,7 @@ class TaskReliabilityQueriesIntegrationTest {
     @Transactional
     void incrementMatchAttemptsTwiceYieldsTwoStartingFromZero() {
         UUID client = newClient();
-        UUID taskId = insertTask(client, "AWAITING_CAPACITY");
+        UUID taskId = insertTask(client, "AWAITING_AGENT");
 
         assertThat(taskRepository.matchAttempts(taskId)).isZero();
 

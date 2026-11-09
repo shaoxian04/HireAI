@@ -37,7 +37,7 @@ public interface TaskRepository {
      * Operational reliability columns — unmapped on TaskDO by design; see V24.
      */
 
-    List<UUID> findIdsAwaitingCapacity();
+    List<UUID> findIdsAwaitingAgent();
 
     /** Ids still SUBMITTED (never routed) whose task was created before {@code cutoff}. */
     List<UUID> findIdsSubmittedBefore(java.time.Instant cutoff);

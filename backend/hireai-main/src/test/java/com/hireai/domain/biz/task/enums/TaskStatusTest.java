@@ -13,7 +13,7 @@ class TaskStatusTest {
         assertThat(TaskStatus.EXECUTING.isPendingEscrow()).isTrue();
         assertThat(TaskStatus.RESULT_RECEIVED.isPendingEscrow()).isTrue();
         assertThat(TaskStatus.PENDING_REVIEW.isPendingEscrow()).isTrue();
-        assertThat(TaskStatus.AWAITING_CAPACITY.isPendingEscrow()).isTrue();
+        assertThat(TaskStatus.AWAITING_AGENT.isPendingEscrow()).isTrue();
     }
 
     @Test

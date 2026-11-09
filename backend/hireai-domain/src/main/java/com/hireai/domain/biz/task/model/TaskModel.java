@@ -103,9 +103,9 @@ public final class TaskModel {
 
     // --- Routing & execution transitions (immutable: each returns a NEW TaskModel) ---
 
-    /** SUBMITTED/AWAITING_CAPACITY → QUEUED: a matching agent version was selected (re-match included). */
+    /** SUBMITTED/AWAITING_AGENT → QUEUED: a matching agent version was selected (re-match included). */
     public TaskModel assignAndQueue(UUID agentVersionId) {
-        requireStatusIn("assignAndQueue", TaskStatus.SUBMITTED, TaskStatus.AWAITING_CAPACITY);
+        requireStatusIn("assignAndQueue", TaskStatus.SUBMITTED, TaskStatus.AWAITING_AGENT);
         requirePresent(agentVersionId, "agent version id");
         return copyWith(TaskStatus.QUEUED, agentVersionId, this.result);
     }
@@ -114,10 +114,10 @@ public final class TaskModel {
      * QUEUED → EXECUTING: the WorkOrder reached the agent. Idempotent: from any state past
      * QUEUED (the agent already called back, or the task timed out / failed meanwhile) it is a
      * no-op that returns {@code this}. Only the pre-assignment states (SUBMITTED,
-     * AWAITING_CAPACITY) are illegal sources.
+     * AWAITING_AGENT) are illegal sources.
      */
     public TaskModel markExecuting() {
-        if (this.status == TaskStatus.SUBMITTED || this.status == TaskStatus.AWAITING_CAPACITY) {
+        if (this.status == TaskStatus.SUBMITTED || this.status == TaskStatus.AWAITING_AGENT) {
             throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
                     "Illegal transition markExecuting from " + this.status);
         }
@@ -149,18 +149,18 @@ public final class TaskModel {
         return copyWith(TaskStatus.SPEC_VIOLATION, this.agentVersionId, this.result);
     }
 
-    /** SUBMITTED → AWAITING_CAPACITY (idempotent from AWAITING_CAPACITY for re-match no-match passes). */
-    public TaskModel markAwaitingCapacity() {
-        requireStatusIn("markAwaitingCapacity", TaskStatus.SUBMITTED, TaskStatus.AWAITING_CAPACITY);
-        return copyWith(TaskStatus.AWAITING_CAPACITY, this.agentVersionId, this.result);
+    /** SUBMITTED → AWAITING_AGENT (idempotent from AWAITING_AGENT for re-match no-match passes). */
+    public TaskModel markAwaitingAgent() {
+        requireStatusIn("markAwaitingAgent", TaskStatus.SUBMITTED, TaskStatus.AWAITING_AGENT);
+        return copyWith(TaskStatus.AWAITING_AGENT, this.agentVersionId, this.result);
     }
 
     /**
-     * SUBMITTED|AWAITING_CAPACITY → CANCELLED: routing attempts exhausted before any Agent was
+     * SUBMITTED|AWAITING_AGENT → CANCELLED: routing attempts exhausted before any Agent was
      * assigned (the SUBMITTED sweeper or the re-match sweeper); the caller refunds escrow.
      */
     public TaskModel markCancelled() {
-        requireStatusIn("markCancelled", TaskStatus.SUBMITTED, TaskStatus.AWAITING_CAPACITY);
+        requireStatusIn("markCancelled", TaskStatus.SUBMITTED, TaskStatus.AWAITING_AGENT);
         return copyWith(TaskStatus.CANCELLED, this.agentVersionId, this.result);
     }
 

@@ -30,8 +30,8 @@ public interface TaskJpaRepository extends JpaRepository<TaskDO, UUID> {
     @Query(value = "UPDATE tasks SET pinned_agent_version_id = :versionId WHERE id = :id", nativeQuery = true)
     void pinAgentVersion(@Param("id") UUID id, @Param("versionId") UUID versionId);
 
-    @Query(value = "SELECT id FROM tasks WHERE status = 'AWAITING_CAPACITY'", nativeQuery = true)
-    List<UUID> findIdsAwaitingCapacity();
+    @Query(value = "SELECT id FROM tasks WHERE status = 'AWAITING_AGENT'", nativeQuery = true)
+    List<UUID> findIdsAwaitingAgent();
 
     @Query(value = "SELECT id FROM tasks WHERE status = 'SUBMITTED' AND gmt_create < :cutoff", nativeQuery = true)
     List<UUID> findIdsSubmittedBefore(@Param("cutoff") Instant cutoff);

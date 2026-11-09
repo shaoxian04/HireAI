@@ -75,9 +75,9 @@ public class RoutingAppServiceImpl implements RoutingAppService {
         Optional<UUID> chosen = routingMatchDomainService.selectOne(view, candidates);
 
         if (chosen.isEmpty()) {
-            log.info("No ACTIVE agent matched task {} (category={}, budget={}); marking AWAITING_CAPACITY",
+            log.info("No ACTIVE agent matched task {} (category={}, budget={}); marking AWAITING_AGENT",
                     taskId, view.category(), view.budget());
-            taskWriteAppService.markAwaitingCapacity(taskId);
+            taskWriteAppService.markAwaitingAgent(taskId);
             return;
         }
 
@@ -100,10 +100,10 @@ public class RoutingAppServiceImpl implements RoutingAppService {
         if (maybeTarget.isEmpty()) {
             // The agent was deactivated or suspended between booking and dispatch (deactivation race).
             // Mirror route()'s no-match branch: the task stays observable with escrow frozen pending
-            // capacity/ops — same contract as the matched path (spec §4.3 step 6).
-            log.warn("AgentVersion {} no longer ACTIVE; task {} left in AWAITING_CAPACITY (deactivation race)",
+            // an eligible agent or ops — same contract as the matched path (spec §4.3 step 6).
+            log.warn("AgentVersion {} no longer ACTIVE; task {} left in AWAITING_AGENT (deactivation race)",
                     agentVersionId, taskId);
-            taskWriteAppService.markAwaitingCapacity(taskId);
+            taskWriteAppService.markAwaitingAgent(taskId);
             return;
         }
         DispatchMessage message = assignAndPublish(view, agentVersionId, maybeTarget.get());

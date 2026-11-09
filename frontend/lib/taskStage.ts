@@ -17,7 +17,7 @@ export function taskStage(status: TaskStatus): StageState {
     case "SUBMITTED":
     case "QUEUED":
       return { index: 2, kind: "active" }; // escrow frozen on submit; now routing
-    case "AWAITING_CAPACITY":
+    case "AWAITING_AGENT":
       return { index: 2, kind: "wait" };
     case "EXECUTING":
       return { index: 3, kind: "active" };

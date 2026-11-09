@@ -13,13 +13,13 @@ import java.util.UUID;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class CapacityRematchSweeperTest {
+class AwaitingAgentRematchSweeperTest {
 
     @Mock
     private TaskReliabilityAppService taskReliabilityAppService;
 
     @InjectMocks
-    private CapacityRematchSweeper sweeper;
+    private AwaitingAgentRematchSweeper sweeper;
 
     @Test
     void sweep_calls_rematchOne_for_every_id() {
@@ -27,7 +27,7 @@ class CapacityRematchSweeperTest {
         UUID id1 = UUID.randomUUID();
         UUID id2 = UUID.randomUUID();
         UUID id3 = UUID.randomUUID();
-        when(taskReliabilityAppService.awaitingCapacityTaskIds())
+        when(taskReliabilityAppService.awaitingAgentTaskIds())
                 .thenReturn(List.of(id1, id2, id3));
 
         // Act
@@ -45,7 +45,7 @@ class CapacityRematchSweeperTest {
         // Arrange
         UUID id1 = UUID.randomUUID();
         UUID id2 = UUID.randomUUID();
-        when(taskReliabilityAppService.awaitingCapacityTaskIds())
+        when(taskReliabilityAppService.awaitingAgentTaskIds())
                 .thenReturn(List.of(id1, id2));
         doThrow(new RuntimeException("Test error")).when(taskReliabilityAppService).rematchOne(id1);
 
@@ -60,7 +60,7 @@ class CapacityRematchSweeperTest {
     @Test
     void sweep_no_calls_on_empty_list() {
         // Arrange
-        when(taskReliabilityAppService.awaitingCapacityTaskIds())
+        when(taskReliabilityAppService.awaitingAgentTaskIds())
                 .thenReturn(List.of());
 
         // Act

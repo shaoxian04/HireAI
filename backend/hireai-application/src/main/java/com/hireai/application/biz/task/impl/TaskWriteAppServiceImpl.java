@@ -87,10 +87,10 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markAwaitingCapacity(UUID taskId) {
+    public void markAwaitingAgent(UUID taskId) {
         TaskModel task = load(taskId);
-        taskRepository.save(task.markAwaitingCapacity());
-        log.info("Task {} marked AWAITING_CAPACITY (no eligible agent)", taskId);
+        taskRepository.save(task.markAwaitingAgent());
+        log.info("Task {} marked AWAITING_AGENT (no eligible agent)", taskId);
     }
 
     @Override
@@ -100,10 +100,10 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     }
 
     @Override
-    public void cancelAwaitingCapacityWithRefund(UUID taskId) {
+    public void cancelAwaitingAgentWithRefund(UUID taskId) {
         TaskModel task = load(taskId);
-        if (task.status() != TaskStatus.AWAITING_CAPACITY) {
-            log.info("Task {} is {} (not AWAITING_CAPACITY); skipping cancel", taskId, task.status());
+        if (task.status() != TaskStatus.AWAITING_AGENT) {
+            log.info("Task {} is {} (not AWAITING_AGENT); skipping cancel", taskId, task.status());
             return;
         }
         cancelWithRefund(task);

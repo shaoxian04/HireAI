@@ -31,7 +31,7 @@ public class JdbcBuilderStatsQueryDao implements BuilderStatsQueryPort {
                        COUNT(*) FILTER (WHERE tk.status IN ('RESULT_RECEIVED','RESOLVED')) AS completed,
                        COUNT(*) FILTER (WHERE tk.status IN ('FAILED','TIMED_OUT','SPEC_VIOLATION')) AS failed,
                        COUNT(*) FILTER (WHERE tk.status IN
-                           ('SUBMITTED','QUEUED','EXECUTING','AWAITING_CAPACITY','PENDING_REVIEW')) AS open_count,
+                           ('SUBMITTED','QUEUED','EXECUTING','AWAITING_AGENT','PENDING_REVIEW')) AS open_count,
                        COALESCE(SUM(tk.budget) FILTER (WHERE tk.status NOT IN
                            ('RESOLVED','CANCELLED','FAILED','TIMED_OUT','SPEC_VIOLATION')), 0) AS credits_in_escrow,
                        COALESCE(SUM(tk.budget) FILTER (WHERE tk.status IN

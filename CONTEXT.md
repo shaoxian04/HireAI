@@ -28,9 +28,9 @@ _Avoid_: dispatch token (a per-Task bearer credential, distinct from this long-l
 The single cause recorded when a Task ends without a delivered result: the Agent could not be reached, declined as busy, was unavailable, no alternative or eligible Agent remained, dispatch was abandoned, execution timed out, the Agent reported failure, or the output broke the spec. Set once at the end and shown to the Client, so the Client can tell *why* without reading the attempt history.
 _Avoid_: error, status (the status says how the Task ended; the reason says why)
 
-**Awaiting agent** _(built under the old name AWAITING_CAPACITY; rename planned in #58)_:
+**Awaiting agent**:
 A routed Task's holding condition when no eligible Agent exists yet. Escrow stays frozen while the platform looks again a bounded number of times, then the Task is cancelled and refunded. It is never caused by an Agent being busy: a busy Agent declines its WorkOrder and the Task moves on.
-_Avoid_: awaiting capacity (the old name; capacity is the Agent declining as busy, which is a different thing)
+_Avoid_: awaiting capacity (the old status name; capacity is the Agent declining as busy, which is a different thing)
 
 **SourceSnapshot** _(planned, not built; see ADR 0004)_:
 The frozen copy of the client-supplied input a Task is judged against — fetched once at submission, content-hashed, and immutable thereafter. It is what the Agent executes on and what an arbitrator later reads, so both sides are held to provably identical evidence even if the original source is amended or disappears.

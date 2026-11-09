@@ -51,7 +51,7 @@ class TaskReliabilityAppServiceImplTest {
     void setUp() {
         service = new TaskReliabilityAppServiceImpl(taskRepository, routingAppService,
                 taskWriteAppService, settlementWriteAppService, webhookOutboxAppService,
-                reputationWriteAppService, 3, Duration.ofSeconds(30), Clock.systemUTC());
+                reputationWriteAppService, 2, 3, Duration.ofSeconds(30), Clock.systemUTC());
     }
 
     private TaskModel taskWithStatus(TaskStatus status) {
@@ -78,7 +78,7 @@ class TaskReliabilityAppServiceImplTest {
     }
 
     @Test
-    void rematchSkipsTasksThatAlreadyLeftAwaitingCapacity() {
+    void rematchSkipsTasksThatAlreadyLeftAwaitingAgent() {
         givenTaskInStatus(TaskStatus.QUEUED);
         service.rematchOne(taskId);
         verifyNoInteractions(routingAppService);
@@ -87,7 +87,7 @@ class TaskReliabilityAppServiceImplTest {
 
     @Test
     void openTaskRematchRunsFullRouting() {
-        givenTaskInStatus(TaskStatus.AWAITING_CAPACITY);
+        givenTaskInStatus(TaskStatus.AWAITING_AGENT);
         when(taskRepository.findPinnedAgentVersionId(taskId)).thenReturn(Optional.empty());
         when(taskWriteAppService.registerMatchAttempt(taskId)).thenReturn(1);
         service.rematchOne(taskId);
@@ -98,7 +98,7 @@ class TaskReliabilityAppServiceImplTest {
     @Test
     void pinnedTaskRematchRetriesOnlyThePinnedVersion() {
         UUID pinned = UUID.randomUUID();
-        givenTaskInStatus(TaskStatus.AWAITING_CAPACITY);
+        givenTaskInStatus(TaskStatus.AWAITING_AGENT);
         when(taskRepository.findPinnedAgentVersionId(taskId)).thenReturn(Optional.of(pinned));
         when(taskWriteAppService.registerMatchAttempt(taskId)).thenReturn(1);
         service.rematchOne(taskId);
@@ -108,31 +108,51 @@ class TaskReliabilityAppServiceImplTest {
 
     @Test
     void exhaustedAttemptsCancelWithRefund() {
-        givenTaskInStatus(TaskStatus.AWAITING_CAPACITY); // before AND after routing
+        givenTaskInStatus(TaskStatus.AWAITING_AGENT); // before AND after routing
         when(taskRepository.findPinnedAgentVersionId(taskId)).thenReturn(Optional.empty());
-        when(taskWriteAppService.registerMatchAttempt(taskId)).thenReturn(3);
+        when(taskWriteAppService.registerMatchAttempt(taskId)).thenReturn(2); // the re-match limit
         service.rematchOne(taskId);
         verify(routingAppService).route(taskId); // last chance still taken
-        verify(taskWriteAppService).cancelAwaitingCapacityWithRefund(taskId);
+        verify(taskWriteAppService).cancelAwaitingAgentWithRefund(taskId);
     }
 
     @Test
     void underAttemptBoundDoesNotCancel() {
-        givenTaskInStatus(TaskStatus.AWAITING_CAPACITY);
+        givenTaskInStatus(TaskStatus.AWAITING_AGENT);
         when(taskRepository.findPinnedAgentVersionId(taskId)).thenReturn(Optional.empty());
-        when(taskWriteAppService.registerMatchAttempt(taskId)).thenReturn(2);
+        when(taskWriteAppService.registerMatchAttempt(taskId)).thenReturn(1);
         service.rematchOne(taskId);
-        verify(taskWriteAppService, never()).cancelAwaitingCapacityWithRefund(any());
+        verify(taskWriteAppService, never()).cancelAwaitingAgentWithRefund(any());
     }
 
     @Test
     void successfulRematchDoesNotCancelEvenAtBound() {
-        // status AWAITING_CAPACITY before routing, QUEUED on the re-read after routing
-        givenTaskStatusSequence(TaskStatus.AWAITING_CAPACITY, TaskStatus.QUEUED);
+        // status AWAITING_AGENT before routing, QUEUED on the re-read after routing
+        givenTaskStatusSequence(TaskStatus.AWAITING_AGENT, TaskStatus.QUEUED);
+        when(taskRepository.findPinnedAgentVersionId(taskId)).thenReturn(Optional.empty());
+        when(taskWriteAppService.registerMatchAttempt(taskId)).thenReturn(2);
+        service.rematchOne(taskId);
+        verify(taskWriteAppService, never()).cancelAwaitingAgentWithRefund(any());
+    }
+
+    @Test
+    void submittedSweeperKeepsItsOwnLimitOfThree() {
+        // attempt 2 is past the re-match limit (2) but under the SUBMITTED limit (3): no cancel
+        givenTaskInStatus(TaskStatus.SUBMITTED);
+        when(taskRepository.findPinnedAgentVersionId(taskId)).thenReturn(Optional.empty());
+        when(taskWriteAppService.registerMatchAttempt(taskId)).thenReturn(2);
+        service.rerouteSubmittedOne(taskId);
+        verify(routingAppService).route(taskId);
+        verify(taskWriteAppService, never()).cancelSubmittedWithRefund(any());
+    }
+
+    @Test
+    void submittedSweeperCancelsAtItsThirdAttempt() {
+        givenTaskInStatus(TaskStatus.SUBMITTED);
         when(taskRepository.findPinnedAgentVersionId(taskId)).thenReturn(Optional.empty());
         when(taskWriteAppService.registerMatchAttempt(taskId)).thenReturn(3);
-        service.rematchOne(taskId);
-        verify(taskWriteAppService, never()).cancelAwaitingCapacityWithRefund(any());
+        service.rerouteSubmittedOne(taskId);
+        verify(taskWriteAppService).cancelSubmittedWithRefund(taskId);
     }
 
     @Test

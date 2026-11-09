@@ -86,9 +86,9 @@ class TaskModelTransitionsTest {
     }
 
     @Test
-    void recordResultRejectsAwaitingCapacityAndTerminalSources() {
+    void recordResultRejectsAwaitingAgentAndTerminalSources() {
         TaskResultModel result = TaskResultModel.record(UUID.randomUUID(), "COMPLETED", "{}", null);
-        TaskModel awaiting = submitted().markAwaitingCapacity();
+        TaskModel awaiting = submitted().markAwaitingAgent();
         TaskModel failed = submitted().assignAndQueue(UUID.randomUUID()).markFailed();
         TaskModel timedOut = submitted().assignAndQueue(UUID.randomUUID()).markTimedOut();
 
@@ -114,8 +114,8 @@ class TaskModelTransitionsTest {
     }
 
     @Test
-    void markExecutingRejectsAwaitingCapacitySource() {
-        TaskModel awaiting = submitted().markAwaitingCapacity();
+    void markExecutingRejectsAwaitingAgentSource() {
+        TaskModel awaiting = submitted().markAwaitingAgent();
         assertThatThrownBy(awaiting::markExecuting).isInstanceOf(DomainException.class);
     }
 
@@ -134,15 +134,15 @@ class TaskModelTransitionsTest {
     }
 
     @Test
-    void markAwaitingCapacityMovesSubmittedToAwaitingCapacity() {
-        TaskModel awaiting = submitted().markAwaitingCapacity();
-        assertThat(awaiting.status()).isEqualTo(TaskStatus.AWAITING_CAPACITY);
+    void markAwaitingAgentMovesSubmittedToAwaitingAgent() {
+        TaskModel awaiting = submitted().markAwaitingAgent();
+        assertThat(awaiting.status()).isEqualTo(TaskStatus.AWAITING_AGENT);
     }
 
     @Test
-    void markAwaitingCapacityRejectsNonSubmittedSource() {
+    void markAwaitingAgentRejectsNonSubmittedSource() {
         TaskModel executing = submitted().assignAndQueue(UUID.randomUUID()).markExecuting();
-        assertThatThrownBy(executing::markAwaitingCapacity)
+        assertThatThrownBy(executing::markAwaitingAgent)
                 .isInstanceOf(DomainException.class);
     }
 
@@ -184,8 +184,8 @@ class TaskModelTransitionsTest {
     }
 
     @Test
-    void markCancelledFromAwaitingCapacity() {
-        TaskModel awaiting = submitted().markAwaitingCapacity();
+    void markCancelledFromAwaitingAgent() {
+        TaskModel awaiting = submitted().markAwaitingAgent();
         TaskModel cancelled = awaiting.markCancelled();
 
         assertThat(cancelled.status()).isEqualTo(TaskStatus.CANCELLED);
@@ -205,9 +205,9 @@ class TaskModelTransitionsTest {
     }
 
     @Test
-    void assignAndQueueAcceptsAwaitingCapacity() {
+    void assignAndQueueAcceptsAwaitingAgent() {
         UUID agentVersionId = UUID.randomUUID();
-        TaskModel awaiting = submitted().markAwaitingCapacity();
+        TaskModel awaiting = submitted().markAwaitingAgent();
         TaskModel queued = awaiting.assignAndQueue(agentVersionId);
 
         assertThat(queued.status()).isEqualTo(TaskStatus.QUEUED);
@@ -215,11 +215,11 @@ class TaskModelTransitionsTest {
     }
 
     @Test
-    void markAwaitingCapacityIsIdempotentFromAwaitingCapacity() {
-        TaskModel awaiting = submitted().markAwaitingCapacity();
-        TaskModel again = awaiting.markAwaitingCapacity();
+    void markAwaitingAgentIsIdempotentFromAwaitingAgent() {
+        TaskModel awaiting = submitted().markAwaitingAgent();
+        TaskModel again = awaiting.markAwaitingAgent();
 
-        assertThat(again.status()).isEqualTo(TaskStatus.AWAITING_CAPACITY);
+        assertThat(again.status()).isEqualTo(TaskStatus.AWAITING_AGENT);
         assertThat(again).isNotSameAs(awaiting);
     }
 }

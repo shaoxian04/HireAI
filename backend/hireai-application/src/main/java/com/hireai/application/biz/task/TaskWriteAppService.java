@@ -12,7 +12,7 @@ import java.util.UUID;
  * (escrow before execution): the task is persisted and its budget frozen in the SAME
  * transaction, so a failed freeze rolls the task back — there is no task without a
  * successful escrow freeze. Returns only the task id; callers re-read via the read service.
- * The routing transitions ({@link #assignAndQueue}, {@link #markAwaitingCapacity}) are
+ * The routing transitions ({@link #assignAndQueue}, {@link #markAwaitingAgent}) are
  * driven by the routing module after a match decision.
  */
 @Validated
@@ -24,21 +24,21 @@ public interface TaskWriteAppService {
     UUID submitDirectlyBooked(@NonNull TaskSubmitInfo taskSubmitInfo, @NonNull UUID agentVersionId);
 
     /**
-     * SUBMITTED/AWAITING_CAPACITY -> QUEUED, and stamps the execution deadline
+     * SUBMITTED/AWAITING_AGENT -> QUEUED, and stamps the execution deadline
      * (assignment time + agent maxExecutionSeconds + grace) used by the timeout sweeper.
      */
     void assignAndQueue(@NonNull UUID taskId, @NonNull UUID agentVersionId, @NonNull Instant executionDeadline);
 
-    void markAwaitingCapacity(@NonNull UUID taskId);
+    void markAwaitingAgent(@NonNull UUID taskId);
 
     /** Re-match bookkeeping: increments and returns the task's match_attempts counter. */
     int registerMatchAttempt(@NonNull UUID taskId);
 
     /**
-     * Re-match exhaustion: AWAITING_CAPACITY -> CANCELLED + FULL escrow refund (recorded settlement,
-     * Hard Invariants #1/#2). Status-guarded no-op if the task already left AWAITING_CAPACITY.
+     * Re-match exhaustion: AWAITING_AGENT -> CANCELLED + FULL escrow refund (recorded settlement,
+     * Hard Invariants #1/#2). Status-guarded no-op if the task already left AWAITING_AGENT.
      */
-    void cancelAwaitingCapacityWithRefund(@NonNull UUID taskId);
+    void cancelAwaitingAgentWithRefund(@NonNull UUID taskId);
 
     /**
      * SUBMITTED-sweeper exhaustion: SUBMITTED -> CANCELLED + FULL escrow refund + client webhook.
