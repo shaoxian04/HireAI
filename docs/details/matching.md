@@ -125,6 +125,11 @@ to the version's webhook with `Authorization: Bearer <dispatch token>` and `X-Co
 
 Nothing else is sent: no Client identity and no budget.
 
+**Token lifetime.** The bearer token expires at `executionDeadline` + 5 minutes
+(`DispatchTokenService.CALLBACK_MARGIN`), fixed when the consumer issues it. An Agent that calls back within
+its declared execution time is never refused; a callback after that margin gets 401. There is no separate
+TTL setting.
+
 **Duplicate deliveries.** An Agent may receive the same WorkOrder more than once and must treat a repeat
 `taskId` as the same job, not a new one. Only the first result for a task is recorded.
 

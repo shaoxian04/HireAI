@@ -84,7 +84,7 @@ Keep these distinct from the user JWT:
 
 | Credential | Secures | Check |
 |---|---|---|
-| **Signed dispatch token** (Inv #6) | `POST /api/agent-callbacks/{taskId}/result`, called by the Agent | `taskId` and `agentVersionId` must match the assignment; invalid, expired or mismatched is 401 |
+| **Signed dispatch token** (Inv #6) | `POST /api/agent-callbacks/{taskId}/result`, called by the Agent | `taskId` and `agentVersionId` must match the assignment; invalid, expired (see [token lifetime](matching.md#the-workorder)) or mismatched is 401 |
 | **Shared bearer secret** (`ARBITRATION_CALLBACK_SECRET`) | `POST /api/arbitration-callbacks/{disputeId}/ruling`, called by the arbitrator | Constant-time compare in `ArbitrationCallbackController`; mismatch is 401 |
 | **HMAC signature** (outbound) | Push webhooks to a client's callback; the platform authenticates itself to the client | See [`programmatic-channel.md` §6](programmatic-channel.md#6-push-webhooks) |
 

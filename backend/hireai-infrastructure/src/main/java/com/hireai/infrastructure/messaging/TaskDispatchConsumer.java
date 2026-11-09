@@ -7,14 +7,12 @@ import com.hireai.infrastructure.client.AgentDispatchClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-
-import java.time.Duration;
 
 /**
  * Consumes dispatch messages: checks under a row lock that the task is still QUEUED (otherwise
- * drops the message), issues a short-lived signed token, POSTs the webhook via
+ * drops the message), issues a signed token that lives until the task's execution deadline
+ * plus {@link DispatchTokenService#CALLBACK_MARGIN}, POSTs the webhook via
  * {@link AgentDispatchClient}, then flips the task to EXECUTING through the
  * {@link TaskExecutionPort} port. A send failure is re-raised so the listener container's
  * bounded retry applies; on exhaustion the message dead-letters to {@link DispatchQueues#DLQ},
@@ -31,9 +29,6 @@ public class TaskDispatchConsumer {
     private final AgentDispatchClient agentDispatchClient;
     private final TaskExecutionPort taskExecutionPort;
 
-    @Value("${hireai.dispatch.token-ttl-seconds:900}")
-    private long tokenTtlSeconds;
-
     @RabbitListener(queues = DispatchQueues.QUEUE)
     public void onDispatch(DispatchMessage message) {
         // 1. Row-locked status check: drop the message unless the task is still QUEUED for this
@@ -44,9 +39,10 @@ public class TaskDispatchConsumer {
                     message.taskId(), message.agentVersionId());
             return;
         }
-        // 2-3. Issue the token and send. A send failure propagates so the listener retry applies.
-        String token = dispatchTokenService.issue(
-                message.taskId(), message.agentVersionId(), Duration.ofSeconds(tokenTtlSeconds));
+        // 2-3. Issue the token (valid until the execution deadline stamped at assignment plus the
+        //    callback margin) and send. A send failure propagates so the listener retry applies.
+        String token = dispatchTokenService.issue(message.taskId(), message.agentVersionId(),
+                message.payload().executionDeadline());
         agentDispatchClient.dispatch(message, token);
         // 4. Mark EXECUTING. The WorkOrder has already reached the Agent, so a failure here is
         //    logged and the message acknowledged, never redelivered (a redelivery would send the
