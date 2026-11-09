@@ -1,10 +1,12 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.application.biz.offering.embedding.TaskTextEmbeddingAppService;
 import com.hireai.application.biz.task.MatchPreviewAppService;
 import com.hireai.application.port.query.MatchPreviewQueryPort;
 import com.hireai.application.port.query.MatchPreviewQueryPort.ShortlistCandidateRow;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.category.repository.CategoryRepository;
+import com.hireai.domain.biz.offering.embedding.info.TextVector;
 import com.hireai.domain.biz.task.info.PreviewCriteria;
 import com.hireai.domain.biz.task.model.ClientDeadline;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
@@ -12,7 +14,6 @@ import com.hireai.domain.shared.model.Money;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -35,6 +36,7 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
     private final MatchPreviewQueryPort queryPort;
     private final RoutingMatchDomainService matcher;
     private final CategoryRepository categoryRepository;
+    private final TaskTextEmbeddingAppService taskTextEmbeddingAppService;
     /** The app's Clock bean: the preview's deadline is counted from the request. */
     private final Clock clock;
 
@@ -46,9 +48,13 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
     @Value("${hireai.execution.grace-seconds:60}")
     private long executionGraceSeconds = 60;
 
+    /**
+     * Not transactional: the task text's embedding (cache or provider, up to its timeout) is resolved
+     * first and must not hold a connection; the rest is single read queries.
+     */
     @Override
-    @Transactional(readOnly = true)
-    public MatchPreview preview(String category, Money budget, Set<UUID> excludedAgentIds, Long deadlineSeconds) {
+    public MatchPreview preview(String title, String description, String category, Money budget,
+                                Set<UUID> excludedAgentIds, Long deadlineSeconds) {
         // An unknown slug is a 400 naming the valid ones (#80).
         String normalized = categoryRepository.load().requireKnown(category);
         Set<UUID> excluded = excludedAgentIds == null ? Set.of() : excludedAgentIds;
@@ -59,7 +65,9 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
             longestExecution = ClientDeadline.after(now, deadlineSeconds)
                     .longestExecutionSeconds(now, executionGraceSeconds);
         }
-        List<ShortlistCandidateRow> rows = queryPort.findBookableCandidates(normalized, longestExecution).stream()
+        TextVector taskVector = taskTextEmbeddingAppService.vectorFor(title, description).orElse(null);
+        List<ShortlistCandidateRow> rows = queryPort.findBookableCandidates(normalized, longestExecution, taskVector)
+                .stream()
                 .filter(r -> !excluded.contains(r.agentId()))
                 .toList();
 
@@ -75,21 +83,25 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
                 .toList();
 
         BigDecimal budgetValue = budget.value();
+        // Near-misses meet the relevance floor too: an off-topic Agent is no useful suggestion.
         List<AgentOption> nearMisses = rows.stream()
                 .filter(r -> r.price().compareTo(budgetValue) > 0)
+                .filter(r -> matcher.passesRelevanceFloor(toCandidate(r)))
                 .sorted(Comparator.comparing(ShortlistCandidateRow::price)
                         .thenComparing(ShortlistCandidateRow::agentVersionId))
                 .limit(NEAR_MISS_LIMIT)
                 .map(this::toOption)
                 .toList();
 
-        return new MatchPreview(shortlist, nearMisses);
+        boolean noCloseMatch = shortlist.isEmpty() && rows.stream()
+                .anyMatch(r -> r.price().compareTo(budgetValue) <= 0 && !matcher.passesRelevanceFloor(toCandidate(r)));
+        return new MatchPreview(shortlist, nearMisses, noCloseMatch);
     }
 
     private AgentCandidate toCandidate(ShortlistCandidateRow r) {
         return new AgentCandidate(r.agentId(), r.agentVersionId(), r.capabilityCategories(),
                 r.price(), r.webhookUrl(), r.maxExecutionSeconds(), r.reputationScore(),
-                r.outputSpecJson(), r.maxConcurrent(), r.inFlight(), r.sampleCount());
+                r.outputSpecJson(), r.maxConcurrent(), r.inFlight(), r.sampleCount(), r.similarity());
     }
 
     private AgentOption toOption(ShortlistCandidateRow r) {

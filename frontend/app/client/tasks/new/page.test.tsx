@@ -79,6 +79,25 @@ describe("submit task — shortlist flow", () => {
     expect(captured!.budget).toBe(12); // pays the agent's price, not the typed budget
   });
 
+  it("tells the client when no agent matches the task closely", async () => {
+    let sent: Record<string, unknown> | null = null;
+    server.use(
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>;
+        return ok({ shortlist: [], nearMisses: [], noCloseMatch: true });
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    const dialog = await screen.findByRole("dialog", { name: /pick your agent/i });
+    expect(dialog).toHaveTextContent(/no agent matches this task closely/i);
+    // The relevance check needs the task text, so the preview sends it.
+    expect(sent!.title).toBe("Summarise");
+    expect(sent!.description).toBe("the report");
+  });
+
   it("books a near-miss at its higher price", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(

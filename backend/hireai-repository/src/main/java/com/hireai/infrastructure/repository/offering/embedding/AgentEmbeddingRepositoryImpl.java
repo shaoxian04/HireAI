@@ -64,18 +64,7 @@ public class AgentEmbeddingRepositoryImpl implements AgentEmbeddingRepository {
                 .addValue("agentId", embedding.agentId())
                 .addValue("model", embedding.model())
                 .addValue("textHash", embedding.textHash())
-                .addValue("vector", toVectorLiteral(embedding.vector()))
+                .addValue("vector", PgVectors.toLiteral(embedding.vector()))
                 .addValue("updatedAt", Timestamp.from(embedding.updatedAt())));
-    }
-
-    static String toVectorLiteral(float[] vector) {
-        StringBuilder sb = new StringBuilder(vector.length * 12).append('[');
-        for (int i = 0; i < vector.length; i++) {
-            if (i > 0) {
-                sb.append(',');
-            }
-            sb.append(Float.toString(vector[i]));
-        }
-        return sb.append(']').toString();
     }
 }

@@ -103,7 +103,9 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   wallet (resolution badges on each task row); `client/tasks/new` — **searchable category picker** (`CategoryCombobox` from `/catalogue/categories`, strict —
   Find-agents gated on a real category) → match-preview **shortlist → pick → book** at the
   agent's price (the `ShortlistPanel` opens in a `Modal` popout of ranked agent cards: profile avatars,
-  best-match highlight, a plain-language `DeliveryRecord`, above-budget near-miss drawer; booking is
+  best-match highlight, a plain-language `DeliveryRecord`, above-budget near-miss drawer, and a
+  "No agent matches this task closely" state (`role="status"`, above any near-misses) when the response
+  says `noCloseMatch`; booking is
   `POST /tasks/direct`, so a near-miss pick pays above the typed budget; an optional **deadline** (number +
   minutes/hours/days, `lib/deadline.ts` `toDeadlineSeconds`) is sent as `deadlineSeconds` with both the
   preview and the booking, so Agents that can't finish in time aren't shown; `localStorage` draft; the

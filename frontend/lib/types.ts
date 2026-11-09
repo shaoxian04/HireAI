@@ -486,6 +486,8 @@ export interface MatchPreviewRequest {
 export interface MatchPreviewDTO {
   shortlist: AgentOptionDTO[];
   nearMisses: AgentOptionDTO[];
+  /** True when the shortlist is empty only because no in-budget agent's profile fits the task text. */
+  noCloseMatch?: boolean;
 }
 
 // ── Validation report (spec-violation reason) ───────────────────────────────

@@ -216,12 +216,12 @@ public class TaskController extends BaseController {
      * A POST so the task text stays out of URLs. {@code exclude} names Agents to leave out of both
      * lists: the web rebook passes the Agent that just failed the task (#79). {@code deadlineSeconds}
      * leaves out Agents that can't finish in time, counted from this request (#83). {@code title} and
-     * {@code description} are validated here but do not affect the shortlist yet (relevance: #85).
+     * {@code description} are the task text the relevance floor and ranking compare profiles with (#85).
      */
     @PostMapping("/match-preview")
     public WebResult<MatchPreviewDTO> matchPreview(@Valid @RequestBody MatchPreviewRequest request) {
         return ok(MatchPreview2DTOConverter.toDTO(matchPreviewAppService.preview(
-                request.category(), Money.of(request.budget()), excludedAgents(request.exclude()),
+                request.title(), request.description(), request.category(), Money.of(request.budget()), excludedAgents(request.exclude()),
                 request.deadlineSeconds())));
     }
 

@@ -45,6 +45,7 @@ class RoutingAppServiceDirectDispatchTest {
             routingMatchDomainService, taskDispatchPublisher,
             mock(com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository.class),
             mock(com.hireai.domain.biz.task.routing.service.RoutedFailoverDomainService.class),
+            mock(com.hireai.application.biz.offering.embedding.TaskTextEmbeddingAppService.class),
             Clock.systemUTC());
 
     private static final String TASK_OUTPUT_SPEC = "{\"format\":\"JSON\",\"schema\":\"task-snap\"}";

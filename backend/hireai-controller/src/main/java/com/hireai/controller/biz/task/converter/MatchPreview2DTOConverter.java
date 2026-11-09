@@ -14,7 +14,8 @@ public final class MatchPreview2DTOConverter {
     public static MatchPreviewDTO toDTO(MatchPreview preview) {
         return new MatchPreviewDTO(
                 preview.shortlist().stream().map(MatchPreview2DTOConverter::option).toList(),
-                preview.nearMisses().stream().map(MatchPreview2DTOConverter::option).toList());
+                preview.nearMisses().stream().map(MatchPreview2DTOConverter::option).toList(),
+                preview.noCloseMatch());
     }
 
     private static AgentOptionDTO option(AgentOption o) {

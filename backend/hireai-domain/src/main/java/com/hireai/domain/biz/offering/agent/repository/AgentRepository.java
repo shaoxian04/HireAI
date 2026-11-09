@@ -5,6 +5,8 @@ import com.hireai.domain.biz.offering.agent.info.AgentReputationTarget;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.reputation.info.ReputationAggregates;
 
+import com.hireai.domain.biz.offering.embedding.info.TextVector;
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -49,13 +51,22 @@ public interface AgentRepository {
     /**
      * The routable candidates for a category within budget. {@code longestExecutionSeconds} is the
      * largest max execution time that still fits the Client's deadline at this moment
-     * ({@code ClientDeadline.longestExecutionSeconds}); null = no deadline.
+     * ({@code ClientDeadline.longestExecutionSeconds}); null = no deadline. {@code taskVector} is the
+     * task text's embedding (null = unavailable): each candidate then carries its raw cosine similarity
+     * to it, computed only against an Agent vector of the same model (else null).
      */
-    List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice, Long longestExecutionSeconds);
+    List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice, Long longestExecutionSeconds,
+                                              TextVector taskVector);
+
+    /** {@link #findActiveCandidates(String, BigDecimal, Long, TextVector)} without a task vector. */
+    default List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice,
+                                                      Long longestExecutionSeconds) {
+        return findActiveCandidates(category, maxPrice, longestExecutionSeconds, null);
+    }
 
     /** {@link #findActiveCandidates(String, BigDecimal, Long)} without a client deadline. */
     default List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice) {
-        return findActiveCandidates(category, maxPrice, null);
+        return findActiveCandidates(category, maxPrice, null, null);
     }
 
     /**

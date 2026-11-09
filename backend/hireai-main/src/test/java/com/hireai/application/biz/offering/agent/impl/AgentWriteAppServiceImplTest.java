@@ -80,7 +80,8 @@ class AgentWriteAppServiceImplTest {
             return store.values().stream().filter(a -> a.ownerId().equals(ownerId)).toList();
         }
         @Override public List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice,
-                                                                Long longestExecutionSeconds) {
+                                                                Long longestExecutionSeconds,
+                                                                com.hireai.domain.biz.offering.embedding.info.TextVector taskVector) {
             return List.of();
         }
         @Override public java.util.Optional<AgentCandidate> findCandidateByVersionId(UUID agentVersionId) {

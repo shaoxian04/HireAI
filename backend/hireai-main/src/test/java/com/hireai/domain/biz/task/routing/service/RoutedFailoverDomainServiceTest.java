@@ -25,7 +25,7 @@ class RoutedFailoverDomainServiceTest {
 
     // Epsilon 0 keeps selection greedy, so the outcome is the best untried candidate.
     private final RoutedFailoverDomainService service = new RoutedFailoverDomainServiceImpl(
-            new RoutingMatchDomainServiceImpl(new MatchingPolicy(0.40, 0.20, 0.20, 0.20, 0.0), new Random(7)));
+            new RoutingMatchDomainServiceImpl(MatchingPolicy.defaults().withEpsilon(0.0), new Random(7)));
 
     private static AgentCandidate candidate(UUID agentId, String price) {
         return new AgentCandidate(agentId, UUID.randomUUID(), List.of("general"), new BigDecimal(price),

@@ -1,5 +1,6 @@
 package com.hireai.application.biz.task.routing.impl;
 
+import com.hireai.application.biz.offering.embedding.TaskTextEmbeddingAppService;
 import com.hireai.application.biz.task.routing.RoutingAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
@@ -7,6 +8,7 @@ import com.hireai.application.port.messaging.TaskDispatchPublisher;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
+import com.hireai.domain.biz.offering.embedding.info.TextVector;
 import com.hireai.domain.biz.task.routing.info.DispatchMessage;
 import com.hireai.domain.biz.task.routing.info.TaskDispatchPayload;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
@@ -50,6 +52,8 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     private final TaskDispatchPublisher taskDispatchPublisher;
     private final DispatchAttemptRepository dispatchAttemptRepository;
     private final RoutedFailoverDomainService routedFailoverDomainService;
+    /** The task text's vector for the relevance floor and term (#85); empty = rank without relevance. */
+    private final TaskTextEmbeddingAppService taskTextEmbeddingAppService;
     /** The app's Clock bean (ClockConfig); tests pass a fixed one to pin the execution deadline. */
     private final Clock clock;
 
@@ -81,9 +85,12 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     @Override
     public void route(UUID taskId) {
         TaskRoutingView view = taskReadAppService.getRoutingView(taskId);
+        // Cached when a match preview (or an earlier routing pass) embedded the same text; resolved
+        // before the selection instant, so time spent on the provider counts against no deadline.
+        TextVector taskVector = taskTextEmbeddingAppService.vectorFor(view.title(), view.description()).orElse(null);
         Instant now = selectionInstant();
         List<AgentCandidate> candidates = agentRepository.findActiveCandidates(
-                view.category(), view.budget(), longestExecutionSeconds(view, now));
+                view.category(), view.budget(), longestExecutionSeconds(view, now), taskVector);
         Optional<UUID> chosen = routingMatchDomainService.selectOne(view, candidates);
 
         if (chosen.isEmpty()) {
@@ -134,10 +141,14 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     public void failOver(UUID taskId) {
         TaskRoutingView view = taskReadAppService.getRoutingView(taskId);
         List<DispatchAttemptView> history = dispatchAttemptRepository.findByTaskId(taskId);
+        // This runs under the task's row lock, so it never waits on the provider: the vector cached by
+        // the first routing pass, else no relevance for this hop.
+        TextVector taskVector = taskTextEmbeddingAppService.cachedVectorFor(view.title(), view.description())
+                .orElse(null);
         // The deadline is re-applied at this hop's own moment: time spent on the failed Agent counts.
         Instant now = selectionInstant();
         List<AgentCandidate> candidates = agentRepository.findActiveCandidates(
-                view.category(), view.budget(), longestExecutionSeconds(view, now));
+                view.category(), view.budget(), longestExecutionSeconds(view, now), taskVector);
         Optional<AgentCandidate> next = routedFailoverDomainService.selectNext(view, history, candidates);
         if (next.isEmpty()) {
             log.info("Task {}: no untried eligible Agent left after {} attempt(s); failing with "

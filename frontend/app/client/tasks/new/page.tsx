@@ -317,6 +317,7 @@ function SubmitTask() {
           open={previewOpen && !selected}
           shortlist={preview.shortlist}
           nearMisses={preview.nearMisses}
+          noCloseMatch={preview.noCloseMatch ?? false}
           budget={budgetValue}
           onSelect={(o) => {
             setSelected(o);

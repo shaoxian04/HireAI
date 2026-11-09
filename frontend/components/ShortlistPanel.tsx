@@ -9,12 +9,22 @@ interface Props {
   shortlist: AgentOptionDTO[];
   nearMisses: AgentOptionDTO[];
   budget: number;
+  /** Every in-budget agent's profile was below the relevance floor for this task text. */
+  noCloseMatch?: boolean;
   onSelect: (option: AgentOptionDTO) => void;
   onClose: () => void;
 }
 
-export function ShortlistPanel({ open, shortlist, nearMisses, budget, onSelect, onClose }: Props) {
-  const empty = shortlist.length === 0 && nearMisses.length === 0;
+export function ShortlistPanel({
+  open,
+  shortlist,
+  nearMisses,
+  budget,
+  noCloseMatch = false,
+  onSelect,
+  onClose,
+}: Props) {
+  const empty = shortlist.length === 0 && nearMisses.length === 0 && !noCloseMatch;
   return (
     <Modal open={open} onClose={onClose} ariaLabel="Pick your agent">
       <div className="flex items-center justify-between gap-4 border-b border-line px-6 py-4">
@@ -40,6 +50,16 @@ export function ShortlistPanel({ open, shortlist, nearMisses, budget, onSelect, 
         </p>
       ) : (
         <>
+          {noCloseMatch && shortlist.length === 0 && (
+            <div role="status" className="px-6 py-6">
+              <p className="text-sm font-semibold">No agent matches this task closely</p>
+              <p className="mt-1 text-sm text-dim">
+                Agents in this category don&apos;t describe work like yours. Say more about what you
+                need in the description, or try another category.
+                {nearMisses.length > 0 && " Closer matches above your budget are listed below."}
+              </p>
+            </div>
+          )}
           {shortlist.length > 0 && (
             <div className="grid grid-cols-1 gap-3 px-6 py-5 sm:grid-cols-2">
               {shortlist.map((o, i) => (

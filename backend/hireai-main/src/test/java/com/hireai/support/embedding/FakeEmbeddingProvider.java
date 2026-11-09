@@ -23,9 +23,13 @@ import java.util.function.Function;
 
 /**
  * A local stand-in for the OpenAI embeddings endpoint ({@code POST <baseUrl>/embeddings}), so no
- * test ever calls the real provider. It records every request and answers with a deterministic
- * vector per input text ({@link #vectorFor} overrides it), or fails while {@link #down()} (503) or
- * hangs while {@link #hanging()}.
+ * test ever calls the real provider. It records every request and answers with {@link #SAME_FOR_EVERY_TEXT}
+ * ({@link #vectorFor} overrides it, e.g. with {@link #deterministicVector} or {@link #direction}), or
+ * fails while {@link #down()} (503) or hangs while {@link #hanging()}.
+ *
+ * <p>The default answer is one vector for every text, so every task/Agent pair has cosine similarity
+ * 1: all Agents pass the relevance floor (#85) and tie on relevance, and tests that don't script
+ * the provider rank exactly as they would without embeddings.
  *
  * <p>{@link #shared()} is the one instance every Spring test context's embedding client points at
  * (see {@link TestEmbeddingConfig}); tests that script it call {@link #reset()} first.
@@ -33,6 +37,9 @@ import java.util.function.Function;
 public final class FakeEmbeddingProvider implements AutoCloseable {
 
     public static final int DIMENSIONS = 1536;
+
+    /** The default answer: one fixed vector for every text (cosine 1 between any two texts). */
+    public static final float[] SAME_FOR_EVERY_TEXT = constant(0.025f);
 
     private static FakeEmbeddingProvider shared;
 
@@ -44,7 +51,7 @@ public final class FakeEmbeddingProvider implements AutoCloseable {
         return t;
     });
     private final List<Recorded> requests = new CopyOnWriteArrayList<>();
-    private volatile Function<String, float[]> vectors = FakeEmbeddingProvider::deterministicVector;
+    private volatile Function<String, float[]> vectors = text -> SAME_FOR_EVERY_TEXT;
     private volatile Mode mode = Mode.UP;
     private volatile CountDownLatch hangRelease = new CountDownLatch(1);
 
@@ -86,7 +93,7 @@ public final class FakeEmbeddingProvider implements AutoCloseable {
     public FakeEmbeddingProvider reset() {
         releaseHangs();
         mode = Mode.UP;
-        vectors = FakeEmbeddingProvider::deterministicVector;
+        vectors = text -> SAME_FOR_EVERY_TEXT;
         requests.clear();
         return this;
     }
@@ -121,6 +128,23 @@ public final class FakeEmbeddingProvider implements AutoCloseable {
         float[] v = new float[DIMENSIONS];
         java.util.Arrays.fill(v, value);
         return v;
+    }
+
+    /**
+     * A unit vector at {@code angleRadians} in the plane of the first two axes: the cosine between
+     * {@code direction(a)} and {@code direction(b)} is exactly {@code cos(a - b)}, so a test can pick the
+     * similarity of each task/Agent pair.
+     */
+    public static float[] direction(double angleRadians) {
+        float[] v = new float[DIMENSIONS];
+        v[0] = (float) Math.cos(angleRadians);
+        v[1] = (float) Math.sin(angleRadians);
+        return v;
+    }
+
+    /** A unit vector whose cosine similarity with {@code direction(0)} is {@code cosine}. */
+    public static float[] atCosineToAxis(double cosine) {
+        return direction(Math.acos(cosine));
     }
 
     /** A fixed pseudo-random vector seeded by the text, so equal texts get equal vectors. */

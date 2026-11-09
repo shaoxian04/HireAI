@@ -35,6 +35,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.hireai.application.biz.offering.embedding.TaskTextEmbeddingAppService;
+import com.hireai.domain.biz.offering.embedding.info.TextVector;
+
 class RoutingAppServiceImplTest {
 
     private final TaskReadAppService taskReadAppService = mock(TaskReadAppService.class);
@@ -48,11 +51,12 @@ class RoutingAppServiceImplTest {
 
     private final DispatchAttemptRepository dispatchAttemptRepository = mock(DispatchAttemptRepository.class);
     private final RoutedFailoverDomainService routedFailoverDomainService = mock(RoutedFailoverDomainService.class);
+    private final TaskTextEmbeddingAppService taskText = mock(TaskTextEmbeddingAppService.class);
 
     private final RoutingAppServiceImpl service = new RoutingAppServiceImpl(
             taskReadAppService, taskWriteAppService, agentRepository,
             routingMatchDomainService, taskDispatchPublisher, dispatchAttemptRepository,
-            routedFailoverDomainService, clock);
+            routedFailoverDomainService, taskText, clock);
 
     // The task's adopted output spec snapshot (Invariant #4). In unit tests the view carries
     // this directly; candidates supply only webhookUrl/version identity.
@@ -79,7 +83,7 @@ class RoutingAppServiceImplTest {
         UUID versionId = UUID.randomUUID();
         AgentCandidate candidate = candidate(versionId);
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00"), null))
+        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00"), null, null))
                 .thenReturn(List.of(candidate));
         when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.of(versionId));
 
@@ -99,7 +103,7 @@ class RoutingAppServiceImplTest {
         UUID chosenVersionId = UUID.randomUUID();
         AgentCandidate candidate = candidate(chosenVersionId);
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00"), null))
+        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00"), null, null))
                 .thenReturn(List.of(candidate));
         when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.of(chosenVersionId));
 
@@ -128,7 +132,7 @@ class RoutingAppServiceImplTest {
         UUID versionId = UUID.randomUUID();
         AgentCandidate candidate = candidate(versionId);
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates(eq("summarisation"), any(), isNull())).thenReturn(List.of(candidate));
+        when(agentRepository.findActiveCandidates(eq("summarisation"), any(), isNull(), isNull())).thenReturn(List.of(candidate));
         when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.of(versionId));
 
         service.route(taskId);
@@ -151,7 +155,7 @@ class RoutingAppServiceImplTest {
         UUID versionId = UUID.randomUUID();
         AgentCandidate candidate = candidate(versionId);
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates(eq("summarisation"), any(), isNull())).thenReturn(List.of(candidate));
+        when(agentRepository.findActiveCandidates(eq("summarisation"), any(), isNull(), isNull())).thenReturn(List.of(candidate));
         when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.of(versionId));
 
         service.route(taskId);
@@ -168,7 +172,7 @@ class RoutingAppServiceImplTest {
     void onNoMatchMarksAwaitingAgentAndPublishesNothing() {
         UUID taskId = UUID.randomUUID();
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates(any(), any(), any())).thenReturn(List.of());
+        when(agentRepository.findActiveCandidates(any(), any(), any(), any())).thenReturn(List.of());
         when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.empty());
 
         service.route(taskId);
@@ -182,7 +186,7 @@ class RoutingAppServiceImplTest {
 
     private void stubFailoverInputs(UUID taskId, List<AgentCandidate> candidates) {
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00"), null))
+        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00"), null, null))
                 .thenReturn(candidates);
         when(dispatchAttemptRepository.findByTaskId(taskId)).thenReturn(List.of());
     }
@@ -249,5 +253,37 @@ class RoutingAppServiceImplTest {
             TransactionSynchronizationManager.clearSynchronization();
         }
         verify(taskDispatchPublisher).publish(any());
+    }
+
+    // --- Relevance (#85) ---
+
+    @Test
+    void routeComparesCandidatesWithTheTaskTextsVector() {
+        UUID taskId = UUID.randomUUID();
+        TextVector vector = new TextVector("m", new float[1536]);
+        when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
+        when(taskText.vectorFor("Summarise report", "Summarise the attached report")).thenReturn(Optional.of(vector));
+        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00"), null, vector))
+                .thenReturn(List.of());
+        when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.empty());
+
+        service.route(taskId);
+
+        verify(agentRepository).findActiveCandidates("summarisation", new BigDecimal("30.00"), null, vector);
+    }
+
+    @Test
+    void aFailoverHopUsesOnlyTheCachedVectorAndNeverCallsTheProvider() {
+        UUID taskId = UUID.randomUUID();
+        TextVector vector = new TextVector("m", new float[1536]);
+        when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
+        when(dispatchAttemptRepository.findByTaskId(taskId)).thenReturn(List.of());
+        when(taskText.cachedVectorFor("Summarise report", "Summarise the attached report")).thenReturn(Optional.of(vector));
+        when(routedFailoverDomainService.selectNext(any(), any(), any())).thenReturn(Optional.empty());
+
+        service.failOver(taskId);
+
+        verify(agentRepository).findActiveCandidates("summarisation", new BigDecimal("30.00"), null, vector);
+        verify(taskText, never()).vectorFor(any(), any());
     }
 }

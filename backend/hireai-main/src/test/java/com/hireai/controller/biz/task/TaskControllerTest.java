@@ -336,14 +336,15 @@ class TaskControllerTest {
     void matchPreviewReturns200WithBothLists() throws Exception {
         UUID agentId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
-        when(matchPreviewAppService.preview(eq("summarisation"), eq(Money.of(new BigDecimal("30"))), eq(Set.of()), isNull()))
+        when(matchPreviewAppService.preview(eq("Summarise"), eq("Private contract text"), eq("summarisation"),
+                eq(Money.of(new BigDecimal("30"))), eq(Set.of()), isNull()))
                 .thenReturn(new MatchPreview(
                         List.of(new AgentOption(agentId, versionId, "Alpha", "tag", "logo",
                                 new BigDecimal("12.00"), new BigDecimal("80.00"), true, "JSON",
                                 List.of("summarisation"), new BigDecimal("9.000"), 10L)),
                         List.of(new AgentOption(UUID.randomUUID(), UUID.randomUUID(), "Pricey", null, null,
                                 new BigDecimal("40.00"), new BigDecimal("90.00"), false, "JSON",
-                                List.of("summarisation"), new BigDecimal("0.000"), 0L))));
+                                List.of("summarisation"), new BigDecimal("0.000"), 0L)), false));
 
         mockMvc.perform(post("/api/tasks/match-preview")
                         .contentType(MediaType.APPLICATION_JSON).content(previewBody("")))
@@ -353,7 +354,20 @@ class TaskControllerTest {
                 .andExpect(jsonPath("$.data.shortlist[0].price").value(12.00))
                 .andExpect(jsonPath("$.data.shortlist[0].availability").value("AVAILABLE"))
                 .andExpect(jsonPath("$.data.nearMisses[0].agentName").value("Pricey"))
-                .andExpect(jsonPath("$.data.nearMisses[0].availability").value("BUSY"));
+                .andExpect(jsonPath("$.data.nearMisses[0].availability").value("BUSY"))
+                .andExpect(jsonPath("$.data.noCloseMatch").value(false));
+    }
+
+    @Test
+    void matchPreviewSaysWhenNoAgentMatchesTheTaskClosely() throws Exception {
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), isNull()))
+                .thenReturn(new MatchPreview(List.of(), List.of(), true));
+
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON).content(previewBody("")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.shortlist").isEmpty())
+                .andExpect(jsonPath("$.data.noCloseMatch").value(true));
     }
 
     @Test
@@ -368,8 +382,8 @@ class TaskControllerTest {
     void matchPreviewPassesEveryExcludedAgentToTheService() throws Exception {
         UUID failed = UUID.randomUUID();
         UUID other = UUID.randomUUID();
-        when(matchPreviewAppService.preview(eq("summarisation"), any(), eq(Set.of(failed, other)), isNull()))
-                .thenReturn(new MatchPreview(List.of(), List.of()));
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of(failed, other)), isNull()))
+                .thenReturn(new MatchPreview(List.of(), List.of(), false));
 
         mockMvc.perform(post("/api/tasks/match-preview")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -380,8 +394,8 @@ class TaskControllerTest {
 
     @Test
     void matchPreviewPassesTheOptionalDeadlineOn() throws Exception {
-        when(matchPreviewAppService.preview(eq("summarisation"), any(), eq(Set.of()), eq(3600L)))
-                .thenReturn(new MatchPreview(List.of(), List.of()));
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), eq(3600L)))
+                .thenReturn(new MatchPreview(List.of(), List.of(), false));
 
         mockMvc.perform(post("/api/tasks/match-preview")
                         .contentType(MediaType.APPLICATION_JSON).content(previewBody(",\"deadlineSeconds\":3600")))

@@ -3,6 +3,8 @@ package com.hireai.infrastructure.repository.offering.agent;
 import com.hireai.domain.biz.offering.agent.enums.AgentStatus;
 import com.hireai.domain.biz.offering.agent.enums.AgentVersionStatus;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
+import com.hireai.domain.biz.offering.embedding.info.TextVector;
+import com.hireai.infrastructure.repository.offering.embedding.PgVectors;
 import com.hireai.domain.biz.offering.agent.info.AgentReputationTarget;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.reputation.info.ReputationAggregates;
@@ -106,9 +108,11 @@ public class AgentRepositoryImpl implements AgentRepository {
 
     @Override
     public List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice,
-                                                     Long longestExecutionSeconds) {
+                                                     Long longestExecutionSeconds, TextVector taskVector) {
         String normalisedCategory = category == null ? "" : category.trim().toLowerCase();
-        return versionJpa.findActiveCandidates(normalisedCategory, maxPrice, longestExecutionSeconds).stream()
+        return versionJpa.findActiveCandidates(normalisedCategory, maxPrice, longestExecutionSeconds,
+                        taskVector == null ? MatchCandidateSql.NO_VECTOR : PgVectors.toLiteral(taskVector.vector()),
+                        taskVector == null ? MatchCandidateSql.NO_VECTOR : taskVector.model()).stream()
                 .map(this::rowToCandidate)
                 .toList();
     }
@@ -164,7 +168,8 @@ public class AgentRepositoryImpl implements AgentRepository {
                 row.getOutputSpec(),
                 row.getMaxConcurrent() == null ? 5 : row.getMaxConcurrent(),
                 row.getInFlight() == null ? 0L : row.getInFlight(),
-                row.getSampleCount() == null ? 0L : row.getSampleCount());
+                row.getSampleCount() == null ? 0L : row.getSampleCount(),
+                row.getSimilarity());
     }
 
     private AgentModel toModel(AgentDO entity) {

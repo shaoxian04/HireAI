@@ -20,8 +20,11 @@ top of `rank`.
 The web never calls `POST /api/tasks`, so every web task is a pinned direct booking.
 
 **Shortlist.** Match-preview is read-only: it creates no task and freezes nothing. It returns the top 5 of
-`rank` plus the 3 cheapest agents above budget (near-misses). The typed budget is only a ceiling for
-ranking. The client pays the chosen agent's price, even for a near-miss above that budget.
+`rank` plus the 3 cheapest agents above budget (near-misses), which must also pass the relevance floor.
+The typed budget is only a ceiling for ranking. The client pays the chosen agent's price, even for a
+near-miss above that budget. When the shortlist is empty only because every in-budget Agent is below the
+floor, the response says `noCloseMatch: true` and the web shows "No agent matches this task closely" above
+any near-misses (an empty category gives `false`).
 
 **One eligibility, one score.** The shortlist, routed selection and failover consider the same Agents
 and score them the same way; only the platform's own picks (`selectOne`) add the ε lottery. An Agent is
@@ -42,23 +45,58 @@ eligible when:
   Agent can rule out a slower one. An Agent admitted this way never gets an execution deadline after the
   Client's. A direct booking of an Agent that can't fit is refused with a 400 before anything is frozen;
   a booked task's pinned dispatch is not re-checked.
+- <a id="relevance-floor"></a>its profile is not clearly irrelevant: the **raw** cosine similarity between
+  the task text's vector and the Agent's profile vector is at least τ (`hireai.matching.relevance-floor`,
+  provisionally 0.25; checked in `rank`). See [relevance](#relevance) for the vectors and the fallbacks.
 
-The SQL half of this lives once, in `MatchCandidateSql` (`ELIGIBLE_FROM` plus the load columns the score
-needs, and the deadline bound `:longestExecutionSeconds` = deadline - now - grace, null without a
-deadline), shared by the shortlist query (`JdbcMatchPreviewQueryDao`) and the routed/failover query
-(`AgentRepository.findActiveCandidates`). The budget filter and the score live once, in
-`RoutingMatchDomainService.rank`. So with `ε = 0` the shortlist's top Agent is the one a routed submit of
+## Relevance
+
+[ADR 0006](../adr/0006-matching-category-filter-relevance-floor.md). The task text is the title and
+description (`TaskText`); the Agent text is its name, tagline and description, embedded as described in
+[`data-model.md`](data-model.md#agent-embeddings). Both go through the same `EmbeddingPort` model.
+
+- **Task vector.** Match-preview and `route()` get it from the `text_embeddings` cache keyed by (text hash,
+  model), or else from the provider (then cached). So a booking or routed submit after a preview with the
+  same text makes no second provider call, and re-matches reuse it too. A failover hop runs under the
+  task's row lock, so it reads only the cache and never waits on the provider. A direct booking doesn't
+  embed anything.
+- **Similarity.** Computed in SQL (`1 - (a <=> b)`, pgvector) over the rows the eligibility WHERE already
+  kept, only against an Agent vector of the **same model** (`MatchCandidateSql`); there is no ANN index.
+- **Fallbacks.** Matching never depends on the provider. If the task vector is unavailable (provider down,
+  slow past its timeout, not configured), there is no similarity for anyone: no floor, and every Agent
+  gets the same relevance term, so the other four factors decide. An Agent with no vector of that model
+  passes the floor and scores a neutral 0.5.
+- **τ is model-specific.** `TauTestSetTest` pins which pairs of a small task/Agent test set, with vectors
+  recorded once from the real model (`src/test/resources/matching/tau-test-set.json`), pass the configured
+  τ. Re-record and re-decide τ there when the model changes. What it shows today: intended specialist
+  matches score well above τ and pairs from a different bucket well below it, while neighbouring Agents in
+  the same bucket land on both sides of it. Within a bucket the floor is noise and the relevance weight
+  does the ordering.
+
+The SQL half of this lives once, in `MatchCandidateSql` (`ELIGIBLE_FROM` plus the load and similarity
+columns the score needs, and the deadline bound `:longestExecutionSeconds` = deadline - now - grace, null
+without a deadline), shared by the shortlist query (`JdbcMatchPreviewQueryDao`) and the routed/failover
+query (`AgentRepository.findActiveCandidates`). The budget filter, the relevance floor and the score live
+once, in `RoutingMatchDomainService.rank`. So with `ε = 0` the shortlist's top Agent is the one a routed submit of
 the same task gets. A direct booking is not a selection: it needs an `ACTIVE`, listed agent at booking
 (see [`programmatic-channel.md`](programmatic-channel.md)) and is then dispatched to its pinned version.
 
 ## Scoring
 
 ```
-score = w_rep     * reputation / 100
-      + w_value   * (budget - price) / budget
-      + w_load    * max(0, 1 - inFlight / maxConcurrent)
-      + w_explore * 1 / (1 + sampleCount)
+score = w_rep       * reputation / 100
+      + w_relevance * relevance
+      + w_value     * (budget - price) / budget
+      + w_load      * max(0, 1 - inFlight / maxConcurrent)
+      + w_explore   * 1 / (1 + sampleCount)
 ```
+
+Defaults: reputation 0.30, relevance 0.25, value 0.15, load 0.15, exploration 0.15. The weights must sum
+to 1.0, and startup fails otherwise.
+
+- `relevance` is the raw similarity min-max normalised over the eligible Agents (those that passed the
+  floor) that have one: the closest scores 1, the furthest 0. With one such Agent, or all tied, each scores
+  0.5; an Agent without a similarity scores 0.5. Relevance sits below reputation on purpose (ADR 0006).
 
 - `inFlight` counts `QUEUED`/`EXECUTING` tasks and `sampleCount` counts `RESOLVED`/`FAILED`/`TIMED_OUT`/
   `SPEC_VIOLATION` tasks, both per agent across all its versions. Failures count: `sampleCount` means
@@ -79,7 +117,7 @@ every match:
 
 - **Starvation.** The bonus decays fast, so a newer agent can lose to the same veteran every time. At the
   default weights, a 5-for-5 agent (reputation 67.5, no ratings) still trails a 200-job, 90-reputation
-  veteran by about 0.03, which is enough to lose on every match.
+  veteran by about 0.02 (with equal relevance), which is enough to lose on every match.
 - **Tie-break monopoly.** Identical newcomers tie, and the deterministic tie-break always picks the same one.
 
 So the term gives newcomers their first jobs and shortlist visibility, and ε gives sustained exploration on

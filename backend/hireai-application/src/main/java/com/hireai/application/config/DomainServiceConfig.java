@@ -67,13 +67,16 @@ public class DomainServiceConfig {
 
     @Bean
     public MatchingPolicy matchingPolicy(
-            @Value("${hireai.matching.weight-reputation:0.40}") double weightReputation,
-            @Value("${hireai.matching.weight-value:0.20}") double weightValue,
-            @Value("${hireai.matching.weight-load:0.20}") double weightLoad,
-            @Value("${hireai.matching.weight-exploration:0.20}") double weightExploration,
-            @Value("${hireai.matching.epsilon:0.10}") double epsilon) {
+            @Value("${hireai.matching.weight-reputation:0.30}") double weightReputation,
+            @Value("${hireai.matching.weight-relevance:0.25}") double weightRelevance,
+            @Value("${hireai.matching.weight-value:0.15}") double weightValue,
+            @Value("${hireai.matching.weight-load:0.15}") double weightLoad,
+            @Value("${hireai.matching.weight-exploration:0.15}") double weightExploration,
+            @Value("${hireai.matching.epsilon:0.10}") double epsilon,
+            @Value("${hireai.matching.relevance-floor:0.25}") double relevanceFloor) {
         // MatchingPolicy's compact constructor validates; bad config = startup crash (spec §7).
-        return new MatchingPolicy(weightReputation, weightValue, weightLoad, weightExploration, epsilon);
+        return new MatchingPolicy(weightReputation, weightRelevance, weightValue, weightLoad,
+                weightExploration, epsilon, relevanceFloor);
     }
 
     @Bean

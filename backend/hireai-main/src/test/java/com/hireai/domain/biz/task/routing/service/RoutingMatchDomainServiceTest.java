@@ -22,7 +22,7 @@ class RoutingMatchDomainServiceTest {
     /** epsilon=0 => pure argmax; seed irrelevant. The standard fixture for scoring tests. */
     private RoutingMatchDomainService greedy() {
         return new RoutingMatchDomainServiceImpl(
-                new MatchingPolicy(0.40, 0.20, 0.20, 0.20, 0.0), new Random(1));
+                MatchingPolicy.defaults().withEpsilon(0.0), new Random(1));
     }
 
     private TaskRoutingView task(String category, String budget) {
@@ -84,12 +84,13 @@ class RoutingMatchDomainServiceTest {
 
     @Test
     void scoreMatchesHandComputedValue() {
-        // rep 90 -> 0.40*0.90 = 0.36 ; price 20/budget 30 -> valueFit (30-20)/30 = 1/3 -> 0.20*(1/3)
-        // inFlight 1 / maxConcurrent 5 -> headroom 0.8 -> 0.20*0.8 = 0.16 ; samples 4 -> 1/5 -> 0.20*0.2 = 0.04
+        // rep 90 -> 0.30*0.90 = 0.27 ; price 20/budget 30 -> valueFit (30-20)/30 = 1/3 -> 0.15*(1/3) = 0.05
+        // inFlight 1 / maxConcurrent 5 -> headroom 0.8 -> 0.15*0.8 = 0.12 ; samples 4 -> 1/5 -> 0.15*0.2 = 0.03
+        // no vector -> neutral relevance 0.5 -> 0.25*0.5 = 0.125
         AgentCandidate c = candidate(UUID.randomUUID(), List.of("summarisation"),
                 "20.00", "90.00", 5, 1, 4);
         List<ScoredCandidate> ranked = greedy().rank(task("summarisation", "30.00"), List.of(c));
-        double expected = 0.36 + 0.20 * (1.0 / 3.0) + 0.16 + 0.04;
+        double expected = 0.27 + 0.05 + 0.12 + 0.03 + 0.125;
         assertThat(ranked).hasSize(1);
         assertThat(ranked.get(0).score()).isCloseTo(expected, offset(1e-9));
     }
@@ -154,8 +155,8 @@ class RoutingMatchDomainServiceTest {
                 candidate(UUID.randomUUID(), List.of("summarisation"), "20.00", "50.00", 5, 0, 100),
                 candidate(cheap, List.of("summarisation"), "16.00", "45.00", 5, 0, 100)));
         // scores engineered equal (budget 40, same load/exploration):
-        // c1 = .4*.50 + .2*((40-20)/40) + .2*1.0 + e = .20 + .10 + .20 + e
-        // c2 = .4*.45 + .2*((40-16)/40) + .2*1.0 + e = .18 + .12 + .20 + e   — equal sums
+        // c1 = .30*.50 + .15*((40-20)/40) + .15*1.0 + e + r = .150 + .075 + .15 + e + r
+        // c2 = .30*.45 + .15*((40-16)/40) + .15*1.0 + e + r = .135 + .090 + .15 + e + r   — equal sums
         assertThat(ranked2.get(0).candidate().agentVersionId()).isEqualTo(cheap);
     }
 
@@ -186,7 +187,7 @@ class RoutingMatchDomainServiceTest {
     @Test
     void epsilonOneSamplesWeightedTowardUnderSampledAgents() {
         RoutingMatchDomainService service = new RoutingMatchDomainServiceImpl(
-                new MatchingPolicy(0.40, 0.20, 0.20, 0.20, 1.0), new Random(7));
+                MatchingPolicy.defaults().withEpsilon(1.0), new Random(7));
         UUID newcomer = UUID.randomUUID();
         UUID veteran = UUID.randomUUID();
         List<AgentCandidate> candidates = List.of(
@@ -207,7 +208,7 @@ class RoutingMatchDomainServiceTest {
     @Test
     void singleCandidateAlwaysChosenRegardlessOfEpsilon() {
         RoutingMatchDomainService service = new RoutingMatchDomainServiceImpl(
-                new MatchingPolicy(0.40, 0.20, 0.20, 0.20, 1.0), new Random(3));
+                MatchingPolicy.defaults().withEpsilon(1.0), new Random(3));
         UUID only = UUID.randomUUID();
         for (int i = 0; i < 20; i++) {
             assertThat(service.selectOne(task("summarisation", "30.00"),
@@ -231,5 +232,135 @@ class RoutingMatchDomainServiceTest {
             }
         }
         assertThat(topWins).isGreaterThan(160); // ~90% greedy + top is also the likely exploration pick
+    }
+
+    // ---- relevance (#85, ADR 0006): raw-cosine floor, min-max normalised term ----
+
+    /** The baseline candidate with a raw cosine similarity to the task text (null = no vector). */
+    private AgentCandidate relevant(UUID versionId, Double similarity) {
+        return new AgentCandidate(UUID.randomUUID(), versionId, List.of("summarisation"),
+                new BigDecimal("10.00"), "https://agent.example/hook", 60, new BigDecimal("50.00"),
+                "{\"format\":\"JSON\"}", 5, 0, 10, similarity);
+    }
+
+    /** Score of the baseline candidate (price 10 / budget 30, rep 50, idle, 10 samples) without relevance. */
+    private static final double BASE_WITHOUT_RELEVANCE =
+            0.30 * 0.50 + 0.15 * (20.0 / 30.0) + 0.15 * 1.0 + 0.15 * (1.0 / 11.0);
+
+    private double scoreOf(List<ScoredCandidate> ranked, UUID versionId) {
+        return ranked.stream().filter(sc -> sc.candidate().agentVersionId().equals(versionId))
+                .findFirst().orElseThrow().score();
+    }
+
+    @Test
+    void aSpecialistOutranksAGeneralistWhenItsProfileIsCloser() {
+        UUID specialist = UUID.randomUUID();
+        UUID generalist = UUID.randomUUID();
+        List<ScoredCandidate> ranked = greedy().rank(task("summarisation", "30.00"), List.of(
+                relevant(generalist, 0.41),
+                relevant(specialist, 0.63)));
+        assertThat(ranked).extracting(sc -> sc.candidate().agentVersionId())
+                .containsExactly(specialist, generalist);
+    }
+
+    @Test
+    void anAgentBelowTheFloorIsIneligible() {
+        UUID close = UUID.randomUUID();
+        UUID atFloor = UUID.randomUUID();
+        List<ScoredCandidate> ranked = greedy().rank(task("summarisation", "30.00"), List.of(
+                relevant(UUID.randomUUID(), 0.249),
+                relevant(atFloor, 0.25),
+                relevant(close, 0.70)));
+        assertThat(ranked).extracting(sc -> sc.candidate().agentVersionId())
+                .containsExactlyInAnyOrder(close, atFloor);
+        assertThat(greedy().selectOne(task("summarisation", "30.00"),
+                List.of(relevant(UUID.randomUUID(), 0.10)))).isEmpty();
+    }
+
+    @Test
+    void relevanceIsMinMaxNormalisedOverTheAgentsThatPassedTheFloor() {
+        UUID best = UUID.randomUUID();
+        UUID worst = UUID.randomUUID();
+        UUID middle = UUID.randomUUID();
+        // 0.05 is below the floor: had it been counted, 0.40 would normalise to 0.41 instead of 0.
+        List<ScoredCandidate> ranked = greedy().rank(task("summarisation", "30.00"), List.of(
+                relevant(best, 0.90),
+                relevant(middle, 0.65),
+                relevant(worst, 0.40),
+                relevant(UUID.randomUUID(), 0.05)));
+        assertThat(scoreOf(ranked, best)).isCloseTo(BASE_WITHOUT_RELEVANCE + 0.25, offset(1e-9));
+        assertThat(scoreOf(ranked, middle)).isCloseTo(BASE_WITHOUT_RELEVANCE + 0.25 * 0.5, offset(1e-9));
+        assertThat(scoreOf(ranked, worst)).isCloseTo(BASE_WITHOUT_RELEVANCE, offset(1e-9));
+    }
+
+    @Test
+    void aSingleCandidateWithAVectorScoresHalf() {
+        UUID only = UUID.randomUUID();
+        List<ScoredCandidate> ranked = greedy().rank(task("summarisation", "30.00"), List.of(relevant(only, 0.80)));
+        assertThat(scoreOf(ranked, only)).isCloseTo(BASE_WITHOUT_RELEVANCE + 0.125, offset(1e-9));
+    }
+
+    @Test
+    void tiedSimilaritiesAllScoreHalf() {
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        List<ScoredCandidate> ranked = greedy().rank(task("summarisation", "30.00"), List.of(
+                relevant(a, 0.55), relevant(b, 0.55)));
+        assertThat(scoreOf(ranked, a)).isCloseTo(BASE_WITHOUT_RELEVANCE + 0.125, offset(1e-9));
+        assertThat(scoreOf(ranked, b)).isCloseTo(BASE_WITHOUT_RELEVANCE + 0.125, offset(1e-9));
+    }
+
+    @Test
+    void anAgentWithoutAVectorPassesTheFloorAndScoresNeutrally() {
+        UUID noVector = UUID.randomUUID();
+        UUID best = UUID.randomUUID();
+        UUID worst = UUID.randomUUID();
+        List<ScoredCandidate> ranked = greedy().rank(task("summarisation", "30.00"), List.of(
+                relevant(best, 0.90), relevant(noVector, null), relevant(worst, 0.30)));
+        assertThat(ranked).extracting(sc -> sc.candidate().agentVersionId())
+                .containsExactly(best, noVector, worst);
+        assertThat(scoreOf(ranked, noVector)).isCloseTo(BASE_WITHOUT_RELEVANCE + 0.125, offset(1e-9));
+    }
+
+    @Test
+    void withoutATaskVectorTheOtherFourFactorsDecide() {
+        // No task vector means no similarity for anyone: no floor, everyone the same neutral term.
+        UUID cheaper = UUID.randomUUID();
+        UUID pricier = UUID.randomUUID();
+        List<ScoredCandidate> ranked = greedy().rank(task("summarisation", "30.00"), List.of(
+                new AgentCandidate(UUID.randomUUID(), pricier, List.of("summarisation"), new BigDecimal("20.00"),
+                        "https://agent.example/hook", 60, new BigDecimal("50.00"), "{}", 5, 0, 10, null),
+                relevant(cheaper, null)));
+        assertThat(ranked).extracting(sc -> sc.candidate().agentVersionId()).containsExactly(cheaper, pricier);
+        assertThat(scoreOf(ranked, cheaper)).isCloseTo(BASE_WITHOUT_RELEVANCE + 0.125, offset(1e-9));
+    }
+
+    @Test
+    void reputationOutweighsASlightlyCloserDescription() {
+        // ADR 0006: relevance (0.25) sits below reputation (0.30).
+        UUID trusted = UUID.randomUUID();
+        UUID closer = UUID.randomUUID();
+        List<ScoredCandidate> ranked = greedy().rank(task("summarisation", "30.00"), List.of(
+                new AgentCandidate(UUID.randomUUID(), trusted, List.of("summarisation"), new BigDecimal("10.00"),
+                        "https://agent.example/hook", 60, new BigDecimal("100.00"), "{}", 5, 0, 10, 0.60),
+                new AgentCandidate(UUID.randomUUID(), closer, List.of("summarisation"), new BigDecimal("10.00"),
+                        "https://agent.example/hook", 60, new BigDecimal("10.00"), "{}", 5, 0, 10, 0.61)));
+        assertThat(ranked.get(0).candidate().agentVersionId()).isEqualTo(trusted);
+    }
+
+    @Test
+    void equalScoresWithRelevanceStillTieBreakByPriceThenVersionId() {
+        UUID low = new UUID(0L, 1L);
+        UUID high = new UUID(0L, 2L);
+        List<ScoredCandidate> ranked = greedy().rank(task("summarisation", "30.00"), List.of(
+                relevant(high, 0.5), relevant(low, 0.5)));
+        assertThat(ranked).extracting(sc -> sc.candidate().agentVersionId()).containsExactly(low, high);
+    }
+
+    @Test
+    void theFloorCheckIsExposedForTheShortlistsNearMisses() {
+        assertThat(greedy().passesRelevanceFloor(relevant(UUID.randomUUID(), 0.10))).isFalse();
+        assertThat(greedy().passesRelevanceFloor(relevant(UUID.randomUUID(), 0.30))).isTrue();
+        assertThat(greedy().passesRelevanceFloor(relevant(UUID.randomUUID(), null))).isTrue();
     }
 }

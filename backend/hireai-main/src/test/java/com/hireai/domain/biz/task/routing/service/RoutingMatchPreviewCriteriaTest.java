@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RoutingMatchPreviewCriteriaTest {
 
     private RoutingMatchDomainService greedy() {
-        return new RoutingMatchDomainServiceImpl(new MatchingPolicy(0.40, 0.20, 0.20, 0.20, 0.0), new Random(1));
+        return new RoutingMatchDomainServiceImpl(MatchingPolicy.defaults().withEpsilon(0.0), new Random(1));
     }
 
     private AgentCandidate candidate(String price) {

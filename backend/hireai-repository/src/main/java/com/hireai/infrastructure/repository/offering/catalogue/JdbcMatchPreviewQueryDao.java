@@ -1,6 +1,8 @@
 package com.hireai.infrastructure.repository.offering.catalogue;
 
 import com.hireai.application.port.query.MatchPreviewQueryPort;
+import com.hireai.domain.biz.offering.embedding.info.TextVector;
+import com.hireai.infrastructure.repository.offering.embedding.PgVectors;
 import com.hireai.infrastructure.repository.offering.agent.MatchCandidateSql;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -47,10 +49,14 @@ public class JdbcMatchPreviewQueryDao implements MatchPreviewQueryPort {
     }
 
     @Override
-    public List<ShortlistCandidateRow> findBookableCandidates(String category, Long longestExecutionSeconds) {
+    public List<ShortlistCandidateRow> findBookableCandidates(String category, Long longestExecutionSeconds,
+                                                              TextVector taskVector) {
         var params = new MapSqlParameterSource()
                 .addValue("category", category == null ? "" : category.trim().toLowerCase(Locale.ROOT))
-                .addValue("longestExecutionSeconds", longestExecutionSeconds, Types.BIGINT);
+                .addValue("longestExecutionSeconds", longestExecutionSeconds, Types.BIGINT)
+                .addValue("taskVector", taskVector == null
+                        ? MatchCandidateSql.NO_VECTOR : PgVectors.toLiteral(taskVector.vector()))
+                .addValue("embeddingModel", taskVector == null ? MatchCandidateSql.NO_VECTOR : taskVector.model());
         return jdbc.query(SQL, params, (rs, i) -> new ShortlistCandidateRow(
                 rs.getObject("agent_id", UUID.class),
                 rs.getObject("agent_version_id", UUID.class),
@@ -68,7 +74,8 @@ public class JdbcMatchPreviewQueryDao implements MatchPreviewQueryPort {
                 rs.getInt("max_execution_seconds"),
                 rs.getInt("max_concurrent"),
                 rs.getLong("in_flight"),
-                rs.getLong("sample_count")));
+                rs.getLong("sample_count"),
+                rs.getObject("similarity", Double.class)));
     }
 
     private static List<String> stringList(Array array) throws SQLException {

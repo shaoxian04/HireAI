@@ -70,13 +70,17 @@ hireai:
   platform:
     public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
   matching:
-    # Multi-factor matcher weights (must sum to 1.0) + epsilon-greedy exploration rate.
-    # Spec: docs/superpowers/specs/2026-07-04-matching-engine-design.md §4.
-    weight-reputation: ${MATCHING_WEIGHT_REPUTATION:0.40}
-    weight-value: ${MATCHING_WEIGHT_VALUE:0.20}
-    weight-load: ${MATCHING_WEIGHT_LOAD:0.20}
-    weight-exploration: ${MATCHING_WEIGHT_EXPLORATION:0.20}
+    # Multi-factor matcher weights (must sum to 1.0; checked at startup) + epsilon-greedy exploration
+    # rate. Explained in docs/details/matching.md (ADR 0006 for relevance).
+    weight-reputation: ${MATCHING_WEIGHT_REPUTATION:0.30}
+    weight-relevance: ${MATCHING_WEIGHT_RELEVANCE:0.25}
+    weight-value: ${MATCHING_WEIGHT_VALUE:0.15}
+    weight-load: ${MATCHING_WEIGHT_LOAD:0.15}
+    weight-exploration: ${MATCHING_WEIGHT_EXPLORATION:0.15}
     epsilon: ${MATCHING_EPSILON:0.10}
+    # τ: an Agent whose raw cosine similarity to the task text is below this is ineligible. Specific
+    # to the embedding model; re-check the τ test set (TauTestSetTest) when changing either.
+    relevance-floor: ${MATCHING_RELEVANCE_FLOOR:0.25}
     # AWAITING_AGENT re-match sweeper: attempt-bounded fail-fast, then CANCELLED + full refund.
     rematch-interval: ${MATCHING_REMATCH_INTERVAL:PT10S}
     rematch-max-attempts: ${MATCHING_REMATCH_MAX_ATTEMPTS:2}

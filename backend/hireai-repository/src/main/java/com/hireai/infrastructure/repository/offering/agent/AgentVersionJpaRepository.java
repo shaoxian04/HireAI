@@ -28,8 +28,9 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
 
     /**
      * Routed selection and failover candidates: the shared eligible set ({@link MatchCandidateSql}:
-     * ACTIVE, listed storefront, category, client deadline) within budget. Returns the columns needed to build an
-     * AgentCandidate. The order is irrelevant; the ranking domain service decides.
+     * ACTIVE, listed storefront, category, client deadline) within budget, each with its similarity to
+     * {@code taskVector} (pgvector text of the task vector, null = none) of model
+     * {@code embeddingModel}. Returns the columns needed to build an AgentCandidate. The order is irrelevant; the ranking domain service decides.
      */
     @Query(value = """
             SELECT v.agent_id            AS agent_id,
@@ -46,7 +47,9 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
             """, nativeQuery = true)
     List<AgentCandidateRow> findActiveCandidates(@Param("category") String category,
                                                  @Param("maxPrice") BigDecimal maxPrice,
-                                                 @Param("longestExecutionSeconds") Long longestExecutionSeconds);
+                                                 @Param("longestExecutionSeconds") Long longestExecutionSeconds,
+                                                 @Param("taskVector") String taskVector,
+                                                 @Param("embeddingModel") String embeddingModel);
 
     /**
      * Looks up a single ACTIVE agent version by its id. Returns the same columns as
@@ -70,7 +73,8 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
                    (SELECT COUNT(*) FROM tasks t
                       JOIN agent_versions av ON av.id = t.agent_version_id
                      WHERE av.agent_id = a.id
-                       AND t.status IN ('RESOLVED','FAILED','TIMED_OUT','SPEC_VIOLATION')) AS sample_count
+                       AND t.status IN ('RESOLVED','FAILED','TIMED_OUT','SPEC_VIOLATION')) AS sample_count,
+                   CAST(NULL AS double precision)                         AS similarity
             FROM agent_versions v
             JOIN agents a ON a.id = v.agent_id AND a.current_version_id = v.id
             WHERE v.id = :versionId
@@ -121,5 +125,7 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
         Integer getMaxConcurrent();
         Long getInFlight();
         Long getSampleCount();
+        /** Raw cosine similarity to the task text; null without both vectors (and for pinned lookups). */
+        Double getSimilarity();
     }
 }
