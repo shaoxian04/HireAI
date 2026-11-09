@@ -1,6 +1,7 @@
 package com.hireai.dispatch;
 
 import com.hireai.application.biz.task.TaskWriteAppService;
+import com.hireai.application.port.security.DispatchTokenService;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -11,6 +12,7 @@ import com.hireai.support.agent.RecordedWorkOrder;
 import com.hireai.support.harness.WholeAppIntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -22,6 +24,11 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 
 /**
  * Dispatch retry (#68): a failed WorkOrder send is retried from a delayed retry queue instead of
@@ -35,6 +42,7 @@ class DispatchRetryIntegrationTest extends WholeAppIntegrationTest {
     private static final int TOTAL_ATTEMPTS = 4;
 
     @Autowired TaskWriteAppService taskWriteAppService;
+    @SpyBean DispatchTokenService dispatchTokenService;
 
     @Test
     void anAgentThatKeepsFailingGetsEveryAttemptThenTheTaskFailsWithARefundWebhookAndReputationEvent() {
@@ -125,6 +133,33 @@ class DispatchRetryIntegrationTest extends WholeAppIntegrationTest {
         // ...and then runs out of attempts.
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
                 assertThat(status(deadTask)).isEqualTo("FAILED"));
+    }
+
+    @Test
+    void aPlatformSideFailureBeforeTheSendIsNeverBlamedOnTheAgent() {
+        FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted());
+        String category = "x-" + UUID.randomUUID();
+        UUID versionId = seedActiveAgent(category, agent.webhookUrl());
+        doThrow(new IllegalStateException("token signing unavailable"))
+                .when(dispatchTokenService).issue(any(), eq(versionId), any());
+        UUID client = newClientWithCredits();
+
+        UUID taskId = submit(client, category);
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                verify(dispatchTokenService, atLeastOnce()).issue(any(), eq(versionId), any()));
+        // Longer than the harness's whole retry schedule: had the failure consumed Agent attempts,
+        // the task would have dead-lettered to FAILED with EXECUTION_FAILED by now.
+        await().during(Duration.ofSeconds(3)).atMost(Duration.ofSeconds(8)).untilAsserted(() -> {
+            assertThat(status(taskId)).isEqualTo("QUEUED");
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM reputation_events WHERE task_id = ?",
+                    Integer.class, taskId)).isZero();
+        });
+        assertThat(agent.workOrders()).isEmpty();
+        // The escrow stays frozen until the execution-timeout sweeper refunds the QUEUED task
+        // without blame (#66).
+        assertThat(jdbc.queryForObject("SELECT escrow_balance FROM wallets WHERE user_id = ?",
+                BigDecimal.class, client)).isEqualByComparingTo("30.00");
     }
 
     private static String unreachableWebhookUrl() throws IOException {

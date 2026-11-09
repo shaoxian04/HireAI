@@ -4,6 +4,7 @@ import com.hireai.application.port.security.DispatchTokenService;
 import com.hireai.application.port.task.TaskExecutionPort;
 import com.hireai.domain.biz.task.routing.info.DispatchMessage;
 import com.hireai.infrastructure.client.AgentDispatchClient;
+import com.hireai.infrastructure.client.AgentSendFailedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -21,6 +22,11 @@ import java.util.Optional;
  * plus {@link DispatchTokenService#CALLBACK_MARGIN}, POSTs the webhook via
  * {@link AgentDispatchClient}, then flips the task to EXECUTING through the
  * {@link TaskExecutionPort} port.
+ *
+ * <p>Only an Agent-attributable send failure ({@link AgentSendFailedException}: unreachable,
+ * read timeout, non-2xx) consumes an attempt. A platform-side failure before or around the send
+ * (task lookup, token issue, scheduling the retry) is logged and the message acknowledged; the
+ * task stays QUEUED and the execution-timeout sweeper refunds it without blaming the Agent.
  *
  * <p>A failed send never blocks the consumer: the message is republished to the retry queue for
  * the next delay of the {@link DispatchRetrySchedule}, with the next attempt number in
@@ -67,12 +73,21 @@ public class TaskDispatchConsumer {
                 return;
             }
             // 2-3. Issue the token (valid until the execution deadline stamped at assignment plus
-            //    the callback margin) and send.
+            //    the callback margin) and send. Only a failure of the send itself is the Agent's
+            //    and consumes an attempt.
             String token = dispatchTokenService.issue(message.taskId(), message.agentVersionId(),
                     message.payload().executionDeadline());
             agentDispatchClient.dispatch(message, token);
-        } catch (RuntimeException e) {
+        } catch (AgentSendFailedException e) {
             retryOrDeadLetter(message, attempt, e);
+            return;
+        } catch (RuntimeException e) {
+            // A platform-side failure (task lookup, token issue, an invalid URL) is never blamed
+            // on the Agent: it neither consumes an attempt nor dead-letters (which would record
+            // EXECUTION_FAILED). The message is acknowledged and the task stays QUEUED; the
+            // execution-timeout sweeper then refunds it without a reputation event.
+            log.error("Dispatch of task {} failed on the platform side before the send; dropping "
+                    + "the message (the task stays QUEUED until its execution timeout)", message.taskId(), e);
             return;
         }
         // 4. Mark EXECUTING. The WorkOrder has already reached the Agent, so a failure here is
@@ -94,7 +109,8 @@ public class TaskDispatchConsumer {
         taskExecutionPort.markFailed(message.taskId());
     }
 
-    private void retryOrDeadLetter(DispatchMessage message, int attempt, RuntimeException cause) {
+    // The seam for busy replies (#76): AgentSendFailedException.statusCode() tells 429/503 apart.
+    private void retryOrDeadLetter(DispatchMessage message, int attempt, AgentSendFailedException cause) {
         Optional<Duration> delay = retrySchedule.delayAfterFailedAttempt(attempt);
         if (delay.isEmpty()) {
             log.warn("Dispatch attempt {}/{} for task {} failed; dead-lettering: {}", attempt,
@@ -104,12 +120,20 @@ public class TaskDispatchConsumer {
         }
         int next = attempt + 1;
         long delayMillis = delay.get().toMillis();
-        // Published to the default exchange, which routes by queue name.
-        rabbitTemplate.convertAndSend("", DispatchQueues.retryQueue(delay.get()), message, retry -> {
-            retry.getMessageProperties().setExpiration(Long.toString(delayMillis));
-            retry.getMessageProperties().setHeader(DispatchQueues.ATTEMPT_HEADER, next);
-            return retry;
-        });
+        try {
+            // Published to the default exchange, which routes by queue name.
+            rabbitTemplate.convertAndSend("", DispatchQueues.retryQueue(delay.get()), message, retry -> {
+                retry.getMessageProperties().setExpiration(Long.toString(delayMillis));
+                retry.getMessageProperties().setHeader(DispatchQueues.ATTEMPT_HEADER, next);
+                return retry;
+            });
+        } catch (RuntimeException publishFailure) {
+            // Platform-side: never dead-letter (that would blame the Agent). The task stays
+            // QUEUED and the execution-timeout sweeper refunds it without a reputation event.
+            log.error("Could not schedule dispatch retry for task {}; dropping the message (the task "
+                    + "stays QUEUED until its execution timeout)", message.taskId(), publishFailure);
+            return;
+        }
         log.warn("Dispatch attempt {}/{} for task {} failed; retrying in {}ms: {}", attempt,
                 retrySchedule.maxAttempts(), message.taskId(), delayMillis, cause.toString());
     }

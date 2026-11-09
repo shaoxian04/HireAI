@@ -81,7 +81,7 @@ invite a second, paid submit.
 | Re-match attempts exhausted | `CANCELLED` | Yes | Yes | No |
 | Past `execution_deadline` while `EXECUTING` | `TIMED_OUT` | Yes | Yes | `EXECUTION_TIMEOUT` |
 | Past `execution_deadline` while still `QUEUED` | `TIMED_OUT` | Yes | Yes | No |
-| Every dispatch attempt failed | `FAILED` | Yes | Yes | `EXECUTION_FAILED` |
+| Every dispatch attempt failed (Agent unreachable, timed out or non-2xx) | `FAILED` | Yes | Yes | `EXECUTION_FAILED` |
 
 - **`AWAITING_AGENT`** means no `ACTIVE` agent covers the category within budget, or a pinned agent went
   inactive or was superseded. Load is soft, so a busy agent never causes it. The re-match sweeper
@@ -146,9 +146,16 @@ The consumer keeps repeats to the minimum, in this order:
 The callback loads the task under the same row lock and accepts a result while the task is `QUEUED` or
 `EXECUTING`, so calling back before the platform has recorded the start is safe.
 
-**Send retries.** A send fails on a connect error, a read timeout or any non-2xx reply. The work-order
-connect and read timeouts are 5s and 15s. The consumer never waits in place: it republishes the message to a
-retry queue and acknowledges it, so other dispatches keep flowing.
+**Send retries.** Only a failure the Agent is accountable for counts as a failed attempt: its endpoint
+refused or was unreachable, did not answer within the read timeout (the contract is a 2xx within 15s), or
+replied with a non-2xx status (`AgentSendFailedException`, which carries the status for later busy handling).
+The work-order connect and read timeouts are 5s and 15s. The consumer never waits in place: it republishes
+the message to a retry queue and acknowledges it, so other dispatches keep flowing.
+
+A platform-side failure (the row-locked task check, issuing the token, an invalid webhook URL, or scheduling
+the retry) never counts against the Agent. The consumer logs it and acknowledges the message, so it never
+reaches the DLQ or `EXECUTION_FAILED`. The task stays `QUEUED` and its execution timeout refunds it without a
+reputation event.
 
 - `hireai.dispatch.retry-delays` (default `5s,10s,15s`) are the waits between attempts, so three delays mean
   four attempts in total. Startup fails if they add up to more than `hireai.execution.grace-seconds`, so
