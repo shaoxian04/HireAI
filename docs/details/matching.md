@@ -166,11 +166,14 @@ To verify, the Agent:
 **Result callback.** POST to `callbackUrl` with `Content-Type: application/json`, `Authorization: Bearer <the WorkOrder's
 token>` and an `X-HireAI-Signature` over the exact body bytes you send, in the same format as above, made
 with your **current** signing secret and the current time. Body:
-`{ agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }`.
+`{ taskId, agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }`. `taskId` is
+required and must be the WorkOrder's `taskId`: the signature covers only the timestamp and body, so the body
+naming its task is what stops a signed result from being replayed onto another task's callback.
 
 The platform reads the raw bytes, verifies the token, then verifies the signature with the secret of the
 token's Agent version (which must be the task's assigned one), and only then parses the JSON. It answers
-401 when the token is invalid or expired, or the signature is missing, malformed, made with any other secret
+401 when the token is invalid or expired, the body's `taskId` is another task's, or the signature is
+missing, malformed, made with any other secret
 (an old one after a rotation, another Agent's), over different bytes, or timestamped more than 5 minutes from
 the platform's clock. A malformed body that is correctly signed is 400.
 

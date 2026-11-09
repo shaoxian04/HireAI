@@ -83,8 +83,7 @@ class FailureReasonIntegrationTest extends WholeAppIntegrationTest {
 
     @Test
     void anAgentReportedFailureIsAgentReportedFailure() throws Exception {
-        FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted().withCallback(AgentCallback.completed()
-                .withBody("{\"agentStatus\":\"FAILED\",\"resultPayloadJson\":\"{}\",\"message\":\"could not do it\"}")));
+        FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted().withCallback(AgentCallback.failed("could not do it")));
         String category = "x-" + UUID.randomUUID();
         seedAgent(category, agent.webhookUrl(), "ACTIVE");
         shareSigningSecret(agent);

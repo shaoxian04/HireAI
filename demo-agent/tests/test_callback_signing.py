@@ -49,7 +49,10 @@ def test_the_callback_is_signed_over_the_exact_bytes_sent(sent):
     assert parts["v1"] == expected_signature(SECRET, parts["t"], request.content)
     # And the agent's own verifier (the platform's rule) accepts it.
     assert agent.verify_signature(SECRET, header, request.content)
-    assert json.loads(request.content)["agentStatus"] == "COMPLETED"
+    sent_body = json.loads(request.content)
+    assert sent_body["agentStatus"] == "COMPLETED"
+    # The signed body names its task, so it can't be replayed onto another task's callback.
+    assert sent_body["taskId"] == "t-1"
 
 
 def test_without_a_secret_the_callback_is_unsigned(sent):

@@ -95,6 +95,8 @@ async def _complete(task_id: str, callback_url: str, token: str, secret: str | N
     await asyncio.sleep(2)  # simulate execution
     result_payload = json.dumps({"summary": DEMO_SUMMARY})
     callback_body = {
+        # Names the task this result answers; the platform rejects a signed body for another task.
+        "taskId": task_id,
         "agentStatus": "COMPLETED",
         "resultPayloadJson": result_payload,
         "resultUrl": None,

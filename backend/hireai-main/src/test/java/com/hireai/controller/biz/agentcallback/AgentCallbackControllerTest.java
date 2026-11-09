@@ -44,15 +44,15 @@ class AgentCallbackControllerTest {
 
     @MockBean AgentCallbackAppService agentCallbackAppService;
 
-    private String body() throws Exception {
+    private String body(UUID taskId) throws Exception {
         return objectMapper.writeValueAsString(
-                new AgentResultCallbackRequest("COMPLETED", "{\"k\":\"v\"}", "https://x/y", "done"));
+                new AgentResultCallbackRequest(taskId, "COMPLETED", "{\"k\":\"v\"}", "https://x/y", "done"));
     }
 
     @Test
     void authenticatesTheRawBytesThenRecordsTheParsedResult() throws Exception {
         UUID taskId = UUID.randomUUID();
-        String body = body();
+        String body = body(taskId);
 
         mockMvc.perform(post("/api/agent-callbacks/{taskId}/result", taskId)
                         .header("Authorization", "Bearer good-token")
@@ -95,20 +95,31 @@ class AgentCallbackControllerTest {
         mockMvc.perform(post("/api/agent-callbacks/{taskId}/result", UUID.randomUUID())
                         .header("Authorization", "Bearer good-token")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"agentStatus\":\"COMPLETED\"}"))
+                        .content("{\"agentStatus\":\"COMPLETED\",\"resultPayloadJson\":\"{}\"}"))
                 .andExpect(status().isBadRequest());
         verify(agentCallbackAppService, never()).recordResult(any(), any(), any());
     }
 
     @Test
+    void aSignedBodyForAnotherTaskIs401AndNotRecorded() throws Exception {
+        mockMvc.perform(post("/api/agent-callbacks/{taskId}/result", UUID.randomUUID())
+                        .header("Authorization", "Bearer good-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(UUID.randomUUID())))
+                .andExpect(status().isUnauthorized());
+        verify(agentCallbackAppService, never()).recordResult(any(), any(), any());
+    }
+
+    @Test
     void returns401WhenTokenInvalid() throws Exception {
+        UUID taskId = UUID.randomUUID();
         doThrow(new DispatchTokenInvalidException("bad token"))
                 .when(agentCallbackAppService).recordResult(any(), any(), any());
 
-        mockMvc.perform(post("/api/agent-callbacks/{taskId}/result", UUID.randomUUID())
+        mockMvc.perform(post("/api/agent-callbacks/{taskId}/result", taskId)
                         .header("Authorization", "Bearer bad-token")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body()))
+                        .content(body(taskId)))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -116,7 +127,7 @@ class AgentCallbackControllerTest {
     void returns401WhenAuthorizationHeaderMissing() throws Exception {
         mockMvc.perform(post("/api/agent-callbacks/{taskId}/result", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body()))
+                        .content(body(UUID.randomUUID())))
                 .andExpect(status().isUnauthorized());
         Mockito.verifyNoInteractions(agentCallbackAppService);
     }

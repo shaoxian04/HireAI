@@ -61,6 +61,13 @@ public class AgentCallbackController extends BaseController {
         byte[] body = rawBody == null ? new byte[0] : rawBody;
         agentCallbackAppService.authenticate(taskId, token, signature, body);
         AgentResultCallbackRequest request = parse(body);
+        // The signature covers the body, and the body names its task: binding it to the path (and
+        // so to the token, which authenticate matched to the path) stops a signed result for one
+        // task being replayed onto another task of the same Agent.
+        if (!taskId.equals(request.taskId())) {
+            throw new DispatchTokenInvalidException(
+                    "Signed callback body is for task " + request.taskId() + ", not " + taskId);
+        }
         AgentResultInfo result = new AgentResultInfo(
                 request.agentStatus(), request.resultPayloadJson(), request.resultUrl(), request.message());
         agentCallbackAppService.recordResult(taskId, token, result);

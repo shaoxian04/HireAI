@@ -37,7 +37,6 @@ import static org.awaitility.Awaitility.await;
 class SignedCallbackIntegrationTest extends WholeAppIntegrationTest {
 
     private static final String SEED_PASSWORD = "DemoPass123!";
-    private static final byte[] COMPLETED = AgentCallback.COMPLETED_BODY.getBytes(StandardCharsets.UTF_8);
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
@@ -55,7 +54,7 @@ class SignedCallbackIntegrationTest extends WholeAppIntegrationTest {
     void aCallbackSignedWithTheAssignedAgentsSecretIsAccepted() throws Exception {
         Dispatched d = dispatchToRegisteredAgent();
 
-        HttpResponse<String> response = callBack(d.order(), COMPLETED, sign(d.secret(), Instant.now(), COMPLETED));
+        HttpResponse<String> response = callBack(d.order(), completed(d), sign(d.secret(), Instant.now(), completed(d)));
 
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
         assertThat(status(d.taskId())).isEqualTo("PENDING_REVIEW");
@@ -65,10 +64,10 @@ class SignedCallbackIntegrationTest extends WholeAppIntegrationTest {
     void aValidTokenAloneIsNotEnough() throws Exception {
         Dispatched d = dispatchToRegisteredAgent();
 
-        assertRejected(d, callBack(d.order(), COMPLETED, null));
+        assertRejected(d, callBack(d.order(), completed(d), null));
         // The raw body is authenticated before it is parsed: garbage without a signature is 401, not 400.
         assertRejected(d, callBack(d.order(), "{not json".getBytes(StandardCharsets.UTF_8), null));
-        assertRejected(d, callBack(d.order(), COMPLETED, "t=" + Instant.now().getEpochSecond() + ",v1=" + "0".repeat(64)));
+        assertRejected(d, callBack(d.order(), completed(d), "t=" + Instant.now().getEpochSecond() + ",v1=" + "0".repeat(64)));
     }
 
     @Test
@@ -76,27 +75,27 @@ class SignedCallbackIntegrationTest extends WholeAppIntegrationTest {
         Dispatched d = dispatchToRegisteredAgent();
         String otherAgentsSecret = registerAgent("x-" + UUID.randomUUID()).path("signingSecret").asText();
 
-        assertRejected(d, callBack(d.order(), COMPLETED, sign("agsec_" + "f".repeat(64), Instant.now(), COMPLETED)));
-        assertRejected(d, callBack(d.order(), COMPLETED, sign(otherAgentsSecret, Instant.now(), COMPLETED)));
+        assertRejected(d, callBack(d.order(), completed(d), sign("agsec_" + "f".repeat(64), Instant.now(), completed(d))));
+        assertRejected(d, callBack(d.order(), completed(d), sign(otherAgentsSecret, Instant.now(), completed(d))));
     }
 
     @Test
     void aStaleOrFutureTimestampIsRejected() throws Exception {
         Dispatched d = dispatchToRegisteredAgent();
 
-        assertRejected(d, callBack(d.order(), COMPLETED,
-                sign(d.secret(), Instant.now().minus(Duration.ofMinutes(6)), COMPLETED)));
-        assertRejected(d, callBack(d.order(), COMPLETED,
-                sign(d.secret(), Instant.now().plus(Duration.ofMinutes(6)), COMPLETED)));
+        assertRejected(d, callBack(d.order(), completed(d),
+                sign(d.secret(), Instant.now().minus(Duration.ofMinutes(6)), completed(d))));
+        assertRejected(d, callBack(d.order(), completed(d),
+                sign(d.secret(), Instant.now().plus(Duration.ofMinutes(6)), completed(d))));
     }
 
     @Test
     void aSignatureOverADifferentBodyIsRejected() throws Exception {
         Dispatched d = dispatchToRegisteredAgent();
-        byte[] failed = "{\"agentStatus\":\"FAILED\",\"resultPayloadJson\":\"{}\"}".getBytes(StandardCharsets.UTF_8);
+        byte[] failed = failedBody(d);
 
         // Signed the COMPLETED body, sent a FAILED one: a tampered body never reaches the task.
-        assertRejected(d, callBack(d.order(), failed, sign(d.secret(), Instant.now(), COMPLETED)));
+        assertRejected(d, callBack(d.order(), failed, sign(d.secret(), Instant.now(), completed(d))));
     }
 
     @Test
@@ -107,8 +106,8 @@ class SignedCallbackIntegrationTest extends WholeAppIntegrationTest {
                 .path("signingSecret").asText();
         assertThat(fresh).startsWith("agsec_").isNotEqualTo(d.secret());
 
-        assertRejected(d, callBack(d.order(), COMPLETED, sign(d.secret(), Instant.now(), COMPLETED)));
-        HttpResponse<String> accepted = callBack(d.order(), COMPLETED, sign(fresh, Instant.now(), COMPLETED));
+        assertRejected(d, callBack(d.order(), completed(d), sign(d.secret(), Instant.now(), completed(d))));
+        HttpResponse<String> accepted = callBack(d.order(), completed(d), sign(fresh, Instant.now(), completed(d)));
         assertThat(accepted.statusCode()).as(accepted.body()).isEqualTo(200);
         assertThat(status(d.taskId())).isEqualTo("PENDING_REVIEW");
     }
@@ -119,21 +118,21 @@ class SignedCallbackIntegrationTest extends WholeAppIntegrationTest {
         // An Agent registered before signing secrets existed (the migration left them NULL).
         jdbc.update("UPDATE agents SET signing_secret = NULL WHERE id = ?", d.agentId());
 
-        assertRejected(d, callBack(d.order(), COMPLETED, null));
-        assertRejected(d, callBack(d.order(), COMPLETED, sign(d.secret(), Instant.now(), COMPLETED)));
+        assertRejected(d, callBack(d.order(), completed(d), null));
+        assertRejected(d, callBack(d.order(), completed(d), sign(d.secret(), Instant.now(), completed(d))));
 
         String fresh = send("POST", "/api/agents/" + d.agentId() + "/rotate-secret", builderJwt, null)
                 .path("signingSecret").asText();
-        HttpResponse<String> accepted = callBack(d.order(), COMPLETED, sign(fresh, Instant.now(), COMPLETED));
+        HttpResponse<String> accepted = callBack(d.order(), completed(d), sign(fresh, Instant.now(), completed(d)));
         assertThat(accepted.statusCode()).as(accepted.body()).isEqualTo(200);
     }
 
     @Test
     void aSecondSignedResultStillDoesNotOverwriteTheFirst() throws Exception {
         Dispatched d = dispatchToRegisteredAgent();
-        byte[] failed = "{\"agentStatus\":\"FAILED\",\"resultPayloadJson\":\"{}\"}".getBytes(StandardCharsets.UTF_8);
+        byte[] failed = failedBody(d);
 
-        assertThat(callBack(d.order(), COMPLETED, sign(d.secret(), Instant.now(), COMPLETED)).statusCode())
+        assertThat(callBack(d.order(), completed(d), sign(d.secret(), Instant.now(), completed(d))).statusCode())
                 .isEqualTo(200);
         assertThat(callBack(d.order(), failed, sign(d.secret(), Instant.now(), failed)).statusCode())
                 .isEqualTo(200);
@@ -143,7 +142,49 @@ class SignedCallbackIntegrationTest extends WholeAppIntegrationTest {
                 Integer.class, d.taskId())).isEqualTo(1);
     }
 
+    @Test
+    void aSignedResultForOneTaskCannotBeReplayedOntoAnotherTaskOfTheSameAgent() throws Exception {
+        FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted());
+        String category = "x-" + UUID.randomUUID();
+        JsonNode registered = registerAgent(category);
+        UUID agentId = UUID.fromString(registered.path("id").asText());
+        String secret = registered.path("signingSecret").asText();
+        jdbc.update("UPDATE agent_versions SET webhook_url = ? WHERE agent_id = ?", agent.webhookUrl(), agentId);
+        send("POST", "/api/agents/" + agentId + "/activate", builderJwt, null);
+        Dispatched a = submitTo(category, agent, 1, agentId, secret);
+        Dispatched b = submitTo(category, agent, 2, agentId, secret);
+
+        // A's genuine signed result, captured and replayed to B's callback with B's (leaked) token.
+        byte[] resultForA = completed(a);
+        String signatureForA = sign(secret, Instant.now(), resultForA);
+        assertRejected(b, callBack(b.order(), resultForA, signatureForA));
+
+        // A's result still lands on A.
+        assertThat(callBack(a.order(), resultForA, signatureForA).statusCode()).isEqualTo(200);
+        assertThat(status(a.taskId())).isEqualTo("PENDING_REVIEW");
+    }
+
+    @Test
+    void aSignedBodyWithoutATaskIdIsRefused() throws Exception {
+        Dispatched d = dispatchToRegisteredAgent();
+        byte[] noTaskId = AgentCallback.COMPLETED_BODY_WITHOUT_TASK_ID.getBytes(StandardCharsets.UTF_8);
+
+        HttpResponse<String> response = callBack(d.order(), noTaskId, sign(d.secret(), Instant.now(), noTaskId));
+
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
+        assertThat(status(d.taskId())).isEqualTo("EXECUTING");
+    }
+
     // ---- helpers ----
+
+    private static byte[] completed(Dispatched d) {
+        return AgentCallback.completedBody(d.taskId().toString()).getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static byte[] failedBody(Dispatched d) {
+        return ("{\"taskId\":\"" + d.taskId() + "\",\"agentStatus\":\"FAILED\",\"resultPayloadJson\":\"{}\"}")
+                .getBytes(StandardCharsets.UTF_8);
+    }
 
     private record Dispatched(UUID agentId, String secret, UUID taskId, RecordedWorkOrder order) {}
 
@@ -156,15 +197,21 @@ class SignedCallbackIntegrationTest extends WholeAppIntegrationTest {
         // Registration only accepts public HTTPS URLs; point the version at the local fake Agent.
         jdbc.update("UPDATE agent_versions SET webhook_url = ? WHERE agent_id = ?", agent.webhookUrl(), agentId);
         send("POST", "/api/agents/" + agentId + "/activate", builderJwt, null);
+        return submitTo(category, agent, 1, agentId, registered.path("signingSecret").asText());
+    }
 
+    /** Routes a task in {@code category} to {@code agent}; waits for its {@code nth} WorkOrder and EXECUTING. */
+    private Dispatched submitTo(String category, FakeAgent agent, int nth, UUID agentId, String secret)
+            throws Exception {
         UUID taskId = UUID.fromString(send("POST", "/api/tasks", clientJwt, """
                 {"title":"Signed callback","description":"Summarise it","category":"%s","budget":10.00,
                  "outputSpec":{"format":"JSON","schema":"{}","acceptanceCriteria":"ok"}}
                 """.formatted(category)).path("id").asText());
-        RecordedWorkOrder order = agent.awaitWorkOrders(1, Duration.ofSeconds(20)).get(0);
+        RecordedWorkOrder order = agent.awaitWorkOrders(nth, Duration.ofSeconds(20)).get(nth - 1);
+        assertThat(order.taskId()).isEqualTo(taskId.toString());
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
                 assertThat(status(taskId)).isEqualTo("EXECUTING"));
-        return new Dispatched(agentId, registered.path("signingSecret").asText(), taskId, order);
+        return new Dispatched(agentId, secret, taskId, order);
     }
 
     private JsonNode registerAgent(String category) throws Exception {

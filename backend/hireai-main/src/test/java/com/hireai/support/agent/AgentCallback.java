@@ -32,10 +32,24 @@ public final class AgentCallback {
 
     public static final String SIGNATURE_HEADER = "X-HireAI-Signature";
 
-    /** A spec-conforming COMPLETED result for a JSON output spec with no schema. */
-    public static final String COMPLETED_BODY = "{\"agentStatus\":\"COMPLETED\","
+    /**
+     * A spec-conforming COMPLETED result (JSON output spec, no schema) WITHOUT the required
+     * {@code taskId}: the platform refuses it (400). Use {@link #completedBody(String)}.
+     */
+    public static final String COMPLETED_BODY_WITHOUT_TASK_ID = "{\"agentStatus\":\"COMPLETED\","
             + "\"resultPayloadJson\":\"{\\\"summary\\\":\\\"done\\\"}\","
             + "\"resultUrl\":\"https://results.example/r/1\",\"message\":\"ok\"}";
+
+    /** A spec-conforming COMPLETED result for {@code taskId} (the body names the task it answers). */
+    public static String completedBody(String taskId) {
+        return "{\"taskId\":\"" + taskId + "\"," + COMPLETED_BODY_WITHOUT_TASK_ID.substring(1);
+    }
+
+    /** An Agent-reported FAILED result for {@code taskId}. */
+    public static String failedBody(String taskId, String message) {
+        return "{\"taskId\":\"" + taskId + "\",\"agentStatus\":\"FAILED\",\"resultPayloadJson\":\"{}\","
+                + "\"message\":\"" + message + "\"}";
+    }
 
     /** How the callback is signed: whether, with which secret (null = the Agent's), at what time. */
     private record Signing(boolean enabled, String secret, Supplier<Instant> at) {
@@ -61,13 +75,21 @@ public final class AgentCallback {
     }
 
     /**
-     * POST {@link #COMPLETED_BODY} to the WorkOrder's {@code callbackUrl}, presenting the
-     * WorkOrder's own bearer token and signed with the Agent's secret (what a well-behaved Agent does).
+     * POST {@link #completedBody} for the WorkOrder's task to its {@code callbackUrl}, presenting
+     * the WorkOrder's own bearer token and signed with the Agent's secret (what a well-behaved
+     * Agent does).
      */
     public static AgentCallback completed() {
         return custom(order -> CallbackRequest.post(order.callbackUrl())
                 .header("Authorization", "Bearer " + order.bearerToken())
-                .body(COMPLETED_BODY));
+                .body(completedBody(order.taskId())));
+    }
+
+    /** Like {@link #completed()}, but the Agent reports it could not do the work. */
+    public static AgentCallback failed(String message) {
+        return custom(order -> CallbackRequest.post(order.callbackUrl())
+                .header("Authorization", "Bearer " + order.bearerToken())
+                .body(failedBody(order.taskId(), message)));
     }
 
     /** Build the whole callback from the WorkOrder yourself (still signed unless told otherwise). */

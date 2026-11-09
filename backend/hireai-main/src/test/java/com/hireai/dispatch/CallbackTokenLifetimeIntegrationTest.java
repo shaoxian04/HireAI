@@ -97,13 +97,14 @@ class CallbackTokenLifetimeIntegrationTest extends WholeAppIntegrationTest {
     }
 
     private HttpResponse<String> callBack(RecordedWorkOrder order) throws Exception {
+        String body = AgentCallback.completedBody(order.taskId());
         HttpRequest request = HttpRequest.newBuilder(URI.create(order.callbackUrl()))
                 .header("Authorization", "Bearer " + order.bearerToken())
                 .header("Content-Type", "application/json")
                 // Signed "now" on the platform's (moved) clock, so only the token's lifetime is tested.
                 .header(AgentCallback.SIGNATURE_HEADER, AgentCallback.signature(agentSecret, clock.instant(),
-                        AgentCallback.COMPLETED_BODY.getBytes(java.nio.charset.StandardCharsets.UTF_8)))
-                .POST(HttpRequest.BodyPublishers.ofString(AgentCallback.COMPLETED_BODY))
+                        body.getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
         return http.send(request, HttpResponse.BodyHandlers.ofString());
     }

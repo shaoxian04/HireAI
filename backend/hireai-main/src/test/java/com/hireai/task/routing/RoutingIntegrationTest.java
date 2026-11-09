@@ -138,14 +138,14 @@ class RoutingIntegrationTest {
             String callbackPath = "http://127.0.0.1:" + serverPort + "/api/agent-callbacks/" + taskId + "/result";
             // Return 200 to the dispatch client now; deliver the result out-of-band so the
             // consumer's markExecuting (QUEUED -> EXECUTING) runs before recordResult.
-            executor.submit(() -> postCallbackWithRetry(callbackPath, authorization));
+            executor.submit(() -> postCallbackWithRetry(callbackPath, authorization, taskId));
         }
 
-        private void postCallbackWithRetry(String callbackPath, String authorization) {
+        private void postCallbackWithRetry(String callbackPath, String authorization, String taskId) {
             RuntimeException last = null;
             for (int attempt = 0; attempt < 20; attempt++) {
                 try {
-                    byte[] body = com.hireai.support.agent.AgentCallback.COMPLETED_BODY
+                    byte[] body = com.hireai.support.agent.AgentCallback.completedBody(taskId)
                             .getBytes(java.nio.charset.StandardCharsets.UTF_8);
                     http.post()
                             .uri(callbackPath)

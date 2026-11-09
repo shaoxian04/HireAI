@@ -36,4 +36,4 @@ cloudflared tunnel --url http://localhost:9000     # -> https://<random>.tryclou
 ## Wire contracts
 
 - **Receives:** the WorkOrder (shape, rules and signature verification in `docs/details/matching.md`) with headers `Authorization: Bearer <token>`, `X-Correlation-ID: <id>` and, when the agent has a secret, `X-HireAI-Signature`. The stub logs the title and description it received, then returns its staged output whatever was asked.
-- **Sends** to `callbackUrl`: `{ agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }` with `Authorization: Bearer <same token>` and, when the secret is set, `X-HireAI-Signature` over the exact body bytes (`sign_body`).
+- **Sends** to `callbackUrl`: `{ taskId, agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }` with `Authorization: Bearer <same token>` and, when the secret is set, `X-HireAI-Signature` over the exact body bytes (`sign_body`).
