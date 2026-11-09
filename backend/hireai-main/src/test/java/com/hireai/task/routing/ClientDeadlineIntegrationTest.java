@@ -133,9 +133,12 @@ class ClientDeadlineIntegrationTest extends WholeAppIntegrationTest {
         quick.awaitWorkOrders(1, Duration.ofSeconds(20));
         assertThat(assignedVersion(taskId)).isEqualTo(quickVersion);
         assertThat(tooSlowLater.workOrders()).isEmpty();
-        assertThat(jdbc.queryForList("SELECT agent_version_id || ':' || outcome FROM dispatch_attempts "
-                + "WHERE task_id = ? ORDER BY attempt_number", String.class, taskId))
-                .containsExactly(firstVersion + ":BUSY", quickVersion + ":ACCEPTED");
+        // ACCEPTED is recorded only once the WorkOrder's reply is back, a moment after the fake Agent
+        // has seen the order, so wait for it rather than racing the consumer.
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                assertThat(jdbc.queryForList("SELECT agent_version_id || ':' || outcome FROM dispatch_attempts "
+                        + "WHERE task_id = ? ORDER BY attempt_number", String.class, taskId))
+                        .containsExactly(firstVersion + ":BUSY", quickVersion + ":ACCEPTED"));
     }
 
     @Test

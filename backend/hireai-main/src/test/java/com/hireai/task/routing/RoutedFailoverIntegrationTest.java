@@ -11,6 +11,7 @@ import com.hireai.support.agent.AgentCallback;
 import com.hireai.support.agent.CallbackOutcome;
 import com.hireai.support.agent.FakeAgent;
 import com.hireai.support.agent.FakeAgentReply;
+import com.hireai.support.embedding.FakeEmbeddingProvider;
 import com.hireai.support.harness.WholeAppIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -78,6 +79,30 @@ class RoutedFailoverIntegrationTest extends WholeAppIntegrationTest {
         // Still in escrow: nothing was refunded or settled along the way.
         assertThat(jdbc.queryForObject("SELECT count(*) FROM settlements WHERE task_id = ?",
                 Integer.class, taskId)).isZero();
+    }
+
+    @Test
+    void aFailoverHopWithNoCachedTaskVectorStillFindsTheNextAgent() {
+        String category = "x-" + UUID.randomUUID();
+        FakeAgent busy = fakeAgent().replyWith(FakeAgentReply.status(429));
+        FakeAgent healthy = fakeAgent().replyWith(FakeAgentReply.accepted());
+        UUID busyVersion = seedAgent(category, busy, "95.00", "5.00");
+        UUID healthyVersion = seedAgent(category, healthy, "50.00", "8.00");
+        // The provider is down, so neither the first routing pass nor the hop has a task vector: the
+        // hop must rank without relevance rather than filter every candidate out.
+        FakeEmbeddingProvider.shared().reset().down();
+        try {
+            UUID taskId = taskWriteAppService.submit(new TaskSubmitInfo(DEV_USER, "Summarise report",
+                    "Never embedded " + UUID.randomUUID(), Money.of("10.00"),
+                    new OutputSpec(OutputFormat.JSON, null, "valid JSON summary"), category));
+
+            healthy.awaitWorkOrders(1, Duration.ofSeconds(20));
+            await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(attempts(taskId))
+                    .containsExactly(busyVersion + ":BUSY", healthyVersion + ":ACCEPTED"));
+            assertThat(assignedVersion(taskId)).isEqualTo(healthyVersion);
+        } finally {
+            FakeEmbeddingProvider.shared().reset();
+        }
     }
 
     @Test
