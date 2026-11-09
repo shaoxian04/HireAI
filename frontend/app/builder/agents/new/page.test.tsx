@@ -161,3 +161,16 @@ describe("agent registration — signing secret", () => {
     expect(await screen.findByRole("button", { name: /copied/i })).toBeInTheDocument();
   });
 });
+
+describe("agent registration — acknowledgement contract", () => {
+  it("tells the Builder how to accept, decline as busy, and deliver the result", () => {
+    renderPage();
+    const contract = screen.getByRole("region", { name: /how your agent answers a work order/i });
+    expect(contract).toHaveTextContent(/2xx/);
+    expect(contract).toHaveTextContent(/15 seconds/i);
+    expect(contract).toHaveTextContent(/429 or 503/);
+    expect(contract).toHaveTextContent(/no reputation penalty/i);
+    expect(contract).toHaveTextContent(/callback/i);
+    expect(contract).toHaveTextContent(/response body is ignored/i);
+  });
+});

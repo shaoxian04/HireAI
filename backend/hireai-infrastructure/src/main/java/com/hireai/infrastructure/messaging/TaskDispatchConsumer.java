@@ -3,7 +3,9 @@ package com.hireai.infrastructure.messaging;
 import com.hireai.application.biz.offering.agent.AgentReadAppService;
 import com.hireai.application.port.security.DispatchTokenService;
 import com.hireai.application.port.task.TaskExecutionPort;
+import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
 import com.hireai.domain.biz.task.routing.info.DispatchMessage;
+import com.hireai.infrastructure.client.AgentBusyException;
 import com.hireai.infrastructure.client.AgentDispatchClient;
 import com.hireai.infrastructure.client.AgentSendFailedException;
 import lombok.extern.slf4j.Slf4j;
@@ -25,8 +27,12 @@ import java.util.Optional;
  * {@link AgentDispatchClient}, then flips the task to EXECUTING through the
  * {@link TaskExecutionPort} port.
  *
+ * <p>A busy reply ({@link AgentBusyException}: 429/503) consumes no attempt and is never retried:
+ * the task is ended through {@link TaskExecutionPort#declineAsBusy} (FAILED, {@code AGENT_BUSY},
+ * refund, a {@code BUSY} dispatch attempt, no reputation event).
+ *
  * <p>Only an Agent-attributable send failure ({@link AgentSendFailedException}: unreachable,
- * read timeout, non-2xx) consumes an attempt. A platform-side failure before or around the send
+ * read timeout, any other non-2xx) consumes an attempt. A platform-side failure before or around the send
  * (task lookup, token issue, scheduling the retry) is logged and the message acknowledged; the
  * task stays QUEUED and the execution-timeout sweeper refunds it without blaming the Agent.
  *
@@ -35,7 +41,8 @@ import java.util.Optional;
  * {@link DispatchQueues#ATTEMPT_HEADER}, and acknowledged. When the TTL expires the message
  * returns to the dispatch queue. A failure on the last attempt rejects the message, so it
  * dead-letters to {@link DispatchQueues#DLQ}, where the DLQ listener fails the task (refund,
- * client webhook, {@code EXECUTION_FAILED}). A failure after a successful send is logged and
+ * client webhook, {@code EXECUTION_FAILED}, an {@code UNREACHABLE} dispatch attempt). A successful
+ * send records an {@code ACCEPTED} dispatch attempt. A failure after a successful send is logged and
  * acknowledged, so a WorkOrder that reached the Agent is never sent again. The listener holds no
  * transaction of its own: each port call is its own short transaction.
  */
@@ -86,6 +93,9 @@ public class TaskDispatchConsumer {
             String signingSecret = agentReadAppService
                     .findSigningSecretForVersion(message.agentVersionId()).orElse(null);
             agentDispatchClient.dispatch(message, token, signingSecret);
+        } catch (AgentBusyException e) {
+            declineAsBusy(message, attempt, e);
+            return;
         } catch (AgentSendFailedException e) {
             retryOrDeadLetter(message, attempt, e);
             return;
@@ -98,7 +108,16 @@ public class TaskDispatchConsumer {
                     + "the message (the task stays QUEUED until its execution timeout)", message.taskId(), e);
             return;
         }
-        // 4. Mark EXECUTING. The WorkOrder has already reached the Agent, so a failure here is
+        // 4. Record the ACCEPTED attempt in the task's dispatch history (#75). Like step 5, a
+        //    failure here is logged and acknowledged: the WorkOrder has already been delivered.
+        try {
+            taskExecutionPort.recordDispatchAttempt(message.taskId(), message.agentVersionId(),
+                    DispatchOutcome.ACCEPTED);
+        } catch (RuntimeException e) {
+            log.error("Task {} WorkOrder was delivered but recording the ACCEPTED dispatch attempt "
+                    + "failed", message.taskId(), e);
+        }
+        // 5. Mark EXECUTING. The WorkOrder has already reached the Agent, so a failure here is
         //    logged and the message acknowledged, never redelivered (a redelivery would send the
         //    WorkOrder twice). The task may stay QUEUED, which is safe: the callback accepts a
         //    result from QUEUED, and the timeout sweeper covers an Agent that never answers.
@@ -117,7 +136,23 @@ public class TaskDispatchConsumer {
         taskExecutionPort.markFailed(message.taskId());
     }
 
-    // The seam for busy replies (#76): AgentSendFailedException.statusCode() tells 429/503 apart.
+    /**
+     * A busy reply (429/503) is final for this Agent: it is never retried (retrying would force
+     * work on an Agent at capacity) and never dead-lettered (that would blame it). The task ends
+     * through {@link TaskExecutionPort#declineAsBusy}. A failure there is platform-side: logged and
+     * acknowledged, and the execution-timeout sweeper refunds the still-QUEUED task without blame.
+     */
+    private void declineAsBusy(DispatchMessage message, int attempt, AgentBusyException cause) {
+        log.info("Dispatch attempt {} for task {}: the Agent declined as busy ({}); not retrying",
+                attempt, message.taskId(), cause.statusCode().orElse(null));
+        try {
+            taskExecutionPort.declineAsBusy(message.taskId(), message.agentVersionId());
+        } catch (RuntimeException e) {
+            log.error("Task {} was declined as busy but ending it failed; acknowledging (the task stays "
+                    + "QUEUED until its execution timeout)", message.taskId(), e);
+        }
+    }
+
     private void retryOrDeadLetter(DispatchMessage message, int attempt, AgentSendFailedException cause) {
         Optional<Duration> delay = retrySchedule.delayAfterFailedAttempt(attempt);
         if (delay.isEmpty()) {

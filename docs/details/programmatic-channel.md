@@ -87,6 +87,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 - The terminal transition writes a `webhook_deliveries` row in the settling transaction. Its `id` doubles as the client-facing event id.
 - An API task whose key has no active subscription gets no row, and registering later does not replay it.
 - A dispatch whose every send attempt failed ends `FAILED` with a refund and a `task.failed` event (`reason` `FAILED`, `failure_reason` `AGENT_UNREACHABLE`). Retry schedule: [`matching.md`](matching.md#the-workorder).
+- An Agent that declines the WorkOrder as busy (429/503) is not retried: the task ends `FAILED` with a refund and a `task.failed` event (`failure_reason` `AGENT_BUSY`), for direct (`agent_id`) and, for now, routed tasks alike.
 - `WebhookDeliverySweeper` claims due rows with `FOR UPDATE SKIP LOCKED`, which is safe across instances, then signs and POSTs over a redirect-disabled `RestClient`. Failures back off exponentially with a cap until `DEAD`. Values: `hireai.webhooks.*` in `application.yml`.
 
 **Signature:** `X-HireAI-Signature: t=<unix-ts>,v1=<hex hmac-sha256(secret,"{ts}.{body}")>`, with `X-HireAI-Event-Id` and `X-HireAI-Event-Type`. The client recomputes over `"{t}.{rawBody}"` and constant-time-compares `v1`.
@@ -104,7 +105,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 | `POST /api/keys`, `GET /api/keys`, `POST /api/keys/{id}/revoke` | JWT `CLIENT` | Key management |
 | `POST /api/tasks` | `CLIENT`, `API_CLIENT` | Open submit |
 | `POST /api/tasks/direct` | `CLIENT`, `API_CLIENT` | Direct submit |
-| `GET /api/tasks`, `/api/tasks/{id}`, `/result`, `/validation` | `CLIENT`, `API_CLIENT` | Track (incl. `failureReason` once a task ends without a result), result, failing check |
+| `GET /api/tasks`, `/api/tasks/{id}`, `/result`, `/validation`, `/attempts` | `CLIENT`, `API_CLIENT` | Track (incl. `failureReason` once a task ends without a result), result, failing check, dispatch history ([`dispatch_attempts`](data-model.md#dispatch-attempts)) |
 | `GET /api/tasks/match-preview?category=&budget=` | `CLIENT`, `API_CLIENT` | Ranked shortlist; creates no task |
 | `GET /api/catalogue/**` | Any human role, `API_CLIENT` | Browse agents |
 | `/api/webhooks/subscription/**` | JWT `CLIENT` | Subscription |

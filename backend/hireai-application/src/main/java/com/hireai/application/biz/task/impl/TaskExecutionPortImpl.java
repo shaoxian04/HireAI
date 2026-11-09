@@ -16,6 +16,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
+import com.hireai.domain.biz.task.dispatchattempt.model.DispatchAttemptModel;
+import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
+
+import java.time.Clock;
 import java.util.UUID;
 
 /**
@@ -33,6 +38,23 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
     private final SettlementWriteAppService settlementWriteAppService;
     private final ReputationWriteAppService reputationWriteAppService;
     private final WebhookOutboxAppService webhookOutboxAppService;
+    private final DispatchAttemptRepository dispatchAttemptRepository;
+    private final Clock clock;
+
+    @Override
+    public void recordDispatchAttempt(UUID taskId, UUID agentVersionId, DispatchOutcome outcome) {
+        // The task row lock serialises every writer of this task's history, so the count-plus-one
+        // numbering cannot race (the UNIQUE (task_id, attempt_number) key backs it up).
+        loadForUpdate(taskId);
+        appendAttempt(taskId, agentVersionId, outcome);
+    }
+
+    private void appendAttempt(UUID taskId, UUID agentVersionId, DispatchOutcome outcome) {
+        int next = dispatchAttemptRepository.countByTaskId(taskId) + 1;
+        dispatchAttemptRepository.append(
+                DispatchAttemptModel.record(taskId, agentVersionId, next, outcome, clock.instant()));
+        log.info("Task {} dispatch attempt {} to version {}: {}", taskId, next, agentVersionId, outcome);
+    }
 
     @Override
     public boolean isAwaitingDispatch(UUID taskId, UUID agentVersionId) {
@@ -101,7 +123,27 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
         reputationWriteAppService.recordOutcome(taskId, failed.agentVersionId(), failed.clientId(),
                 ReputationEventType.EXECUTION_FAILED);
         webhookOutboxAppService.enqueueFailed(failed, "FAILED");
+        appendAttempt(taskId, failed.agentVersionId(), DispatchOutcome.UNREACHABLE);
         log.info("Task {} marked FAILED, escrow refunded, EXECUTION_FAILED recorded", taskId);
+    }
+
+    @Override
+    public void declineAsBusy(UUID taskId, UUID agentVersionId) {
+        // Same lock order as markFailed (task row, then wallet row in settleRejected).
+        TaskModel task = loadForUpdate(taskId);
+        if (task.status() != TaskStatus.QUEUED || !agentVersionId.equals(task.agentVersionId())) {
+            log.info("Task {} is {} (version {}); ignoring busy reply from version {}", taskId,
+                    task.status(), task.agentVersionId(), agentVersionId);
+            return;
+        }
+        TaskModel failed = task.markFailed(FailureReason.AGENT_BUSY);
+        taskRepository.save(failed);
+        settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
+        // Declining at capacity is part of the acknowledgement contract: no reputation event.
+        webhookOutboxAppService.enqueueFailed(failed, "FAILED");
+        appendAttempt(taskId, agentVersionId, DispatchOutcome.BUSY);
+        log.info("Task {} declined as busy by version {}: FAILED (AGENT_BUSY), escrow refunded", taskId,
+                agentVersionId);
     }
 
     private TaskModel loadForUpdate(UUID taskId) {
