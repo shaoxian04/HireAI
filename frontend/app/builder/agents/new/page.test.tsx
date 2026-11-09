@@ -94,6 +94,29 @@ describe("agent registration — max parallel tasks", () => {
     expect(input.value).toBe("120");
   });
 
+  it("shows the 24-hour execution limit", () => {
+    renderPage();
+    expect(screen.getByText(/86,400 seconds \(24 hours\)/)).toBeInTheDocument();
+  });
+
+  it("stops a max execution time above 24 hours before it is sent", async () => {
+    let posted = false;
+    server.use(
+      http.post("*/api/agents", () => {
+        posted = true;
+        return ok({ id: "a-1" });
+      }),
+    );
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Bot" } });
+    fireEvent.change(screen.getByLabelText(/categories/i), { target: { value: "summarisation" } });
+    fireEvent.change(screen.getByLabelText(/webhook/i), { target: { value: "https://a.example/run" } });
+    fireEvent.change(screen.getByLabelText(/max execution seconds/i), { target: { value: "86401" } });
+    fireEvent.click(screen.getByRole("button", { name: /register agent/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/at most 86400/i);
+    expect(posted).toBe(false);
+  });
+
   it("clears and retypes max parallel tasks without a stray leading zero, submitting the typed value", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(

@@ -21,6 +21,7 @@ import { EMPTY_OUTPUT_SPEC, OutputSpecFields } from "@/lib/outputSpecFields";
 import type { AgentDTO, CreateAgentRequest, OutputSpecDTO } from "@/lib/types";
 import { Button, Field, Input } from "@/components/ui";
 import { PageHeader } from "@/components/PageHeader";
+import { MAX_EXECUTION_HINT, MAX_EXECUTION_SECONDS } from "@/lib/agentLimits";
 
 function RegisterAgent() {
   const router = useRouter();
@@ -128,11 +129,17 @@ function RegisterAgent() {
               />
             </Field>
             <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="Max execution seconds" htmlFor="maxExec" error={errorFor(error, "maxExecutionSeconds")}>
+              <Field
+                label="Max execution seconds"
+                htmlFor="maxExec"
+                error={errorFor(error, "maxExecutionSeconds")}
+                hint={MAX_EXECUTION_HINT}
+              >
                 <Input
                   id="maxExec"
                   type="number"
                   min={1}
+                  max={MAX_EXECUTION_SECONDS}
                   value={maxExecutionSeconds}
                   onChange={(e) => { setMaxExecutionSeconds(e.target.value); clearFieldError(); }}
                   placeholder="60"

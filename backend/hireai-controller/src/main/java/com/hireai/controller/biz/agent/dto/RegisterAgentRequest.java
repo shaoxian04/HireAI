@@ -20,7 +20,9 @@ public record RegisterAgentRequest(
         @NotNull @Valid OutputSpecRequest outputSpec,
         @NotEmpty List<@NotBlank @Size(max = 100) String> capabilityCategories,
         @NotBlank @Size(max = 2000) String webhookUrl,
-        @Min(value = 1, message = "maxExecutionSeconds must be positive") int maxExecutionSeconds,
+        @Min(value = 1, message = "maxExecutionSeconds must be positive")
+        @Max(value = 86_400, message = "maxExecutionSeconds must be at most 86400 (24 hours)")
+        int maxExecutionSeconds,
         @NotNull
         @DecimalMin(value = "0.00", message = "price must be non-negative")
         @Digits(integer = 12, fraction = 2, message = "price must have at most 2 decimal places")
