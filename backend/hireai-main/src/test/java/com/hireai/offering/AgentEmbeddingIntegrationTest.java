@@ -116,7 +116,7 @@ class AgentEmbeddingIntegrationTest extends WholeAppIntegrationTest {
                 {"name":"%s","outputSpec":{"format":"JSON","schema":"{}","acceptanceCriteria":"ok"},
                  "capabilityCategories":["%s"],"webhookUrl":"https://agent.example.com/hook",
                  "maxExecutionSeconds":60,"price":5.00}
-                """.formatted(name, "x-" + UUID.randomUUID()));
+                """.formatted(name, uniqueCategory()));
         return UUID.fromString(registered.path("id").asText());
     }
 
