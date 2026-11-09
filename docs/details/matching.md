@@ -78,17 +78,24 @@ invite a second, paid submit.
 | Routing throws after submit | Stays `SUBMITTED`, escrow held | No | No | No |
 | Still `SUBMITTED` after the routing attempts | `CANCELLED` | Yes | Yes | No |
 | No eligible agent | `AWAITING_AGENT`, escrow held | No | No | No |
+| Pinned agent not `ACTIVE`, or pinned version superseded, at dispatch | `CANCELLED` at once | Yes | Yes | No |
 | Re-match attempts exhausted | `CANCELLED` | Yes | Yes | No |
 | Past `execution_deadline` while `EXECUTING` | `TIMED_OUT` | Yes | Yes | `EXECUTION_TIMEOUT` |
 | Past `execution_deadline` while still `QUEUED` | `TIMED_OUT` | Yes | Yes | No |
 | Every dispatch attempt failed (Agent unreachable, timed out or non-2xx) | `FAILED` | Yes | Yes | `EXECUTION_FAILED` |
 
-- **`AWAITING_AGENT`** means no `ACTIVE` agent covers the category within budget, or a pinned agent went
-  inactive or was superseded. Load is soft, so a busy agent never causes it. The re-match sweeper
+- **`AWAITING_AGENT`** means no `ACTIVE` agent covers the category within budget. Only routed tasks wait
+  there. Load is soft, so a busy agent never causes it. The re-match sweeper
   (`AwaitingAgentRematchSweeper`) retries it up to `hireai.matching.rematch-max-attempts` times,
   then cancels with a refund.
-- **Pinned tasks never substitute.** A direct booking retries only its exact version, because the client's
-  spec and price are frozen to it (Invariant #4).
+- **Pinned tasks never substitute, and fail fast.** A direct booking is dispatched only to its exact version,
+  because the client's spec and price are frozen to it (Invariant #4). If at dispatch the agent is not
+  `ACTIVE` or the pinned version is no longer its current one, `dispatchDirect` cancels the task at once
+  (`TaskWriteAppService.cancelPinnedAsUnavailable`, row-locked): `AGENT_UNAVAILABLE`, a full refund, a
+  `task.failed` webhook and an `UNAVAILABLE` row in the dispatch history. Deactivating or publishing a new
+  version never counts against the Builder, so no reputation event is written. The re-match sweeper never
+  retries a pinned task: one it finds `AWAITING_AGENT` (parked there before this rule) is cancelled the
+  same way on its first sweep, so its escrow is never stranded.
 - **The deadline is stamped at assignment**, so one query catches both a silent agent and a lost publish.
   Only a silent agent is blamed: a task still `QUEUED` normally never reached the agent, so its timeout
   refunds without a reputation event (`TaskModel.timeoutIsAgentFault`). The rare task left `QUEUED` after a

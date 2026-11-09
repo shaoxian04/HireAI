@@ -138,13 +138,9 @@ class FailureReasonIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
-    void aDirectBookingWhoseAgentStaysUnavailableIsAgentUnavailable() throws Exception {
+    void aDirectBookingWhoseAgentIsUnavailableIsAgentUnavailable() throws Exception {
         UUID versionId = seedAgent("x-" + UUID.randomUUID(), "https://agent.example/run", "SUSPENDED");
         UUID taskId = taskWriteAppService.submitDirectlyBooked(submitInfo("general", null), versionId);
-        assertThat(status(taskId)).isEqualTo("AWAITING_AGENT");
-
-        taskReliabilityAppService.rematchOne(taskId);
-        taskReliabilityAppService.rematchOne(taskId);
 
         assertThat(status(taskId)).isEqualTo("CANCELLED");
         assertThat(apiFailureReason(taskId)).isEqualTo("AGENT_UNAVAILABLE");

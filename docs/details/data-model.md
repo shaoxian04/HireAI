@@ -55,7 +55,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
   - `ACCEPTED`: the Agent replied 2xx to the WorkOrder (recorded by the dispatch consumer after the send).
   - `UNREACHABLE`: every send in the retry schedule failed (recorded in the DLQ's `FAILED` transaction).
   - `BUSY`: the Agent replied 429/503 to the WorkOrder (recorded in the same transaction that ends the task `FAILED` with `AGENT_BUSY`).
-  - `UNAVAILABLE` is in the enum and the CHECK but no path records it yet (routed failover is #58 work).
+  - `UNAVAILABLE`: a pinned agent was not `ACTIVE`, or its version was superseded, at dispatch (recorded in the same transaction that ends the task `CANCELLED` with `AGENT_UNAVAILABLE`).
   - Read-only to the task owner (JWT or API key) at `GET /api/tasks/{id}/attempts`: attempt number, `agentId` (joined from the version), `agentVersionId`, outcome, `occurredAt`. Another client gets 404.
 
 **Adjudication**
@@ -72,7 +72,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 ## Status enums
 
 - **Task:** `SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED → PENDING_REVIEW → RESOLVED`, with `DISPUTED` between review and resolved. Off-path: `AWAITING_AGENT`, `TIMED_OUT`, `SPEC_VIOLATION`, `FAILED`, `CANCELLED`.
-  - `AWAITING_AGENT`: no eligible agent, or a pinned agent went inactive. Retried by a sweeper, then `CANCELLED` with a refund. Named `AWAITING_CAPACITY` before `V29`, which rewrote existing rows and the status CHECK.
+  - `AWAITING_AGENT`: no eligible agent for a routed task. Retried by a sweeper, then `CANCELLED` with a refund. Named `AWAITING_CAPACITY` before `V29`, which rewrote existing rows and the status CHECK.
   - `QUEUED → RESULT_RECEIVED`: a result is accepted from `QUEUED` as well as `EXECUTING`, because a fast agent can call back before the dispatch consumer marks the task `EXECUTING`.
   - Marking `EXECUTING` is idempotent: `QUEUED → EXECUTING`, and a no-op from any later state. It is illegal only from `SUBMITTED` or `AWAITING_AGENT`.
   - `SUBMITTED → CANCELLED`: routing kept failing after submit. The SUBMITTED sweeper retries it, then cancels with a refund.
@@ -86,7 +86,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
   - `EXECUTION_TIMEOUT`: past the deadline while `EXECUTING` → `TIMED_OUT`.
   - `DISPATCH_ABANDONED`: past the deadline while still `QUEUED` → `TIMED_OUT`; or routing failed on every SUBMITTED sweep → `CANCELLED`.
   - `NO_ELIGIBLE_AGENT`: a routed task's re-match attempts ran out → `CANCELLED`.
-  - `AGENT_UNAVAILABLE`: a direct booking's pinned version stayed unavailable through the re-match attempts → `CANCELLED`.
+  - `AGENT_UNAVAILABLE`: at dispatch, a direct booking's agent is not `ACTIVE` or its pinned version was superseded → `CANCELLED` at once, no reputation event.
   - `AGENT_BUSY`: the Agent declined the WorkOrder with 429/503 → `FAILED`, no reputation event. Routed tasks too, until routed failover re-routes them.
   - `NO_ALTERNATIVE_AGENT` is in the enum and the CHECK but no path sets it yet (routed failover is #58 work).
 - **Agent:** `PENDING_VERIFICATION → ACTIVE ⇄ SUSPENDED`; `ACTIVE` or `SUSPENDED → DEACTIVATED`.

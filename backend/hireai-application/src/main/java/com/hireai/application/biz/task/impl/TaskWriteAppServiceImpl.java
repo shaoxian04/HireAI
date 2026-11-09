@@ -5,6 +5,9 @@ import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
 import com.hireai.utility.result.ResultCode;
+import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
+import com.hireai.domain.biz.task.dispatchattempt.model.DispatchAttemptModel;
+import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
 import com.hireai.domain.biz.task.event.TaskSubmittedDomainEvent;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.enums.FailureReason;
@@ -20,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -35,6 +39,9 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     private final ApplicationEventPublisher eventPublisher;
     private final SettlementWriteAppService settlementWriteAppService;
     private final WebhookOutboxAppService webhookOutboxAppService;
+    private final DispatchAttemptRepository dispatchAttemptRepository;
+    /** The app's Clock bean (ClockConfig): stamps the UNAVAILABLE dispatch attempt. */
+    private final Clock clock;
 
     @Override
     public UUID submit(TaskSubmitInfo taskSubmitInfo) {
@@ -126,6 +133,24 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
         // Routing threw on every sweep: the platform never got the task to an Agent.
         cancelWithRefund(task, FailureReason.DISPATCH_ABANDONED);
         log.info("Task {} CANCELLED after routing failed on every SUBMITTED sweep; escrow fully refunded", taskId);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void cancelPinnedAsUnavailable(UUID taskId, UUID agentVersionId) {
+        // Same lock order as the other refund paths: task row, then wallet row in settleRejected.
+        TaskModel task = taskRepository.findByIdForUpdate(taskId)
+                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
+        if (task.status() != TaskStatus.SUBMITTED && task.status() != TaskStatus.AWAITING_AGENT) {
+            log.info("Task {} is {}; skipping pinned fail-fast cancel", taskId, task.status());
+            return;
+        }
+        cancelWithRefund(task, FailureReason.AGENT_UNAVAILABLE);
+        int next = dispatchAttemptRepository.countByTaskId(taskId) + 1;
+        dispatchAttemptRepository.append(DispatchAttemptModel.record(
+                taskId, agentVersionId, next, DispatchOutcome.UNAVAILABLE, clock.instant()));
+        log.info("Task {} CANCELLED (AGENT_UNAVAILABLE): pinned version {} is no longer available; "
+                + "escrow fully refunded", taskId, agentVersionId);
     }
 
     private void cancelWithRefund(TaskModel task, FailureReason reason) {

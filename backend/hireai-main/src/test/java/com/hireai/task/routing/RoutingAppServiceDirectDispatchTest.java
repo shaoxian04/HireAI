@@ -106,20 +106,21 @@ class RoutingAppServiceDirectDispatchTest {
     }
 
     /**
-     * Deactivation race: findCandidateByVersionId returns empty (agent was deactivated/suspended
-     * between booking and dispatch). Must mark AWAITING_AGENT, NEVER publish, and NOT throw.
+     * Pinned fail-fast (#77): findCandidateByVersionId returns empty (the agent is no longer ACTIVE
+     * or the pinned version was superseded). The task is cancelled as unavailable at once, never
+     * parked AWAITING_AGENT and never published, and dispatchDirect does not throw.
      */
     @Test
-    void deactivationRaceMarksAwaitingAgentNeverPublishes() {
+    void unavailablePinnedVersionCancelsAtOnceNeverPublishes() {
         UUID taskId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
         when(agentRepository.findCandidateByVersionId(versionId)).thenReturn(Optional.empty());
 
-        // Must not throw.
         service.dispatchDirect(taskId, versionId);
 
-        verify(taskWriteAppService).markAwaitingAgent(taskId);
+        verify(taskWriteAppService).cancelPinnedAsUnavailable(taskId, versionId);
+        verify(taskWriteAppService, never()).markAwaitingAgent(any());
         verify(taskDispatchPublisher, never()).publish(any());
         verify(taskWriteAppService, never()).assignAndQueue(any(), any(), any());
     }
