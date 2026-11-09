@@ -8,7 +8,7 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 |---|---|---|
 | **1 Task Submission** | Submit with atomic escrow freeze and a frozen `output_spec`; idempotent retries; web flow: category picker → read-only match preview → pick → direct booking at the agent's price | Client input documents (`SourceSnapshot`, see [ADR 0004](../adr/0004-launch-vertical-document-grounded-extraction.md)) |
 | **2 Agent Registration** | Register, activate, suspend, reactivate, deactivate, publish a version; HTTPS-only webhook; builder-declared concurrency; storefront and media | Admin verification (builders activate their own agents); editing a webhook without publishing a version |
-| **3 Routing & Execution** | Scored ε-greedy matcher, RabbitMQ dispatch, signed webhook, token-authenticated callback carrying the task's title, description and deadline ([WorkOrder](matching.md#the-workorder)); sweepers for capacity re-match and execution timeout; dispatch DLQ refund | The rest of the hardening is tracked in #53 |
+| **3 Routing & Execution** | Scored ε-greedy matcher, RabbitMQ dispatch, signed webhook, token-authenticated callback carrying the task's title, description and deadline ([WorkOrder](matching.md#the-workorder)); sweepers for SUBMITTED re-routing, capacity re-match and execution timeout; dispatch DLQ refund | The rest of the hardening is tracked in #53 |
 | **4 Validation & Disputes** | Format and JSON-Schema gate before any client sees a result; reason-gated reject (A/B/C dispute, D charges in full); LangGraph arbitrator; ruling is a proposal, then client accept or appeal, or auto-accept; admin tier-2 override; arbitration DLQ and timeout escalate to admin | Validation of `acceptanceCriteria` (only the arbitrator reads them); SSE (the UI polls); dispute discovery for builders on full refunds (no payout row, so nothing on earnings) |
 | **5 Reputation & Settlement** | Append-only reputation stream, two-component shrinkage score, earned reviews, builder Reputation and Reviews tabs; 85/15 settlement, deterministic split and refund; builder earnings read | Multi-account Sybil defence (accepted in [ADR 0003](../adr/0003-two-component-shrinkage-reputation.md)); decay and auto-suspend (rejected there) |
 | **6 Discovery & Dashboard** | Authenticated catalogue, agent profiles, direct booking, builder console and earnings | Anonymous public catalogue |
@@ -43,7 +43,6 @@ All tracked in #53. Fixes are in #56 unless noted.
 
 - **Token can expire before the deadline, confirmed.** The consumer issues the dispatch token with a fixed 900s TTL, while `execution_deadline` is `maxExecutionSeconds` + grace with no upper bound on `maxExecutionSeconds`.
 - **QUEUED timeouts penalise the agent, confirmed.** `TaskReliabilityAppServiceImpl.timeoutOne` records `EXECUTION_TIMEOUT` for QUEUED tasks too, although the agent never received them.
-- **Task stuck in SUBMITTED, unreproduced.** If routing throws after the submit transaction commits, no sweeper picks the task up: escrow stays frozen and the client gets a 500.
 - **Dispatch-DLQ failure is silent, confirmed.** `TaskExecutionPortImpl.markFailed` refunds, but emits no webhook and no reputation event.
 - **Superseded pinned version stalls, confirmed.** `findCandidateByVersionId` requires the current version, so a direct booking whose version is replaced retries until it is cancelled. What happens next is the failover spec (#58).
 - **No failover after assignment, confirmed.** Neither mode switches agents once one is assigned (#58).
@@ -67,7 +66,7 @@ All tracked in #53. Fixes are in #56 unless noted.
 ### Concurrency
 
 - **`tasks` has no `@Version`.** Writes are last-writer-wins outside the locked settlement path.
-- **Single-instance sweepers.** `CapacityRematchSweeper` runs through unlocked reads. Before scaling out, `assignAndQueue` and `cancelAwaitingCapacityWithRefund` must become status-conditional or row-locked. Money stays safe through `settlements.task_id UNIQUE`.
+- **Single-instance sweepers.** `CapacityRematchSweeper` and `SubmittedTaskSweeper` run through unlocked reads. Before scaling out, `assignAndQueue` and `cancelAwaitingCapacityWithRefund` must become status-conditional or row-locked. Money stays safe through `settlements.task_id UNIQUE`.
 - **`adminRule` does not lock then re-read.** It is safe today through the same constraint.
 - **Spend caps have a TOCTOU window.** Concurrent submits under one key can slightly overshoot (accepted).
 - **Wallet version conflicts return 500**, not a retryable 409. Money is safe; the loser's transaction rolls back.

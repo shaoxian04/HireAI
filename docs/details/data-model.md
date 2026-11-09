@@ -68,6 +68,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
   - `AWAITING_CAPACITY`: no eligible agent, or a pinned agent went inactive. Retried by a sweeper, then `CANCELLED` with a refund.
   - `QUEUED → RESULT_RECEIVED`: a result is accepted from `QUEUED` as well as `EXECUTING`, because a fast agent can call back before the dispatch consumer marks the task `EXECUTING`.
   - Marking `EXECUTING` is idempotent: `QUEUED → EXECUTING`, and a no-op from any later state. It is illegal only from `SUBMITTED` or `AWAITING_CAPACITY`.
+  - `SUBMITTED → CANCELLED`: routing kept failing after submit. The SUBMITTED sweeper retries it, then cancels with a refund.
   - `TIMED_OUT`: past `execution_deadline`, with a refund.
   - API-key tasks skip review: PASS goes to `RESOLVED`, FAIL to `SPEC_VIOLATION`.
 - **Task resolution:** `ACCEPTED`, `REJECTED`, `PARTIALLY_ACCEPTED`.

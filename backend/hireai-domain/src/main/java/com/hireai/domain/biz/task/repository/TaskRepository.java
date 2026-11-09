@@ -39,6 +39,9 @@ public interface TaskRepository {
 
     List<UUID> findIdsAwaitingCapacity();
 
+    /** Ids still SUBMITTED (never routed) whose task was created before {@code cutoff}. */
+    List<UUID> findIdsSubmittedBefore(java.time.Instant cutoff);
+
     List<UUID> findIdsExecutionExpired(java.time.Instant now);
 
     void incrementMatchAttempts(UUID taskId);

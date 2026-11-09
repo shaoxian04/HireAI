@@ -91,6 +91,11 @@ public class TaskRepositoryImpl implements TaskRepository {
     }
 
     @Override
+    public List<UUID> findIdsSubmittedBefore(Instant cutoff) {
+        return taskJpa.findIdsSubmittedBefore(cutoff);
+    }
+
+    @Override
     public List<UUID> findIdsExecutionExpired(Instant now) {
         return taskJpa.findIdsExecutionExpired(now);
     }
