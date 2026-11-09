@@ -72,6 +72,14 @@ public interface AgentJpaRepository extends JpaRepository<AgentDO, UUID> {
     @Query(value = "UPDATE agents SET signing_secret = :secret WHERE id = :agentId", nativeQuery = true)
     int updateSigningSecret(@Param("agentId") UUID agentId, @Param("secret") String secret);
 
+    /** The unmapped signing secret of the agent owning a version (null when none is set). */
+    @Query(value = """
+            SELECT a.signing_secret FROM agents a
+            JOIN agent_versions v ON v.agent_id = a.id
+            WHERE v.id = :versionId
+            """, nativeQuery = true)
+    Optional<String> findSigningSecretByVersionId(@Param("versionId") UUID versionId);
+
     interface ReputationAggregateRow {
         BigDecimal getReliabilitySum();
         long getReliabilityCount();

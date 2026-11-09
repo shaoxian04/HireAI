@@ -86,6 +86,11 @@ public class AgentRepositoryImpl implements AgentRepository {
     }
 
     @Override
+    public Optional<String> findSigningSecretByVersionId(UUID agentVersionId) {
+        return agentJpa.findSigningSecretByVersionId(agentVersionId);
+    }
+
+    @Override
     public Optional<AgentModel> findById(UUID agentId) {
         return agentJpa.findById(agentId).map(this::toModel);
     }

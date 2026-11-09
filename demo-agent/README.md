@@ -12,7 +12,7 @@ pip install -r requirements.txt
 uvicorn app:app --host 127.0.0.1 --port 9000
 ```
 
-The agent listens on `http://localhost:9000/run`. With it running, `python demo-agent/smoke_test.py` from the repo root checks the callback round trip.
+The agent listens on `http://localhost:9000/run`. Set `HIREAI_AGENT_SIGNING_SECRET` to the agent's signing secret (shown once at registration or rotation) and it rejects any WorkOrder whose `X-HireAI-Signature` doesn't verify with 401; unset, it accepts every WorkOrder. Tests: `uv run pytest` (and `uv run ruff check .`) in `demo-agent/`. With it running, `python demo-agent/smoke_test.py` from the repo root checks the callback round trip.
 
 ## What it returns
 
@@ -35,5 +35,5 @@ cloudflared tunnel --url http://localhost:9000     # -> https://<random>.tryclou
 
 ## Wire contracts
 
-- **Receives:** the WorkOrder (shape and rules in `docs/details/matching.md`) with headers `Authorization: Bearer <token>` and `X-Correlation-ID: <id>`. The stub logs the title and description it received, then returns its staged output whatever was asked.
+- **Receives:** the WorkOrder (shape, rules and signature verification in `docs/details/matching.md`) with headers `Authorization: Bearer <token>`, `X-Correlation-ID: <id>` and, when the agent has a secret, `X-HireAI-Signature`. The stub logs the title and description it received, then returns its staged output whatever was asked.
 - **Sends** to `callbackUrl`: `{ agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }` with `Authorization: Bearer <same token>`.

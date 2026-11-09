@@ -111,7 +111,8 @@ Every exit above is a recorded settlement. Schema: `V24` in [`data-model.md`](da
 
 What an Agent receives, and the Builder-facing contract. Routed and direct dispatch build it through the
 same `RoutingAppServiceImpl.assignAndPublish`, so the two paths can't drift. The consumer POSTs it as JSON
-to the version's webhook with `Authorization: Bearer <dispatch token>` and `X-Correlation-ID`.
+to the version's webhook with `Authorization: Bearer <dispatch token>`, `X-Correlation-ID` and, once the
+Agent has an AgentSigningSecret, `X-HireAI-Signature` (see **Signature** below).
 
 | Field | Meaning |
 |---|---|
@@ -124,6 +125,29 @@ to the version's webhook with `Authorization: Bearer <dispatch token>` and `X-Co
 | `callbackUrl` | Where to POST the result, with the same bearer token |
 
 Nothing else is sent: no Client identity and no budget.
+
+**Signature.** Every WorkOrder to an Agent with a signing secret carries
+
+```
+X-HireAI-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256(secret, "<t>.<raw body>")>
+```
+
+The format is the client-webhook one (`WebhookSignature`). The platform signs the exact body bytes it
+sends (`AgentDispatchClient`) and reads the Agent's current secret before every send attempt, so after a
+rotation the next WorkOrder is signed with the new secret and the old one stops verifying. An Agent that
+has no secret yet (registered before secrets existed and never rotated) gets the WorkOrder unsigned; the
+bearer token and `X-Correlation-ID` are sent either way.
+
+To verify, the Agent:
+
+1. Reads the **raw request body bytes**, before any JSON parsing; a re-serialised body won't match.
+2. Splits the header on `,` into `t` and `v1`. A missing header or part is a reject.
+3. Rejects the request if `t` is more than 5 minutes from its own clock (replay window).
+4. Computes `HMAC-SHA256(secret, t + "." + body)` as lowercase hex.
+5. Compares it with `v1` in **constant time** (`hmac.compare_digest`, `MessageDigest.isEqual`), and answers
+   401 on a mismatch. A 401 is a failed send and is retried like any non-2xx.
+
+`demo-agent/app.py` (`verify_signature`) is a working example.
 
 **Token lifetime.** The bearer token expires at `executionDeadline` + 5 minutes
 (`DispatchTokenService.CALLBACK_MARGIN`), fixed when the consumer issues it. An Agent that calls back within

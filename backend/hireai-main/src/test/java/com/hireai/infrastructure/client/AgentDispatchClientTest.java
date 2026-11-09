@@ -9,13 +9,24 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.mock.http.client.MockClientHttpRequest;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.HexFormat;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.headerDoesNotExist;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
@@ -24,6 +35,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class AgentDispatchClientTest {
+
+    private static final Instant NOW = Instant.parse("2026-11-10T09:30:00Z");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -62,7 +75,7 @@ class AgentDispatchClientTest {
                 .andRespond(withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON).body("{}"));
 
         AgentDispatchClient client = client(builder.build(), PUBLIC_DNS, false);
-        client.dispatch(messageTo(webhook), "the-token");
+        client.dispatch(messageTo(webhook), "the-token", null);
 
         server.verify();
     }
@@ -71,7 +84,7 @@ class AgentDispatchClientTest {
     void rejectsNonHttpsWebhookInProdProfile() {
         AgentDispatchClient client = client(RestClient.builder().build(), PUBLIC_DNS, false);
 
-        assertThatThrownBy(() -> client.dispatch(messageTo("http://agent.example.com/run"), "the-token"))
+        assertThatThrownBy(() -> client.dispatch(messageTo("http://agent.example.com/run"), "the-token", null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("HTTPS");
     }
@@ -83,7 +96,7 @@ class AgentDispatchClientTest {
                 .andRespond(withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON).body("{}"));
 
         AgentDispatchClient client = client(builder.build(), PUBLIC_DNS, true);
-        client.dispatch(messageTo(webhook), "the-token");
+        client.dispatch(messageTo(webhook), "the-token", null);
 
         server.verify();
     }
@@ -92,7 +105,7 @@ class AgentDispatchClientTest {
     void rejectsNonLocalhostHttpEvenInDevProfile() {
         AgentDispatchClient client = client(RestClient.builder().build(), PUBLIC_DNS, true);
 
-        assertThatThrownBy(() -> client.dispatch(messageTo("http://agent.example.com/run"), "the-token"))
+        assertThatThrownBy(() -> client.dispatch(messageTo("http://agent.example.com/run"), "the-token", null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("HTTPS");
     }
@@ -103,7 +116,7 @@ class AgentDispatchClientTest {
         server.expect(requestTo(webhook)).andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
         AgentDispatchClient client = client(builder.build(), PUBLIC_DNS, false);
 
-        assertThatThrownBy(() -> client.dispatch(messageTo(webhook), "the-token"))
+        assertThatThrownBy(() -> client.dispatch(messageTo(webhook), "the-token", null))
                 .isInstanceOfSatisfying(AgentSendFailedException.class,
                         e -> org.assertj.core.api.Assertions.assertThat(e.statusCode()).hasValue(500));
     }
@@ -114,7 +127,7 @@ class AgentDispatchClientTest {
         server.expect(requestTo(webhook)).andRespond(withException(new java.net.SocketTimeoutException("Read timed out")));
         AgentDispatchClient client = client(builder.build(), PUBLIC_DNS, false);
 
-        assertThatThrownBy(() -> client.dispatch(messageTo(webhook), "the-token"))
+        assertThatThrownBy(() -> client.dispatch(messageTo(webhook), "the-token", null))
                 .isInstanceOfSatisfying(AgentSendFailedException.class,
                         e -> org.assertj.core.api.Assertions.assertThat(e.statusCode()).isEmpty());
     }
@@ -125,7 +138,7 @@ class AgentDispatchClientTest {
         HostResolver rebound = host -> new InetAddress[]{InetAddress.getByName("10.0.0.7")};
         AgentDispatchClient client = client(builder.build(), rebound, false);
 
-        assertThatThrownBy(() -> client.dispatch(messageTo("https://agent.example.com/run"), "the-token"))
+        assertThatThrownBy(() -> client.dispatch(messageTo("https://agent.example.com/run"), "the-token", null))
                 .isInstanceOfSatisfying(AgentSendFailedException.class, e -> {
                     org.assertj.core.api.Assertions.assertThat(e.statusCode()).isEmpty();
                     org.assertj.core.api.Assertions.assertThat(e).hasMessageContaining("private/blocked");
@@ -140,14 +153,63 @@ class AgentDispatchClientTest {
                 .location(java.net.URI.create("https://169.254.169.254/latest/meta-data")));
         AgentDispatchClient client = client(builder.build(), PUBLIC_DNS, false);
 
-        assertThatThrownBy(() -> client.dispatch(messageTo(webhook), "the-token"))
+        assertThatThrownBy(() -> client.dispatch(messageTo(webhook), "the-token", null))
                 .isInstanceOfSatisfying(AgentSendFailedException.class,
                         e -> org.assertj.core.api.Assertions.assertThat(e.statusCode()).hasValue(302));
         server.verify();
     }
 
+    @Test
+    void anAgentWithASecretGetsTheExactBytesSentSignedWithTheTimestampAndSecret() {
+        String webhook = "https://agent.example.com/run";
+        AtomicReference<byte[]> sentBody = new AtomicReference<>();
+        AtomicReference<String> sentSignature = new AtomicReference<>();
+        server.expect(requestTo(webhook))
+                .andExpect(header("Authorization", "Bearer the-token"))
+                .andExpect(header("X-Correlation-ID", "corr-123"))
+                .andExpect(request -> {
+                    sentBody.set(((MockClientHttpRequest) request).getBodyAsBytes());
+                    sentSignature.set(request.getHeaders().getFirst("X-HireAI-Signature"));
+                })
+                .andRespond(withStatus(HttpStatus.OK));
+        AgentDispatchClient client = client(builder.build(), PUBLIC_DNS, false);
+
+        client.dispatch(messageTo(webhook), "the-token", "agsec_test-secret");
+
+        server.verify();
+        assertThat(sentSignature.get()).isEqualTo("t=" + NOW.getEpochSecond() + ",v1="
+                + independentHmacHex("agsec_test-secret", NOW.getEpochSecond() + "." , sentBody.get()));
+    }
+
+    @Test
+    void anAgentWithoutASecretGetsAnUnsignedWorkOrder() {
+        String webhook = "https://agent.example.com/run";
+        server.expect(requestTo(webhook))
+                .andExpect(header("Authorization", "Bearer the-token"))
+                .andExpect(headerDoesNotExist("X-HireAI-Signature"))
+                .andRespond(withStatus(HttpStatus.OK));
+        AgentDispatchClient client = client(builder.build(), PUBLIC_DNS, false);
+
+        client.dispatch(messageTo(webhook), "the-token", null);
+
+        server.verify();
+    }
+
+    /** HMAC-SHA256 over prefix bytes + body bytes, computed without the production helper. */
+    static String independentHmacHex(String secret, String prefix, byte[] body) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            mac.update(prefix.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(mac.doFinal(body));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     private AgentDispatchClient client(RestClient restClient, HostResolver resolver, boolean allowInsecureLocalhost) {
         return new AgentDispatchClient(restClient, objectMapper,
-                new WebhookUrlValidator(false, allowInsecureLocalhost, resolver), allowInsecureLocalhost);
+                new WebhookUrlValidator(false, allowInsecureLocalhost, resolver), allowInsecureLocalhost,
+                Clock.fixed(NOW, ZoneOffset.UTC));
     }
 }

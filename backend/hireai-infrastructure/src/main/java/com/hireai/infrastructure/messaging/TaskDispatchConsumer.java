@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.messaging;
 
+import com.hireai.application.biz.offering.agent.AgentReadAppService;
 import com.hireai.application.port.security.DispatchTokenService;
 import com.hireai.application.port.task.TaskExecutionPort;
 import com.hireai.domain.biz.task.routing.info.DispatchMessage;
@@ -19,7 +20,8 @@ import java.util.Optional;
 /**
  * Consumes dispatch messages: checks under a row lock that the task is still QUEUED (otherwise
  * drops the message), issues a signed token that lives until the task's execution deadline
- * plus {@link DispatchTokenService#CALLBACK_MARGIN}, POSTs the webhook via
+ * plus {@link DispatchTokenService#CALLBACK_MARGIN}, reads the Agent's current signing secret,
+ * POSTs the WorkOrder (signed when the Agent has a secret) via
  * {@link AgentDispatchClient}, then flips the task to EXECUTING through the
  * {@link TaskExecutionPort} port.
  *
@@ -46,17 +48,20 @@ public class TaskDispatchConsumer {
     private final TaskExecutionPort taskExecutionPort;
     private final RabbitTemplate rabbitTemplate;
     private final DispatchRetrySchedule retrySchedule;
+    private final AgentReadAppService agentReadAppService;
 
     public TaskDispatchConsumer(DispatchTokenService dispatchTokenService,
                                 AgentDispatchClient agentDispatchClient,
                                 TaskExecutionPort taskExecutionPort,
                                 @Qualifier("dispatchRabbitTemplate") RabbitTemplate rabbitTemplate,
-                                DispatchRetrySchedule retrySchedule) {
+                                DispatchRetrySchedule retrySchedule,
+                                AgentReadAppService agentReadAppService) {
         this.dispatchTokenService = dispatchTokenService;
         this.agentDispatchClient = agentDispatchClient;
         this.taskExecutionPort = taskExecutionPort;
         this.rabbitTemplate = rabbitTemplate;
         this.retrySchedule = retrySchedule;
+        this.agentReadAppService = agentReadAppService;
     }
 
     @RabbitListener(queues = DispatchQueues.QUEUE, containerFactory = "dispatchListenerContainerFactory")
@@ -77,7 +82,10 @@ public class TaskDispatchConsumer {
             //    and consumes an attempt.
             String token = dispatchTokenService.issue(message.taskId(), message.agentVersionId(),
                     message.payload().executionDeadline());
-            agentDispatchClient.dispatch(message, token);
+            // The signing secret is read on every attempt, so a rotation applies to the next send.
+            String signingSecret = agentReadAppService
+                    .findSigningSecretForVersion(message.agentVersionId()).orElse(null);
+            agentDispatchClient.dispatch(message, token, signingSecret);
         } catch (AgentSendFailedException e) {
             retryOrDeadLetter(message, attempt, e);
             return;

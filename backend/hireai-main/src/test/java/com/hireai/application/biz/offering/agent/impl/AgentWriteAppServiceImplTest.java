@@ -54,6 +54,11 @@ class AgentWriteAppServiceImplTest {
             secrets.put(agentId, signingSecret);
         }
 
+        @Override public Optional<String> findSigningSecretByVersionId(UUID agentVersionId) {
+            AgentVersionModel version = versionStore.get(agentVersionId);
+            return version == null ? Optional.empty() : Optional.ofNullable(secrets.get(version.agentId()));
+        }
+
         @Override public AgentModel save(AgentModel agent) {
             store.put(agent.id(), agent);
             if (agent.currentVersion() != null) {

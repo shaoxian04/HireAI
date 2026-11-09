@@ -35,6 +35,13 @@ public interface AgentRepository {
      */
     void updateSigningSecret(UUID agentId, String signingSecret);
 
+    /**
+     * The current AgentSigningSecret of the agent that owns this version, read for WorkOrder
+     * signing only. Empty when the version is unknown or the agent has no secret yet. Read at
+     * send time, so a rotation applies to the next WorkOrder. No status filter.
+     */
+    Optional<String> findSigningSecretByVersionId(UUID agentVersionId);
+
     Optional<AgentModel> findById(UUID agentId);
 
     List<AgentModel> findByOwnerId(UUID ownerId, AgentQuery query);

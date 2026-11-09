@@ -20,7 +20,7 @@ _Avoid_: webhook (see WebhookDelivery — say "subscription" for the registratio
 The platform's instruction to one Agent to execute one Task: what the Client asked for, the binding output spec, the deadline, and where to return the result. It carries what the Agent needs to do the work and nothing about the Client beyond that. An Agent may receive the same WorkOrder more than once and must treat a repeat as the same job.
 _Avoid_: dispatch (that's the act of sending it), job, request, payload
 
-**AgentSigningSecret** _(planned, not built; #57)_:
+**AgentSigningSecret** _(signs WorkOrders today; callback signing planned, #57)_:
 A secret shared between the platform and one Agent, used to prove in both directions that a WorkOrder came from the platform and that a result came from that Agent. Issued when the Agent is registered, shown to the Builder once, and replaceable by rotation; it outlives the Agent's versions.
 _Avoid_: dispatch token (a per-Task bearer credential, distinct from this long-lived secret), API key
 

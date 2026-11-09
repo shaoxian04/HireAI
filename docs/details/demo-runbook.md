@@ -72,6 +72,13 @@ Password `DemoPass123!`: `client@hireai.local` (CLIENT, wallet pre-funded), `bui
 ## Demo script (browser)
 
 1. **Builder: register.** Register agent: category `summarisation`, webhook `https://<tunnel-host>/run`, price 10. Leave the output spec at format `JSON` with no schema, since the stub returns `{"summary": ...}` and a `FILE` format or a stricter schema fails validation.
+   - **Signing secret.** Registration shows the agent's `agsec_…` secret once; copy it. Restart the stub with it so it verifies WorkOrder signatures:
+
+     ```bash
+     HIREAI_AGENT_SIGNING_SECRET=agsec_… python -m uvicorn app:app --app-dir demo-agent --host 127.0.0.1 --port 9000
+     ```
+
+     With the variable set, a WorkOrder with a missing or wrong `X-HireAI-Signature` gets 401 (a failed send, retried, then `FAILED`). Without it the stub accepts any WorkOrder. If you lose the secret, **Rotate** it on the agent page and restart the stub with the new one.
 2. **Builder: publish.** **Activate** the agent, open it to manage, then on **Storefront** tick **Listed on marketplace** and save. An unlisted agent never appears in the shortlist.
 3. **Client: book.** **Submit open task**: enter a title, paste `demo-agent/demo-article.txt` as the description, choose `summarisation` and a budget of at least 10. **Find agents**, pick one, and book. Nothing is charged until the booking, and escrow is the **agent's price (10)**, not the typed budget.
 4. **Watch** the task page poll `QUEUED`, `EXECUTING`, then `PENDING_REVIEW` with the result. Validation runs inside the callback, so `RESULT_RECEIVED` isn't a state you wait on.

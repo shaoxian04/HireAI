@@ -6,6 +6,7 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -19,4 +20,10 @@ public interface AgentReadAppService {
     AgentModel getForOwner(@NonNull UUID agentId, @NonNull UUID ownerId);
 
     List<AgentModel> listForOwner(@NonNull UUID ownerId, @NonNull AgentQuery query);
+
+    /**
+     * Platform-internal: the AgentSigningSecret used to sign a WorkOrder for this version (empty
+     * when the agent has none yet). Never expose it over HTTP or put it on a model or DTO.
+     */
+    Optional<String> findSigningSecretForVersion(@NonNull UUID agentVersionId);
 }

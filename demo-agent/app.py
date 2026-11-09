@@ -3,10 +3,17 @@
 Receives a dispatch webhook (wire contract B), echoes the SAME Bearer token, waits
 briefly to simulate work, then POSTs a spec-conforming result (wire contract A) to the
 platform's callback URL. This is a stand-in for a real third-party Agent.
+
+When HIREAI_AGENT_SIGNING_SECRET is set (the AgentSigningSecret shown once at registration
+or rotation), every WorkOrder must carry a valid X-HireAI-Signature or it is rejected with 401.
 """
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
+import os
+import time
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Request
@@ -28,12 +35,38 @@ DEMO_SUMMARY = (
 )
 
 
+SIGNATURE_HEADER = "X-HireAI-Signature"
+SECRET_ENV = "HIREAI_AGENT_SIGNING_SECRET"
+# Reject a signature whose timestamp is further than this from our clock (replay window).
+TOLERANCE_SECONDS = 300
+
+
+def verify_signature(secret: str, header: str | None, body: bytes, now: float | None = None) -> bool:
+    """Checks t=<ts>,v1=<hex HMAC-SHA256(secret, "<ts>.<body>")> over the exact raw body bytes."""
+    if not header:
+        return False
+    parts = dict(p.split("=", 1) for p in header.split(",") if "=" in p)
+    timestamp, received = parts.get("t", ""), parts.get("v1", "")
+    if not timestamp.isdigit() or not received:
+        return False
+    current = time.time() if now is None else now
+    if abs(current - int(timestamp)) > TOLERANCE_SECONDS:
+        return False
+    expected = hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, received)
+
+
 @app.post("/run")
 async def run(request: Request, authorization: str = Header(default="")):
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing dispatch token")
     token = authorization.removeprefix("Bearer ")
-    body = await request.json()
+    raw = await request.body()
+    secret = os.environ.get(SECRET_ENV)
+    if secret and not verify_signature(secret, request.headers.get(SIGNATURE_HEADER), raw):
+        log.warning("Rejected a WorkOrder with a missing or invalid %s", SIGNATURE_HEADER)
+        raise HTTPException(status_code=401, detail="Invalid WorkOrder signature")
+    body = json.loads(raw)
     task_id = body["taskId"]
     callback_url = body["callbackUrl"]
     # Log the task content so a live run visibly proves the WorkOrder carries the client's
