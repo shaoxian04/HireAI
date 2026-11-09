@@ -4,7 +4,8 @@ status: accepted
 
 # The launch vertical is document-grounded extraction, chosen by where ground truth lives
 
-**Status:** decided, not built.
+**Status:** decided, not built. The free-form categories described below are superseded by
+[ADR 0006](./0006-matching-category-filter-relevance-floor.md).
 
 HireAI is horizontal by construction — `agent_versions.capability_categories` is a free-form lowercased `TEXT[]` and
 `GET /catalogue/categories` merely aggregates whatever builders have registered, so nothing in the
