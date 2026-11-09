@@ -150,10 +150,12 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
         TaskModel timedOut = task.markTimedOut();
         taskRepository.save(timedOut);
         settlementWriteAppService.settleRejected(taskId, timedOut.clientId(), timedOut.budget());
-        // The deadline passed with no result. Stamped at ASSIGNMENT, so the agent had the work.
-        reputationWriteAppService.recordOutcome(taskId, timedOut.agentVersionId(),
-                timedOut.clientId(), ReputationEventType.EXECUTION_TIMEOUT);
+        // Blame only an Agent that had the work: a task still QUEUED never reached it (#66).
+        if (task.timeoutIsAgentFault()) {
+            reputationWriteAppService.recordOutcome(taskId, timedOut.agentVersionId(),
+                    timedOut.clientId(), ReputationEventType.EXECUTION_TIMEOUT);
+        }
         webhookOutboxAppService.enqueueFailed(timedOut, "TIMED_OUT");
-        log.info("Task {} TIMED_OUT past execution deadline; escrow fully refunded", taskId);
+        log.info("Task {} TIMED_OUT from {} past execution deadline; escrow fully refunded", taskId, task.status());
     }
 }
