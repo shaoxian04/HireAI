@@ -52,7 +52,7 @@ Both go through `SubmitOrchestrationAppService` (idempotency, caps, attribution)
 | **Direct** | `POST /api/tasks/direct` | `{title, description, budget, agentId, category?}` | Pinned | Inherits the agent's spec |
 
 - **Categories come from one platform-owned list** ([`categories`](data-model.md#categories), served by `GET /api/catalogue/categories`). An unknown slug on open submit, on a direct booking's optional `category`, or on match-preview is `400 VALIDATION_ERROR` whose message lists the valid slugs (`Unknown category 'x'. Valid categories: …`); input is trimmed and lowercased first. Nothing is frozen. A direct booking's `category` must also be one the agent serves (else 400); without it the task takes the agent's first category.
-- **Open mode is API and MCP only.** The web UI always books direct, after a shortlist from `GET /api/tasks/match-preview`.
+- **Open mode is API and MCP only.** The web UI always books direct, after a shortlist from `POST /api/tasks/match-preview`.
 - **Open mode picks only listed agents:** the same eligibility and score as the web shortlist ([matching](matching.md#one-ranking-engine-three-uses)).
 - **Direct mode needs `ACTIVE` and listed.** Anything else is `404 NOT_FOUND`, deliberately, to avoid leaking existence.
 - **Direct budget:** must be at least the agent's price, or `400 VALIDATION_ERROR`. **The submitted budget is what freezes and settles**, so a caller who over-budgets pays that amount. Only the web UI sends `budget = price`. See [Known gaps](build-status.md#known-gaps).
@@ -107,7 +107,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 | `POST /api/tasks` | `CLIENT`, `API_CLIENT` | Open submit |
 | `POST /api/tasks/direct` | `CLIENT`, `API_CLIENT` | Direct submit |
 | `GET /api/tasks`, `/api/tasks/{id}`, `/result`, `/validation`, `/attempts` | `CLIENT`, `API_CLIENT` | Track (incl. `failureReason` once a task ends without a result; `/{id}` also gives the `category` and the `agentId` it was booked with), result, failing check, dispatch history ([`dispatch_attempts`](data-model.md#dispatch-attempts)) |
-| `GET /api/tasks/match-preview?category=&budget=[&exclude=<agentId>…]` | `CLIENT`, `API_CLIENT` | Ranked shortlist; creates no task. `exclude` (repeatable, at most 20) leaves those Agents out of both lists |
+| `POST /api/tasks/match-preview` `{title, description, category, budget, deadlineSeconds?, exclude?}` | `CLIENT`, `API_CLIENT` | Ranked shortlist; creates no task and freezes nothing. A POST so the task text never travels in a URL. `exclude` (at most 20 Agent ids) leaves those Agents out of both lists. `title`/`description` (same limits as submit) and a positive `deadlineSeconds` are validated; the shortlist does not use them. There is no GET form |
 | `GET /api/catalogue/**` | Any human role, `API_CLIENT` | Browse agents; `/categories` is the category list (`category` slug, `label`, `agentCount`) |
 | `/api/webhooks/subscription/**` | JWT `CLIENT` | Subscription |
 | `GET /api/webhooks/deliveries`, `POST …/{id}/redeliver` | `CLIENT`, `API_CLIENT` | Delivery log, resend |

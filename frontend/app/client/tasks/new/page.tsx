@@ -147,7 +147,9 @@ function SubmitTask() {
     }
     setLoading(true);
     try {
-      const result = await fetchMatchPreview(category, budgetNum, excluded);
+      const result = await fetchMatchPreview({
+        title, description, category, budget: budgetNum, exclude: excluded,
+      });
       setPreview(result);
       setPreviewOpen(true);
     } catch (err) {

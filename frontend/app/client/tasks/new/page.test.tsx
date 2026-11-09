@@ -60,7 +60,7 @@ describe("submit task — shortlist flow", () => {
   it("finds agents then books an in-budget pick at the agent's price", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(
-      http.get("*/api/tasks/match-preview", () => ok(previewBody)),
+      http.post("*/api/tasks/match-preview", () => ok(previewBody)),
       http.post("*/api/tasks/direct", async ({ request }) => {
         captured = (await request.json()) as Record<string, unknown>;
         return ok({ id: "t-9", status: "SUBMITTED" });
@@ -82,7 +82,7 @@ describe("submit task — shortlist flow", () => {
   it("books a near-miss at its higher price", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(
-      http.get("*/api/tasks/match-preview", () => ok(previewBody)),
+      http.post("*/api/tasks/match-preview", () => ok(previewBody)),
       http.post("*/api/tasks/direct", async ({ request }) => {
         captured = (await request.json()) as Record<string, unknown>;
         return ok({ id: "t-10", status: "SUBMITTED" });
@@ -132,10 +132,10 @@ describe("submit task — shortlist flow", () => {
   });
 
   it("clears and retypes the budget field without a stray leading zero, then searches with the typed value", async () => {
-    let calledUrl = "";
+    let sent: Record<string, unknown> | null = null;
     server.use(
-      http.get("*/api/tasks/match-preview", ({ request }) => {
-        calledUrl = request.url;
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>;
         return ok(previewBody);
       }),
     );
@@ -150,7 +150,8 @@ describe("submit task — shortlist flow", () => {
     expect(budgetInput.value).toBe("45");
     await pickCategory();
     fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
-    await waitFor(() => expect(calledUrl).toContain("budget=45"));
+    await waitFor(() => expect(sent).not.toBeNull());
+    expect(sent!.budget).toBe(45);
   });
 
   it("shows a validation error instead of searching with a silently-substituted 0 when budget is left empty", async () => {
@@ -171,7 +172,7 @@ describe("submit task — idempotency", () => {
   /** Drives the form up to a booked in-budget pick, collecting each POST's Idempotency-Key. */
   async function bookOnce(keys: string[], status: number) {
     server.use(
-      http.get("*/api/tasks/match-preview", () => ok(previewBody)),
+      http.post("*/api/tasks/match-preview", () => ok(previewBody)),
       http.post("*/api/tasks/direct", ({ request }) => {
         keys.push(request.headers.get("Idempotency-Key") ?? "");
         return status === 200
@@ -271,11 +272,11 @@ describe("submit task — rebook a failed task", () => {
 
   it("leaves the failed agent out of the shortlist search", async () => {
     nav.search = "rebook=t-7";
-    let calledUrl: URL | null = null;
+    let sent: Record<string, unknown> | null = null;
     server.use(
       http.get("*/api/tasks/t-7", () => ok(failedTask)),
-      http.get("*/api/tasks/match-preview", ({ request }) => {
-        calledUrl = new URL(request.url);
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>;
         return ok(previewBody);
       }),
     );
@@ -284,10 +285,11 @@ describe("submit task — rebook a failed task", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
 
-    await waitFor(() => expect(calledUrl).not.toBeNull());
-    expect(calledUrl!.searchParams.getAll("exclude")).toEqual(["a-failed"]);
-    expect(calledUrl!.searchParams.get("category")).toBe("summarisation");
-    expect(calledUrl!.searchParams.get("budget")).toBe("15");
+    await waitFor(() => expect(sent).not.toBeNull());
+    expect(sent).toEqual({
+      title: "Quarterly digest", description: "Summarise the Q3 board pack", category: "summarisation",
+      budget: 15, exclude: ["a-failed"],
+    });
   });
 
   it("books the new pick as a new task and leaves the failed one alone", async () => {
@@ -295,7 +297,7 @@ describe("submit task — rebook a failed task", () => {
     let captured: Record<string, unknown> | null = null;
     server.use(
       http.get("*/api/tasks/t-7", () => ok(failedTask)),
-      http.get("*/api/tasks/match-preview", () => ok(previewBody)),
+      http.post("*/api/tasks/match-preview", () => ok(previewBody)),
       http.post("*/api/tasks/direct", async ({ request }) => {
         captured = (await request.json()) as Record<string, unknown>;
         return ok({ id: "t-8", status: "SUBMITTED" });
@@ -326,11 +328,13 @@ describe("submit task — rebook a failed task", () => {
     expect(screen.getByLabelText(/title/i)).toHaveValue("");
   });
 
-  it("sends no exclusion on an ordinary new task", async () => {
+  it("sends the task in a POST body, with no exclusion, on an ordinary new task", async () => {
+    let sent: Record<string, unknown> | null = null;
     let calledUrl: URL | null = null;
     server.use(
-      http.get("*/api/tasks/match-preview", ({ request }) => {
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
         calledUrl = new URL(request.url);
+        sent = (await request.json()) as Record<string, unknown>;
         return ok(previewBody);
       }),
     );
@@ -339,7 +343,9 @@ describe("submit task — rebook a failed task", () => {
     await pickCategory();
     fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
 
-    await waitFor(() => expect(calledUrl).not.toBeNull());
-    expect(calledUrl!.searchParams.has("exclude")).toBe(false);
+    await waitFor(() => expect(sent).not.toBeNull());
+    // The task text goes in the body, never in the URL.
+    expect(sent).toEqual({ title: "Summarise", description: "the report", category: "summarisation", budget: 30 });
+    expect(calledUrl!.search).toBe("");
   });
 });

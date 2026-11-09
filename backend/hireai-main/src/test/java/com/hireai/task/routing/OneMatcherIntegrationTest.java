@@ -103,7 +103,8 @@ class OneMatcherIntegrationTest extends WholeAppIntegrationTest {
         seedAgent(category, middling, "70.00", "6.00", true);
         seedAgent(category, unlistedStar, "99.00", "1.00", false);
 
-        JsonNode preview = get("/api/tasks/match-preview?category=" + category + "&budget=10");
+        JsonNode preview = post("/api/tasks/match-preview", """
+                {"title":"Digest","description":"Summarise","category":"%s","budget":10}""".formatted(category));
         String shortlistTop = preview.path("shortlist").get(0).path("agentId").asText();
 
         UUID taskId = submitRouted(category);

@@ -74,9 +74,13 @@ class RebookIntegrationTest extends WholeAppIntegrationTest {
         Map<String, Object> rowBefore = taskRow(failedTaskId);
         List<Map<String, Object>> ledgerBefore = ledgerOf(failedTaskId);
 
-        String previewPath = "/api/tasks/match-preview?category=" + category + "&budget=20";
-        assertThat(agentIds(get(previewPath))).contains(failedAgent.agentId().toString());
-        JsonNode excluded = get(previewPath + "&exclude=" + failedAgent.agentId());
+        String preview = """
+                {"title":"Quarterly digest","description":"Summarise the Q3 board pack",
+                 "category":"%s","budget":20%s}""";
+        assertThat(agentIds(post("/api/tasks/match-preview", preview.formatted(category, ""))))
+                .contains(failedAgent.agentId().toString());
+        JsonNode excluded = post("/api/tasks/match-preview",
+                preview.formatted(category, ",\"exclude\":[\"" + failedAgent.agentId() + "\"]"));
         assertThat(agentIds(excluded))
                 .containsExactly(otherAgent.agentId().toString())
                 .doesNotContain(failedAgent.agentId().toString());

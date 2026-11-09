@@ -19,6 +19,7 @@ import com.hireai.controller.biz.task.dto.CreateReviewRequest;
 import com.hireai.controller.biz.task.dto.DirectBookRequest;
 import com.hireai.controller.biz.task.dto.DispatchAttemptDTO;
 import com.hireai.controller.biz.task.dto.MatchPreviewDTO;
+import com.hireai.controller.biz.task.dto.MatchPreviewRequest;
 import com.hireai.controller.biz.task.dto.RejectTaskRequest;
 import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
 import com.hireai.controller.biz.task.dto.TaskDTO;
@@ -45,7 +46,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -211,22 +211,15 @@ public class TaskController extends BaseController {
     }
 
     /**
-     * {@code exclude} (repeatable) names Agents to leave out of both lists: the web rebook passes
-     * the Agent that just failed the task (#79).
+     * A POST so the task text stays out of URLs. {@code exclude} names Agents to leave out of both
+     * lists: the web rebook passes the Agent that just failed the task (#79). {@code title},
+     * {@code description} and {@code deadlineSeconds} are validated here but do not affect the
+     * shortlist yet (relevance and the client deadline come with #85 and #83).
      */
-    @GetMapping("/match-preview")
-    public WebResult<MatchPreviewDTO> matchPreview(@RequestParam("category") String category,
-                                                   @RequestParam("budget") BigDecimal budget,
-                                                   @RequestParam(value = "exclude", required = false)
-                                                   List<UUID> exclude) {
-        if (category == null || category.isBlank()) {
-            throw new DomainException(ResultCode.VALIDATION_ERROR, "category is required");
-        }
-        if (budget == null || budget.signum() <= 0) {
-            throw new DomainException(ResultCode.VALIDATION_ERROR, "budget must be positive");
-        }
-        return ok(MatchPreview2DTOConverter.toDTO(
-                matchPreviewAppService.preview(category, Money.of(budget), excludedAgents(exclude))));
+    @PostMapping("/match-preview")
+    public WebResult<MatchPreviewDTO> matchPreview(@Valid @RequestBody MatchPreviewRequest request) {
+        return ok(MatchPreview2DTOConverter.toDTO(matchPreviewAppService.preview(
+                request.category(), Money.of(request.budget()), excludedAgents(request.exclude()))));
     }
 
     private static Set<UUID> excludedAgents(List<UUID> exclude) {

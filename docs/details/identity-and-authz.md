@@ -26,7 +26,7 @@ Stored in the `user_roles` join table; a user may hold several of `CLIENT`, `BUI
 
 | Route | Allowed |
 |---|---|
-| `POST /api/tasks`, `/api/tasks/direct`; `GET /api/tasks`, `/api/tasks/*`, `/api/tasks/*/result`, `/api/tasks/*/validation`, `/api/tasks/*/attempts` | `CLIENT`, `API_CLIENT` |
+| `POST /api/tasks`, `/api/tasks/direct`, `/api/tasks/match-preview`; `GET /api/tasks`, `/api/tasks/*`, `/api/tasks/*/result`, `/api/tasks/*/validation`, `/api/tasks/*/attempts` | `CLIENT`, `API_CLIENT` |
 | `GET /api/webhooks/deliveries`, `POST /api/webhooks/deliveries/*/redeliver` | `CLIENT`, `API_CLIENT` |
 | `POST /api/tasks/*/accept`, `/reject` | `CLIENT`, `BUILDER`, `ADMIN` (human-only) |
 | `/api/keys/**`, `/api/webhooks/subscription/**` | `CLIENT` (JWT-only: a leaked key cannot mint keys or repoint a callback) |
@@ -37,7 +37,7 @@ Stored in the `user_roles` join table; a user may hold several of `CLIENT`, `BUI
 
 Consequences worth knowing:
 - The catalogue needs a role; "public" in these docs means "any signed-in role", not anonymous.
-- The `GET /api/tasks/*` wildcard also matches `GET /api/tasks/match-preview`, so API keys can reach it, while a BUILDER-only or ADMIN-only JWT cannot.
+- `POST /api/tasks/match-preview` needs its own matcher: no `/api/tasks/*` GET wildcard covers a POST, so without it an API key would fall to the final rule (401). A BUILDER-only or ADMIN-only JWT cannot reach it.
 - The final rule only *adds* the API-key lockout; every human already holds one of those roles. So most builder routes are not gated to `BUILDER`: a CLIENT passes the chain and only ownership applies. See [Known gaps](build-status.md#known-gaps).
 
 ### Denied means 401 in the full app

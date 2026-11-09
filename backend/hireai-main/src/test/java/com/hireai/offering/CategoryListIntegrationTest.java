@@ -113,7 +113,8 @@ class CategoryListIntegrationTest extends WholeAppIntegrationTest {
 
     @Test
     void matchPreviewWithAnUnknownCategoryIsA400() throws Exception {
-        assertUnknownCategory(send("GET", "/api/tasks/match-preview?category=nope&budget=10", null), "nope");
+        assertUnknownCategory(send("POST", "/api/tasks/match-preview", """
+                {"title":"T","description":"d","category":"nope","budget":10}"""), "nope");
     }
 
     @Test

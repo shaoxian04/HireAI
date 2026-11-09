@@ -77,8 +77,11 @@ public class SecurityConfig {
                         // Public API documentation (springdoc / Swagger UI) — the programmatic OpenAPI group.
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         // Submit / track / settle: reachable by a human CLIENT or an API_CLIENT key.
+                        // match-preview is a POST (task text in the body), so it needs its own matcher:
+                        // no GET wildcard covers it.
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
-                                "/api/tasks", "/api/tasks/direct").hasAnyRole("CLIENT", "API_CLIENT")
+                                "/api/tasks", "/api/tasks/direct", "/api/tasks/match-preview")
+                                .hasAnyRole("CLIENT", "API_CLIENT")
                         .requestMatchers(org.springframework.http.HttpMethod.GET,
                                 "/api/tasks", "/api/tasks/*", "/api/tasks/*/result",
                                 "/api/tasks/*/validation", "/api/tasks/*/attempts").hasAnyRole("CLIENT", "API_CLIENT")

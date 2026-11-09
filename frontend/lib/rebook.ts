@@ -1,5 +1,5 @@
 import { api } from "@/lib/api";
-import type { MatchPreviewDTO } from "@/lib/types";
+import type { MatchPreviewDTO, MatchPreviewRequest } from "@/lib/types";
 
 /**
  * "Choose another agent" (#79): the new-task flow opened for a failed task. Only the task id travels
@@ -11,16 +11,15 @@ export function rebookHref(taskId: string): string {
 }
 
 /**
- * The match preview for the new-task flow. `exclude` names Agents to leave out of both lists (the
- * Agent that just failed a rebooked task). This is the one place the frontend sends it, so moving
- * the call to a POST body later changes only this function.
+ * The match preview for the new-task flow, as a POST so the task text stays out of URLs. An empty
+ * `exclude` is left off the body; otherwise it names Agents to leave out of both lists (the Agent
+ * that just failed a rebooked task).
  */
-export function fetchMatchPreview(
-  category: string,
-  budget: number,
-  exclude: readonly string[] = [],
-): Promise<MatchPreviewDTO> {
-  const params = new URLSearchParams({ category, budget: String(budget) });
-  for (const agentId of exclude) params.append("exclude", agentId);
-  return api<MatchPreviewDTO>(`/tasks/match-preview?${params.toString()}`);
+export function fetchMatchPreview(request: MatchPreviewRequest): Promise<MatchPreviewDTO> {
+  const { exclude, ...rest } = request;
+  const body: MatchPreviewRequest = exclude && exclude.length > 0 ? { ...rest, exclude } : rest;
+  return api<MatchPreviewDTO>("/tasks/match-preview", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }

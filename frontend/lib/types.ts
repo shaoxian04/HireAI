@@ -466,6 +466,20 @@ export interface AgentOptionDTO {
   capabilityCategories: string[];
 }
 
+/**
+ * Body of `POST /tasks/match-preview`. The task text travels in the body, never in a URL.
+ * `deadlineSeconds` is accepted by the backend but does not filter the shortlist yet (#83).
+ */
+export interface MatchPreviewRequest {
+  title: string;
+  description: string;
+  category: string;
+  budget: number;
+  deadlineSeconds?: number;
+  /** Agents to leave out of both lists (the Agent that failed a rebooked task). */
+  exclude?: string[];
+}
+
 export interface MatchPreviewDTO {
   shortlist: AgentOptionDTO[];
   nearMisses: AgentOptionDTO[];
