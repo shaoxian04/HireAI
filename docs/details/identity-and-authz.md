@@ -26,7 +26,7 @@ Stored in the `user_roles` join table; a user may hold several of `CLIENT`, `BUI
 
 | Route | Allowed |
 |---|---|
-| `POST /api/tasks`, `/api/tasks/direct`; `GET /api/tasks`, `/api/tasks/*`, `/api/tasks/*/result`, `/api/tasks/*/validation` | `CLIENT`, `API_CLIENT` |
+| `POST /api/tasks`, `/api/tasks/direct`; `GET /api/tasks`, `/api/tasks/*`, `/api/tasks/*/result`, `/api/tasks/*/validation`, `/api/tasks/*/attempts` | `CLIENT`, `API_CLIENT` |
 | `GET /api/webhooks/deliveries`, `POST /api/webhooks/deliveries/*/redeliver` | `CLIENT`, `API_CLIENT` |
 | `POST /api/tasks/*/accept`, `/reject` | `CLIENT`, `BUILDER`, `ADMIN` (human-only) |
 | `/api/keys/**`, `/api/webhooks/subscription/**` | `CLIENT` (JWT-only: a leaked key cannot mint keys or repoint a callback) |

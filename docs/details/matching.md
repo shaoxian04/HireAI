@@ -164,8 +164,9 @@ The consumer keeps repeats to the minimum, in this order:
 2. It issues the token and sends. A failed send is retried (see the schedule below), so an Agent may see one
    WorkOrder per send the platform considered failed (for example a 5xx or a read timeout after the Agent had
    already received it).
-3. It marks the task `EXECUTING` under a row lock. A failure here, after a successful send, is logged and the
-   message is acknowledged, never redelivered.
+3. It records an `ACCEPTED` row in the task's [dispatch history](data-model.md#dispatch-attempts), then
+   marks the task `EXECUTING` under a row lock. A failure of either, after a successful send, is logged and
+   the message is acknowledged, never redelivered.
 
 The callback loads the task under the same row lock and accepts a result while the task is `QUEUED` or
 `EXECUTING`, so calling back before the platform has recorded the start is safe.
@@ -198,7 +199,8 @@ reputation event.
   per-message TTL, and expiry dead-letters it back to the dispatch exchange. The attempt number travels in
   the `x-hireai-dispatch-attempt` header.
 - When the last attempt fails, the consumer rejects the message and it dead-letters to `task.dispatch.dlq`.
-  The DLQ listener then fails the task (`FAILED`, refund, `task.failed` webhook, `EXECUTION_FAILED`).
+  The DLQ listener then fails the task (`FAILED`, refund, `task.failed` webhook, `EXECUTION_FAILED`, and an
+  `UNREACHABLE` row in the dispatch history), all in one transaction.
 - `hireai.dispatch.consumers` (default 4) consumers each take one message at a time, so a hanging Agent
   holds only the consumer that is waiting on it.
 - Every attempt re-runs step 1, so a task that ended while its message waited is dropped, not sent.

@@ -2,6 +2,8 @@ package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.utility.result.ResultCode;
+import com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView;
+import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
@@ -25,6 +27,13 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
 
     private final TaskRepository taskRepository;
     private final OutputSpecJsonMapper outputSpecJsonMapper;
+    private final DispatchAttemptRepository dispatchAttemptRepository;
+
+    @Override
+    public List<DispatchAttemptView> listDispatchAttempts(UUID taskId, UUID clientId) {
+        getForClient(taskId, clientId); // ownership guard (Hard Invariant #5): NOT_FOUND for others
+        return dispatchAttemptRepository.findByTaskId(taskId);
+    }
 
     @Override
     public TaskModel getForClient(UUID taskId, UUID clientId) {

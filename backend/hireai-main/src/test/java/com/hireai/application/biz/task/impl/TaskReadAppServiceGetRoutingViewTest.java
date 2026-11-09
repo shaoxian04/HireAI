@@ -30,7 +30,7 @@ class TaskReadAppServiceGetRoutingViewTest {
     private final OutputSpecJsonMapper outputSpecJsonMapper = new OutputSpecJsonMapper(new ObjectMapper());
 
     private TaskReadAppServiceImpl service() {
-        return new TaskReadAppServiceImpl(taskRepository, outputSpecJsonMapper);
+        return new TaskReadAppServiceImpl(taskRepository, outputSpecJsonMapper, null);
     }
 
     @Test

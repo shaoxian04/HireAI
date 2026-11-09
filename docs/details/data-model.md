@@ -16,6 +16,7 @@ The current schema and domain model, from the code. `backend/hireai-main/src/mai
 | task | `TaskModel` | `TaskResultModel`, `OutputSpec` | `TaskRepository` | Legal transitions only; a result exists only after dispatch. |
 | task | `IdempotencyRecord` | | `IdempotencyRepository` | `UNIQUE (owner, key)` in the same transaction as the freeze, so a race rolls the freeze back. |
 | task | `WebhookDeliveryModel` | | `WebhookDeliveryRepository` | One row per terminal event, written in the settling transaction and retried until delivered or dead. |
+| task | `DispatchAttemptModel` | | `DispatchAttemptRepository` | Append-only; attempts numbered 1, 2, … per task under the task row lock. |
 | adjudication | `DisputeModel` | `Ruling` | `DisputeRepository` | One dispute per task; settles exactly once. |
 | adjudication | `ValidationReportModel` | `CheckResult` | `ValidationReportRepository` | PASS only if every check passes; runs before any client sees a result. |
 | reputation | `ReputationEventModel` | | `ReputationEventRepository` | Append-only. There is no reputation aggregate: the score is a fold over this stream. |
@@ -50,6 +51,11 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 - `idempotency_keys`: `UNIQUE (owner_id, idempotency_key)`, `request_fingerprint`, `task_id`.
 - `api_key_task`: one row per key-submitted task; soft task reference and the read source for spend caps.
 - `webhook_deliveries`: the outbox. `id` is also the client-facing event id; `payload` is TEXT because the signed body is sent byte for byte; `attempts`, `next_attempt_at`, `status`.
+- <a id="dispatch-attempts"></a>`dispatch_attempts`: the task's dispatch history, one row per Agent version the platform tried to hand the task to. Soft `task_id` and `agent_version_id` (no FK), `attempt_number` (1-based, `UNIQUE (task_id, attempt_number)`, numbered under the task row lock), `outcome`, `occurred_at` (when the outcome was known), `gmt_create`. **Append-only by trigger.** Outcomes (`DispatchOutcome`, CHECK since `V33`):
+  - `ACCEPTED`: the Agent replied 2xx to the WorkOrder (recorded by the dispatch consumer after the send).
+  - `UNREACHABLE`: every send in the retry schedule failed (recorded in the DLQ's `FAILED` transaction).
+  - `BUSY` and `UNAVAILABLE` are in the enum and the CHECK but no path records them yet (busy replies and routed failover are #58 work).
+  - Read-only to the task owner (JWT or API key) at `GET /api/tasks/{id}/attempts`: attempt number, `agentId` (joined from the version), `agentVersionId`, outcome, `occurredAt`. Another client gets 404.
 
 **Adjudication**
 - `validation_reports`: soft task reference, `attempt_no`, `verdict`, `checks`.

@@ -1,5 +1,6 @@
 package com.hireai.application.biz.task;
 
+import com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
@@ -28,4 +29,10 @@ public interface TaskReadAppService {
     List<TaskModel> listForClient(@NonNull UUID clientId, @NonNull TaskQuery query);
 
     TaskRoutingView getRoutingView(@NonNull UUID taskId);
+
+    /**
+     * The task's dispatch history in attempt order (#75), to its owner only: NOT_FOUND for any
+     * other client. Empty while the task has not been dispatched.
+     */
+    List<DispatchAttemptView> listDispatchAttempts(@NonNull UUID taskId, @NonNull UUID clientId);
 }
