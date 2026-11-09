@@ -1,6 +1,7 @@
 package com.hireai.application.biz.offering.agent.impl;
 
 import com.hireai.application.biz.offering.agent.AgentWriteAppService;
+import com.hireai.application.port.webhook.WebhookUrlValidatorPort;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.event.AgentActivatedDomainEvent;
 import com.hireai.domain.biz.offering.agent.event.AgentRegisteredDomainEvent;
@@ -43,10 +44,12 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
     private final AgentDeactivateDomainService deactivateDomainService;
     private final ApplicationEventPublisher eventPublisher;
     private final AgentSigningSecretGenerator signingSecretGenerator;
+    private final WebhookUrlValidatorPort urlValidator;
 
     @Override
     public AgentRegistration register(AgentRegisterInfo registerInfo) {
         AgentModel agent = registerDomainService.register(registerInfo);
+        assertWebhookDeliverable(agent);
         UUID agentId = agentRepository.save(agent).id();
         String signingSecret = signingSecretGenerator.generate();
         agentRepository.updateSigningSecret(agentId, signingSecret);
@@ -83,6 +86,7 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
     @Override
     public AgentModel publishNewVersion(UUID agentId, UUID ownerId, PublishVersionInfo info) {
         AgentModel agent = loadOwned(agentId, ownerId);
+        assertWebhookDeliverable(agent);
         AgentModel updated = agent.publishNewVersion(Pricing.of(info.price()),
                 info.maxExecutionSeconds(), info.capabilityCategories());
         agentRepository.publishNewVersion(updated);
@@ -113,6 +117,14 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
         AgentModel agent = loadOwned(agentId, ownerId);
         agentRepository.save(deactivateDomainService.deactivate(agent));
         log.info("Agent {} deactivated by owner {}", agentId, ownerId);
+    }
+
+    /**
+     * SSRF guard (Invariant #6): the webhook must be HTTPS and resolve only to public addresses.
+     * A new version carries the URL over, so publishing re-checks it against today's DNS answer.
+     */
+    private void assertWebhookDeliverable(AgentModel agent) {
+        urlValidator.assertAgentWebhookDeliverable(agent.currentVersion().webhookUrl());
     }
 
     /** Load + owner check (Invariant #5): a foreign agent is indistinguishable from a missing one. */
