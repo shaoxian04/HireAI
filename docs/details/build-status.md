@@ -8,7 +8,7 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 |---|---|---|
 | **1 Task Submission** | Submit with atomic escrow freeze and a frozen `output_spec`; idempotent retries; web flow: category picker → read-only match preview → pick → direct booking at the agent's price | Client input documents (`SourceSnapshot`, see [ADR 0004](../adr/0004-launch-vertical-document-grounded-extraction.md)) |
 | **2 Agent Registration** | Register, activate, suspend, reactivate, deactivate, publish a version; HTTPS-only webhook; builder-declared concurrency; storefront and media | Admin verification (builders activate their own agents); editing a webhook without publishing a version |
-| **3 Routing & Execution** | Scored ε-greedy matcher, RabbitMQ dispatch, signed webhook, token-authenticated callback; sweepers for capacity re-match and execution timeout; dispatch DLQ refund | Sending task content to the agent (#45) |
+| **3 Routing & Execution** | Scored ε-greedy matcher, RabbitMQ dispatch, signed webhook, token-authenticated callback; sweepers for capacity re-match and execution timeout; dispatch DLQ refund | Sending task content to the agent (#55); the rest of the hardening is tracked in #53 |
 | **4 Validation & Disputes** | Format and JSON-Schema gate before any client sees a result; reason-gated reject (A/B/C dispute, D charges in full); LangGraph arbitrator; ruling is a proposal, then client accept or appeal, or auto-accept; admin tier-2 override; arbitration DLQ and timeout escalate to admin | Validation of `acceptanceCriteria` (only the arbitrator reads them); SSE (the UI polls); dispute discovery for builders on full refunds (no payout row, so nothing on earnings) |
 | **5 Reputation & Settlement** | Append-only reputation stream, two-component shrinkage score, earned reviews, builder Reputation and Reviews tabs; 85/15 settlement, deterministic split and refund; builder earnings read | Multi-account Sybil defence (accepted in [ADR 0003](../adr/0003-two-component-shrinkage-reputation.md)); decay and auto-suspend (rejected there) |
 | **6 Discovery & Dashboard** | Authenticated catalogue, agent profiles, direct booking, builder console and earnings | Anonymous public catalogue |
@@ -31,13 +31,25 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 
 ### Money and contract
 
-- **#45, confirmed.** No dispatch carries task content. `RoutingAppServiceImpl.buildDispatchMessage` sends the category as title and description on **both** `route()` and `dispatchDirect()`, so web, API and MCP tasks are all affected, and format-only validation will not catch it.
-- **#46, confirmed.** On routed submit the client authors the spec, the matcher ignores specs, and the builder absorbs a failure. The agent does see the spec at dispatch, but declining costs the same zero-quality sample. Design is open; do not implement yet.
+- **No task content in dispatch, confirmed (#55).** No dispatch carries task content. `RoutingAppServiceImpl.buildDispatchMessage` sends the category as title and description on **both** `route()` and `dispatchDirect()`, so web, API and MCP tasks are all affected, and format-only validation will not catch it.
+- **#46, confirmed.** On routed submit the client authors the spec, the matcher ignores specs, and the builder absorbs a failure. The agent does see the spec at dispatch, but declining costs the same zero-quality sample. #46 is now the whole binding-contract redesign and starts only after the rest of #53 is closed. #50 is the holdover until then.
 - **Over-budget direct booking, confirmed.** The backend only asserts `budget >= price`, then freezes and settles on the submitted budget. Only the web UI sends the price, so API and MCP callers can overpay.
-- **Weak validation on machine tasks, confirmed.** TEXT passes on any non-blank payload and a blank or prose schema is skipped, so `acceptanceCriteria` has no effect on auto-settle. MCP routed submit always sends a blank schema.
-- **Dispatch-DLQ failure is silent, confirmed.** `TaskExecutionPortImpl.markFailed` refunds, but emits no webhook and no reputation event.
+- **Weak validation on machine tasks, confirmed (#46).** TEXT passes on any non-blank payload and a blank or prose schema is skipped, so `acceptanceCriteria` has no effect on auto-settle. MCP routed submit always sends a blank schema. FILE checks only that `resultUrl` is https and never fetches it.
 - **Zero-commission band, confirmed.** At prices up to `0.03` the 15% commission rounds to `0.00`, so the platform does the work for free and a Sybil round trip costs nothing.
 - **MCP double-freeze, unreproduced.** `submit_task` generates a new `Idempotency-Key` per call, so re-invoking it freezes escrow again.
+
+### Routing and execution
+
+All tracked in #53. Fixes are in #56 unless noted.
+
+- **Early callback is dropped, unreproduced.** `AgentCallbackAppServiceImpl.recordResult` no-ops unless the task is EXECUTING. A result posted before `TaskDispatchConsumer` runs `markExecuting` is lost, and the task later times out against the agent.
+- **Token can expire before the deadline, confirmed.** The consumer issues the dispatch token with a fixed 900s TTL, while `execution_deadline` is `maxExecutionSeconds` + grace with no upper bound on `maxExecutionSeconds`.
+- **QUEUED timeouts penalise the agent, confirmed.** `TaskReliabilityAppServiceImpl.timeoutOne` records `EXECUTION_TIMEOUT` for QUEUED tasks too, although the agent never received them.
+- **Task stuck in SUBMITTED, unreproduced.** If routing throws after the submit transaction commits, no sweeper picks the task up: escrow stays frozen and the client gets a 500.
+- **Duplicate and stale dispatch, unreproduced.** A `markExecuting` failure after a successful POST makes RabbitMQ retry the POST, and the consumer never checks task status before sending.
+- **Dispatch-DLQ failure is silent, confirmed.** `TaskExecutionPortImpl.markFailed` refunds, but emits no webhook and no reputation event.
+- **Superseded pinned version stalls, confirmed.** `findCandidateByVersionId` requires the current version, so a direct booking whose version is replaced retries until it is cancelled. What happens next is the failover spec (#58).
+- **No failover after assignment, confirmed.** Neither mode switches agents once one is assigned (#58).
 
 ### Reputation
 
@@ -50,7 +62,9 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 - **#23, confirmed.** A role denial returns 401, not 403, and the frontend sends a 401 to `/login`. Details are in the [post-mortem](../post-mortem/2026-07-17-api-key-lockout-401-vs-403.md).
 - **Wrong error status, confirmed.** An unknown path, a wrong method and an unsupported media type all return 500, because `GlobalExceptionConfiguration`'s catch-all handles them.
 - **No role check on builder actions, confirmed.** `anyRequest()` admits any human role, so a CLIENT reaches `/api/builder/earnings` and `POST /api/agents`. Ownership checks still apply.
-- **Unlisted agents can win routing, confirmed.** `findActiveCandidates` ignores `is_listed`; the shortlist and direct booking require it.
+- **Unlisted agents can win routing, confirmed (#59).** `findActiveCandidates` ignores `is_listed`; the shortlist and direct booking require it.
+- **No SSRF guard on agent webhook URLs, confirmed (#57).** `AgentDispatchClient` checks only the `https://` prefix. Client webhooks use `WebhookUrlValidator`; agent webhooks do not.
+- **Agent I/O can't be verified, confirmed (#57).** The work order carries no body signature an agent could check, and the dispatch token is a reusable bearer credential for the callback until it expires.
 - **API keys outlive their user, confirmed.** `findActiveByHash` checks key status only.
 
 ### Concurrency
