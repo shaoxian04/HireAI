@@ -1,6 +1,7 @@
 package com.hireai.application.biz.offering.agent.impl;
 
 import com.hireai.application.biz.offering.agent.AgentWriteAppService;
+import com.hireai.application.port.webhook.WebhookUrlValidatorPort;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.enums.AgentStatus;
 import com.hireai.domain.biz.offering.agent.event.AgentActivatedDomainEvent;
@@ -141,6 +142,18 @@ class AgentWriteAppServiceImplTest {
         @Override public void publishEvent(ApplicationEvent event) { events.add(event); }
     }
 
+    /** SSRF guard stand-in: rejects any URL in {@code blocked}, like the real one does for internal hosts. */
+    static class FakeUrlValidator implements WebhookUrlValidatorPort {
+        final java.util.Set<String> blocked = new java.util.HashSet<>();
+        @Override public void assertDeliverable(String url) { assertAgentWebhookDeliverable(url); }
+        @Override public void assertAgentWebhookDeliverable(String url) {
+            if (blocked.contains(url)) {
+                throw new DomainException(ResultCode.VALIDATION_ERROR, "Callback URL resolves to a private/blocked address");
+            }
+        }
+    }
+
+    private final FakeUrlValidator urlValidator = new FakeUrlValidator();
     private final FakeAgentRepository repository = new FakeAgentRepository();
     private final FakeStorefrontRepository profileRepository = new FakeStorefrontRepository();
     private final RecordingPublisher publisher = new RecordingPublisher();
@@ -148,7 +161,7 @@ class AgentWriteAppServiceImplTest {
             repository, profileRepository, new AgentRegisterDomainServiceImpl(),
             new AgentActivateDomainServiceImpl(), new AgentSuspendDomainServiceImpl(),
             new AgentReactivateDomainServiceImpl(), new AgentDeactivateDomainServiceImpl(), publisher,
-            new AgentSigningSecretGenerator());
+            new AgentSigningSecretGenerator(), urlValidator);
 
     private AgentRegisterInfo info(UUID ownerId) {
         return new AgentRegisterInfo(ownerId, "Summariser Bot",
@@ -290,5 +303,29 @@ class AgentWriteAppServiceImplTest {
         service.activate(agentId, ownerId);
         assertThatThrownBy(() -> service.suspend(agentId, UUID.randomUUID()))
                 .isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void registeringAnAgentWhoseWebhookFailsTheSsrfGuardIsRejectedAndNothingIsSaved() {
+        urlValidator.blocked.add("https://agent.example.com/hook");
+
+        assertThatThrownBy(() -> service.register(info(UUID.randomUUID())))
+                .isInstanceOf(DomainException.class)
+                .hasMessage("Callback URL resolves to a private/blocked address");
+        assertThat(publisher.events).isEmpty();
+        assertThat(profileRepository.store).isEmpty();
+    }
+
+    @Test
+    void publishingAVersionRechecksTheCarriedOverWebhook() {
+        UUID ownerId = UUID.randomUUID();
+        UUID agentId = service.register(info(ownerId)).agentId();
+        urlValidator.blocked.add("https://agent.example.com/hook");
+
+        assertThatThrownBy(() -> service.publishNewVersion(agentId, ownerId,
+                new PublishVersionInfo(new BigDecimal("6.00"), 120, List.of("summarisation"))))
+                .isInstanceOf(DomainException.class)
+                .hasMessage("Callback URL resolves to a private/blocked address");
+        assertThat(repository.findById(agentId).orElseThrow().currentVersion().versionNumber()).isEqualTo(1);
     }
 }

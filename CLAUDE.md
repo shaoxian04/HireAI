@@ -43,7 +43,7 @@ These are needed on every task and are too important to risk being unread. Enfor
 3. **Deterministic money path.** The LLM may produce a dispute *ruling* but never moves credits. All settlement is computed deterministically in the domain layer from the ruling category.
 4. **The task's frozen output spec is the binding contract.** The `output_spec` stored on the task at submit is the single contract used by both automated validation and arbitration: the Agent's own spec on direct bookings, the client's on routed tasks (see #46). Validation runs before any client sees a result.
 5. **Server-side identity from JWT.** Derive the user ID from the JWT principal; path/body IDs require an explicit ownership check. Builders act only on Agents they own; clients only on their own tasks/wallet.
-6. **Signed, HTTPS-only Agent I/O.** Webhook URLs must be HTTPS; dispatch carries a short-lived signed token; result callbacks are rejected (401) unless the token is valid and unexpired. Extended to **outbound** client webhooks: SSRF-guarded target + HMAC signature (see `docs/details/programmatic-channel.md`).
+6. **Signed, HTTPS-only Agent I/O.** Webhook URLs must be HTTPS and pass the SSRF guard (at registration, publish and every send; redirects never followed); dispatch carries a short-lived signed token; result callbacks are rejected (401) unless the token is valid and unexpired. Extended to **outbound** client webhooks: SSRF-guarded target + HMAC signature (see `docs/details/programmatic-channel.md`).
 
 ## Doc rules
 

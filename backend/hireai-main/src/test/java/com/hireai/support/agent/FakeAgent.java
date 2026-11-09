@@ -144,6 +144,7 @@ public final class FakeAgent implements AutoCloseable {
 
             byte[] response = reply.body().getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
+            reply.headers().forEach((name, value) -> exchange.getResponseHeaders().add(name, value));
             exchange.sendResponseHeaders(reply.status(), response.length == 0 ? -1 : response.length);
             if (response.length > 0) {
                 try (OutputStream out = exchange.getResponseBody()) {

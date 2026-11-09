@@ -41,7 +41,6 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 
 All tracked in #53. Fixes are in #56 unless noted.
 
-- **A 429 or 503 WorkOrder reply is sent twice, confirmed.** The shared Apache HttpClient behind `AgentDispatchClient` retries a 429/503 POST once by itself, after about 1s, inside one send attempt, so the Agent receives a duplicate WorkOrder and the consumer waits. A dedicated dispatch client (#69) and busy handling (#76) cover it.
 - **Superseded pinned version stalls, confirmed.** `findCandidateByVersionId` requires the current version, so a direct booking whose version is replaced retries until it is cancelled. What happens next is the failover spec (#58).
 - **No failover after assignment, confirmed.** Neither mode switches agents once one is assigned (#58).
 
@@ -57,7 +56,7 @@ All tracked in #53. Fixes are in #56 unless noted.
 - **Wrong error status, confirmed.** An unknown path, a wrong method and an unsupported media type all return 500, because `GlobalExceptionConfiguration`'s catch-all handles them.
 - **No role check on builder actions, confirmed.** `anyRequest()` admits any human role, so a CLIENT reaches `/api/builder/earnings` and `POST /api/agents`. Ownership checks still apply.
 - **Unlisted agents can win routing, confirmed (#59).** `findActiveCandidates` ignores `is_listed`; the shortlist and direct booking require it.
-- **No SSRF guard on agent webhook URLs, confirmed (#57).** `AgentDispatchClient` checks only the `https://` prefix. Client webhooks use `WebhookUrlValidator`; agent webhooks do not.
+- **DNS rebinding, accepted (#57).** The SSRF guard resolves the host, then the HTTP client resolves it again to connect, so a name that switches to an internal address between the two is not caught. This applies to agent and client webhooks alike; closing it means pinning the checked IP.
 - **Agent I/O can't be verified, confirmed (#57).** The work order carries no body signature an agent could check, and the dispatch token is a reusable bearer credential for the callback until it expires. Agents hold a signing secret, but nothing signs WorkOrders or verifies callbacks with it yet.
 - **API keys outlive their user, confirmed.** `findActiveByHash` checks key status only.
 

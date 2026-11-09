@@ -10,12 +10,14 @@ import org.springframework.http.client.ClientHttpRequestFactory;
 import java.time.Duration;
 
 /**
- * Applies bounded connect/read timeouts to ALL Spring RestClient.Builder instances —
- * including {@link AgentDispatchClient} and {@link SupabaseStorageClient} — so that a slow or
- * unresponsive remote endpoint cannot block a thread indefinitely. Implemented as a
- * {@link RestClientCustomizer} rather than a per-instance {@code requestFactory(...)} override
- * so that a test's {@code MockRestServiceServer}, which installs its own factory on a plain
- * {@code RestClient.builder()}, is never clobbered.
+ * Applies bounded connect/read timeouts to every Spring {@code RestClient.Builder} built from the
+ * shared builder bean (e.g. {@link SupabaseStorageClient}), so that a slow or unresponsive remote
+ * endpoint cannot block a thread indefinitely. Implemented as a {@link RestClientCustomizer} rather
+ * than a per-instance {@code requestFactory(...)} override so that a test's
+ * {@code MockRestServiceServer}, which installs its own factory on a plain
+ * {@code RestClient.builder()}, is never clobbered. Agent WorkOrders do NOT go through this: they
+ * use the dedicated client from {@link AgentDispatchRestClientConfig} (no redirects, no automatic
+ * retries); client webhooks use {@code WebhookRestClientConfig}.
  */
 @Configuration
 public class DispatchRestClientConfig {
