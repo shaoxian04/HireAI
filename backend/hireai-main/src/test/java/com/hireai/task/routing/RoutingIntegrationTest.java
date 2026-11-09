@@ -30,7 +30,7 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * End-to-end marketplace spine: submit a task, let routing match it to a seeded ACTIVE
- * agent, dispatch over RabbitMQ to an in-JVM stub agent, and observe the token-authenticated
+ * agent, dispatch over RabbitMQ to an in-JVM stub agent, and observe the token- and signature-authenticated
  * callback + validation gate drive the task to PENDING_REVIEW with a persisted task_results row.
  * Also asserts the no-match path lands on AWAITING_AGENT. Boots a real Postgres (Flyway V1-V16) and a
  * real RabbitMQ; auto-skips without Docker. Runs under the 'dev' profile so the localhost
@@ -51,6 +51,9 @@ class RoutingIntegrationTest {
             return false;
         }
     }
+
+    /** The seeded stub Agents' signing secret: the stub signs its callbacks with it (#72). */
+    static final String STUB_SECRET = "agsec_routing-stub-secret";
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -142,15 +145,16 @@ class RoutingIntegrationTest {
             RuntimeException last = null;
             for (int attempt = 0; attempt < 20; attempt++) {
                 try {
+                    byte[] body = com.hireai.support.agent.AgentCallback.COMPLETED_BODY
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8);
                     http.post()
                             .uri(callbackPath)
                             .header("Authorization", authorization)
+                            .header(com.hireai.support.agent.AgentCallback.SIGNATURE_HEADER,
+                                    com.hireai.support.agent.AgentCallback.signature(
+                                            STUB_SECRET, java.time.Instant.now(), body))
                             .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                            .body(java.util.Map.of(
-                                    "agentStatus", "COMPLETED",
-                                    "resultPayloadJson", "{\"summary\":\"done\"}",
-                                    "resultUrl", "https://results.example/r/1",
-                                    "message", "ok"))
+                            .body(body)
                             .retrieve()
                             .toBodilessEntity();
                     return;
@@ -190,9 +194,9 @@ class RoutingIntegrationTest {
         UUID ownerId = newBuilder();
         UUID agentId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
-        jdbc.update("INSERT INTO agents (id, owner_id, name, status, current_version_id, reputation_score) " +
-                        "VALUES (?, ?, ?, 'ACTIVE', ?, 80.00)",
-                agentId, ownerId, "Stub Agent", versionId);
+        jdbc.update("INSERT INTO agents (id, owner_id, name, status, current_version_id, reputation_score, " +
+                        "signing_secret) VALUES (?, ?, ?, 'ACTIVE', ?, 80.00, ?)",
+                agentId, ownerId, "Stub Agent", versionId, STUB_SECRET);
         jdbc.update("INSERT INTO agent_versions " +
                         "(id, agent_id, version_number, output_spec, capability_categories, webhook_url, max_execution_seconds, price) " +
                         "VALUES (?, ?, 1, ?::jsonb, ?, ?, 60, ?)",

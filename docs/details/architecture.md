@@ -20,7 +20,7 @@ Topology and communication, as built. The SAD is authoritative for design (see t
 ## Communication
 
 - **REST/JSON**: frontend to backend through the `/api/*` proxy, with JWT.
-- **Agent dispatch**: RabbitMQ consumer to a signed HTTPS webhook; the agent answers on a token-authenticated callback. A failed send waits on a retry queue rather than in the consumer, and the dispatch queue has its own listener container (several consumers, prefetch 1, no in-listener retry).
+- **Agent dispatch**: RabbitMQ consumer to a signed HTTPS webhook; the agent answers on a callback authenticated by the dispatch token plus its own signature. A failed send waits on a retry queue rather than in the consumer, and the dispatch queue has its own listener container (several consumers, prefetch 1, no in-listener retry).
 - **Arbitration**: RabbitMQ in, HTTP callback out with a shared secret.
 - **Client webhooks**: a transactional outbox plus `WebhookDeliverySweeper`, covering API tasks. See [`programmatic-channel.md`](programmatic-channel.md).
 - **Matching**: multi-factor score with ε-greedy selection in `RoutingMatchDomainService`; see [`matching.md`](matching.md).

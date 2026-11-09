@@ -87,6 +87,7 @@ class FailureReasonIntegrationTest extends WholeAppIntegrationTest {
                 .withBody("{\"agentStatus\":\"FAILED\",\"resultPayloadJson\":\"{}\",\"message\":\"could not do it\"}")));
         String category = "x-" + UUID.randomUUID();
         seedAgent(category, agent.webhookUrl(), "ACTIVE");
+        shareSigningSecret(agent);
 
         UUID taskId = taskWriteAppService.submit(submitInfo(category, null));
 
@@ -100,6 +101,7 @@ class FailureReasonIntegrationTest extends WholeAppIntegrationTest {
         FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted().withCallback(AgentCallback.completed()));
         String category = "x-" + UUID.randomUUID();
         seedAgent(category, agent.webhookUrl(), "ACTIVE");
+        shareSigningSecret(agent);
 
         UUID taskId = taskWriteAppService.submit(submitInfo(category, STRICT_SCHEMA));
 

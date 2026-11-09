@@ -1,6 +1,7 @@
 package com.hireai.application.biz.task.callback.impl;
 
 import com.hireai.application.biz.adjudication.validation.ValidationAppService;
+import com.hireai.application.biz.offering.agent.AgentReadAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.callback.AgentCallbackAppService;
@@ -16,17 +17,20 @@ import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.biz.task.enums.TaskStatus;
+import com.hireai.domain.biz.task.webhookdelivery.WebhookSignature;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.UUID;
 
 /**
- * Verifies the dispatch token, confirms it authorises THIS task, then records the agent's
- * result. For a COMPLETED result: moves task QUEUED/EXECUTING → RESULT_RECEIVED, persists the
+ * Authenticates the callback ({@link #authenticate}: dispatch token for THIS task plus an
+ * {@code X-HireAI-Signature} over the raw body with the token's Agent's current signing secret),
+ * then records the agent's result. For a COMPLETED result: moves task QUEUED/EXECUTING → RESULT_RECEIVED, persists the
  * task_results child, and invokes the Module 4 validation gate (→ PENDING_REVIEW on pass,
  * SPEC_VIOLATION + auto-refund on fail). For a non-COMPLETED agentStatus: marks task FAILED
  * and refunds the client's escrow. A duplicate callback (task already past EXECUTING) is
@@ -45,14 +49,27 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
     private final SettlementWriteAppService settlementWriteAppService;
     private final WebhookOutboxAppService webhookOutboxAppService;
     private final ReputationWriteAppService reputationWriteAppService;
+    private final AgentReadAppService agentReadAppService;
+    private final Clock clock;
+
+    @Override
+    @Transactional(readOnly = true)
+    public void authenticate(UUID taskId, String bearerToken, String signatureHeader, byte[] rawBody) {
+        DispatchTokenClaims claims = verifyTokenFor(taskId, bearerToken);
+        // The token's version must be the task's assigned one; recordResult enforces that under
+        // the row lock, so the secret checked here is the assigned Agent's.
+        String secret = agentReadAppService.findSigningSecretForVersion(claims.agentVersionId())
+                .orElseThrow(() -> new DispatchTokenInvalidException(
+                        "Agent version " + claims.agentVersionId() + " has no signing secret; rotate it first"));
+        if (!WebhookSignature.verify(secret, signatureHeader, rawBody, clock.instant(),
+                WebhookSignature.DEFAULT_TOLERANCE)) {
+            throw new DispatchTokenInvalidException("Missing, invalid or stale X-HireAI-Signature for task " + taskId);
+        }
+    }
 
     @Override
     public void recordResult(UUID taskId, String bearerToken, AgentResultInfo result) {
-        DispatchTokenClaims claims = dispatchTokenService.verify(bearerToken);
-        if (!claims.taskId().equals(taskId)) {
-            throw new DispatchTokenInvalidException(
-                    "Dispatch token task " + claims.taskId() + " does not match callback task " + taskId);
-        }
+        DispatchTokenClaims claims = verifyTokenFor(taskId, bearerToken);
         // Row-locked (task row first, then the wallet row inside settlement: the usual lock
         // order), so a concurrent mark-EXECUTING, timeout or second callback reads this
         // callback's committed outcome instead of overwriting it.
@@ -91,5 +108,14 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
         taskRepository.save(recorded);
         log.info("Task {} result recorded; invoking validation gate (agentStatus={})", taskId, result.agentStatus());
         validationAppService.validateAndGate(recorded);
+    }
+
+    private DispatchTokenClaims verifyTokenFor(UUID taskId, String bearerToken) {
+        DispatchTokenClaims claims = dispatchTokenService.verify(bearerToken);
+        if (!claims.taskId().equals(taskId)) {
+            throw new DispatchTokenInvalidException(
+                    "Dispatch token task " + claims.taskId() + " does not match callback task " + taskId);
+        }
+        return claims;
     }
 }

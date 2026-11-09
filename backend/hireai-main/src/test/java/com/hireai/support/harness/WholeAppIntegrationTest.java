@@ -95,6 +95,20 @@ public abstract class WholeAppIntegrationTest {
         return agent;
     }
 
+    /**
+     * Stores {@code agent}'s {@link FakeAgent#signingSecret()} on every Agent row whose version
+     * webhook points at it, so its signed callbacks are accepted (#72: the callback must be signed
+     * with the assigned Agent's stored secret). Call after seeding the Agent with raw SQL.
+     */
+    protected void shareSigningSecret(FakeAgent agent) {
+        int updated = jdbc.update("UPDATE agents SET signing_secret = ? WHERE id IN "
+                + "(SELECT agent_id FROM agent_versions WHERE webhook_url = ?)",
+                agent.signingSecret(), agent.webhookUrl());
+        if (updated == 0) {
+            throw new IllegalStateException("No seeded Agent has webhook " + agent.webhookUrl());
+        }
+    }
+
     /** Absolute URL of a path on the app under test, e.g. {@code platformUrl("/api/tasks")}. */
     protected String platformUrl(String path) {
         return "http://localhost:" + environment.getRequiredProperty("server.port") + path;

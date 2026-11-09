@@ -42,11 +42,12 @@ class AgentCallbackAppServiceImplTest {
     @Mock SettlementWriteAppService settlementWriteAppService;
     @Mock WebhookOutboxAppService webhookOutboxAppService;
     @Mock com.hireai.application.biz.reputation.ReputationWriteAppService reputationWriteAppService;
+    @Mock com.hireai.application.biz.offering.agent.AgentReadAppService agentReadAppService;
 
     private AgentCallbackAppServiceImpl service() {
         return new AgentCallbackAppServiceImpl(taskRepository, dispatchTokenService,
                 validationAppService, settlementWriteAppService, webhookOutboxAppService,
-                reputationWriteAppService);
+                reputationWriteAppService, agentReadAppService, java.time.Clock.systemUTC());
     }
 
     private TaskModel executingTask() {

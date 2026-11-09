@@ -24,7 +24,7 @@ def started(monkeypatch):
     """Records the tasks the agent starts instead of calling back for real."""
     calls = []
 
-    async def fake_complete(task_id, callback_url, token):
+    async def fake_complete(task_id, callback_url, token, secret=None):
         calls.append(task_id)
 
     monkeypatch.setattr(agent, "_complete", fake_complete)

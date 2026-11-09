@@ -49,6 +49,7 @@ class CallbackTokenLifetimeIntegrationTest extends WholeAppIntegrationTest {
     @Autowired TaskWriteAppService taskWriteAppService;
 
     private Instant start;
+    private String agentSecret;
 
     @BeforeEach
     void startTheClock() {
@@ -84,6 +85,8 @@ class CallbackTokenLifetimeIntegrationTest extends WholeAppIntegrationTest {
         FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted()); // accepts, calls back later
         String category = "slow-" + UUID.randomUUID();
         seedActiveAgent(category, agent.webhookUrl());
+        shareSigningSecret(agent);
+        agentSecret = agent.signingSecret();
         UUID taskId = taskWriteAppService.submit(new TaskSubmitInfo(newClientWithCredits(), "Summarise report",
                 "Summarise the attached quarterly report", Money.of("30.00"),
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON summary"), category));
@@ -97,6 +100,9 @@ class CallbackTokenLifetimeIntegrationTest extends WholeAppIntegrationTest {
         HttpRequest request = HttpRequest.newBuilder(URI.create(order.callbackUrl()))
                 .header("Authorization", "Bearer " + order.bearerToken())
                 .header("Content-Type", "application/json")
+                // Signed "now" on the platform's (moved) clock, so only the token's lifetime is tested.
+                .header(AgentCallback.SIGNATURE_HEADER, AgentCallback.signature(agentSecret, clock.instant(),
+                        AgentCallback.COMPLETED_BODY.getBytes(java.nio.charset.StandardCharsets.UTF_8)))
                 .POST(HttpRequest.BodyPublishers.ofString(AgentCallback.COMPLETED_BODY))
                 .build();
         return http.send(request, HttpResponse.BodyHandlers.ofString());

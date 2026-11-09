@@ -13,7 +13,7 @@ API key ──(Authorization: ApiKey <raw>)──► submit (open | direct)
   → idempotency + spend-cap checks       [409 IDEMPOTENCY_CONFLICT / SPEND_CAP_EXCEEDED]
   → atomic escrow freeze                 (Inv #1)
   → routing → RabbitMQ dispatch → signed HTTPS webhook to the Agent
-  → Agent callback (dispatch-token auth)
+  → Agent callback (dispatch token + agent signature)
   → validation gate on the frozen output_spec
         PASS → settleAccepted (85/15) → RESOLVED
         FAIL → refund → SPEC_VIOLATION

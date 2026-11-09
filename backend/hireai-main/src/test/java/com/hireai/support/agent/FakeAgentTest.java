@@ -146,6 +146,27 @@ class FakeAgentTest {
     }
 
     @Test
+    void aCallbackIsSignedOverItsFinalBodyWithTheAgentsSecretUnlessToldOtherwise() throws Exception {
+        receiver = CallbackReceiver.start(200);
+        String altered = "{\"agentStatus\":\"FAILED\"}";
+        agent.replyOnceWith(FakeAgentReply.status(202).withCallback(AgentCallback.completed().withBody(altered)))
+                .replyOnceWith(FakeAgentReply.status(202).withCallback(AgentCallback.completed().unsigned()));
+
+        sendWorkOrder(workOrderBody(receiver.url()), "Authorization", "Bearer tok-1");
+        agent.awaitCallbacks(1, Duration.ofSeconds(5));
+        sendWorkOrder(workOrderBody(receiver.url()), "Authorization", "Bearer tok-2");
+        agent.awaitCallbacks(2, Duration.ofSeconds(5));
+
+        assertThat(agent.signingSecret()).matches("agsec_[0-9a-f]{64}");
+        String signature = receiver.received().get(0).header("X-HireAI-Signature");
+        assertThat(signature).matches("t=\\d+,v1=[0-9a-f]{64}");
+        long ts = Long.parseLong(signature.substring(2, signature.indexOf(',')));
+        assertThat(signature).isEqualTo(AgentCallback.signature(agent.signingSecret(),
+                java.time.Instant.ofEpochSecond(ts), altered.getBytes(StandardCharsets.UTF_8)));
+        assertThat(receiver.received().get(1).header("X-HireAI-Signature")).isNull();
+    }
+
+    @Test
     void anEarlyCallbackIsSentBeforeTheReply() throws Exception {
         receiver = CallbackReceiver.start(200);
         agent.replyWith(FakeAgentReply.status(202).withCallback(AgentCallback.completed().beforeReply()));

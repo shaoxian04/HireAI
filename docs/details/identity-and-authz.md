@@ -85,7 +85,7 @@ Keep these distinct from the user JWT:
 
 | Credential | Secures | Check |
 |---|---|---|
-| **Signed dispatch token** (Inv #6) | `POST /api/agent-callbacks/{taskId}/result`, called by the Agent | `taskId` and `agentVersionId` must match the assignment; invalid, expired (see [token lifetime](matching.md#the-workorder)) or mismatched is 401 |
+| **Signed dispatch token + callback signature** (Inv #6) | `POST /api/agent-callbacks/{taskId}/result`, called by the Agent | Both are required. The token's `taskId` and `agentVersionId` must match the assignment. The raw body must carry `X-HireAI-Signature` made with that Agent's current signing secret, timestamp within ±5 minutes ([how to sign](matching.md#the-workorder), **Result callback**). The body is taken as raw bytes and verified before it is parsed (`AgentCallbackController` → `AgentCallbackAppService.authenticate`). An invalid, expired (see [token lifetime](matching.md#the-workorder)) or mismatched token, and a missing, wrong, stale or foreign signature, all get 401 through the same handler. An Agent with no secret can't post results until its owner rotates one |
 | **Shared bearer secret** (`ARBITRATION_CALLBACK_SECRET`) | `POST /api/arbitration-callbacks/{disputeId}/ruling`, called by the arbitrator | Constant-time compare in `ArbitrationCallbackController`; mismatch is 401 |
 | **HMAC signature** (outbound) | Push webhooks to a client's callback; the platform authenticates itself to the client | See [`programmatic-channel.md` §6](programmatic-channel.md#6-push-webhooks) |
 
