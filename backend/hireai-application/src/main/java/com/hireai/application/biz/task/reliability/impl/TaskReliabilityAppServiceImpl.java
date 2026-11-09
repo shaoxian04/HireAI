@@ -89,8 +89,14 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
         if (maybeTask.isEmpty() || maybeTask.get().status() != TaskStatus.AWAITING_AGENT) {
             return; // matched or cancelled since the sweep listed it — nothing to do
         }
+        if (taskRepository.findPinnedAgentVersionId(taskId).isPresent()) {
+            // A direct booking fails fast at dispatch when its Agent or version is gone (#77); there
+            // is no other Agent to try and the pinned one won't come back, so never retry it here.
+            log.info("Re-match sweeper: task {} is a pinned booking; not retried", taskId);
+            return;
+        }
         int attempts = taskWriteAppService.registerMatchAttempt(taskId);
-        routeOrDispatchPinned(taskId);
+        routingAppService.route(taskId);
         boolean stillHeld = taskRepository.findById(taskId)
                 .map(t -> t.status() == TaskStatus.AWAITING_AGENT)
                 .orElse(false);
@@ -130,7 +136,8 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
     private void routeOrDispatchPinned(UUID taskId) {
         Optional<UUID> pinned = taskRepository.findPinnedAgentVersionId(taskId);
         if (pinned.isPresent()) {
-            // Direct booking: retry ONLY the client's chosen version — never substitute (spec §6.1).
+            // Direct booking: dispatch ONLY the client's chosen version — never substitute (spec §6.1).
+            // If it is no longer available, dispatchDirect cancels the task at once (#77).
             routingAppService.dispatchDirect(taskId, pinned.get());
         } else {
             routingAppService.route(taskId);

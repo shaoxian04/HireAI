@@ -98,12 +98,12 @@ public class RoutingAppServiceImpl implements RoutingAppService {
         TaskRoutingView view = taskReadAppService.getRoutingView(taskId);
         Optional<AgentCandidate> maybeTarget = agentRepository.findCandidateByVersionId(agentVersionId);
         if (maybeTarget.isEmpty()) {
-            // The agent was deactivated or suspended between booking and dispatch (deactivation race).
-            // Mirror route()'s no-match branch: the task stays observable with escrow frozen pending
-            // an eligible agent or ops — same contract as the matched path (spec §4.3 step 6).
-            log.warn("AgentVersion {} no longer ACTIVE; task {} left in AWAITING_AGENT (deactivation race)",
-                    agentVersionId, taskId);
-            taskWriteAppService.markAwaitingAgent(taskId);
+            // The Agent is no longer ACTIVE, or the pinned version was superseded. A direct booking
+            // never substitutes another Agent and the pinned version won't come back, so fail fast:
+            // CANCELLED with AGENT_UNAVAILABLE and a refund, so the Client can rebook at once (#77).
+            log.warn("AgentVersion {} no longer available (agent not ACTIVE or version superseded); "
+                    + "cancelling pinned task {}", agentVersionId, taskId);
+            taskWriteAppService.cancelPinnedAsUnavailable(taskId, agentVersionId);
             return;
         }
         DispatchMessage message = assignAndPublish(view, agentVersionId, maybeTarget.get());

@@ -42,10 +42,12 @@ class TaskWriteAppServiceImplTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock SettlementWriteAppService settlementWriteAppService;
     @Mock WebhookOutboxAppService webhookOutboxAppService;
+    @Mock com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository dispatchAttemptRepository;
 
     private TaskWriteAppServiceImpl service() {
         return new TaskWriteAppServiceImpl(taskRepository, taskSubmitDomainService,
-                walletWriteAppService, eventPublisher, settlementWriteAppService, webhookOutboxAppService);
+                walletWriteAppService, eventPublisher, settlementWriteAppService, webhookOutboxAppService,
+                dispatchAttemptRepository, java.time.Clock.systemUTC());
     }
 
     private TaskModel submittedTask() {
@@ -159,5 +161,16 @@ class TaskWriteAppServiceImplTest {
 
         verify(taskRepository, never()).save(any());
         verifyNoInteractions(settlementWriteAppService);
+    }
+
+    @Test
+    void pinnedFailFastIsANoOpOnceTheTaskHasMovedOn() {
+        TaskModel queued = submittedTask().assignAndQueue(UUID.randomUUID());
+        when(taskRepository.findByIdForUpdate(queued.id())).thenReturn(Optional.of(queued));
+
+        service().cancelPinnedAsUnavailable(queued.id(), UUID.randomUUID());
+
+        verify(taskRepository, never()).save(any());
+        verifyNoInteractions(settlementWriteAppService, webhookOutboxAppService, dispatchAttemptRepository);
     }
 }

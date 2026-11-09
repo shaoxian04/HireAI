@@ -45,4 +45,14 @@ public interface TaskWriteAppService {
      * Row-locked; status-guarded no-op if routing moved the task on in the meantime.
      */
     void cancelSubmittedWithRefund(@NonNull UUID taskId);
+
+    /**
+     * Pinned fail-fast (#77): the direct booking's Agent is no longer ACTIVE or its pinned version
+     * is no longer current, so SUBMITTED/AWAITING_AGENT -> CANCELLED with AGENT_UNAVAILABLE, a FULL
+     * escrow refund, a client webhook and an UNAVAILABLE dispatch attempt. No reputation event: a
+     * Builder deactivating or publishing is not at fault. Runs in its own transaction (it is called
+     * from routing, which runs after the submit commit); row-locked and status-guarded, so a task
+     * that has already moved on is left alone.
+     */
+    void cancelPinnedAsUnavailable(@NonNull UUID taskId, @NonNull UUID agentVersionId);
 }

@@ -96,14 +96,14 @@ class TaskReliabilityAppServiceImplTest {
     }
 
     @Test
-    void pinnedTaskRematchRetriesOnlyThePinnedVersion() {
+    void pinnedTaskIsNeverRetriedByTheRematchSweeper() {
         UUID pinned = UUID.randomUUID();
         givenTaskInStatus(TaskStatus.AWAITING_AGENT);
         when(taskRepository.findPinnedAgentVersionId(taskId)).thenReturn(Optional.of(pinned));
-        when(taskWriteAppService.registerMatchAttempt(taskId)).thenReturn(1);
         service.rematchOne(taskId);
-        verify(routingAppService).dispatchDirect(taskId, pinned);
-        verify(routingAppService, never()).route(any());
+        verifyNoInteractions(routingAppService);
+        verify(taskWriteAppService, never()).registerMatchAttempt(any());
+        verify(taskWriteAppService, never()).cancelAwaitingAgentWithRefund(any());
     }
 
     @Test
