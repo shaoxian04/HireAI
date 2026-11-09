@@ -53,8 +53,9 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 - `webhook_deliveries`: the outbox. `id` is also the client-facing event id; `payload` is TEXT because the signed body is sent byte for byte; `attempts`, `next_attempt_at`, `status`.
 - <a id="dispatch-attempts"></a>`dispatch_attempts`: the task's dispatch history, one row per Agent version the platform tried to hand the task to. Soft `task_id` and `agent_version_id` (no FK), `attempt_number` (1-based, `UNIQUE (task_id, attempt_number)`, numbered under the task row lock), `outcome`, `occurred_at` (when the outcome was known), `gmt_create`. **Append-only by trigger.** Outcomes (`DispatchOutcome`, CHECK since `V33`):
   - `ACCEPTED`: the Agent replied 2xx to the WorkOrder (recorded by the dispatch consumer after the send).
-  - `UNREACHABLE`: every send in the retry schedule failed (recorded in the DLQ's `FAILED` transaction).
-  - `BUSY`: the Agent replied 429/503 to the WorkOrder (recorded in the same transaction that ends the task `FAILED` with `AGENT_BUSY`).
+  - `UNREACHABLE`: every send in the retry schedule failed (recorded in the DLQ transaction that fails the task over or ends it `FAILED`).
+  - `BUSY`: the Agent replied 429/503 to the WorkOrder (recorded in the same transaction that fails the task over or ends it `FAILED` with `AGENT_BUSY`).
+  - A routed task's history is also its failover exclusion list: no Agent in it is picked again ([routed failover](matching.md#routed-failover)).
   - `UNAVAILABLE`: a pinned agent was not `ACTIVE`, or its version was superseded, at dispatch (recorded in the same transaction that ends the task `CANCELLED` with `AGENT_UNAVAILABLE`).
   - Read-only to the task owner (JWT or API key) at `GET /api/tasks/{id}/attempts`: attempt number, `agentId` (joined from the version), `agentVersionId`, outcome, `occurredAt`. Another client gets 404.
 
@@ -64,7 +65,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 - `dispute_rulings`: `tier`, `decided_by` (`ARBITRATOR`, `ADMINISTRATOR`, `FALLBACK`), `category`, `rationale`. **Append-only by trigger.**
 
 **Reputation**
-- `reputation_events`: `agent_id`, soft `task_id`, `event_type`, `quality`, `weight`, `occurred_at`. **Append-only by trigger.** Partial UNIQUE `(task_id, event_type)` makes each outcome exactly-once while allowing a later `RATING`.
+- `reputation_events`: `agent_id`, soft `task_id`, `event_type`, `quality`, `weight`, `occurred_at`. **Append-only by trigger.** Partial UNIQUE `(task_id, agent_id, event_type)` (since `V34`) makes each outcome exactly-once per Agent while allowing a later `RATING`; per Agent because routed failover can give one task several unreachable Agents, each with its own `EXECUTION_FAILED`.
 - `reviews`: `task_id` NOT NULL UNIQUE, `client_id`, `agent_id`, `rating`, `review_text`, `builder_response`, `is_published`.
 
 **Columns kept off the JPA entities on purpose:** the `tasks` sweeper columns, the `agents` sum/count columns and `agents.signing_secret` are unmapped and written only by targeted native `UPDATE`s, so a full-row save can't overwrite them. `AgentDO` sees only a read-only `@Formula` presence flag for the secret, so the secret never loads with an agent. `reputation_score` is mapped (see Known gaps).
@@ -80,15 +81,15 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
   - API-key tasks skip review: PASS goes to `RESOLVED`, FAIL to `SPEC_VIOLATION`.
 - **Task resolution:** `ACCEPTED`, `REJECTED`, `PARTIALLY_ACCEPTED`.
 - <a id="failure-reason"></a>**Failure reason** (`tasks.failure_reason`, `FailureReason`; CHECK since `V32`): why a task ended without a delivered result. The terminal transition sets it, and `TaskModel` refuses to set it a second time. `NULL` on live and successful tasks, and on tasks that ended before `V32`. Where each value comes from today:
-  - `AGENT_UNREACHABLE`: every dispatch send attempt failed (DLQ) → `FAILED`.
+  - `AGENT_UNREACHABLE`: every dispatch send attempt to a direct booking's Agent failed (DLQ) → `FAILED`.
   - `AGENT_REPORTED_FAILURE`: the Agent's callback reported a non-`COMPLETED` status → `FAILED`.
   - `SPEC_VIOLATION`: the result failed validation → `SPEC_VIOLATION`.
   - `EXECUTION_TIMEOUT`: past the deadline while `EXECUTING` → `TIMED_OUT`.
   - `DISPATCH_ABANDONED`: past the deadline while still `QUEUED` → `TIMED_OUT`; or routing failed on every SUBMITTED sweep → `CANCELLED`.
   - `NO_ELIGIBLE_AGENT`: a routed task's re-match attempts ran out → `CANCELLED`.
   - `AGENT_UNAVAILABLE`: at dispatch, a direct booking's agent is not `ACTIVE` or its pinned version was superseded → `CANCELLED` at once, no reputation event.
-  - `AGENT_BUSY`: the Agent declined the WorkOrder with 429/503 → `FAILED`, no reputation event. Routed tasks too, until routed failover re-routes them.
-  - `NO_ALTERNATIVE_AGENT` is in the enum and the CHECK but no path sets it yet (routed failover is #58 work).
+  - `AGENT_BUSY`: a direct booking's Agent declined the WorkOrder with 429/503 → `FAILED`, no reputation event.
+  - `NO_ALTERNATIVE_AGENT`: a routed task's Agent was busy or unreachable and no untried eligible Agent was left, or 3 Agents had been tried ([routed failover](matching.md#routed-failover)) → `FAILED`.
 - **Agent:** `PENDING_VERIFICATION → ACTIVE ⇄ SUSPENDED`; `ACTIVE` or `SUSPENDED → DEACTIVATED`.
 - **Agent version:** `DRAFT`, `ACTIVE`, `DEPRECATED`.
 - **Reject reason:** `A_MISMATCH`, `B_FACTUAL`, `C_INCOMPLETE` open a dispute; `D_CHANGED_MIND` charges in full with no dispute.

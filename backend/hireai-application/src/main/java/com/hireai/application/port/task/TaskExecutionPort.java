@@ -35,21 +35,23 @@ public interface TaskExecutionPort {
     void markTimedOut(UUID taskId);
 
     /**
-     * The dispatch ran out of attempts (the DLQ listener): QUEUED/EXECUTING → FAILED under a row
-     * lock, with a refund, an {@code EXECUTION_FAILED} reputation event, a client
-     * {@code task.failed} webhook and an {@code UNREACHABLE} dispatch attempt. A no-op once the
-     * task has already ended.
+     * The dispatch to {@code agentVersionId} ran out of attempts (the DLQ listener). Under a row
+     * lock it records an {@code UNREACHABLE} dispatch attempt and an {@code EXECUTION_FAILED}
+     * reputation event against that Agent. Then a routed task still QUEUED fails over to another
+     * Agent ({@code RoutingAppService#failOver}); a pinned task (or one already EXECUTING) ends
+     * FAILED with {@code AGENT_UNREACHABLE}, a refund and a client {@code task.failed} webhook.
+     * A no-op once the task has ended or is assigned to another version (a stale message for an
+     * Agent the task has already moved away from).
      */
-    void markFailed(UUID taskId);
+    void markFailed(UUID taskId, UUID agentVersionId);
 
     /**
      * The Agent declined the WorkOrder as busy (429/503): under a row lock, a task still QUEUED for
-     * {@code agentVersionId} records a {@code BUSY} dispatch attempt and ends FAILED with
-     * {@code AGENT_BUSY}, a refund and a client {@code task.failed} webhook. No reputation event:
-     * declining at capacity is never a fault. A no-op when the task has moved on (another outcome
-     * committed first, or it is assigned to another version).
-     *
-     * <p>Routed tasks end the same way for now; routed failover (#78) re-routes them instead.
+     * {@code agentVersionId} records a {@code BUSY} dispatch attempt. A routed task then fails over
+     * to another Agent; a pinned task ends FAILED with {@code AGENT_BUSY}, a refund and a client
+     * {@code task.failed} webhook. No reputation event either way: declining at capacity is never a
+     * fault. A no-op when the task has moved on (another outcome committed first, or it is assigned
+     * to another version).
      */
     void declineAsBusy(UUID taskId, UUID agentVersionId);
 }

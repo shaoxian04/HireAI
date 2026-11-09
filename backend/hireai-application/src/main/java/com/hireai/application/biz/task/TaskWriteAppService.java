@@ -55,4 +55,17 @@ public interface TaskWriteAppService {
      * that has already moved on is left alone.
      */
     void cancelPinnedAsUnavailable(@NonNull UUID taskId, @NonNull UUID agentVersionId);
+
+    /**
+     * Routed failover (#78): QUEUED -> QUEUED assigned to {@code newAgentVersionId}, with a new
+     * execution deadline. Joins the caller's row-locked transaction (MANDATORY).
+     */
+    void reassign(@NonNull UUID taskId, @NonNull UUID newAgentVersionId, @NonNull Instant executionDeadline);
+
+    /**
+     * Routed failover found no untried eligible Agent (#78): QUEUED -> FAILED with
+     * NO_ALTERNATIVE_AGENT, a FULL escrow refund and a client webhook. Joins the caller's
+     * row-locked transaction (MANDATORY).
+     */
+    void failWithNoAlternative(@NonNull UUID taskId);
 }

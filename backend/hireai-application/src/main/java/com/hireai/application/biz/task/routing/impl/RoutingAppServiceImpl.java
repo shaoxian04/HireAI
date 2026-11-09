@@ -13,8 +13,15 @@ import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
+import com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView;
+import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
+import com.hireai.domain.biz.task.routing.service.RoutedFailoverDomainService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -27,7 +34,9 @@ import java.util.UUID;
  * Orchestrates routing. Deliberately NOT @Transactional: assignAndQueue owns its own
  * transaction and must COMMIT before publish runs, so the RabbitMQ consumer never races
  * an uncommitted QUEUED state (see plan: "Why publish-after-commit"). publish runs outside
- * any DB transaction because a message send cannot be rolled back.
+ * any DB transaction because a message send cannot be rolled back. The one exception is
+ * {@link #failOver}, which must join the dispatch path's row-locked transaction and publishes
+ * from an after-commit hook instead.
  */
 @Service
 @Slf4j
@@ -39,6 +48,8 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     private final AgentRepository agentRepository;
     private final RoutingMatchDomainService routingMatchDomainService;
     private final TaskDispatchPublisher taskDispatchPublisher;
+    private final DispatchAttemptRepository dispatchAttemptRepository;
+    private final RoutedFailoverDomainService routedFailoverDomainService;
     /** The app's Clock bean (ClockConfig); tests pass a fixed one to pin the execution deadline. */
     private final Clock clock;
 
@@ -112,15 +123,63 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     }
 
     /**
+     * Joins the caller's transaction (MANDATORY: the dispatch path's row-locked transaction that
+     * already recorded the failed attempt), so the attempt, the reassignment and the new deadline
+     * commit together. The WorkOrder is published only after that commit, exactly like the first
+     * dispatch, so the consumer never sees the new version before the row names it.
+     */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void failOver(UUID taskId) {
+        TaskRoutingView view = taskReadAppService.getRoutingView(taskId);
+        List<DispatchAttemptView> history = dispatchAttemptRepository.findByTaskId(taskId);
+        List<AgentCandidate> candidates = agentRepository.findActiveCandidates(view.category(), view.budget());
+        Optional<AgentCandidate> next = routedFailoverDomainService.selectNext(view, history, candidates);
+        if (next.isEmpty()) {
+            log.info("Task {}: no untried eligible Agent left after {} attempt(s); failing with "
+                    + "NO_ALTERNATIVE_AGENT", taskId, history.size());
+            taskWriteAppService.failWithNoAlternative(taskId);
+            return;
+        }
+        AgentCandidate target = next.get();
+        Instant executionDeadline = deadlineFor(target);
+        taskWriteAppService.reassign(taskId, target.agentVersionId(), executionDeadline);
+        DispatchMessage message = buildDispatchMessage(view, target.agentVersionId(), target, executionDeadline);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    taskDispatchPublisher.publish(message);
+                    log.info("Task {} failed over to agentVersion {} and dispatch published (correlationId={})",
+                            taskId, target.agentVersionId(), message.correlationId());
+                } catch (RuntimeException e) {
+                    // The reassignment committed: the task stays QUEUED for the new Agent, and the
+                    // execution-timeout sweeper refunds it without blaming anyone.
+                    log.error("Task {} was reassigned to agentVersion {} but publishing its WorkOrder "
+                            + "failed (the task stays QUEUED until its execution timeout)",
+                            taskId, target.agentVersionId(), e);
+                }
+            }
+        });
+    }
+
+    /**
+     * Execution deadline for a dispatch to {@code target} starting now. Truncated to microseconds,
+     * the precision the task row stores, so the WorkOrder carries exactly the stamped value.
+     */
+    private Instant deadlineFor(AgentCandidate target) {
+        return clock.instant().truncatedTo(ChronoUnit.MICROS)
+                .plusSeconds(target.maxExecutionSeconds() + executionGraceSeconds);
+    }
+
+    /**
      * The one path both routed and direct dispatch take, so the WorkOrder can't drift between
      * them. The QUEUED transition (with the execution deadline) commits FIRST in its own
      * transaction so the consumer always sees a durable QUEUED row; only then is the message
-     * published. The deadline is truncated to microseconds, the precision the task row stores,
-     * so the WorkOrder carries exactly the stamped value.
+     * published.
      */
     private DispatchMessage assignAndPublish(TaskRoutingView view, UUID agentVersionId, AgentCandidate target) {
-        Instant executionDeadline = clock.instant().truncatedTo(ChronoUnit.MICROS)
-                .plusSeconds(target.maxExecutionSeconds() + executionGraceSeconds);
+        Instant executionDeadline = deadlineFor(target);
         taskWriteAppService.assignAndQueue(view.taskId(), agentVersionId, executionDeadline);
         DispatchMessage message = buildDispatchMessage(view, agentVersionId, target, executionDeadline);
         taskDispatchPublisher.publish(message);

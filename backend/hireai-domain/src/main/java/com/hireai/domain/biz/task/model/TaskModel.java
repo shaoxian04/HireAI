@@ -114,6 +114,23 @@ public final class TaskModel {
     }
 
     /**
+     * QUEUED → QUEUED with another Agent: routed failover (#78). The platform picked the Agent, and
+     * it could not take the task before starting (unreachable after the retry schedule, or busy),
+     * so the platform hands the task to another version. Only a task still QUEUED qualifies: once
+     * the Agent started (EXECUTING) or the task ended, it is never swapped. The new version must
+     * differ from the current one; an Agent already tried is excluded before this is called.
+     */
+    public TaskModel reassign(UUID newAgentVersionId) {
+        requireStatus(TaskStatus.QUEUED, "reassign");
+        requirePresent(newAgentVersionId, "agent version id");
+        if (newAgentVersionId.equals(this.agentVersionId)) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Cannot reassign task " + id + " to the version it is already assigned to");
+        }
+        return copyWith(TaskStatus.QUEUED, newAgentVersionId, this.result);
+    }
+
+    /**
      * QUEUED → EXECUTING: the WorkOrder reached the agent. Idempotent: from any state past
      * QUEUED (the agent already called back, or the task timed out / failed meanwhile) it is a
      * no-op that returns {@code this}. Only the pre-assignment states (SUBMITTED,

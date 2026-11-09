@@ -3,6 +3,7 @@ package com.hireai.application.biz.task.impl;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
+import com.hireai.application.biz.task.routing.RoutingAppService;
 import com.hireai.domain.biz.reputation.enums.ReputationEventType;
 import com.hireai.application.port.task.TaskExecutionPort;
 import com.hireai.utility.result.ResultCode;
@@ -40,6 +41,7 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
     private final WebhookOutboxAppService webhookOutboxAppService;
     private final DispatchAttemptRepository dispatchAttemptRepository;
     private final Clock clock;
+    private final RoutingAppService routingAppService;
 
     @Override
     public void recordDispatchAttempt(UUID taskId, UUID agentVersionId, DispatchOutcome outcome) {
@@ -101,11 +103,11 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
     }
 
     @Override
-    public void markFailed(UUID taskId) {
+    public void markFailed(UUID taskId, UUID agentVersionId) {
         // Row-locked load: lock ordering is task-row -> wallet-row (settleRejected locks the wallet
         // next), identical to the review/accept path, so no new deadlock. The residual
         // timeout-vs-agent-callback race window remains money-safe via the settlements.task_id
-        // UNIQUE constraint (the callback path is out of this branch's scope).
+        // UNIQUE constraint.
         TaskModel task = loadForUpdate(taskId);
         if (task.status() != TaskStatus.QUEUED && task.status() != TaskStatus.EXECUTING) {
             // Duplicate failure signal (e.g. DLQ redelivery, or the timeout sweeper got there first):
@@ -113,17 +115,26 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
             log.info("Task {} already {}; ignoring duplicate failure signal", taskId, task.status());
             return;
         }
+        if (!agentVersionId.equals(task.agentVersionId())) {
+            // The task already failed over to another Agent: this dead letter is for the old one.
+            log.info("Task {} is assigned to version {}; ignoring dead letter for version {}", taskId,
+                    task.agentVersionId(), agentVersionId);
+            return;
+        }
+        // The Agent could not be reached on any attempt of the retry schedule: a zero-quality
+        // sample against it whether or not the task fails over. Joins this transaction.
+        reputationWriteAppService.recordOutcome(taskId, agentVersionId, task.clientId(),
+                ReputationEventType.EXECUTION_FAILED);
+        appendAttempt(taskId, agentVersionId, DispatchOutcome.UNREACHABLE);
+        if (failsOver(task)) {
+            routingAppService.failOver(taskId);
+            return;
+        }
         TaskModel failed = task.markFailed(FailureReason.AGENT_UNREACHABLE);
         taskRepository.save(failed);
-        // Stranded-escrow fix (spec §6.3): the DLQ path previously marked FAILED without refunding,
-        // freezing the client's escrow forever. Every escrow exit is a recorded settlement.
+        // Stranded-escrow fix (spec §6.3): every escrow exit is a recorded settlement.
         settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
-        // The Agent could not be reached on any attempt: a zero-quality sample against it, and
-        // the client's integration learns of the failure. Both join this transaction.
-        reputationWriteAppService.recordOutcome(taskId, failed.agentVersionId(), failed.clientId(),
-                ReputationEventType.EXECUTION_FAILED);
         webhookOutboxAppService.enqueueFailed(failed, "FAILED");
-        appendAttempt(taskId, failed.agentVersionId(), DispatchOutcome.UNREACHABLE);
         log.info("Task {} marked FAILED, escrow refunded, EXECUTION_FAILED recorded", taskId);
     }
 
@@ -136,6 +147,12 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
                     task.status(), task.agentVersionId(), agentVersionId);
             return;
         }
+        if (failsOver(task)) {
+            // Declining at capacity is part of the acknowledgement contract: no reputation event.
+            appendAttempt(taskId, agentVersionId, DispatchOutcome.BUSY);
+            routingAppService.failOver(taskId);
+            return;
+        }
         TaskModel failed = task.markFailed(FailureReason.AGENT_BUSY);
         taskRepository.save(failed);
         settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
@@ -144,6 +161,15 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
         appendAttempt(taskId, agentVersionId, DispatchOutcome.BUSY);
         log.info("Task {} declined as busy by version {}: FAILED (AGENT_BUSY), escrow refunded", taskId,
                 agentVersionId);
+    }
+
+    /**
+     * Routed failover (#78) applies when the platform picked the Agent (no pinned version) and the
+     * Agent never started (still QUEUED). A direct booking is never substituted.
+     */
+    private boolean failsOver(TaskModel task) {
+        return task.status() == TaskStatus.QUEUED
+                && taskRepository.findPinnedAgentVersionId(task.id()).isEmpty();
     }
 
     private TaskModel loadForUpdate(UUID taskId) {

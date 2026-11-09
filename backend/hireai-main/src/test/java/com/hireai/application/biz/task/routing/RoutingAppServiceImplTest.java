@@ -8,6 +8,10 @@ import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.routing.info.DispatchMessage;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
+import com.hireai.domain.biz.task.routing.service.RoutedFailoverDomainService;
+import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -41,9 +45,13 @@ class RoutingAppServiceImplTest {
     private static final Instant NOW = Instant.parse("2030-01-01T00:00:00Z");
     private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
+    private final DispatchAttemptRepository dispatchAttemptRepository = mock(DispatchAttemptRepository.class);
+    private final RoutedFailoverDomainService routedFailoverDomainService = mock(RoutedFailoverDomainService.class);
+
     private final RoutingAppServiceImpl service = new RoutingAppServiceImpl(
             taskReadAppService, taskWriteAppService, agentRepository,
-            routingMatchDomainService, taskDispatchPublisher, clock);
+            routingMatchDomainService, taskDispatchPublisher, dispatchAttemptRepository,
+            routedFailoverDomainService, clock);
 
     // The task's adopted output spec snapshot (Invariant #4). In unit tests the view carries
     // this directly; candidates supply only webhookUrl/version identity.
@@ -167,5 +175,78 @@ class RoutingAppServiceImplTest {
         verify(taskWriteAppService).markAwaitingAgent(taskId);
         verify(taskWriteAppService, never()).assignAndQueue(any(), any(), any());
         verify(taskDispatchPublisher, never()).publish(any());
+    }
+
+    // --- Routed failover (#78) ---
+
+    private void stubFailoverInputs(UUID taskId, List<AgentCandidate> candidates) {
+        when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
+        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00")))
+                .thenReturn(candidates);
+        when(dispatchAttemptRepository.findByTaskId(taskId)).thenReturn(List.of());
+    }
+
+    @Test
+    void failOverReassignsWithAFreshDeadlineAndPublishesOnlyAfterCommit() {
+        UUID taskId = UUID.randomUUID();
+        AgentCandidate next = candidate(UUID.randomUUID());
+        stubFailoverInputs(taskId, List.of(next));
+        when(routedFailoverDomainService.selectNext(any(), any(), any())).thenReturn(Optional.of(next));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.failOver(taskId);
+
+            verify(taskWriteAppService).reassign(taskId, next.agentVersionId(), Instant.parse("2030-01-01T00:02:00Z"));
+            verify(taskDispatchPublisher, never()).publish(any());
+
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+        ArgumentCaptor<DispatchMessage> captor = ArgumentCaptor.forClass(DispatchMessage.class);
+        verify(taskDispatchPublisher).publish(captor.capture());
+        assertThat(captor.getValue().agentVersionId()).isEqualTo(next.agentVersionId());
+        assertThat(captor.getValue().webhookUrl()).isEqualTo(next.webhookUrl());
+        assertThat(captor.getValue().payload().executionDeadline()).isEqualTo(Instant.parse("2030-01-01T00:02:00Z"));
+        assertThat(captor.getValue().payload().outputSpecJson()).isEqualTo(TASK_OUTPUT_SPEC);
+    }
+
+    @Test
+    void failOverWithNoAlternativeEndsTheTaskAndPublishesNothing() {
+        UUID taskId = UUID.randomUUID();
+        stubFailoverInputs(taskId, List.of());
+        when(routedFailoverDomainService.selectNext(any(), any(), any())).thenReturn(Optional.empty());
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.failOver(taskId);
+            assertThat(TransactionSynchronizationManager.getSynchronizations()).isEmpty();
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+        verify(taskWriteAppService).failWithNoAlternative(taskId);
+        verify(taskWriteAppService, never()).reassign(any(), any(), any());
+        verify(taskDispatchPublisher, never()).publish(any());
+    }
+
+    @Test
+    void aPublishFailureAfterCommitIsSwallowed() {
+        // The reassignment already committed: the task stays QUEUED for the new Agent and the
+        // timeout sweeper refunds it without blame. The caller (the dispatch consumer) must not see it.
+        UUID taskId = UUID.randomUUID();
+        AgentCandidate next = candidate(UUID.randomUUID());
+        stubFailoverInputs(taskId, List.of(next));
+        when(routedFailoverDomainService.selectNext(any(), any(), any())).thenReturn(Optional.of(next));
+        org.mockito.Mockito.doThrow(new RuntimeException("broker down")).when(taskDispatchPublisher).publish(any());
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.failOver(taskId);
+            TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+        verify(taskDispatchPublisher).publish(any());
     }
 }

@@ -48,8 +48,8 @@ public class ReputationEventRepositoryImpl implements ReputationEventRepository 
     }
 
     @Override
-    public boolean existsByTaskIdAndEventType(UUID taskId, ReputationEventType eventType) {
-        return taskId != null && jpa.existsByTaskIdAndEventType(taskId, eventType);
+    public boolean existsByTaskIdAndAgentIdAndEventType(UUID taskId, UUID agentId, ReputationEventType eventType) {
+        return taskId != null && jpa.existsByTaskIdAndAgentIdAndEventType(taskId, agentId, eventType);
     }
 
     private ReputationEventModel toModel(ReputationEventDO entity) {

@@ -153,6 +153,33 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
                 + "escrow fully refunded", taskId, agentVersionId);
     }
 
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void reassign(UUID taskId, UUID newAgentVersionId, Instant executionDeadline) {
+        TaskModel task = loadForUpdate(taskId);
+        UUID previous = task.agentVersionId();
+        taskRepository.save(task.reassign(newAgentVersionId));
+        taskRepository.stampExecutionDeadline(taskId, executionDeadline);
+        log.info("Task {} reassigned from agent version {} to {} (deadline {})",
+                taskId, previous, newAgentVersionId, executionDeadline);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void failWithNoAlternative(UUID taskId) {
+        TaskModel failed = loadForUpdate(taskId).markFailed(FailureReason.NO_ALTERNATIVE_AGENT);
+        taskRepository.save(failed);
+        settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
+        webhookOutboxAppService.enqueueFailed(failed, "FAILED");
+        log.info("Task {} FAILED (NO_ALTERNATIVE_AGENT): no untried eligible Agent left; escrow fully refunded",
+                taskId);
+    }
+
+    private TaskModel loadForUpdate(UUID taskId) {
+        return taskRepository.findByIdForUpdate(taskId)
+                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
+    }
+
     private void cancelWithRefund(TaskModel task, FailureReason reason) {
         TaskModel cancelled = task.markCancelled(reason);
         taskRepository.save(cancelled);

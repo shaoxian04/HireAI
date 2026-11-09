@@ -18,6 +18,8 @@ import com.hireai.domain.biz.reputation.service.impl.ReputationScoringDomainServ
 import com.hireai.domain.biz.task.routing.service.MatchingPolicy;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.task.routing.service.impl.RoutingMatchDomainServiceImpl;
+import com.hireai.domain.biz.task.routing.service.RoutedFailoverDomainService;
+import com.hireai.domain.biz.task.routing.service.impl.RoutedFailoverDomainServiceImpl;
 import com.hireai.domain.biz.adjudication.service.SchemaValidator;
 import com.hireai.domain.biz.adjudication.service.ValidationDomainService;
 import com.hireai.domain.biz.adjudication.service.impl.ValidationDomainServiceImpl;
@@ -77,6 +79,11 @@ public class DomainServiceConfig {
     @Bean
     public RoutingMatchDomainService routingMatchDomainService(MatchingPolicy matchingPolicy) {
         return new RoutingMatchDomainServiceImpl(matchingPolicy, new SecureRandom());
+    }
+
+    @Bean
+    public RoutedFailoverDomainService routedFailoverDomainService(RoutingMatchDomainService routingMatchDomainService) {
+        return new RoutedFailoverDomainServiceImpl(routingMatchDomainService);
     }
 
     @Bean

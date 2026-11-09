@@ -14,6 +14,7 @@ top of `rank`.
 | Web submit | Client, from a shortlist | `GET /api/tasks/match-preview` runs `rank`, then the pick calls `POST /api/tasks/direct` |
 | API / MCP routed submit | Platform | `POST /api/tasks`, then `route()` runs `selectOne` |
 | Re-match of a held routed task | Platform | Sweeper calls `route()` again over fresh candidates |
+| Failover of a routed task whose Agent couldn't take it | Platform | `failOver()` runs `selectOne` over the candidates not yet tried ([routed failover](#routed-failover)) |
 | Direct booking, or re-match of one | Client already chose | `dispatchDirect()`, no matching |
 
 The web never calls `POST /api/tasks`, so every web task is a pinned direct booking.
@@ -82,7 +83,10 @@ invite a second, paid submit.
 | Re-match attempts exhausted | `CANCELLED` | Yes | Yes | No |
 | Past `execution_deadline` while `EXECUTING` | `TIMED_OUT` | Yes | Yes | `EXECUTION_TIMEOUT` |
 | Past `execution_deadline` while still `QUEUED` | `TIMED_OUT` | Yes | Yes | No |
-| Every dispatch attempt failed (Agent unreachable, timed out or non-2xx) | `FAILED` | Yes | Yes | `EXECUTION_FAILED` |
+| Routed task: the Agent is busy, or every dispatch attempt failed, and an untried eligible Agent is left | Stays `QUEUED`, reassigned (see **Routed failover**) | No | No | `EXECUTION_FAILED` if unreachable, none if busy |
+| Routed task: same, but no untried eligible Agent is left (or 3 Agents tried) | `FAILED` (`NO_ALTERNATIVE_AGENT`) | Yes | Yes | As above, for the last Agent |
+| Pinned task: every dispatch attempt failed (Agent unreachable, timed out or non-2xx) | `FAILED` (`AGENT_UNREACHABLE`) | Yes | Yes | `EXECUTION_FAILED` |
+| Pinned task: the Agent declined as busy (429/503) | `FAILED` (`AGENT_BUSY`) | Yes | Yes | No |
 
 - **`AWAITING_AGENT`** means no `ACTIVE` agent covers the category within budget. Only routed tasks wait
   there. Load is soft, so a busy agent never causes it. The re-match sweeper
@@ -96,6 +100,26 @@ invite a second, paid submit.
   version never counts against the Builder, so no reputation event is written. The re-match sweeper never
   retries a pinned task: one it finds `AWAITING_AGENT` (parked there before this rule) is cancelled the
   same way on its first sweep, so its escrow is never stranded.
+- <a id="routed-failover"></a>**Routed failover.** When the platform picked the Agent (no pinned version)
+  and that Agent can't take the task before starting, the task stays `QUEUED` and goes to another Agent.
+  The triggers are a busy decline (429/503) and an unreachable Agent (the DLQ, after the whole retry
+  schedule). A failure after the Agent started (`EXECUTING`: a reported failure, a timeout, a spec
+  violation) is never failed over. In one transaction under the task row lock
+  (`TaskExecutionPortImpl.declineAsBusy` / `markFailed`, then `RoutingAppService.failOver`):
+  - the failed attempt is recorded in the [dispatch history](data-model.md#dispatch-attempts) (`BUSY`, or
+    `UNREACHABLE` plus `EXECUTION_FAILED` against that Agent);
+  - the next candidate is picked from the same candidate query and matcher as initial routing (same budget
+    and eligibility), excluding every Agent already in the task's history, under any version
+    (`RoutedFailoverDomainService`);
+  - `TaskModel.reassign` swaps the version (only from `QUEUED`, never to the same version) and a new
+    `execution_deadline` is stamped from now.
+
+  The new WorkOrder is published only after that transaction commits. At most **3 distinct Agents**
+  (`RoutedFailoverDomainService.MAX_DISTINCT_AGENTS`) are tried per task. With no untried eligible Agent
+  left, or 3 tried, the task ends `FAILED` with `NO_ALTERNATIVE_AGENT`, a full refund and a `task.failed`
+  webhook. A late callback from a replaced Agent gets 401: its token names the old version, which is no
+  longer the task's assigned one. A dead letter or busy reply for a replaced version is ignored. If the
+  publish fails after the commit, the task stays `QUEUED` and its execution timeout refunds it without blame.
 - **The deadline is stamped at assignment**, so one query catches both a silent agent and a lost publish.
   Only a silent agent is blamed: a task still `QUEUED` normally never reached the agent, so its timeout
   refunds without a reputation event (`TaskModel.timeoutIsAgentFault`). The rare task left `QUEUED` after a
@@ -138,12 +162,14 @@ registration form, `frontend/components/AckContract.tsx`):
 
 - **Accept:** reply any 2xx (202 recommended) within the 15s read timeout, then do the work asynchronously.
   A slower reply, a refused connection or any other non-2xx is a failed send and is retried (see
-  **Send retries**); after the last attempt the task fails with `EXECUTION_FAILED` against the Agent.
+  **Send retries**); after the last attempt `EXECUTION_FAILED` is recorded against the Agent and the task
+  fails over (routed) or fails (pinned).
 - **Decline as busy:** reply 429 or 503. The platform does not retry, records a `BUSY` row in the
-  [dispatch history](data-model.md#dispatch-attempts) and writes **no** reputation event. The task then ends
-  `FAILED` with FailureReason `AGENT_BUSY`, a refund and a `task.failed` webhook
-  (`TaskExecutionPort.declineAsBusy`). This applies to routed tasks too until routed failover (#78)
-  re-routes them instead.
+  [dispatch history](data-model.md#dispatch-attempts) and writes **no** reputation event
+  (`TaskExecutionPort.declineAsBusy`). A routed task then goes to another Agent
+  ([routed failover](#routed-failover)); a pinned task ends `FAILED` with FailureReason `AGENT_BUSY`, a
+  refund and a `task.failed` webhook.
+- **After a failover, the task is no longer yours:** a result you post for it afterwards gets 401.
 - **Deliver only through the callback:** the result is accepted only as a POST to `callbackUrl`. Anything
   in the WorkOrder's HTTP response body is ignored.
 
@@ -239,8 +265,10 @@ reputation event.
   per-message TTL, and expiry dead-letters it back to the dispatch exchange. The attempt number travels in
   the `x-hireai-dispatch-attempt` header.
 - When the last attempt fails, the consumer rejects the message and it dead-letters to `task.dispatch.dlq`.
-  The DLQ listener then fails the task (`FAILED`, refund, `task.failed` webhook, `EXECUTION_FAILED`, and an
-  `UNREACHABLE` row in the dispatch history), all in one transaction.
+  The DLQ listener then records an `UNREACHABLE` row in the dispatch history and `EXECUTION_FAILED`, and
+  either fails the task over ([routed failover](#routed-failover)) or, for a pinned task, fails it
+  (`FAILED`, refund, `task.failed` webhook), all in one transaction. A dead letter for a version the task
+  no longer names (it already failed over) is ignored.
 - `hireai.dispatch.consumers` (default 4) consumers each take one message at a time, so a hanging Agent
   holds only the consumer that is waiting on it.
 - Every attempt re-runs step 1, so a task that ended while its message waited is dropped, not sent.

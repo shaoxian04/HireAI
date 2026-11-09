@@ -28,8 +28,9 @@ import java.util.Optional;
  * {@link TaskExecutionPort} port.
  *
  * <p>A busy reply ({@link AgentBusyException}: 429/503) consumes no attempt and is never retried:
- * the task is ended through {@link TaskExecutionPort#declineAsBusy} (FAILED, {@code AGENT_BUSY},
- * refund, a {@code BUSY} dispatch attempt, no reputation event).
+ * it goes to {@link TaskExecutionPort#declineAsBusy}, which records a {@code BUSY} dispatch attempt
+ * (no reputation event) and fails a routed task over to another Agent, or ends a pinned one FAILED
+ * with {@code AGENT_BUSY} and a refund.
  *
  * <p>Only an Agent-attributable send failure ({@link AgentSendFailedException}: unreachable,
  * read timeout, any other non-2xx) consumes an attempt. A platform-side failure before or around the send
@@ -40,8 +41,9 @@ import java.util.Optional;
  * the next delay of the {@link DispatchRetrySchedule}, with the next attempt number in
  * {@link DispatchQueues#ATTEMPT_HEADER}, and acknowledged. When the TTL expires the message
  * returns to the dispatch queue. A failure on the last attempt rejects the message, so it
- * dead-letters to {@link DispatchQueues#DLQ}, where the DLQ listener fails the task (refund,
- * client webhook, {@code EXECUTION_FAILED}, an {@code UNREACHABLE} dispatch attempt). A successful
+ * dead-letters to {@link DispatchQueues#DLQ}, where the DLQ listener records an {@code UNREACHABLE}
+ * dispatch attempt and {@code EXECUTION_FAILED}, then fails a routed task over to another Agent or
+ * ends a pinned one FAILED (refund, client webhook). A successful
  * send records an {@code ACCEPTED} dispatch attempt. A failure after a successful send is logged and
  * acknowledged, so a WorkOrder that reached the Agent is never sent again. The listener holds no
  * transaction of its own: each port call is its own short transaction.
@@ -132,14 +134,15 @@ public class TaskDispatchConsumer {
 
     @RabbitListener(queues = DispatchQueues.DLQ)
     public void onDeadLetter(DispatchMessage message) {
-        log.warn("Dispatch for task {} exhausted its attempts; marking FAILED", message.taskId());
-        taskExecutionPort.markFailed(message.taskId());
+        log.warn("Dispatch for task {} to version {} exhausted its attempts; failing over or failing",
+                message.taskId(), message.agentVersionId());
+        taskExecutionPort.markFailed(message.taskId(), message.agentVersionId());
     }
 
     /**
      * A busy reply (429/503) is final for this Agent: it is never retried (retrying would force
-     * work on an Agent at capacity) and never dead-lettered (that would blame it). The task ends
-     * through {@link TaskExecutionPort#declineAsBusy}. A failure there is platform-side: logged and
+     * work on an Agent at capacity) and never dead-lettered (that would blame it). The task fails
+     * over or ends through {@link TaskExecutionPort#declineAsBusy}. A failure there is platform-side: logged and
      * acknowledged, and the execution-timeout sweeper refunds the still-QUEUED task without blame.
      */
     private void declineAsBusy(DispatchMessage message, int attempt, AgentBusyException cause) {

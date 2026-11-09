@@ -22,7 +22,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -85,7 +85,7 @@ class DispatchRaceIntegrationTest extends WholeAppIntegrationTest {
 
     @Test
     void aDispatchMessageForATimedOutTaskIsDroppedAndTheAgentReceivesNothing() {
-        assertStaleMessageDropped(taskExecutionPort::markTimedOut, "TIMED_OUT");
+        assertStaleMessageDropped((id, version) -> taskExecutionPort.markTimedOut(id), "TIMED_OUT");
     }
 
     @Test
@@ -93,7 +93,7 @@ class DispatchRaceIntegrationTest extends WholeAppIntegrationTest {
         assertStaleMessageDropped(taskExecutionPort::markFailed, "FAILED");
     }
 
-    private void assertStaleMessageDropped(Consumer<UUID> endTask, String endStatus) {
+    private void assertStaleMessageDropped(BiConsumer<UUID, UUID> endTask, String endStatus) {
         FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted());
         String category = "x-" + UUID.randomUUID();
         UUID versionId = seedActiveAgent(category, agent.webhookUrl());
@@ -102,7 +102,7 @@ class DispatchRaceIntegrationTest extends WholeAppIntegrationTest {
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
                 assertThat(status(taskId)).isEqualTo("EXECUTING"));
 
-        endTask.accept(taskId);
+        endTask.accept(taskId, versionId);
         assertThat(status(taskId)).isEqualTo(endStatus);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM settlements WHERE task_id = ?",
                 Integer.class, taskId)).isEqualTo(1);
