@@ -1,5 +1,6 @@
 package com.hireai.admin;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.admin.AdminReadAppService;
 import com.hireai.application.biz.admin.view.AdminViews;
@@ -64,7 +65,7 @@ class AdminDisputeFlowIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

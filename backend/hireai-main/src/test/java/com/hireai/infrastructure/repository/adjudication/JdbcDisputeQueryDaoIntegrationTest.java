@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.repository.adjudication;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.biz.adjudication.dispute.view.DisputeMineRow;
 import com.hireai.application.biz.adjudication.port.DisputeQueryPort;
 import org.junit.jupiter.api.Test;
@@ -45,7 +46,7 @@ class JdbcDisputeQueryDaoIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

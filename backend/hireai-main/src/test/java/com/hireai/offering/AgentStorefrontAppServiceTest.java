@@ -41,10 +41,12 @@ class AgentStorefrontAppServiceTest {
     private final MediaStoragePort mediaStoragePort = mock(MediaStoragePort.class);
     private final ReviewRepository reviewRepository = mock(ReviewRepository.class);
     private final BuilderStatsQueryPort builderStatsQueryPort = mock(BuilderStatsQueryPort.class);
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher =
+            mock(org.springframework.context.ApplicationEventPublisher.class);
 
     private final AgentStorefrontAppServiceImpl service = new AgentStorefrontAppServiceImpl(
             agentReadAppService, profileRepository, mediaStoragePort, reviewRepository,
-            builderStatsQueryPort);
+            builderStatsQueryPort, eventPublisher, java.time.Clock.systemUTC());
 
     // ---- helpers ----
 
@@ -81,6 +83,10 @@ class AgentStorefrontAppServiceTest {
         assertThat(saved.tagline()).isEqualTo("My tagline");
         assertThat(saved.listed()).isTrue();
         assertThat(result.tagline()).isEqualTo("My tagline");
+
+        // The profile text changed, so the embedding refresh is requested (after commit)
+        verify(eventPublisher).publishEvent(any(
+                com.hireai.domain.biz.offering.storefront.event.AgentProfileUpdatedDomainEvent.class));
     }
 
     @Test

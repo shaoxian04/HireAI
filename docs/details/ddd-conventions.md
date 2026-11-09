@@ -32,7 +32,7 @@ hireai-domain         domain/biz/<subdomain>[/<aggregate>]/{model,repository,ser
 hireai-application    application/biz/<subdomain>[/<aggregate>]   app services + impl/
                       application/biz/admin                    AdminReadAppService, cross-subdomain admin reads
                       application/biz/adjudication/port        arbitration ports
-                      application/port/{messaging,query,security,storage,task,webhook}
+                      application/port/{embedding,messaging,query,security,storage,task,webhook}
                       application/config                       DomainServiceConfig wires domain services
 hireai-repository     infrastructure/repository/<subdomain>[/<aggregate>], infrastructure/repository/admin
 hireai-infrastructure infrastructure/{adjudication,client,messaging,security,webhook}
@@ -71,7 +71,7 @@ Layer-local unit tests also live in `hireai-domain`, `hireai-application`, `hire
 2. **One repository per aggregate root**, and depend on the interface. Exceptions: `OAuthIdentityRepository` serves a child of `UserModel`, and `ApiKeyTaskRepository` has no aggregate.
 3. **App services are interface + `impl/`.** Use `XxxReadAppService`/`XxxWriteAppService` when a subdomain splits cleanly and a use-case name when a flow spans both. Read services return models; write services return an ID, `void`, or a small result.
 4. **Keep behaviour in the aggregate.** Most transitions are `TaskModel` methods called from app services. Add a domain service when a rule spans objects or needs a pure calculation. Don't build a god-class.
-5. **Cross-aggregate flows are direct app-service calls.** The only domain events are `TaskSubmittedDomainEvent`, `AgentRegisteredDomainEvent` and `AgentActivatedDomainEvent`. Routing is not an aggregate: `RoutingAppService` coordinates Task and Agent.
+5. **Cross-aggregate flows are direct app-service calls.** The only domain events are `TaskSubmittedDomainEvent`, `AgentRegisteredDomainEvent`, `AgentActivatedDomainEvent` and `AgentProfileUpdatedDomainEvent`; the first drives routing and the registered/profile-updated pair drives Agent embedding, each after commit. Routing is not an aggregate: `RoutingAppService` coordinates Task and Agent.
 6. **Controllers stay thin.** Validate, build the `Info`, call, convert, wrap.
 
 The aggregate, child and repository map is in [`data-model.md`](data-model.md).

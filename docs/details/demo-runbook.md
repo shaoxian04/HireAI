@@ -4,7 +4,7 @@ How to stand up HireAI locally and run the end-to-end demo. Commands are for Git
 
 | Component | Port | How |
 |---|---|---|
-| Postgres | 5432 | Docker `postgres:16-alpine` |
+| Postgres | 5432 | Docker `pgvector/pgvector:pg16` (Postgres 16 with pgvector, which the schema needs) |
 | RabbitMQ | 5672, 15672 | Docker `rabbitmq:3.13-management-alpine` |
 | Backend | 8080 | `spring-boot:run` on `hireai-main` |
 | Arbitrator | 8000 | `uvicorn` in `arbitration/` |
@@ -17,7 +17,7 @@ How to stand up HireAI locally and run the end-to-end demo. Commands are for Git
 **1. Infrastructure.** `--user 100:101` avoids a RabbitMQ startup crash (see Troubleshooting).
 
 ```bash
-docker run -d --name hireai-pg -e POSTGRES_DB=hireai -e POSTGRES_USER=hireai -e POSTGRES_PASSWORD=hireai -p 5432:5432 postgres:16-alpine
+docker run -d --name hireai-pg -e POSTGRES_DB=hireai -e POSTGRES_USER=hireai -e POSTGRES_PASSWORD=hireai -p 5432:5432 pgvector/pgvector:pg16
 ```
 
 ```bash
@@ -37,7 +37,7 @@ mkdir -p "$HOME/jt" && export JAVA_TOOL_OPTIONS="-Djdk.net.unixdomain.tmpdir=$(c
 mvn -f backend/hireai-main/pom.xml spring-boot:run
 ```
 
-The secret must match the arbitrator's, or its rulings are rejected with 401. Image upload additionally needs `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` (see below).
+The secret must match the arbitrator's, or its rulings are rejected with 401. Image upload additionally needs `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` (see below). To embed Agent profiles, also export `OPENAI_API_KEY` (the arbitrator's key works); without it registration and profile edits still work, the Agents just have no vector yet, and the re-embed sweeper fills them in once a key is set and the backend restarts.
 
 **3. Arbitrator.** Start it **after** the backend, which declares the queue. It needs `arbitration/.env` (see [its README](../../arbitration/README.md)).
 
@@ -112,7 +112,7 @@ Only Postgres moves; RabbitMQ stays local. Supabase data persists, so demo rows 
 export DB_URL='jdbc:postgresql://aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require' DB_USERNAME='postgres.<project-ref>' DB_PASSWORD='<db-password>'
 ```
 
-The backend connects as a privileged role and never uses the Data API. Because money tables live in `public`, disable the project's Data API or enable deny-all RLS on them.
+Supabase ships pgvector, and the `V36` migration enables it (`CREATE EXTENSION vector`), so the migrating role needs permission to create extensions (the default `postgres` role has it). The backend connects as a privileged role and never uses the Data API. Because money tables live in `public`, disable the project's Data API or enable deny-all RLS on them.
 
 ## Supabase Storage (agent images)
 
@@ -139,6 +139,7 @@ Then stop the uvicorn, cloudflared, mvn and npm processes.
 | `docker info` succeeds but containers fail | It exits 0 with the daemon down | Poll `docker ps` with a timeout |
 | RabbitMQ exits: `.erlang.cookie: eacces` | Cookie created root-owned | Recreate with `--user 100:101` |
 | JVM: `Unable to establish loopback connection`, `Invalid argument: connect` | AF_UNIX sockets fail under `AppData\Local\Temp` on this Windows build | `-Djdk.net.unixdomain.tmpdir=<dir under the user profile>` via `JAVA_TOOL_OPTIONS`; needed for `mvn test` too |
+| Flyway fails at `V36`: `extension "vector" is not available` | The Postgres image has no pgvector | Recreate `hireai-pg` from `pgvector/pgvector:pg16` (the data volume of a plain `postgres:16` container works with it) |
 | `uv run pytest` hangs in `arbitration/` | `test_health_ok` reads the real `.env` and starts a live consumer | `OPENAI_API_KEY= ARBITRATION_CALLBACK_SECRET= uv run pytest` |
 | Registering a webhook fails: `Webhook URL must be HTTPS` | Unconditional at registration (Inv #6) | Use the tunnel URL |
 | Every dispatch fails after restarting the tunnel | Quick tunnels get a new hostname, and no endpoint edits a webhook. Retries dead-letter, and the task ends `FAILED` and refunded | Repoint with the SQL below |

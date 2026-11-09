@@ -1,5 +1,6 @@
 package com.hireai.ledger;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.application.biz.ledger.wallet.BuilderEarningsReadAppService;
 import com.hireai.application.biz.ledger.wallet.BuilderEarningsReadAppService.Earnings;
@@ -50,7 +51,7 @@ class BuilderEarningsIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

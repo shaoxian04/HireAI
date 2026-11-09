@@ -106,6 +106,18 @@ hireai:
     retry-delays: ${DISPATCH_RETRY_DELAYS:5s,10s,15s}
     # Concurrent dispatch consumers (prefetch 1 each), so one hanging Agent holds only one.
     consumers: ${DISPATCH_CONSUMERS:4}
+  embedding:
+    # Agent profile embeddings (OpenAI). Without an API key nothing is sent and Agents simply have
+    # no vector yet; registration and profile edits never wait on or fail because of the provider.
+    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+    api-key: ${OPENAI_API_KEY:}
+    # Changing the model makes every stored vector stale: the re-embed sweeper replaces them.
+    # The vector column is 1536-dimensional, so the model must produce (or be cut to) 1536.
+    model: ${EMBEDDING_MODEL:text-embedding-3-small}
+    # Connect and read timeout per embedding request.
+    timeout: ${EMBEDDING_TIMEOUT:PT2S}
+    # Re-embed sweeper: fills missing vectors and replaces stale-text or other-model ones.
+    sweep-interval: ${EMBEDDING_SWEEP_INTERVAL:PT5M}
   auth:
     # HS256 signing secret for authentication JWTs. MUST be overridden in real deploys.
     # Dev default is >= 32 bytes (HS256 minimum). Never a real secret in git.

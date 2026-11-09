@@ -1,5 +1,6 @@
 package com.hireai.offering;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.port.query.CatalogueQueryPort;
 import com.hireai.application.port.query.CatalogueQueryPort.AgentCardRow;
 import com.hireai.application.port.query.CatalogueQueryPort.AgentProfileRow;
@@ -45,7 +46,7 @@ class CatalogueQueryDaoIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

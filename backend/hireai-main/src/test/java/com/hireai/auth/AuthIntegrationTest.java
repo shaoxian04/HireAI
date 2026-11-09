@@ -1,5 +1,6 @@
 package com.hireai.auth;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hireai.application.biz.task.routing.RoutingAppService;
@@ -48,7 +49,7 @@ class AuthIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
     // Intentionally no RabbitMQ container: @Profile("!test") arbitration beans (RabbitArbitrationClient,
     // ArbitrationDlqListener) are active but safe here because no test opens a dispute, so nothing publishes.
 

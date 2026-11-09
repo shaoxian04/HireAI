@@ -1,5 +1,6 @@
 package com.hireai.apikey;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.domain.biz.task.idempotency.model.IdempotencyRecord;
 import com.hireai.domain.biz.task.idempotency.repository.IdempotencyRepository;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,7 @@ class IdempotencyRepositoryIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
