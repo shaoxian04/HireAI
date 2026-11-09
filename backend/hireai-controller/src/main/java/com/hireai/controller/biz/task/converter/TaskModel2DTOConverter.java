@@ -8,6 +8,7 @@ import com.hireai.domain.biz.ledger.settlement.service.SettlementPolicy;
 import com.hireai.domain.shared.model.Money;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 /**
  * Explicit, hand-written converter from the Task domain model to its outbound DTO.
@@ -21,6 +22,11 @@ public final class TaskModel2DTOConverter {
     }
 
     public static TaskDTO toDTO(TaskModel task) {
+        return toDTO(task, null);
+    }
+
+    /** {@code agentId} is the Agent the task was booked with, resolved by the caller (nullable). */
+    public static TaskDTO toDTO(TaskModel task, UUID agentId) {
         OutputSpec spec = task.outputSpec();
         BigDecimal payout = null;
         BigDecimal commission = null;
@@ -52,6 +58,8 @@ public final class TaskModel2DTOConverter {
                 payout,
                 commission,
                 refund,
-                task.failureReason() == null ? null : task.failureReason().name());
+                task.failureReason() == null ? null : task.failureReason().name(),
+                task.category(),
+                agentId);
     }
 }

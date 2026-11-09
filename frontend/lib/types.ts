@@ -142,6 +142,10 @@ export interface TaskDTO {
   refundAmount?: number | null;
   /** Why the task ended without a delivered result; absent on live and successful tasks. */
   failureReason?: FailureReason | null;
+  /** The capability category the task was matched on. */
+  category?: string;
+  /** The Agent the task was booked with (`GET /tasks/{id}` only; absent when none was). */
+  agentId?: string | null;
 }
 
 /** Mirrors the backend FailureReason enum (set once when a task ends without a result). */

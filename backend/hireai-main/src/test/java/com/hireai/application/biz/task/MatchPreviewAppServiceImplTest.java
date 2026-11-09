@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,7 +53,7 @@ class MatchPreviewAppServiceImplTest {
                 row("Midrange", "15.00", "50.00", 5, 0, 10),
                 row("Pricey", "30.00", "70.00", 5, 0, 10)));      // over budget 20 -> near-miss
 
-        MatchPreview preview = service().preview("summarisation", Money.of("20.00"));
+        MatchPreview preview = service().preview("summarisation", Money.of("20.00"), Set.of());
 
         assertThat(preview.shortlist()).extracting(AgentOption::agentName)
                 .containsExactly("Cheap+Good", "Midrange");        // both in budget, best-first
@@ -68,7 +69,7 @@ class MatchPreviewAppServiceImplTest {
                 row("P50", "50.00", "50.00", 5, 0, 0),
                 row("P30", "30.00", "50.00", 5, 0, 0)));
 
-        MatchPreview preview = service().preview("summarisation", Money.of("20.00"));
+        MatchPreview preview = service().preview("summarisation", Money.of("20.00"), Set.of());
 
         assertThat(preview.nearMisses()).extracting(AgentOption::agentName)
                 .containsExactly("P25", "P30", "P40");              // cheapest 3, ascending
@@ -82,7 +83,7 @@ class MatchPreviewAppServiceImplTest {
                 row(higherId, "Second", "40.00", "50.00", 5, 0, 0),
                 row(lowerId, "First", "40.00", "50.00", 5, 0, 0)));
 
-        MatchPreview preview = service().preview("summarisation", Money.of("20.00"));
+        MatchPreview preview = service().preview("summarisation", Money.of("20.00"), Set.of());
 
         assertThat(preview.nearMisses()).extracting(AgentOption::agentVersionId)
                 .containsExactly(lowerId, higherId);
@@ -96,7 +97,7 @@ class MatchPreviewAppServiceImplTest {
                 row("e", "14.00", "50.00", 5, 0, 0), row("f", "15.00", "50.00", 5, 0, 0));
         when(queryPort.findBookableCandidates(anyString())).thenReturn(six);
 
-        assertThat(service().preview("summarisation", Money.of("30.00")).shortlist()).hasSize(5);
+        assertThat(service().preview("summarisation", Money.of("30.00"), Set.of()).shortlist()).hasSize(5);
     }
 
     @Test
@@ -104,7 +105,7 @@ class MatchPreviewAppServiceImplTest {
         when(queryPort.findBookableCandidates(anyString()))
                 .thenReturn(List.of(row("Busy", "10.00", "50.00", 3, 3, 0)));  // inFlight == maxConcurrent
 
-        assertThat(service().preview("summarisation", Money.of("20.00")).shortlist().get(0).available())
+        assertThat(service().preview("summarisation", Money.of("20.00"), Set.of()).shortlist().get(0).available())
                 .isFalse();
     }
 
@@ -112,7 +113,7 @@ class MatchPreviewAppServiceImplTest {
     void emptyWhenNoBookableCandidates() {
         when(queryPort.findBookableCandidates(anyString())).thenReturn(List.of());
 
-        MatchPreview preview = service().preview("summarisation", Money.of("20.00"));
+        MatchPreview preview = service().preview("summarisation", Money.of("20.00"), Set.of());
 
         assertThat(preview.shortlist()).isEmpty();
         assertThat(preview.nearMisses()).isEmpty();
@@ -124,6 +125,25 @@ class MatchPreviewAppServiceImplTest {
                 .thenReturn(List.of(row("Agent", "10.00", "50.00", 5, 0, 0)));
 
         // Rows advertise "summarisation" (lowercase); a mixed-case input must still match after normalization.
-        assertThat(service().preview("Summarisation", Money.of("20.00")).shortlist()).hasSize(1);
+        assertThat(service().preview("Summarisation", Money.of("20.00"), Set.of()).shortlist()).hasSize(1);
+    }
+
+    @Test
+    void anExcludedAgentIsNeverReturnedInEitherList() {
+        ShortlistCandidateRow failedCheap = row("Failed", "10.00", "99.00", 5, 0, 10);
+        ShortlistCandidateRow failedPricey = new ShortlistCandidateRow(failedCheap.agentId(), UUID.randomUUID(),
+                "Failed v2", "tag", "logo", new BigDecimal("30.00"), new BigDecimal("99.00"),
+                new BigDecimal("0.000"), 0L, List.of("summarisation"),
+                "{\"format\":\"JSON\"}", "JSON", "https://a/hook", 60, 5, 0, 10);
+        when(queryPort.findBookableCandidates(anyString())).thenReturn(List.of(
+                failedCheap, failedPricey,
+                row("Other", "12.00", "50.00", 5, 0, 10),
+                row("OtherPricey", "35.00", "50.00", 5, 0, 10)));
+
+        MatchPreview preview = service().preview("summarisation", Money.of("20.00"),
+                Set.of(failedCheap.agentId()));
+
+        assertThat(preview.shortlist()).extracting(AgentOption::agentName).containsExactly("Other");
+        assertThat(preview.nearMisses()).extracting(AgentOption::agentName).containsExactly("OtherPricey");
     }
 }

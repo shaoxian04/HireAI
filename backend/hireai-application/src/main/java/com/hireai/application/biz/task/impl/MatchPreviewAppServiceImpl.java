@@ -16,6 +16,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -32,9 +33,13 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
 
     @Override
     @Transactional(readOnly = true)
-    public MatchPreview preview(String category, Money budget) {
+    public MatchPreview preview(String category, Money budget, Set<UUID> excludedAgentIds) {
         String normalized = category == null ? "" : category.trim().toLowerCase(Locale.ROOT);
-        List<ShortlistCandidateRow> rows = queryPort.findBookableCandidates(normalized);
+        Set<UUID> excluded = excludedAgentIds == null ? Set.of() : excludedAgentIds;
+        // Excluded before ranking, so they leave the shortlist and the near-misses alike.
+        List<ShortlistCandidateRow> rows = queryPort.findBookableCandidates(normalized).stream()
+                .filter(r -> !excluded.contains(r.agentId()))
+                .toList();
 
         Map<UUID, ShortlistCandidateRow> byVersion = rows.stream()
                 .collect(Collectors.toMap(ShortlistCandidateRow::agentVersionId, Function.identity(),

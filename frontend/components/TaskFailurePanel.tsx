@@ -1,9 +1,11 @@
 "use client";
 
-import Link from "next/link";
+import { ButtonLink } from "@/components/ui";
+import { rebookHref } from "@/lib/rebook";
 import type { FailureReason, TaskStatus, ValidationReportDTO } from "@/lib/types";
 
 interface Props {
+  taskId: string;
   status: TaskStatus;
   /** Why the task ended (absent on tasks that ended before reasons were recorded). */
   failureReason?: FailureReason | null;
@@ -16,7 +18,6 @@ interface Copy {
   tone: Tone;
   headline: string;
   why: string;
-  action: { label: string; href: string };
 }
 
 const COPY: Partial<Record<TaskStatus, Copy>> = {
@@ -24,31 +25,27 @@ const COPY: Partial<Record<TaskStatus, Copy>> = {
     tone: "red",
     headline: "The result didn't meet the spec",
     why: "The agent returned something, but it failed the automated output check for this task — so you were never charged for it.",
-    action: { label: "Submit a new task", href: "/client/tasks/new" },
   },
   TIMED_OUT: {
     tone: "amber",
     headline: "The agent ran out of time",
     why: "This agent accepted your task but didn't return a result within its deadline. That's on the agent, not you.",
-    action: { label: "Try another agent", href: "/client/tasks/new" },
   },
   FAILED: {
     tone: "red",
     headline: "We couldn't reach the agent",
     why: "We tried to hand your task to the agent but its service didn't respond. No work started, so there's nothing to review.",
-    action: { label: "Try another agent", href: "/client/tasks/new" },
   },
   CANCELLED: {
     tone: "dim",
     headline: "No agent was available",
     why: "We kept looking for a free agent in this category but none opened up in time, so we released your task rather than hold your credits.",
-    action: { label: "Browse the marketplace", href: "/client" },
   },
 };
 
 /**
- * Plain-words explanation per FailureReason. The status still decides the tone and the action;
- * the reason, when present, decides what we say happened.
+ * Plain-words explanation per FailureReason. The status still decides the tone; the reason, when
+ * present, decides what we say happened. Every failed end state offers the same rebook action.
  */
 const REASON_COPY: Record<FailureReason, { headline: string; why: string }> = {
   AGENT_UNREACHABLE: {
@@ -101,7 +98,7 @@ const HEAD_CLS: Record<Tone, string> = {
   dim: "text-fg",
 };
 
-export function TaskFailurePanel({ status, failureReason, budget, detail }: Props) {
+export function TaskFailurePanel({ taskId, status, failureReason, budget, detail }: Props) {
   const statusCopy = COPY[status];
   if (!statusCopy) return null;
   const copy = { ...statusCopy, ...(failureReason ? REASON_COPY[failureReason] : {}) };
@@ -141,12 +138,10 @@ export function TaskFailurePanel({ status, failureReason, budget, detail }: Prop
         </details>
       )}
 
-      <Link
-        href={copy.action.href}
-        className="inline-flex h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-ink transition hover:bg-accent-2"
-      >
-        {copy.action.label}
-      </Link>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <ButtonLink href={rebookHref(taskId)}>Choose another agent</ButtonLink>
+        <p className="text-xs text-dim">Your task, filled in again, with this agent left off the shortlist.</p>
+      </div>
     </section>
   );
 }

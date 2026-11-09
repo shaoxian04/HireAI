@@ -6,16 +6,20 @@ import { server, ok } from "../../../../test/msw/handlers";
 import { AuthProvider } from "@/lib/auth";
 import SubmitTaskPage from "@/app/client/tasks/new/page";
 
+const nav = vi.hoisted(() => ({ search: "" }));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   useParams: () => ({}),
   usePathname: () => "/client/tasks/new",
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   server.resetHandlers();
   localStorage.clear();
+  nav.search = "";
 });
 afterAll(() => server.close());
 
@@ -236,5 +240,106 @@ describe("submit task — escrow preview", () => {
     expect(screen.getByText(/nothing is frozen yet/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/budget/i), { target: { value: "2000" } });
     expect(await screen.findByText(/more than you have available/i)).toBeInTheDocument();
+  });
+});
+
+// "Choose another agent" on a failed task (#79) opens this page as /client/tasks/new?rebook=<id>.
+describe("submit task — rebook a failed task", () => {
+  const failedTask = {
+    id: "t-7", clientId: "u-1", title: "Quarterly digest", description: "Summarise the Q3 board pack",
+    budget: 15, status: "FAILED", failureReason: "AGENT_BUSY", category: "summarisation",
+    agentId: "a-failed", createdAt: "2026-11-01T10:00:00Z",
+    outputSpec: { format: "JSON", schema: null, acceptanceCriteria: "ok" },
+  };
+
+  it("prefills the failed task over any saved draft", async () => {
+    localStorage.setItem(
+      "hireai.taskDraft",
+      JSON.stringify({ title: "Old draft", description: "d", category: "translation", budget: "99" }),
+    );
+    nav.search = "rebook=t-7";
+    server.use(http.get("*/api/tasks/t-7", () => ok(failedTask)));
+    renderPage();
+
+    expect(await screen.findByDisplayValue("Quarterly digest")).toBeInTheDocument();
+    expect(screen.getByLabelText(/description/i)).toHaveValue("Summarise the Q3 board pack");
+    expect(screen.getByLabelText(/category/i)).toHaveValue("summarisation");
+    expect(screen.getByLabelText(/budget/i)).toHaveValue(15);
+    expect(screen.getByText(/the agent that failed it is left off the shortlist/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /find agents/i })).toBeEnabled();
+  });
+
+  it("leaves the failed agent out of the shortlist search", async () => {
+    nav.search = "rebook=t-7";
+    let calledUrl: URL | null = null;
+    server.use(
+      http.get("*/api/tasks/t-7", () => ok(failedTask)),
+      http.get("*/api/tasks/match-preview", ({ request }) => {
+        calledUrl = new URL(request.url);
+        return ok(previewBody);
+      }),
+    );
+    renderPage();
+    await screen.findByDisplayValue("Quarterly digest");
+
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+
+    await waitFor(() => expect(calledUrl).not.toBeNull());
+    expect(calledUrl!.searchParams.getAll("exclude")).toEqual(["a-failed"]);
+    expect(calledUrl!.searchParams.get("category")).toBe("summarisation");
+    expect(calledUrl!.searchParams.get("budget")).toBe("15");
+  });
+
+  it("books the new pick as a new task and leaves the failed one alone", async () => {
+    nav.search = "rebook=t-7";
+    let captured: Record<string, unknown> | null = null;
+    server.use(
+      http.get("*/api/tasks/t-7", () => ok(failedTask)),
+      http.get("*/api/tasks/match-preview", () => ok(previewBody)),
+      http.post("*/api/tasks/direct", async ({ request }) => {
+        captured = (await request.json()) as Record<string, unknown>;
+        return ok({ id: "t-8", status: "SUBMITTED" });
+      }),
+    );
+    renderPage();
+    await screen.findByDisplayValue("Quarterly digest");
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    await screen.findByRole("dialog", { name: /pick your agent/i });
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(await screen.findByRole("button", { name: /confirm & book/i }));
+
+    await waitFor(() => expect(captured).not.toBeNull());
+    expect(captured).toEqual({
+      title: "Quarterly digest", description: "Summarise the Q3 board pack", budget: 12, agentId: "a-1",
+    });
+  });
+
+  it("falls back to a blank form when the failed task can't be loaded", async () => {
+    nav.search = "rebook=t-404";
+    server.use(
+      http.get("*/api/tasks/t-404", () =>
+        HttpResponse.json({ success: false, code: "NOT_FOUND", message: "Task not found" }, { status: 404 })),
+    );
+    renderPage();
+
+    expect(await screen.findByText(/couldn't load the task to rebook/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/title/i)).toHaveValue("");
+  });
+
+  it("sends no exclusion on an ordinary new task", async () => {
+    let calledUrl: URL | null = null;
+    server.use(
+      http.get("*/api/tasks/match-preview", ({ request }) => {
+        calledUrl = new URL(request.url);
+        return ok(previewBody);
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+
+    await waitFor(() => expect(calledUrl).not.toBeNull());
+    expect(calledUrl!.searchParams.has("exclude")).toBe(false);
   });
 });

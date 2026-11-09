@@ -1,6 +1,8 @@
 package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.task.TaskReadAppService;
+import com.hireai.domain.biz.offering.agent.info.AgentReputationTarget;
+import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView;
 import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -28,6 +31,20 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     private final TaskRepository taskRepository;
     private final OutputSpecJsonMapper outputSpecJsonMapper;
     private final DispatchAttemptRepository dispatchAttemptRepository;
+    private final AgentRepository agentRepository;
+
+    @Override
+    public Optional<UUID> findBookedAgentId(TaskModel task) {
+        UUID versionId = task.agentVersionId() != null
+                ? task.agentVersionId()
+                : taskRepository.findPinnedAgentVersionId(task.id()).orElse(null);
+        if (versionId == null) {
+            return Optional.empty();
+        }
+        // No status filter: the Agent may have been deactivated since, which is often why it failed.
+        return agentRepository.findReputationTargetByVersionId(versionId)
+                .map(AgentReputationTarget::agentId);
+    }
 
     @Override
     public List<DispatchAttemptView> listDispatchAttempts(UUID taskId, UUID clientId) {

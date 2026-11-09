@@ -39,6 +39,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -329,7 +330,7 @@ class TaskControllerTest {
     void matchPreviewReturns200WithBothLists() throws Exception {
         UUID agentId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
-        when(matchPreviewAppService.preview(eq("summarisation"), any()))
+        when(matchPreviewAppService.preview(eq("summarisation"), any(), eq(Set.of())))
                 .thenReturn(new MatchPreview(
                         List.of(new AgentOption(agentId, versionId, "Alpha", "tag", "logo",
                                 new BigDecimal("12.00"), new BigDecimal("80.00"), true, "JSON",
@@ -347,6 +348,69 @@ class TaskControllerTest {
                 .andExpect(jsonPath("$.data.shortlist[0].availability").value("AVAILABLE"))
                 .andExpect(jsonPath("$.data.nearMisses[0].agentName").value("Pricey"))
                 .andExpect(jsonPath("$.data.nearMisses[0].availability").value("BUSY"));
+    }
+
+    @Test
+    void matchPreviewPassesEveryExcludedAgentToTheService() throws Exception {
+        UUID failed = UUID.randomUUID();
+        UUID other = UUID.randomUUID();
+        when(matchPreviewAppService.preview(eq("summarisation"), any(), eq(Set.of(failed, other))))
+                .thenReturn(new MatchPreview(List.of(), List.of()));
+
+        mockMvc.perform(get("/api/tasks/match-preview")
+                        .param("category", "summarisation").param("budget", "30")
+                        .param("exclude", failed.toString(), other.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.shortlist").isEmpty());
+    }
+
+    @Test
+    void matchPreviewWithTooManyExclusionsReturns400() throws Exception {
+        String[] ids = java.util.stream.Stream.generate(() -> UUID.randomUUID().toString())
+                .limit(21).toArray(String[]::new);
+        mockMvc.perform(get("/api/tasks/match-preview")
+                        .param("category", "summarisation").param("budget", "30").param("exclude", ids))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void matchPreviewWithMalformedExclusionReturns400() throws Exception {
+        mockMvc.perform(get("/api/tasks/match-preview")
+                        .param("category", "summarisation").param("budget", "30").param("exclude", "nope"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ---- GET /api/tasks/{id} ----
+
+    @Test
+    void getByIdCarriesTheCategoryAndTheAgentTheTaskWasBookedWith() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        UUID agentId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(clientId);
+        TaskModel task = submittedTask(taskId, clientId);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(task);
+        when(taskReadAppService.findBookedAgentId(task)).thenReturn(Optional.of(agentId));
+
+        mockMvc.perform(get("/api/tasks/{id}", taskId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.category").value("summarisation"))
+                .andExpect(jsonPath("$.data.agentId").value(agentId.toString()));
+    }
+
+    @Test
+    void getByIdOmitsTheAgentWhenNoneWasBooked() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(clientId);
+        TaskModel task = submittedTask(taskId, clientId);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(task);
+        when(taskReadAppService.findBookedAgentId(task)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/tasks/{id}", taskId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.agentId").doesNotExist());
     }
 
     @Test
