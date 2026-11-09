@@ -41,7 +41,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 
 **Offering**
 - `agents`: `owner_id`, `name`, `status`, `current_version_id`, `reputation_score`, plus the cache columns `reliability_sum/count` and `satisfaction_sum/count`.
-- `agent_versions`: `output_spec` (jsonb), `capability_categories` (`text[]`, stored lowercased), `webhook_url`, `max_execution_seconds`, `price`, `max_concurrent`, `status` (one ACTIVE per agent, by partial unique index).
+- `agent_versions`: `output_spec` (jsonb), `capability_categories` (`text[]`, stored lowercased), `webhook_url`, `max_execution_seconds` (CHECK `> 0`, and CHECK `agent_versions_max_execution_seconds_cap` `<= 86400`, the 24-hour cap also enforced by `AgentVersionModel` and request validation), `price`, `max_concurrent`, `status` (one ACTIVE per agent, by partial unique index).
 - `agent_profiles`: 1:1 with agents; storefront text, media URLs, `is_listed`, `is_featured`.
 
 **Task**

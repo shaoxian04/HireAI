@@ -74,6 +74,17 @@ class AgentVersionModelTest {
     }
 
     @Test
+    void createAcceptsExactly24HoursAndRejectsOneSecondMore() {
+        assertThatCode(() -> AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
+                List.of("summarisation"), "https://a.example.com", 86_400, Pricing.of(BigDecimal.ONE), 5))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
+                List.of("summarisation"), "https://a.example.com", 86_401, Pricing.of(BigDecimal.ONE), 5))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("86400");
+    }
+
+    @Test
     void rejectsNullOutputSpec() {
         assertThatThrownBy(() -> AgentVersionModel.create(UUID.randomUUID(), 1, null,
                 List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5))
@@ -128,6 +139,16 @@ class AgentVersionModelTest {
         AgentVersionModel v = AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
                 List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5);
         assertThatThrownBy(() -> v.supersededBy(Pricing.of(BigDecimal.ONE), 0, List.of("summarisation")))
+                .isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void supersededByRejectsMoreThan24Hours() {
+        AgentVersionModel v = AgentVersionModel.create(UUID.randomUUID(), 1, spec(),
+                List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5);
+        assertThat(v.supersededBy(Pricing.of(BigDecimal.ONE), 86_400, List.of("summarisation"))
+                .maxExecutionSeconds()).isEqualTo(86_400);
+        assertThatThrownBy(() -> v.supersededBy(Pricing.of(BigDecimal.ONE), 86_401, List.of("summarisation")))
                 .isInstanceOf(DomainException.class);
     }
 
