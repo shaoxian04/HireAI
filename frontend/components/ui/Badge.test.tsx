@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { Badge, statusColor } from "./Badge";
+import { Badge, statusColor, statusLabel } from "./Badge";
 
 describe("statusColor", () => {
   it("maps every task lifecycle status to a non-empty class string", () => {
@@ -22,9 +22,26 @@ describe("statusColor", () => {
   });
 });
 
+describe("statusLabel", () => {
+  it("gives known statuses a readable label", () => {
+    expect(statusLabel("PENDING_REVIEW")).toBe("Needs review");
+    expect(statusLabel("SPEC_VIOLATION")).toBe("Failed validation");
+  });
+
+  it("sentence-cases an unknown status instead of showing the raw enum", () => {
+    expect(statusLabel("SOME_NEW_STATE")).toBe("Some new state");
+  });
+});
+
 describe("Badge", () => {
-  it("renders its status text", () => {
+  it("renders the readable label and keeps the raw status inspectable", () => {
     render(<Badge status="ACTIVE" />);
-    expect(screen.getByText("ACTIVE")).toBeInTheDocument();
+    const badge = screen.getByText("Active");
+    expect(badge).toHaveAttribute("data-status", "ACTIVE");
+  });
+
+  it("prefers explicit children over the label", () => {
+    render(<Badge status="RESOLVED">Resolved · accepted</Badge>);
+    expect(screen.getByText("Resolved · accepted")).toBeInTheDocument();
   });
 });
