@@ -4,6 +4,7 @@ import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.Container;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.RabbitMQContainer;
+import org.testcontainers.utility.DockerImageName;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -20,6 +21,13 @@ import java.sql.Statement;
  * container (and never fails) on a machine without Docker.
  */
 public final class HarnessContainers {
+
+    /**
+     * The Postgres image for every integration test: Postgres 16 with the pgvector extension, which
+     * the schema needs since #84 ({@code CREATE EXTENSION vector}). Use it for any new container.
+     */
+    public static final DockerImageName POSTGRES_IMAGE =
+            DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres");
 
     private static PostgreSQLContainer<?> postgres;
     private static RabbitMQContainer rabbit;
@@ -38,7 +46,7 @@ public final class HarnessContainers {
 
     public static synchronized PostgreSQLContainer<?> postgres() {
         if (postgres == null) {
-            PostgreSQLContainer<?> container = new PostgreSQLContainer<>("postgres:16-alpine");
+            PostgreSQLContainer<?> container = new PostgreSQLContainer<>(POSTGRES_IMAGE);
             container.start();
             postgres = container;
         }

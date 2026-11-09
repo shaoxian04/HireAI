@@ -1,5 +1,6 @@
 package com.hireai.apikey;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.domain.biz.identity.apikey.model.ApiKeyModel;
 import com.hireai.domain.biz.identity.apikey.model.ApiKeyStatus;
 import com.hireai.domain.biz.identity.apikey.repository.ApiKeyRepository;
@@ -34,7 +35,7 @@ class ApiKeyRepositoryIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

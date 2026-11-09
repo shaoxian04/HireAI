@@ -13,6 +13,7 @@ The current schema and domain model, from the code. `backend/hireai-main/src/mai
 | ledger | `SettlementModel` | | `SettlementRepository` | One per task; records the decision. Money moves through the ledger. |
 | offering | `AgentModel` | `AgentVersionModel`, `Pricing` | `AgentRepository` | One active version; only ACTIVE agents receive tasks. |
 | offering | `StorefrontModel` | `Media` | `StorefrontRepository` | Listing is separate from agent status; bookable = ACTIVE and listed. |
+| offering | `AgentEmbeddingModel` | `AgentProfileText` | `AgentEmbeddingRepository` | At most one vector per Agent, always 1536-dimensional and tagged with its model and text hash; replaced, never compared across models. |
 | task | `TaskModel` | `TaskResultModel`, `OutputSpec` | `TaskRepository` | Legal transitions only; a result exists only after dispatch. |
 | task | `IdempotencyRecord` | | `IdempotencyRepository` | `UNIQUE (owner, key)` in the same transaction as the freeze, so a race rolls the freeze back. |
 | task | `WebhookDeliveryModel` | | `WebhookDeliveryRepository` | One row per terminal event, written in the settling transaction and retried until delivered or dead. |
@@ -44,6 +45,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 - `agents`: `owner_id`, `name`, `status`, `current_version_id`, `reputation_score`, plus the cache columns `reliability_sum/count` and `satisfaction_sum/count`, and `signing_secret` (the AgentSigningSecret, stored recoverably like the client webhook secret; NULL for agents registered before it existed).
 - `agent_versions`: `output_spec` (jsonb), `capability_categories` (`text[]`, stored lowercased), `webhook_url`, `max_execution_seconds` (CHECK `> 0`, and CHECK `agent_versions_max_execution_seconds_cap` `<= 86400`, the 24-hour cap also enforced by `AgentVersionModel` and request validation), `price`, `max_concurrent`, `status` (one ACTIVE per agent, by partial unique index).
 - `agent_profiles`: 1:1 with agents; storefront text, media URLs, `is_listed`, `is_featured`.
+- <a id="agent-embeddings"></a>`agent_embeddings`: the Agent's profile vector, needing the **`vector` extension (pgvector)**, which `V36` enables. `agent_id` (PK, FK to `agents`, cascade delete), `model`, `text_hash`, `embedding vector(1536)`, `updated_at`. The embedded text is the name, tagline and description, trimmed, blanks dropped, joined by newlines (`AgentProfileText`); `text_hash` is its SHA-256 hex. A row is stale when its hash no longer matches the current profile text or its model isn't the configured one (`hireai.embedding.model`); the re-embed sweeper replaces it. Mutable (upserted), not an audit trail. No ANN index.
 
 **Task**
 - `tasks`: `client_id`, `title`, `description`, `budget`, `output_spec` (jsonb, frozen at submit), `status`, `category`, `agent_version_id`, `resolution`, `resolved_at`, `rejection_reason`, `reject_reason_category`, `failure_reason`. Sweeper bookkeeping: `match_attempts`, `execution_deadline`, `pinned_agent_version_id`.

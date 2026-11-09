@@ -1,5 +1,6 @@
 package com.hireai.adjudication;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.biz.task.callback.AgentCallbackAppService;
 import com.hireai.application.biz.task.routing.RoutingAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
@@ -88,7 +89,7 @@ class ValidationGateIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

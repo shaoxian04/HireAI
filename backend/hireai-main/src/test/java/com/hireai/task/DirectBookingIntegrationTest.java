@@ -1,5 +1,6 @@
 package com.hireai.task;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hireai.application.biz.offering.agent.AgentWriteAppService;
@@ -71,7 +72,7 @@ class DirectBookingIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

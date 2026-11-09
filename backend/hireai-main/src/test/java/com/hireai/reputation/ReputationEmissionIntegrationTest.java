@@ -1,5 +1,6 @@
 package com.hireai.reputation;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.biz.adjudication.validation.ValidationAppService;
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
@@ -59,7 +60,7 @@ class ReputationEmissionIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

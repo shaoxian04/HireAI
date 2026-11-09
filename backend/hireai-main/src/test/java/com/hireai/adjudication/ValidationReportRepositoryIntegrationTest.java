@@ -1,5 +1,6 @@
 package com.hireai.adjudication;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.domain.biz.adjudication.enums.Verdict;
 import com.hireai.domain.biz.adjudication.model.CheckResult;
 import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
@@ -45,7 +46,7 @@ class ValidationReportRepositoryIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

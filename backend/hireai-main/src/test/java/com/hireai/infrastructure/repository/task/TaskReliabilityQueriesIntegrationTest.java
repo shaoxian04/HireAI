@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.repository.task;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,7 +51,7 @@ class TaskReliabilityQueriesIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void props(DynamicPropertyRegistry registry) {

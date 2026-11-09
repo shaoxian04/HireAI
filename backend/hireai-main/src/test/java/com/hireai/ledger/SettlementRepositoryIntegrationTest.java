@@ -1,5 +1,6 @@
 package com.hireai.ledger;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.domain.biz.ledger.settlement.enums.SettlementType;
 import com.hireai.domain.biz.ledger.settlement.model.SettlementModel;
 import com.hireai.domain.biz.ledger.settlement.repository.SettlementRepository;
@@ -43,7 +44,7 @@ class SettlementRepositoryIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

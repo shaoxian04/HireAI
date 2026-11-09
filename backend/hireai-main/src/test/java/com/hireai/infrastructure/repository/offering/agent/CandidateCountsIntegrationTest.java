@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.repository.offering.agent;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,7 +50,7 @@ class CandidateCountsIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void props(DynamicPropertyRegistry registry) {

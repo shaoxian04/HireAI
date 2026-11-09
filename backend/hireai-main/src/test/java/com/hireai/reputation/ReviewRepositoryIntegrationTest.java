@@ -1,5 +1,6 @@
 package com.hireai.reputation;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.domain.biz.reputation.model.ReviewModel;
 import com.hireai.domain.biz.reputation.repository.ReviewRepository;
 import org.junit.jupiter.api.Test;
@@ -45,7 +46,7 @@ class ReviewRepositoryIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

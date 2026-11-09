@@ -1,5 +1,6 @@
 package com.hireai.task.routing;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.biz.offering.agent.AgentWriteAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.biz.task.reliability.TaskReliabilityAppService;
@@ -67,7 +68,7 @@ class MatchingEngineIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @Container
     static RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.13-management-alpine");
