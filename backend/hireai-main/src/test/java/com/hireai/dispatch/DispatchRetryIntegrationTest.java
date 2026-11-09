@@ -46,7 +46,6 @@ class DispatchRetryIntegrationTest extends WholeAppIntegrationTest {
 
     @Test
     void anAgentThatKeepsFailingGetsEveryAttemptThenTheTaskFailsWithARefundWebhookAndReputationEvent() {
-        // 500, not 503: the shared Apache HttpClient retries a 429/503 once by itself (#69/#76).
         FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.status(500));
         String category = "x-" + UUID.randomUUID();
         UUID versionId = seedActiveAgent(category, agent.webhookUrl());
@@ -74,6 +73,24 @@ class DispatchRetryIntegrationTest extends WholeAppIntegrationTest {
                 String.class, taskId, versionId)).containsExactly("EXECUTION_FAILED");
         // No fifth attempt after the dead-letter.
         assertThat(agent.workOrders()).hasSize(TOTAL_ATTEMPTS);
+    }
+
+    @Test
+    void aBusyAgentGetsExactlyOneWorkOrderPerAttempt() {
+        // The dispatch HTTP client never resends a POST by itself (the shared Apache client used to
+        // retry a 429/503 once, so each attempt delivered the WorkOrder twice).
+        FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.status(503));
+        String category = "x-" + UUID.randomUUID();
+        seedActiveAgent(category, agent.webhookUrl());
+
+        UUID taskId = submit(newClientWithCredits(), category);
+
+        agent.awaitWorkOrders(TOTAL_ATTEMPTS, Duration.ofSeconds(30));
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                assertThat(status(taskId)).isEqualTo("FAILED"));
+        // Quiet for longer than the client's old automatic-retry delay (~1s).
+        await().during(Duration.ofSeconds(2)).atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                assertThat(agent.workOrders()).hasSize(TOTAL_ATTEMPTS));
     }
 
     @Test

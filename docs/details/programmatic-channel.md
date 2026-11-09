@@ -79,7 +79,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 - `POST /api/webhooks/subscription` with `{apiKeyId, callbackUrl}`. The signing secret is server-generated. Re-registering replaces the active subscription, and there is at most one per key.
 - `GET` with `?apiKeyId=`, and `POST …/rotate-secret`, `POST …/deactivate`, likewise `?apiKeyId=`.
 
-**SSRF guard** (`WebhookUrlValidator`, Inv #6 outbound), checked **at registration and before every delivery attempt**: HTTPS only; the host is DNS-resolved; loopback, link-local (incl. cloud metadata), RFC1918, CGNAT and IPv6 ULA are blocked. `WEBHOOKS_ALLOW_INSECURE_LOCALHOST` exempts `http://localhost` for dev.
+**SSRF guard** (`WebhookUrlValidator`, Inv #6 outbound), checked **at registration and before every delivery attempt**: HTTPS only; the host is DNS-resolved; loopback, link-local (incl. cloud metadata), RFC1918, CGNAT and IPv6 ULA are blocked. `WEBHOOKS_ALLOW_INSECURE_LOCALHOST` exempts `http://localhost` for dev. Agent webhook URLs go through the same guard ([`matching.md`](matching.md#the-workorder)). DNS rebinding between the check and the connection is a known gap.
 
 **Events:** `task.completed` (doorbell) and `task.failed` (doorbell plus `reason` and `refunded`). `reason` is one of `SPEC_VIOLATION`, `FAILED`, `TIMED_OUT`, `CANCELLED`.
 

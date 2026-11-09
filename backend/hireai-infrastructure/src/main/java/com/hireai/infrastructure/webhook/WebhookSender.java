@@ -3,6 +3,7 @@ package com.hireai.infrastructure.webhook;
 import com.hireai.application.port.webhook.WebhookSendResult;
 import com.hireai.application.port.webhook.WebhookSenderPort;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -20,7 +21,7 @@ public class WebhookSender implements WebhookSenderPort {
      * see {@link WebhookRestClientConfig}) — NOT the shared auto-configured builder, so the
      * Inv #6 SSRF guard cannot be bypassed via a callback's 3xx redirect to an internal host.
      */
-    public WebhookSender(RestClient webhookRestClient) {
+    public WebhookSender(@Qualifier("webhookRestClient") RestClient webhookRestClient) {
         this.restClient = webhookRestClient;
     }
 

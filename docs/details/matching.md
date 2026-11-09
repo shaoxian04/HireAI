@@ -146,9 +146,19 @@ The consumer keeps repeats to the minimum, in this order:
 The callback loads the task under the same row lock and accepts a result while the task is `QUEUED` or
 `EXECUTING`, so calling back before the platform has recorded the start is safe.
 
+**Webhook URL guard.** The version's webhook goes through the same SSRF guard as client webhooks
+(`WebhookUrlValidatorPort.assertAgentWebhookDeliverable`, rules in
+[`programmatic-channel.md`](programmatic-channel.md)) at registration, at version publish (the URL carries
+over, so publishing re-checks today's DNS answer) and before every send. Registration and publish reject an
+internal address with the client-webhook error (400 `VALIDATION_ERROR`). The dev opt-in for
+`http://localhost` is `hireai.dispatch.allow-insecure-localhost`.
+
 **Send retries.** Only a failure the Agent is accountable for counts as a failed attempt: its endpoint
-refused or was unreachable, did not answer within the read timeout (the contract is a 2xx within 15s), or
-replied with a non-2xx status (`AgentSendFailedException`, which carries the status for later busy handling).
+refused or was unreachable, did not answer within the read timeout (the contract is a 2xx within 15s),
+replied with a non-2xx status (`AgentSendFailedException`, which carries the status for later busy handling),
+or its host now resolves to an internal address (the send-time guard; nothing is sent). A 3xx counts as a
+non-2xx reply: the dispatch client (`AgentDispatchRestClientConfig`) never follows redirects and never
+resends a POST by itself, so the Agent gets exactly one WorkOrder per attempt.
 The work-order connect and read timeouts are 5s and 15s. The consumer never waits in place: it republishes
 the message to a retry queue and acknowledges it, so other dispatches keep flowing.
 
