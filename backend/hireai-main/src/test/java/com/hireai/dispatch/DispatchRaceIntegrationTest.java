@@ -49,6 +49,7 @@ class DispatchRaceIntegrationTest extends WholeAppIntegrationTest {
                 .withCallback(AgentCallback.completed().beforeReply()));
         String category = "x-" + UUID.randomUUID();
         seedActiveAgent(category, agent.webhookUrl());
+        shareSigningSecret(agent);
 
         UUID taskId = submit(category);
 
@@ -70,6 +71,7 @@ class DispatchRaceIntegrationTest extends WholeAppIntegrationTest {
                 .withCallback(AgentCallback.completed().afterReply(Duration.ofSeconds(2))));
         String category = "x-" + UUID.randomUUID();
         seedActiveAgent(category, agent.webhookUrl());
+        shareSigningSecret(agent);
 
         UUID taskId = submit(category);
 

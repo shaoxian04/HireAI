@@ -54,6 +54,7 @@ public final class FakeAgent implements AutoCloseable {
     private final AtomicReference<FakeAgentReply> defaultReply = new AtomicReference<>(FakeAgentReply.ok());
     private final AtomicReference<CountDownLatch> hangRelease = new AtomicReference<>(new CountDownLatch(1));
     private final AtomicInteger sequence = new AtomicInteger();
+    private final String signingSecret = newSigningSecret();
     private volatile boolean closed;
 
     private FakeAgent(HttpServer server) {
@@ -74,6 +75,15 @@ public final class FakeAgent implements AutoCloseable {
     /** The URL to register as this Agent's webhook ({@code http://localhost:<port>/work-orders}). */
     public String webhookUrl() {
         return "http://localhost:" + server.getAddress().getPort() + PATH;
+    }
+
+    /**
+     * This Agent's own signing secret ({@code agsec_} + 64 hex, random per Agent), used to sign
+     * its scripted callbacks. The platform accepts them only once the same value is stored on the
+     * Agent's row ({@code WholeAppIntegrationTest.shareSigningSecret}).
+     */
+    public String signingSecret() {
+        return signingSecret;
     }
 
     /** Answer every WorkOrder with {@code reply} once the one-off queue is empty. */
@@ -167,7 +177,7 @@ public final class FakeAgent implements AutoCloseable {
     private void sendCallback(AgentCallback callback, RecordedWorkOrder order) {
         CallbackRequest request = null;
         try {
-            request = callback.buildFor(order);
+            request = callback.buildFor(order, signingSecret);
             HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(request.url()))
                     .timeout(Duration.ofSeconds(30))
                     .POST(HttpRequest.BodyPublishers.ofByteArray(request.bodyBytes()));
@@ -212,6 +222,12 @@ public final class FakeAgent implements AutoCloseable {
                 throw new AssertionError("Interrupted while waiting for " + what, ex);
             }
         }
+    }
+
+    private static String newSigningSecret() {
+        byte[] random = new byte[32];
+        new java.security.SecureRandom().nextBytes(random);
+        return "agsec_" + java.util.HexFormat.of().formatHex(random);
     }
 
     private static java.util.concurrent.ThreadFactory daemon(String name) {

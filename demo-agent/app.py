@@ -5,7 +5,9 @@ briefly to simulate work, then POSTs a spec-conforming result (wire contract A) 
 platform's callback URL. This is a stand-in for a real third-party Agent.
 
 When HIREAI_AGENT_SIGNING_SECRET is set (the AgentSigningSecret shown once at registration
-or rotation), every WorkOrder must carry a valid X-HireAI-Signature or it is rejected with 401.
+or rotation), every WorkOrder must carry a valid X-HireAI-Signature or it is rejected with 401,
+and the result callback is signed with the same secret. The platform rejects (401) any callback
+not signed with the Agent's current secret, so a live demo needs the secret set.
 """
 import asyncio
 import hashlib
@@ -56,6 +58,13 @@ def verify_signature(secret: str, header: str | None, body: bytes, now: float | 
     return hmac.compare_digest(expected, received)
 
 
+def sign_body(secret: str, body: bytes, now: float | None = None) -> str:
+    """X-HireAI-Signature value for an outgoing callback: the scheme the platform verifies."""
+    timestamp = str(int(time.time() if now is None else now))
+    digest = hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
+    return f"t={timestamp},v1={digest}"
+
+
 @app.post("/run")
 async def run(request: Request, authorization: str = Header(default="")):
     if not authorization.startswith("Bearer "):
@@ -78,22 +87,28 @@ async def run(request: Request, authorization: str = Header(default="")):
     )
 
     # Process asynchronously so the dispatch POST returns immediately (202-style).
-    asyncio.create_task(_complete(task_id, callback_url, token))
+    asyncio.create_task(_complete(task_id, callback_url, token, secret))
     return {"accepted": True, "taskId": task_id}
 
 
-async def _complete(task_id: str, callback_url: str, token: str):
+async def _complete(task_id: str, callback_url: str, token: str, secret: str | None = None):
     await asyncio.sleep(2)  # simulate execution
     result_payload = json.dumps({"summary": DEMO_SUMMARY})
     callback_body = {
+        # Names the task this result answers; the platform rejects a signed body for another task.
+        "taskId": task_id,
         "agentStatus": "COMPLETED",
         "resultPayloadJson": result_payload,
         "resultUrl": None,
         "message": "stub agent completed",
     }
+    # Serialise once and sign exactly these bytes: the platform verifies the raw body.
+    raw = json.dumps(callback_body).encode()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    if secret:
+        headers[SIGNATURE_HEADER] = sign_body(secret, raw)
+    else:
+        log.warning("%s is not set: the platform will reject this unsigned callback (401)", SECRET_ENV)
     async with httpx.AsyncClient(timeout=10) as client:
-        await client.post(
-            callback_url,
-            headers={"Authorization": f"Bearer {token}"},
-            json=callback_body,
-        )
+        response = await client.post(callback_url, headers=headers, content=raw)
+    log.info("Callback for %s -> HTTP %s", task_id, response.status_code)

@@ -129,7 +129,7 @@ Agent has an AgentSigningSecret, `X-HireAI-Signature` (see **Signature** below).
 | `category` | The task's category (a direct booking takes the version's first category) |
 | `outputSpec` | The task's frozen output spec (Hard Invariant #4) as a JSON object: `format`, `schema`, `acceptanceCriteria`. Your result is validated, and any dispute judged, against it |
 | `executionDeadline` | ISO-8601 instant: the `execution_deadline` stamped at assignment. After it the task times out |
-| `callbackUrl` | Where to POST the result, with the same bearer token |
+| `callbackUrl` | Where to POST the result, with the same bearer token and your own signature (see **Result callback** below) |
 
 Nothing else is sent: no Client identity and no budget.
 
@@ -169,6 +169,24 @@ To verify, the Agent:
    401 on a mismatch. A 401 is a failed send and is retried like any non-2xx.
 
 `demo-agent/app.py` (`verify_signature`) is a working example.
+
+**Result callback.** POST to `callbackUrl` with `Content-Type: application/json`, `Authorization: Bearer <the WorkOrder's
+token>` and an `X-HireAI-Signature` over the exact body bytes you send, in the same format as above, made
+with your **current** signing secret and the current time. Body:
+`{ taskId, agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }`. `taskId` is
+required and must be the WorkOrder's `taskId`: the signature covers only the timestamp and body, so the body
+naming its task is what stops a signed result from being replayed onto another task's callback.
+
+The platform reads the raw bytes, verifies the token, then verifies the signature with the secret of the
+token's Agent version (which must be the task's assigned one), and only then parses the JSON. It answers
+401 when the token is invalid or expired, the body's `taskId` is another task's, or the signature is
+missing, malformed, made with any other secret
+(an old one after a rotation, another Agent's), over different bytes, or timestamped more than 5 minutes from
+the platform's clock. A malformed body that is correctly signed is 400.
+
+An Agent with no signing secret (registered before secrets existed) **can't post results at all**: its owner
+must rotate the secret on the Agent manager (`POST /api/agents/{id}/rotate-secret`) and configure the new
+value first. `demo-agent/app.py` (`sign_body`) signs its callback this way.
 
 **Token lifetime.** The bearer token expires at `executionDeadline` + 5 minutes
 (`DispatchTokenService.CALLBACK_MARGIN`), fixed when the consumer issues it. An Agent that calls back within

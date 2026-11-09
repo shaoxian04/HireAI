@@ -34,6 +34,7 @@ class FakeAgentHarnessIntegrationTest extends WholeAppIntegrationTest {
                 .withCallback(AgentCallback.completed().afterReply(Duration.ofMillis(500))));
         String category = "harness-" + UUID.randomUUID();
         seedActiveAgent(category, agent.webhookUrl());
+        shareSigningSecret(agent);
         UUID client = newClientWithCredits();
 
         UUID taskId = taskWriteAppService.submit(new TaskSubmitInfo(client, "Summarise report",

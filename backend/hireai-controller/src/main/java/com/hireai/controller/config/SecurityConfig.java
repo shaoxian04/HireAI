@@ -20,7 +20,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *
  * <p><b>Default / prod / dev</b> ({@code @Profile("!test")}): the stateless, CSRF-off,
  * JWT-authenticated {@code securedFilterChain} ({@code @Order(2)}). Only login, register, the agent
- * result callback (dispatch-token authenticated — Hard Invariant #6), and the health probe are
+ * result callback (dispatch token + Agent signature — Hard Invariant #6), and the health probe are
  * public; everything else requires a valid JWT. The {@link JwtAuthenticationFilter} runs before the
  * username/password filter; an unauthenticated request to a protected route gets a 401 (no redirect).
  * When OAuth is enabled ({@code hireai.auth.oauth2.enabled=true}, the {@code oauth} profile), a
