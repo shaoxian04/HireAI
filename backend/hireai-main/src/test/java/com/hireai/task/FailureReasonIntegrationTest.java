@@ -63,12 +63,13 @@ class FailureReasonIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
-    void anExhaustedDispatchIsAgentUnreachableInTheApiAndTheWebhook() throws Exception {
+    void anExhaustedDispatchOfADirectBookingIsAgentUnreachableInTheApiAndTheWebhook() throws Exception {
+        // A direct booking: a routed task would fail over instead (#78, RoutedFailoverIntegrationTest).
         FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.status(500));
         String category = "x-" + UUID.randomUUID();
-        seedAgent(category, agent.webhookUrl(), "ACTIVE");
+        UUID versionId = seedAgent(category, agent.webhookUrl(), "ACTIVE");
 
-        UUID taskId = taskWriteAppService.submit(submitInfo(category, null));
+        UUID taskId = taskWriteAppService.submitDirectlyBooked(submitInfo(category, null), versionId);
         subscribeToWebhooks(taskId);
 
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->

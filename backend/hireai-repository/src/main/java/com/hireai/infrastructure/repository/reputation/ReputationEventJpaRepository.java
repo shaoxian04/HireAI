@@ -13,7 +13,7 @@ public interface ReputationEventJpaRepository extends JpaRepository<ReputationEv
 
     List<ReputationEventDO> findByAgentIdOrderByOccurredAtDesc(UUID agentId, Pageable pageable);
 
-    boolean existsByTaskIdAndEventType(UUID taskId, ReputationEventType eventType);
+    boolean existsByTaskIdAndAgentIdAndEventType(UUID taskId, UUID agentId, ReputationEventType eventType);
 
     /**
      * Replays an agent's whole stream and re-derives its aggregates, split by component. Used by

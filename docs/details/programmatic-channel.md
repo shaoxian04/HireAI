@@ -87,8 +87,8 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 **Outbox and sweeper (at-least-once):**
 - The terminal transition writes a `webhook_deliveries` row in the settling transaction. Its `id` doubles as the client-facing event id.
 - An API task whose key has no active subscription gets no row, and registering later does not replay it.
-- A dispatch whose every send attempt failed ends `FAILED` with a refund and a `task.failed` event (`reason` `FAILED`, `failure_reason` `AGENT_UNREACHABLE`). Retry schedule: [`matching.md`](matching.md#the-workorder).
-- An Agent that declines the WorkOrder as busy (429/503) is not retried: the task ends `FAILED` with a refund and a `task.failed` event (`failure_reason` `AGENT_BUSY`), for direct (`agent_id`) and, for now, routed tasks alike.
+- A routed task (no `agent_id`) whose Agent is busy (429/503) or unreachable after every send attempt fails over to another eligible Agent within the same budget, up to 3 distinct Agents, with no event in between ([routed failover](matching.md#routed-failover)). With none left it ends `FAILED` with a refund and a `task.failed` event (`failure_reason` `NO_ALTERNATIVE_AGENT`). `GET /api/tasks/{id}/attempts` shows each Agent tried.
+- A direct (`agent_id`) task is never moved: every send attempt failing ends it `FAILED` with a refund and a `task.failed` event (`reason` `FAILED`, `failure_reason` `AGENT_UNREACHABLE`); a busy decline is not retried and ends it the same way with `failure_reason` `AGENT_BUSY`. Retry schedule: [`matching.md`](matching.md#the-workorder).
 - `WebhookDeliverySweeper` claims due rows with `FOR UPDATE SKIP LOCKED`, which is safe across instances, then signs and POSTs over a redirect-disabled `RestClient`. Failures back off exponentially with a cap until `DEAD`. Values: `hireai.webhooks.*` in `application.yml`.
 
 **Signature:** `X-HireAI-Signature: t=<unix-ts>,v1=<hex hmac-sha256(secret,"{ts}.{body}")>`, with `X-HireAI-Event-Id` and `X-HireAI-Event-Type`. The client recomputes over `"{t}.{rawBody}"` and constant-time-compares `v1`.

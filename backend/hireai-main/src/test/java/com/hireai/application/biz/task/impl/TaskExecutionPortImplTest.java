@@ -20,6 +20,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
+import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
+import com.hireai.application.biz.task.routing.RoutingAppService;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -43,11 +45,79 @@ class TaskExecutionPortImplTest {
     @Mock ReputationWriteAppService reputationWriteAppService;
     @Mock WebhookOutboxAppService webhookOutboxAppService;
     @Mock DispatchAttemptRepository dispatchAttemptRepository;
+    @Mock RoutingAppService routingAppService;
 
     private TaskExecutionPortImpl port() {
         return new TaskExecutionPortImpl(taskRepository, settlementWriteAppService,
                 reputationWriteAppService, webhookOutboxAppService, dispatchAttemptRepository,
-                Clock.fixed(Instant.parse("2026-11-10T00:00:00Z"), ZoneOffset.UTC));
+                Clock.fixed(Instant.parse("2026-11-10T00:00:00Z"), ZoneOffset.UTC), routingAppService);
+    }
+
+    private void pinned(TaskModel task) {
+        when(taskRepository.findPinnedAgentVersionId(task.id())).thenReturn(Optional.of(task.agentVersionId()));
+    }
+
+    // --- Routed failover (#78) ---
+
+    @Test
+    void aDeadLetterForARoutedQueuedTaskRecordsTheFailureAndFailsOver() {
+        TaskModel task = queuedTask();
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
+        when(taskRepository.findPinnedAgentVersionId(task.id())).thenReturn(Optional.empty());
+
+        port().markFailed(task.id(), task.agentVersionId());
+
+        verify(reputationWriteAppService).recordOutcome(task.id(), task.agentVersionId(), task.clientId(),
+                ReputationEventType.EXECUTION_FAILED);
+        verify(dispatchAttemptRepository).append(org.mockito.ArgumentMatchers.argThat(a ->
+                a.outcome() == DispatchOutcome.UNREACHABLE && a.agentVersionId().equals(task.agentVersionId())));
+        verify(routingAppService).failOver(task.id());
+        verify(taskRepository, never()).save(any());
+        verifyNoInteractions(settlementWriteAppService, webhookOutboxAppService);
+    }
+
+    @Test
+    void aBusyReplyForARoutedTaskFailsOverWithoutAReputationEvent() {
+        TaskModel task = queuedTask();
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
+        when(taskRepository.findPinnedAgentVersionId(task.id())).thenReturn(Optional.empty());
+
+        port().declineAsBusy(task.id(), task.agentVersionId());
+
+        verify(dispatchAttemptRepository).append(org.mockito.ArgumentMatchers.argThat(a ->
+                a.outcome() == DispatchOutcome.BUSY));
+        verify(routingAppService).failOver(task.id());
+        verify(taskRepository, never()).save(any());
+        verifyNoInteractions(settlementWriteAppService, webhookOutboxAppService, reputationWriteAppService);
+    }
+
+    @Test
+    void aBusyReplyForAPinnedTaskEndsItWithoutFailover() {
+        TaskModel task = queuedTask();
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
+        pinned(task);
+        when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        port().declineAsBusy(task.id(), task.agentVersionId());
+
+        ArgumentCaptor<TaskModel> captor = ArgumentCaptor.forClass(TaskModel.class);
+        verify(taskRepository).save(captor.capture());
+        assertThat(captor.getValue().failureReason()).isEqualTo(FailureReason.AGENT_BUSY);
+        verifyNoInteractions(routingAppService, reputationWriteAppService);
+    }
+
+    @Test
+    void aDeadLetterForAVersionTheTaskMovedAwayFromIsANoOp() {
+        // The task already failed over: a redelivered dead letter for the old Agent must not
+        // touch the new assignment.
+        TaskModel task = queuedTask();
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
+
+        port().markFailed(task.id(), UUID.randomUUID());
+
+        verify(taskRepository, never()).save(any());
+        verifyNoInteractions(settlementWriteAppService, reputationWriteAppService, webhookOutboxAppService,
+                dispatchAttemptRepository, routingAppService);
     }
 
     private TaskModel queuedTask() {
@@ -117,8 +187,9 @@ class TaskExecutionPortImplTest {
         TaskModel task = queuedTask();
         when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        pinned(task);
 
-        port().markFailed(task.id());
+        port().markFailed(task.id(), task.agentVersionId());
 
         ArgumentCaptor<TaskModel> captor = ArgumentCaptor.forClass(TaskModel.class);
         verify(taskRepository).save(captor.capture());
@@ -150,7 +221,7 @@ class TaskExecutionPortImplTest {
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         TaskExecutionPortImpl port = port();
-        port.markFailed(taskId);
+        port.markFailed(taskId, executingTask.agentVersionId());
 
         // verify
         ArgumentCaptor<TaskModel> captor = ArgumentCaptor.forClass(TaskModel.class);
@@ -168,8 +239,9 @@ class TaskExecutionPortImplTest {
                 .assignAndQueue(versionId);
         when(taskRepository.findByIdForUpdate(queued.id())).thenReturn(Optional.of(queued));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        pinned(queued);
 
-        port().markFailed(queued.id());
+        port().markFailed(queued.id(), versionId);
 
         verify(reputationWriteAppService).recordOutcome(queued.id(), versionId, clientId,
                 ReputationEventType.EXECUTION_FAILED);
@@ -194,7 +266,7 @@ class TaskExecutionPortImplTest {
         when(taskRepository.findByIdForUpdate(taskId)).thenReturn(Optional.of(failedTask));
 
         TaskExecutionPortImpl port = port();
-        port.markFailed(taskId);
+        port.markFailed(taskId, failedTask.agentVersionId());
 
         // verify: no save, no settlement, reputation, webhook or second UNREACHABLE attempt
         verify(taskRepository, never()).save(any());

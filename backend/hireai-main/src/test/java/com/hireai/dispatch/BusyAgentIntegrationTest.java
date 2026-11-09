@@ -27,8 +27,8 @@ import static org.awaitility.Awaitility.await;
  * An Agent at capacity declines a WorkOrder with 429 or 503 (#76). The busy reply is final for that
  * Agent: it is not retried, it records a {@code BUSY} dispatch attempt and no reputation event. A
  * pinned (directly booked) task then ends FAILED with {@code AGENT_BUSY}, a refund and a
- * {@code task.failed} webhook. A routed task ends the same way until routed failover (#78)
- * re-routes it instead.
+ * {@code task.failed} webhook. A routed task fails over instead (#78); with no other Agent it ends
+ * FAILED with {@code NO_ALTERNATIVE_AGENT} (failover itself is covered by RoutedFailoverIntegrationTest).
  */
 class BusyAgentIntegrationTest extends WholeAppIntegrationTest {
 
@@ -74,8 +74,9 @@ class BusyAgentIntegrationTest extends WholeAppIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(ints = {429, 503})
-    void aRoutedTaskWhoseAgentIsBusyFailsAsAgentBusyWithoutARetryOrPenalty(int busyStatus) throws Exception {
-        // Interim behaviour: routed failover (#78) will re-route instead of failing.
+    void aRoutedTaskWhoseOnlyAgentIsBusyFailsWithNoAlternativeWithoutARetryOrPenalty(int busyStatus)
+            throws Exception {
+        // Routed failover (#78) looks for another Agent; with none in the category the task ends.
         FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.status(busyStatus));
         String category = "x-" + UUID.randomUUID();
         UUID versionId = seedActiveAgent(category, agent.webhookUrl());
@@ -84,7 +85,7 @@ class BusyAgentIntegrationTest extends WholeAppIntegrationTest {
 
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
                 assertThat(status(taskId)).isEqualTo("FAILED"));
-        assertThat(apiFailureReason(taskId)).isEqualTo("AGENT_BUSY");
+        assertThat(apiFailureReason(taskId)).isEqualTo("NO_ALTERNATIVE_AGENT");
         assertRefunded(taskId);
         assertNotRetriedAndNotPenalised(agent, taskId, versionId);
     }
