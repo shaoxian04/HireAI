@@ -14,7 +14,7 @@ public final class AgentModel2DTOConverter {
     private AgentModel2DTOConverter() {
     }
 
-    public static AgentDTO toDTO(AgentModel agent) {
+    public static AgentDTO toDTO(AgentModel agent, boolean listed) {
         AgentVersionModel version = agent.currentVersion();
         OutputSpec spec = version.outputSpec();
         AgentDTO.AgentVersionDTO versionDTO = new AgentDTO.AgentVersionDTO(
@@ -35,6 +35,7 @@ public final class AgentModel2DTOConverter {
                 agent.reputationScore(),
                 versionDTO,
                 agent.createdAt(),
-                agent.hasSigningSecret());
+                agent.hasSigningSecret(),
+                listed);
     }
 }

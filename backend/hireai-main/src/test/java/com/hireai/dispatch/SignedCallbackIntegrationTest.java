@@ -151,6 +151,7 @@ class SignedCallbackIntegrationTest extends WholeAppIntegrationTest {
         String secret = registered.path("signingSecret").asText();
         jdbc.update("UPDATE agent_versions SET webhook_url = ? WHERE agent_id = ?", agent.webhookUrl(), agentId);
         send("POST", "/api/agents/" + agentId + "/activate", builderJwt, null);
+        jdbc.update("UPDATE agent_profiles SET is_listed = true WHERE agent_id = ?", agentId); // routed work needs a listed storefront (#81)
         Dispatched a = submitTo(category, agent, 1, agentId, secret);
         Dispatched b = submitTo(category, agent, 2, agentId, secret);
 
@@ -197,6 +198,7 @@ class SignedCallbackIntegrationTest extends WholeAppIntegrationTest {
         // Registration only accepts public HTTPS URLs; point the version at the local fake Agent.
         jdbc.update("UPDATE agent_versions SET webhook_url = ? WHERE agent_id = ?", agent.webhookUrl(), agentId);
         send("POST", "/api/agents/" + agentId + "/activate", builderJwt, null);
+        jdbc.update("UPDATE agent_profiles SET is_listed = true WHERE agent_id = ?", agentId); // routed work needs a listed storefront (#81)
         return submitTo(category, agent, 1, agentId, registered.path("signingSecret").asText());
     }
 

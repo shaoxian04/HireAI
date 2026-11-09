@@ -71,6 +71,7 @@ export const handlers = [
         },
         createdAt: "2026-06-06T10:00:00Z",
         hasSigningSecret: true,
+        listed: false,
       },
     ]),
   ),
@@ -91,6 +92,7 @@ export const handlers = [
       },
       createdAt: "2026-06-06T10:00:00Z",
       hasSigningSecret: true,
+      listed: false,
     }),
   ),
 
@@ -523,6 +525,7 @@ const AGENT_DTO_A1 = {
   },
   createdAt: "2026-06-06T10:00:00Z",
   hasSigningSecret: true,
+  listed: true,
 };
 
 export const manageHandlers = [

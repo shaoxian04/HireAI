@@ -92,6 +92,7 @@ class AgentWebhookSsrfIntegrationTest extends WholeAppIntegrationTest {
         String category = uniqueCategory();
         UUID agentId = register("https://" + host + "/run", category);
         assertThat(post("/api/agents/" + agentId + "/activate", "").statusCode()).isEqualTo(200);
+        jdbc.update("UPDATE agent_profiles SET is_listed = true WHERE agent_id = ?", agentId); // routed work needs a listed storefront (#81)
         UUID versionId = jdbc.queryForObject("SELECT current_version_id FROM agents WHERE id = ?", UUID.class, agentId);
         dns.answer(host, "169.254.169.254");
         int lookupsBeforeSend = (int) dns.lookups().stream().filter(host::equals).count();
@@ -198,6 +199,7 @@ class AgentWebhookSsrfIntegrationTest extends WholeAppIntegrationTest {
         UUID versionId = UUID.randomUUID();
         jdbc.update("INSERT INTO agents (id, owner_id, name, status, current_version_id, reputation_score) "
                 + "VALUES (?, ?, 'Fake Agent', 'ACTIVE', ?, 80.00)", agentId, ownerId, versionId);
+        jdbc.update("INSERT INTO agent_profiles (agent_id, is_listed) VALUES (?, true)", agentId);
         jdbc.update("INSERT INTO agent_versions (id, agent_id, version_number, output_spec, capability_categories, "
                         + "webhook_url, max_execution_seconds, price) VALUES (?, ?, 1, ?::jsonb, ?, ?, 60, ?)",
                 versionId, agentId, "{\"format\":\"JSON\"}", new String[]{category}, webhookUrl,

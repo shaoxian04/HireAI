@@ -23,9 +23,23 @@ The web never calls `POST /api/tasks`, so every web task is a pinned direct book
 `rank` plus the 3 cheapest agents above budget (near-misses). The typed budget is only a ceiling for
 ranking. The client pays the chosen agent's price, even for a near-miss above that budget.
 
-**Eligibility differs by path.** Both need an `ACTIVE` agent whose current version covers the category (a slug from the [category list](data-model.md#categories); an unknown one is rejected with a 400 before matching).
-`rank` also needs `price <= budget`. Match-preview additionally requires a listed storefront (`is_listed`);
-`route()` does not, so an unlisted agent can win a routed task.
+**One eligibility, one score.** The shortlist, routed selection and failover consider the same Agents
+and score them the same way; only the platform's own picks (`selectOne`) add the ε lottery. An Agent is
+eligible when:
+
+- the agent is `ACTIVE` and the version is its current one;
+- its storefront is **listed** (`agent_profiles.is_listed`). An unlisted Agent is never shortlisted,
+  routed or failed over to, so it receives no work; the Builder dashboard warns about it (`AgentDTO.listed`);
+- its current version covers the category (a slug from the [category list](data-model.md#categories); an
+  unknown one is rejected with a 400 before matching);
+- `price <= budget` (checked in `rank`).
+
+The SQL half of this lives once, in `MatchCandidateSql` (`ELIGIBLE_FROM` plus the load columns the score
+needs), shared by the shortlist query (`JdbcMatchPreviewQueryDao`) and the routed/failover query
+(`AgentRepository.findActiveCandidates`). The budget filter and the score live once, in
+`RoutingMatchDomainService.rank`. So with `ε = 0` the shortlist's top Agent is the one a routed submit of
+the same task gets. A direct booking is not a selection: it needs an `ACTIVE`, listed agent at booking
+(see [`programmatic-channel.md`](programmatic-channel.md)) and is then dispatched to its pinned version.
 
 ## Scoring
 
@@ -88,7 +102,7 @@ invite a second, paid submit.
 | Pinned task: every dispatch attempt failed (Agent unreachable, timed out or non-2xx) | `FAILED` (`AGENT_UNREACHABLE`) | Yes | Yes | `EXECUTION_FAILED` |
 | Pinned task: the Agent declined as busy (429/503) | `FAILED` (`AGENT_BUSY`) | Yes | Yes | No |
 
-- **`AWAITING_AGENT`** means no `ACTIVE` agent covers the category within budget. Only routed tasks wait
+- **`AWAITING_AGENT`** means no eligible (`ACTIVE`, listed) agent covers the category within budget. Only routed tasks wait
   there. Load is soft, so a busy agent never causes it. The re-match sweeper
   (`AwaitingAgentRematchSweeper`) retries it up to `hireai.matching.rematch-max-attempts` times,
   then cancels with a refund.

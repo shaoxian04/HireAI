@@ -70,6 +70,7 @@ class CandidateCountsIntegrationTest {
     @BeforeEach
     void clearRoutableData() {
         jdbc.update("DELETE FROM tasks");
+        jdbc.update("DELETE FROM agent_profiles");
         jdbc.update("DELETE FROM agent_versions");
         jdbc.update("DELETE FROM agents");
     }
@@ -100,6 +101,7 @@ class CandidateCountsIntegrationTest {
         jdbc.update("INSERT INTO agents (id, owner_id, name, status, current_version_id, reputation_score) " +
                         "VALUES (?, ?, ?, 'ACTIVE', ?, 80.00)",
                 agentId, ownerId, "Candidate Agent", versionId);
+        jdbc.update("INSERT INTO agent_profiles (agent_id, is_listed) VALUES (?, true)", agentId);
         if (maxConcurrent == null) {
             jdbc.update("INSERT INTO agent_versions " +
                             "(id, agent_id, version_number, output_spec, capability_categories, webhook_url, " +

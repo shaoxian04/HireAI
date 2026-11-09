@@ -210,6 +210,7 @@ class RoutedFailoverIntegrationTest extends WholeAppIntegrationTest {
         UUID versionId = UUID.randomUUID();
         jdbc.update("INSERT INTO agents (id, owner_id, name, status, current_version_id, reputation_score) "
                 + "VALUES (?, ?, 'Failover Agent', 'ACTIVE', ?, ?)", agentId, ownerId, versionId, new BigDecimal(reputation));
+        jdbc.update("INSERT INTO agent_profiles (agent_id, is_listed) VALUES (?, true)", agentId);
         jdbc.update("INSERT INTO agent_versions (id, agent_id, version_number, output_spec, capability_categories, "
                         + "webhook_url, max_execution_seconds, price) VALUES (?, ?, 1, ?::jsonb, ?, ?, 60, ?)",
                 versionId, agentId, "{\"format\":\"JSON\"}", new String[]{category}, agent.webhookUrl(),

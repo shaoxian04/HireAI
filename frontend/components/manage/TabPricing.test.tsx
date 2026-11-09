@@ -28,6 +28,7 @@ const AGENT: AgentDTO = {
   reputationScore: 80,
   createdAt: "2026-11-01T00:00:00Z",
   hasSigningSecret: true,
+  listed: true,
   currentVersion: {
     outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "ok" },
     capabilityCategories: ["summarisation"],

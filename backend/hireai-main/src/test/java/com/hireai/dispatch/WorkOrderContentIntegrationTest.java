@@ -46,7 +46,7 @@ class WorkOrderContentIntegrationTest extends WholeAppIntegrationTest {
     void aRoutedSubmitDeliversTheSubmittedContentToTheAgent() throws Exception {
         FakeAgent agent = fakeAgent();
         String category = uniqueCategory();
-        SeededAgent seeded = seedActiveAgent(category, agent.webhookUrl(), false);
+        SeededAgent seeded = seedActiveAgent(category, agent.webhookUrl());
 
         JsonNode task = post("/api/tasks", """
                 {"title":"Quarterly digest","description":"Summarise the Q3 board pack into five bullets",
@@ -68,7 +68,7 @@ class WorkOrderContentIntegrationTest extends WholeAppIntegrationTest {
     void aDirectBookingDeliversTheSubmittedContentToTheAgent() throws Exception {
         FakeAgent agent = fakeAgent();
         String category = uniqueCategory();
-        SeededAgent seeded = seedActiveAgent(category, agent.webhookUrl(), true);
+        SeededAgent seeded = seedActiveAgent(category, agent.webhookUrl());
 
         JsonNode task = post("/api/tasks/direct", """
                 {"title":"Translate memo","description":"Translate the attached memo into formal French",
@@ -117,7 +117,8 @@ class WorkOrderContentIntegrationTest extends WholeAppIntegrationTest {
     private record SeededAgent(UUID agentId, UUID versionId) {
     }
 
-    private SeededAgent seedActiveAgent(String category, String webhookUrl, boolean listed) {
+    /** A listed ACTIVE Agent: routed selection and direct booking both require the storefront listed. */
+    private SeededAgent seedActiveAgent(String category, String webhookUrl) {
         UUID ownerId = UUID.randomUUID();
         jdbc.update("INSERT INTO users (id, email) VALUES (?, ?)", ownerId, ownerId + "@test.local");
         jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'BUILDER')", ownerId);
@@ -128,9 +129,7 @@ class WorkOrderContentIntegrationTest extends WholeAppIntegrationTest {
         jdbc.update("INSERT INTO agent_versions (id, agent_id, version_number, output_spec, capability_categories, "
                         + "webhook_url, max_execution_seconds, price) VALUES (?, ?, 1, ?::jsonb, ?, ?, 60, ?)",
                 versionId, agentId, AGENT_SPEC, new String[]{category}, webhookUrl, new BigDecimal("10.00"));
-        if (listed) {
-            jdbc.update("INSERT INTO agent_profiles (agent_id, tagline, is_listed) VALUES (?, 'T', true)", agentId);
-        }
+        jdbc.update("INSERT INTO agent_profiles (agent_id, tagline, is_listed) VALUES (?, 'T', true)", agentId);
         return new SeededAgent(agentId, versionId);
     }
 }

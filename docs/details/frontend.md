@@ -84,7 +84,7 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
 - `client/become-builder/` — terms acceptance page; calls `useAuth().becomeBuilder()` on confirm,
   which adds the `BUILDER` role and re-issues the token; switches `activeSurface` to `BUILDER` and
   routes to `/builder`.
-- `builder/` — portfolio dashboard (wallet tile links to earnings); `builder/earnings` — earnings
+- `builder/` — portfolio dashboard (wallet tile links to earnings; an amber note and a per-row marker flag agents whose storefront is unlisted, `AgentDTO.listed`, since those receive no work); `builder/earnings` — earnings
   view (lifetime/pending totals from `GET /api/builder/earnings`, per-agent breakdown, payout
   history; amounts derived server-side from `SettlementPolicy`); `builder/agents/new` — register
   an agent (the form shows the WorkOrder acknowledgement contract, `components/AckContract.tsx`), then reveal its signing secret once (`RegisteredAgentDTO.signingSecret`) before routing to

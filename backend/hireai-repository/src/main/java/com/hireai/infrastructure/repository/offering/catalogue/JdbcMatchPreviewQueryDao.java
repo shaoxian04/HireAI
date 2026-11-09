@@ -1,6 +1,7 @@
 package com.hireai.infrastructure.repository.offering.catalogue;
 
 import com.hireai.application.port.query.MatchPreviewQueryPort;
+import com.hireai.infrastructure.repository.offering.agent.MatchCandidateSql;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -13,9 +14,9 @@ import java.util.UUID;
 
 /**
  * JDBC implementation of {@link MatchPreviewQueryPort}. Mirrors the catalogue card projection
- * (agents + agent_profiles + agent_versions) and adds the per-agent in_flight/sample_count
- * subqueries the matcher needs. Bookable = a.status = 'ACTIVE' AND p.is_listed (exactly the direct
- * booking requirement). No price filter — the app service partitions by budget. Category is
+ * (agents + agent_profiles + agent_versions) over the same eligible set routed selection uses
+ * ({@link MatchCandidateSql}: ACTIVE, listed, category), plus the load columns the matcher scores.
+ * No price filter: the app service partitions by budget (shortlist vs near-misses). Category is
  * lowercased before binding (categories are stored lowercase).
  */
 @Repository
@@ -36,21 +37,7 @@ public class JdbcMatchPreviewQueryDao implements MatchPreviewQueryPort {
                    v.output_spec->>'format' AS output_format,
                    v.webhook_url           AS webhook_url,
                    v.max_execution_seconds AS max_execution_seconds,
-                   v.max_concurrent        AS max_concurrent,
-                   (SELECT COUNT(*) FROM tasks t
-                      JOIN agent_versions av ON av.id = t.agent_version_id
-                     WHERE av.agent_id = a.id AND t.status IN ('QUEUED','EXECUTING'))          AS in_flight,
-                   (SELECT COUNT(*) FROM tasks t
-                      JOIN agent_versions av ON av.id = t.agent_version_id
-                     WHERE av.agent_id = a.id
-                       AND t.status IN ('RESOLVED','FAILED','TIMED_OUT','SPEC_VIOLATION'))     AS sample_count
-            FROM agents a
-            JOIN agent_profiles p ON p.agent_id = a.id
-            JOIN agent_versions v ON v.id = a.current_version_id
-            WHERE a.status = 'ACTIVE'
-              AND p.is_listed
-              AND v.capability_categories && ARRAY[:category]::text[]
-            """;
+            """ + MatchCandidateSql.LOAD_COLUMNS + MatchCandidateSql.ELIGIBLE_FROM;
 
     private final NamedParameterJdbcTemplate jdbc;
 

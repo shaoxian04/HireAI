@@ -5,8 +5,10 @@ import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
 import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -20,6 +22,12 @@ public interface AgentReadAppService {
     AgentModel getForOwner(@NonNull UUID agentId, @NonNull UUID ownerId);
 
     List<AgentModel> listForOwner(@NonNull UUID ownerId, @NonNull AgentQuery query);
+
+    /**
+     * The subset of these agents whose storefront is listed. Matching (shortlist, routing, failover)
+     * considers only listed Agents, so the Builder dashboard warns about the others.
+     */
+    Set<UUID> findListedAgentIds(@NonNull Collection<UUID> agentIds);
 
     /**
      * Platform-internal: the AgentSigningSecret used to sign a WorkOrder for this version (empty

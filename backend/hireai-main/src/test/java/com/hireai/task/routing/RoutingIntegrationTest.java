@@ -89,6 +89,7 @@ class RoutingIntegrationTest {
      */
     @BeforeEach
     void clearRoutableAgents() {
+        jdbc.update("DELETE FROM agent_profiles");
         jdbc.update("DELETE FROM agent_versions");
         jdbc.update("DELETE FROM agents");
     }
@@ -197,6 +198,7 @@ class RoutingIntegrationTest {
         jdbc.update("INSERT INTO agents (id, owner_id, name, status, current_version_id, reputation_score, " +
                         "signing_secret) VALUES (?, ?, ?, 'ACTIVE', ?, 80.00, ?)",
                 agentId, ownerId, "Stub Agent", versionId, STUB_SECRET);
+        jdbc.update("INSERT INTO agent_profiles (agent_id, is_listed) VALUES (?, true)", agentId);
         jdbc.update("INSERT INTO agent_versions " +
                         "(id, agent_id, version_number, output_spec, capability_categories, webhook_url, max_execution_seconds, price) " +
                         "VALUES (?, ?, 1, ?::jsonb, ?, ?, 60, ?)",

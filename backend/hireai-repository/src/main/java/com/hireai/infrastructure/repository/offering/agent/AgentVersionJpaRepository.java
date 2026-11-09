@@ -27,9 +27,9 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
     int updateStatus(@Param("agentId") UUID agentId, @Param("from") String from, @Param("to") String to);
 
     /**
-     * One row per ACTIVE agent whose current version covers the requested category and whose
-     * price is within budget. Returns the columns needed to build an AgentCandidate. Uses the
-     * Postgres array-overlap operator (&&) against the GIN-indexed capability_categories.
+     * Routed selection and failover candidates: the shared eligible set ({@link MatchCandidateSql}:
+     * ACTIVE, listed storefront, category) within budget. Returns the columns needed to build an
+     * AgentCandidate. The order is irrelevant; the ranking domain service decides.
      */
     @Query(value = """
             SELECT v.agent_id            AS agent_id,
@@ -40,19 +40,7 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
                    v.max_execution_seconds AS max_execution_seconds,
                    a.reputation_score    AS reputation_score,
                    v.output_spec         AS output_spec,
-                   v.max_concurrent      AS max_concurrent,
-                   (SELECT COUNT(*) FROM tasks t
-                      JOIN agent_versions av ON av.id = t.agent_version_id
-                     WHERE av.agent_id = a.id
-                       AND t.status IN ('QUEUED','EXECUTING'))            AS in_flight,
-                   (SELECT COUNT(*) FROM tasks t
-                      JOIN agent_versions av ON av.id = t.agent_version_id
-                     WHERE av.agent_id = a.id
-                       AND t.status IN ('RESOLVED','FAILED','TIMED_OUT','SPEC_VIOLATION')) AS sample_count
-            FROM agent_versions v
-            JOIN agents a ON a.id = v.agent_id AND a.current_version_id = v.id
-            WHERE a.status = 'ACTIVE'
-              AND v.capability_categories && ARRAY[:category]::text[]
+            """ + MatchCandidateSql.LOAD_COLUMNS + MatchCandidateSql.ELIGIBLE_FROM + """
               AND v.price <= :maxPrice
             ORDER BY a.reputation_score DESC
             """, nativeQuery = true)

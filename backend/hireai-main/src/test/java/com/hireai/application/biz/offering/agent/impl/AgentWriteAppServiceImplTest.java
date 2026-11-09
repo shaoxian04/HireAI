@@ -139,6 +139,10 @@ class AgentWriteAppServiceImplTest {
         @Override public Optional<StorefrontModel> findByAgentId(UUID agentId) {
             return Optional.ofNullable(store.get(agentId));
         }
+        @Override public java.util.Set<UUID> findListedAgentIds(java.util.Collection<UUID> agentIds) {
+            return agentIds.stream().filter(id -> store.containsKey(id) && store.get(id).listed())
+                    .collect(java.util.stream.Collectors.toSet());
+        }
     }
 
     /** Recording event publisher. */

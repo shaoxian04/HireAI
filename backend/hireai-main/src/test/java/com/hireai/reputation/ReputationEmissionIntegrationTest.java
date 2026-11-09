@@ -93,6 +93,7 @@ class ReputationEmissionIntegrationTest {
         jdbc.update("""
                 INSERT INTO agents (id, owner_id, name, status, current_version_id)
                 VALUES (?, ?, 'Emission IT Agent', 'ACTIVE', ?)""", agentId, builderId, versionId);
+                jdbc.update("INSERT INTO agent_profiles (agent_id, is_listed) VALUES (?, true)", agentId);
         jdbc.update("""
                 INSERT INTO agent_versions (id, agent_id, version_number, output_spec,
                                             capability_categories, webhook_url,

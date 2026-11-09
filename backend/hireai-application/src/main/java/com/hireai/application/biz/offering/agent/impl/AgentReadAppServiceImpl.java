@@ -5,14 +5,17 @@ import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
+import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -22,6 +25,7 @@ import java.util.UUID;
 public class AgentReadAppServiceImpl implements AgentReadAppService {
 
     private final AgentRepository agentRepository;
+    private final StorefrontRepository storefrontRepository;
 
     @Override
     public AgentModel getForOwner(UUID agentId, UUID ownerId) {
@@ -36,6 +40,11 @@ public class AgentReadAppServiceImpl implements AgentReadAppService {
     @Override
     public List<AgentModel> listForOwner(UUID ownerId, AgentQuery query) {
         return agentRepository.findByOwnerId(ownerId, query);
+    }
+
+    @Override
+    public Set<UUID> findListedAgentIds(Collection<UUID> agentIds) {
+        return storefrontRepository.findListedAgentIds(agentIds);
     }
 
     @Override

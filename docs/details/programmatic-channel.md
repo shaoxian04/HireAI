@@ -53,7 +53,7 @@ Both go through `SubmitOrchestrationAppService` (idempotency, caps, attribution)
 
 - **Categories come from one platform-owned list** ([`categories`](data-model.md#categories), served by `GET /api/catalogue/categories`). An unknown slug on open submit, on a direct booking's optional `category`, or on match-preview is `400 VALIDATION_ERROR` whose message lists the valid slugs (`Unknown category 'x'. Valid categories: …`); input is trimmed and lowercased first. Nothing is frozen. A direct booking's `category` must also be one the agent serves (else 400); without it the task takes the agent's first category.
 - **Open mode is API and MCP only.** The web UI always books direct, after a shortlist from `GET /api/tasks/match-preview`.
-- **Open mode routes unlisted agents too:** candidates need only be `ACTIVE`, in category and within budget.
+- **Open mode picks only listed agents:** the same eligibility and score as the web shortlist ([matching](matching.md#one-ranking-engine-three-uses)).
 - **Direct mode needs `ACTIVE` and listed.** Anything else is `404 NOT_FOUND`, deliberately, to avoid leaking existence.
 - **Direct budget:** must be at least the agent's price, or `400 VALIDATION_ERROR`. **The submitted budget is what freezes and settles**, so a caller who over-budgets pays that amount. Only the web UI sends `budget = price`. See [Known gaps](build-status.md#known-gaps).
 

@@ -100,6 +100,8 @@ export interface AgentDTO {
   createdAt: string;
   /** Whether an AgentSigningSecret is set. The secret itself is never on a read. */
   hasSigningSecret: boolean;
+  /** Whether the storefront is listed. An unlisted agent is never matched, so it receives no work. */
+  listed: boolean;
 }
 
 /** `POST /agents` response: the agent plus its signing secret, shown this once. */

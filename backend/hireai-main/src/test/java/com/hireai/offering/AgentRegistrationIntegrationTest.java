@@ -143,6 +143,8 @@ class AgentRegistrationIntegrationTest {
         agentWriteAppService.activate(cheap, owner);
         agentWriteAppService.activate(pricey, owner);
         agentWriteAppService.activate(other, owner);
+        jdbc.update("UPDATE agent_profiles SET is_listed = true WHERE agent_id = ?", pricey); // routed work needs a listed storefront (#81)
+        jdbc.update("UPDATE agent_profiles SET is_listed = true WHERE agent_id = ?", cheap); // routed work needs a listed storefront (#81)
         // give 'pricey' the higher reputation so it sorts first
         jdbc.update("UPDATE agents SET reputation_score = 80.00 WHERE id = ?", pricey);
         jdbc.update("UPDATE agents SET reputation_score = 60.00 WHERE id = ?", cheap);

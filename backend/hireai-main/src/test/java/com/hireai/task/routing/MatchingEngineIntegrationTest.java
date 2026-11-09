@@ -156,6 +156,7 @@ class MatchingEngineIntegrationTest {
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
                 List.of(category), webhookUrl, 60, new BigDecimal(price), maxConcurrent)).agentId();
         agentWriteAppService.activate(agentId, owner);
+        jdbc.update("UPDATE agent_profiles SET is_listed = true WHERE agent_id = ?", agentId); // routed work needs a listed storefront (#81)
         UUID versionId = agentRepository.findById(agentId).orElseThrow().currentVersion().id();
         return new AgentSeed(agentId, versionId);
     }
@@ -295,6 +296,7 @@ class MatchingEngineIntegrationTest {
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
                 List.of(category), "https://unused.example/hook-capacity", 60, new BigDecimal("10.00"), 8)).agentId();
         agentWriteAppService.activate(agentId, owner);
+        jdbc.update("UPDATE agent_profiles SET is_listed = true WHERE agent_id = ?", agentId); // routed work needs a listed storefront (#81)
 
         AgentModel agent = agentRepository.findById(agentId).orElseThrow();
         assertThat(agent.currentVersion().maxConcurrent()).isEqualTo(8);

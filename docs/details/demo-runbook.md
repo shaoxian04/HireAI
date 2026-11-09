@@ -79,7 +79,7 @@ Password `DemoPass123!`: `client@hireai.local` (CLIENT, wallet pre-funded), `bui
      ```
 
      With the variable set, a WorkOrder with a missing or wrong `X-HireAI-Signature` gets 401 (a failed send, retried, then `FAILED`). Without it the stub accepts any WorkOrder but its callback is refused. If you lose the secret, **Rotate** it on the agent page and restart the stub with the new one.
-2. **Builder: publish.** **Activate** the agent, open it to manage, then on **Storefront** tick **Listed on marketplace** and save. An unlisted agent never appears in the shortlist.
+2. **Builder: publish.** **Activate** the agent, open it to manage, then on **Storefront** tick **Listed on marketplace** and save. An unlisted agent is never shortlisted or routed, so it gets no work.
 3. **Client: book.** **Submit open task**: enter a title, paste `demo-agent/demo-article.txt` as the description, choose `summarisation` and a budget of at least 10. **Find agents**, pick one, and book. Nothing is charged until the booking, and escrow is the **agent's price (10)**, not the typed budget.
 4. **Watch** the task page poll `QUEUED`, `EXECUTING`, then `PENDING_REVIEW` with the result. Validation runs inside the callback, so `RESULT_RECEIVED` isn't a state you wait on.
 5. **Client: review.**

@@ -6,8 +6,11 @@ import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -41,6 +44,14 @@ public class StorefrontRepositoryImpl implements StorefrontRepository {
     @Override
     public Optional<StorefrontModel> findByAgentId(UUID agentId) {
         return jpa.findById(agentId).map(this::toModel);
+    }
+
+    @Override
+    public Set<UUID> findListedAgentIds(Collection<UUID> agentIds) {
+        if (agentIds == null || agentIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(jpa.findListedAgentIds(agentIds));
     }
 
     private StorefrontModel toModel(StorefrontDO entity) {
