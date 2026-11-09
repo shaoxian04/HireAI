@@ -4,8 +4,10 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -21,5 +23,7 @@ public record PublishVersionRequest(
         @Min(1)
         @Max(value = 86_400, message = "maxExecutionSeconds must be at most 86400 (24 hours)")
         int maxExecutionSeconds,
-        @NotEmpty List<String> capabilityCategories) {
+        @NotEmpty List<@NotBlank @Size(max = 100) String> capabilityCategories,
+        /** Optional free-text proposal for a bucket the category list lacks; stored for admins. */
+        @Size(max = 100) String suggestedCategory) {
 }

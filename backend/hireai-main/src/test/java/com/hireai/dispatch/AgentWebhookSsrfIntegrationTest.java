@@ -89,7 +89,7 @@ class AgentWebhookSsrfIntegrationTest extends WholeAppIntegrationTest {
     @Test
     void aHostWhoseDnsAnswerChangesToAPrivateAddressAfterRegistrationIsBlockedAtSendTime() throws Exception {
         String host = "rebind-" + UUID.randomUUID() + ".example.com";
-        String category = "x-" + UUID.randomUUID();
+        String category = uniqueCategory();
         UUID agentId = register("https://" + host + "/run", category);
         assertThat(post("/api/agents/" + agentId + "/activate", "").statusCode()).isEqualTo(200);
         UUID versionId = jdbc.queryForObject("SELECT current_version_id FROM agents WHERE id = ?", UUID.class, agentId);
@@ -116,7 +116,7 @@ class AgentWebhookSsrfIntegrationTest extends WholeAppIntegrationTest {
         // 307 keeps the method and body, so a client that followed it would re-POST the WorkOrder.
         FakeAgent redirector = fakeAgent().replyWith(FakeAgentReply.status(307)
                 .withHeader("Location", internal.webhookUrl()));
-        String category = "x-" + UUID.randomUUID();
+        String category = uniqueCategory();
         seedActiveAgent(category, redirector.webhookUrl());
 
         UUID taskId = submit(newClientWithCredits(), category);
@@ -132,7 +132,7 @@ class AgentWebhookSsrfIntegrationTest extends WholeAppIntegrationTest {
     void theLocalhostOptInStillDeliversToALocalAgent() {
         FakeAgent local = fakeAgent().replyWith(FakeAgentReply.accepted());
         assertThat(local.webhookUrl()).startsWith("http://localhost");
-        String category = "x-" + UUID.randomUUID();
+        String category = uniqueCategory();
         seedActiveAgent(category, local.webhookUrl());
 
         UUID taskId = submit(newClientWithCredits(), category);

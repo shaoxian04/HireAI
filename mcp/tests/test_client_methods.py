@@ -27,6 +27,15 @@ async def test_list_agents_builds_query_params():
 
 
 @respx.mock
+async def test_list_categories_reads_the_catalogue_categories():
+    rows = [{"category": "summarisation", "label": "Summarisation", "agentCount": 2}]
+    route = respx.get(f"{BASE}/api/catalogue/categories").mock(return_value=ok(rows))
+    out = await client().list_categories()
+    assert out == rows
+    assert route.calls.last.request.headers["Authorization"] == "ApiKey hk_live_testkey"
+
+
+@respx.mock
 async def test_submit_direct_posts_agentid_and_idempotency_key():
     route = respx.post(f"{BASE}/api/tasks/direct").mock(return_value=ok({"id": "t1", "status": "SUBMITTED"}))
     out = await client().submit_direct(title="T", description="d", budget=50, agent_id="a1")

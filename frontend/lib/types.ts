@@ -121,6 +121,8 @@ export interface CreateAgentRequest {
   maxExecutionSeconds: number;
   price: number;
   maxConcurrent: number;
+  /** Optional "suggest a category" text, stored for admins; never used for matching. */
+  suggestedCategory?: string;
 }
 
 // ── Tasks ──
@@ -225,8 +227,10 @@ export interface AgentProfileDTO {
   reviews: CatalogueReviewDTO[];
 }
 
+/** One bucket of the platform-owned category list; `category` is the slug every category field takes. */
 export interface CategoryCountDTO {
   category: string;
+  label: string;
   agentCount: number;
 }
 
@@ -237,6 +241,8 @@ export interface DirectBookRequest {
   description: string;
   budget: number;
   agentId: string;
+  /** Optional slug the agent serves; defaults to the agent's first category. */
+  category?: string;
 }
 
 export type CatalogueSort = "hot" | "rating" | "price_asc" | "price_desc" | "newest";

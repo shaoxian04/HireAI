@@ -78,7 +78,7 @@ class SubmittedSweeperIntegrationTest extends WholeAppIntegrationTest {
                 {"title":"Summarise report","description":"Summarise the attached quarterly report",
                  "category":"%s","budget":30.00,
                  "outputSpec":{"format":"JSON","schema":"{\\"type\\":\\"object\\"}","acceptanceCriteria":"valid JSON"}}
-                """.formatted("x-" + UUID.randomUUID());
+                """.formatted(uniqueCategory());
         ResponseEntity<String> response = new RestTemplate().postForEntity(
                 platformUrl("/api/tasks"), new HttpEntity<>(body, headers), String.class);
 

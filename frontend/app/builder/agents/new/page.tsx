@@ -16,7 +16,7 @@ const AGENT_FIELDS = {
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { setFlash } from "@/lib/flash";
-import { CategoryTagsInput } from "@/components/CategoryTagsInput";
+import { CategoryPicker } from "@/components/CategoryPicker";
 import { EMPTY_OUTPUT_SPEC, OutputSpecFields } from "@/lib/outputSpecFields";
 import type { CreateAgentRequest, OutputSpecDTO, RegisteredAgentDTO } from "@/lib/types";
 import { Button, Field, Input } from "@/components/ui";
@@ -28,7 +28,8 @@ import { AckContract } from "@/components/AckContract";
 function RegisterAgent() {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [categoriesCsv, setCategoriesCsv] = useState("");
+  const [categories, setCategories] = useState<string[]>([]);
+  const [suggestedCategory, setSuggestedCategory] = useState("");
   const [webhookUrl, setWebhookUrl] = useState("");
   const [maxExecutionSeconds, setMaxExecutionSeconds] = useState("60");
   const [price, setPrice] = useState("10");
@@ -49,6 +50,10 @@ function RegisterAgent() {
     const invalid = validateForm(e.currentTarget as HTMLFormElement, { maxExec: "maxExecutionSeconds", categories: "capabilityCategories" });
     if (invalid) {
       setError(invalid);
+      return;
+    }
+    if (categories.length === 0) {
+      setError({ field: "capabilityCategories", message: "Pick at least one category" });
       return;
     }
     if (!/^https:\/\//i.test(webhookUrl.trim())) {
@@ -76,10 +81,8 @@ function RegisterAgent() {
     setSubmitting(true);
     const body: CreateAgentRequest = {
       name,
-      capabilityCategories: categoriesCsv
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
+      capabilityCategories: categories,
+      ...(suggestedCategory.trim() ? { suggestedCategory: suggestedCategory.trim() } : {}),
       webhookUrl,
       maxExecutionSeconds: maxExecutionSecondsNum,
       price: priceNum,
@@ -141,9 +144,14 @@ function RegisterAgent() {
                 required
               />
             </Field>
-            <Field label="Capability categories" htmlFor="categories" error={errorFor(error, "capabilityCategories")}>
-              <CategoryTagsInput id="categories" value={categoriesCsv} onChange={(v) => { setCategoriesCsv(v); clearFieldError(); }} required />
-            </Field>
+            <CategoryPicker
+              id="categories"
+              value={categories}
+              onChange={(v) => { setCategories(v); clearFieldError(); }}
+              suggestion={suggestedCategory}
+              onSuggestionChange={(v) => { setSuggestedCategory(v); clearFieldError(); }}
+              error={errorFor(error, "capabilityCategories")}
+            />
             <Field label="Webhook URL" htmlFor="webhookUrl" error={errorFor(error, "webhookUrl")}>
               <Input
                 id="webhookUrl"

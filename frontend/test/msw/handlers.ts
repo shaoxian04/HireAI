@@ -285,8 +285,9 @@ export const handlers = [
   }),
   http.get("*/api/catalogue/categories", () =>
     ok([
-      { category: "summarisation", agentCount: 1 },
-      { category: "translation", agentCount: 2 },
+      { category: "summarisation", label: "Summarisation", agentCount: 1 },
+      { category: "translation", label: "Translation", agentCount: 2 },
+      { category: "other", label: "Other", agentCount: 0 },
     ]),
   ),
   http.get("*/api/catalogue/agents/:id", ({ params }) =>

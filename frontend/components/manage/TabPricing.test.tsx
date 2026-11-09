@@ -3,14 +3,19 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { TabPricing } from "@/components/manage/TabPricing";
 import type { AgentDTO } from "@/lib/types";
 
-/** Records only the publish call; the category suggestions lookup gets an empty list. */
+/** Records only the publish call; the category list lookup gets two buckets. */
 const apiMock = vi.fn();
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
   return {
     ...actual,
     api: (path: string, init?: RequestInit) =>
-      path.startsWith("/catalogue/") ? Promise.resolve([]) : apiMock(path, init),
+      path.startsWith("/catalogue/")
+        ? Promise.resolve([
+            { category: "summarisation", label: "Summarisation", agentCount: 1 },
+            { category: "other", label: "Other", agentCount: 0 },
+          ])
+        : apiMock(path, init),
   };
 });
 
@@ -56,5 +61,22 @@ describe("TabPricing — execution time limit", () => {
     await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(1));
     const body = JSON.parse((apiMock.mock.calls[0][1] as RequestInit).body as string);
     expect(body.maxExecutionSeconds).toBe(86400);
+  });
+});
+
+describe("TabPricing — category list", () => {
+  beforeEach(() => apiMock.mockReset());
+
+  it("publishes the picked categories and a suggested category", async () => {
+    apiMock.mockResolvedValue(AGENT);
+    render(<TabPricing agentId="a-1" agent={AGENT} onAgentChange={() => {}} />);
+    expect(await screen.findByRole("checkbox", { name: "Summarisation" })).toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Other" }));
+    fireEvent.change(screen.getByLabelText(/suggest a category/i), { target: { value: "Contract redlining" } });
+    fireEvent.click(screen.getByRole("button", { name: /publish version/i }));
+    await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(1));
+    const body = JSON.parse((apiMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.capabilityCategories).toEqual(["summarisation", "other"]);
+    expect(body.suggestedCategory).toBe("Contract redlining");
   });
 });

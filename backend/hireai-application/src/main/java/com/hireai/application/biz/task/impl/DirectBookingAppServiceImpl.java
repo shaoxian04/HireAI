@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -49,18 +50,31 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
         // Pricing rule (budget >= price) is owned by the agent version.
         agent.currentVersion().assertAffordable(info.budget());
 
-        // Adopt the agent's declared output_spec as the task's binding contract (Invariant #4)
-        // and its first capability category as the task category (stats/labels).
+        // Adopt the agent's declared output_spec as the task's binding contract (Invariant #4).
+        // The task category (stats/labels, rebook) is the client's choice when given, which the
+        // agent must serve; otherwise the agent's first capability category.
         TaskSubmitInfo submitInfo = new TaskSubmitInfo(
                 info.clientId(), info.title(), info.description(), info.budget(),
-                agent.currentVersion().outputSpec(),
-                // Safe: AgentVersionModel.create guarantees >= 1 category.
-                agent.currentVersion().capabilityCategories().get(0));
+                agent.currentVersion().outputSpec(), taskCategory(agent, info.category()));
 
         UUID taskId = taskWriteAppService.submitDirectlyBooked(submitInfo, agent.currentVersionId());
         log.info("Task {} direct-booked to agent {} (version {})",
                 taskId, agent.id(), agent.currentVersionId());
         return taskId;
+    }
+
+    private static String taskCategory(AgentModel agent, String requested) {
+        List<String> served = agent.currentVersion().capabilityCategories();
+        if (requested == null) {
+            // Safe: AgentVersionModel.create guarantees >= 1 category.
+            return served.get(0);
+        }
+        if (!served.contains(requested)) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "This agent does not serve category '" + requested + "'. It serves: "
+                            + String.join(", ", served));
+        }
+        return requested;
     }
 
     private boolean isListed(UUID agentId) {

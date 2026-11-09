@@ -45,7 +45,7 @@ class WorkOrderContentIntegrationTest extends WholeAppIntegrationTest {
     @Test
     void aRoutedSubmitDeliversTheSubmittedContentToTheAgent() throws Exception {
         FakeAgent agent = fakeAgent();
-        String category = "x-" + UUID.randomUUID();
+        String category = uniqueCategory();
         SeededAgent seeded = seedActiveAgent(category, agent.webhookUrl(), false);
 
         JsonNode task = post("/api/tasks", """
@@ -67,7 +67,7 @@ class WorkOrderContentIntegrationTest extends WholeAppIntegrationTest {
     @Test
     void aDirectBookingDeliversTheSubmittedContentToTheAgent() throws Exception {
         FakeAgent agent = fakeAgent();
-        String category = "x-" + UUID.randomUUID();
+        String category = uniqueCategory();
         SeededAgent seeded = seedActiveAgent(category, agent.webhookUrl(), true);
 
         JsonNode task = post("/api/tasks/direct", """

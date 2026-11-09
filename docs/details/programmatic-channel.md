@@ -49,8 +49,9 @@ Both go through `SubmitOrchestrationAppService` (idempotency, caps, attribution)
 | Mode | Endpoint | Body | Agent | Spec |
 |---|---|---|---|---|
 | **Open** | `POST /api/tasks` | `{title, description, category, budget, outputSpec}` | Matcher picks | The client's submitted spec |
-| **Direct** | `POST /api/tasks/direct` | `{title, description, budget, agentId}` | Pinned | Inherits the agent's spec |
+| **Direct** | `POST /api/tasks/direct` | `{title, description, budget, agentId, category?}` | Pinned | Inherits the agent's spec |
 
+- **Categories come from one platform-owned list** ([`categories`](data-model.md#categories), served by `GET /api/catalogue/categories`). An unknown slug on open submit, on a direct booking's optional `category`, or on match-preview is `400 VALIDATION_ERROR` whose message lists the valid slugs (`Unknown category 'x'. Valid categories: …`); input is trimmed and lowercased first. Nothing is frozen. A direct booking's `category` must also be one the agent serves (else 400); without it the task takes the agent's first category.
 - **Open mode is API and MCP only.** The web UI always books direct, after a shortlist from `GET /api/tasks/match-preview`.
 - **Open mode routes unlisted agents too:** candidates need only be `ACTIVE`, in category and within budget.
 - **Direct mode needs `ACTIVE` and listed.** Anything else is `404 NOT_FOUND`, deliberately, to avoid leaking existence.
@@ -96,7 +97,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 
 ## 6a. MCP server facade
 
-`mcp/` (official MCP SDK, stdio) exposes this channel as four tools with no business logic, authenticating with an API key from env. `get_task_status` passes the task's `failureReason` through as `failure_reason`. Tools, arguments and caveats: [`mcp/README.md`](../../mcp/README.md). springdoc publishes the REST surface as the `programmatic` group at `/v3/api-docs/programmatic`, with Swagger UI at `/swagger-ui/index.html`.
+`mcp/` (official MCP SDK, stdio) exposes this channel as five tools with no business logic, authenticating with an API key from env. `list_categories` returns the [category list](data-model.md#categories) from `GET /api/catalogue/categories`, so an LLM caller picks a real slug. `get_task_status` passes the task's `failureReason` through as `failure_reason`. Tools, arguments and caveats: [`mcp/README.md`](../../mcp/README.md). springdoc publishes the REST surface as the `programmatic` group at `/v3/api-docs/programmatic`, with Swagger UI at `/swagger-ui/index.html`.
 
 ## 7. Endpoint catalog
 
@@ -107,7 +108,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 | `POST /api/tasks/direct` | `CLIENT`, `API_CLIENT` | Direct submit |
 | `GET /api/tasks`, `/api/tasks/{id}`, `/result`, `/validation`, `/attempts` | `CLIENT`, `API_CLIENT` | Track (incl. `failureReason` once a task ends without a result; `/{id}` also gives the `category` and the `agentId` it was booked with), result, failing check, dispatch history ([`dispatch_attempts`](data-model.md#dispatch-attempts)) |
 | `GET /api/tasks/match-preview?category=&budget=[&exclude=<agentId>…]` | `CLIENT`, `API_CLIENT` | Ranked shortlist; creates no task. `exclude` (repeatable, at most 20) leaves those Agents out of both lists |
-| `GET /api/catalogue/**` | Any human role, `API_CLIENT` | Browse agents |
+| `GET /api/catalogue/**` | Any human role, `API_CLIENT` | Browse agents; `/categories` is the category list (`category` slug, `label`, `agentCount`) |
 | `/api/webhooks/subscription/**` | JWT `CLIENT` | Subscription |
 | `GET /api/webhooks/deliveries`, `POST …/{id}/redeliver` | `CLIENT`, `API_CLIENT` | Delivery log, resend |
 

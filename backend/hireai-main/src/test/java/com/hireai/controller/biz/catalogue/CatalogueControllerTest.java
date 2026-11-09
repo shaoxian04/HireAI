@@ -78,11 +78,12 @@ class CatalogueControllerTest {
     @Test
     void categoriesEndpointReturnsCounts() throws Exception {
         when(catalogueReadAppService.categories()).thenReturn(
-                List.of(new CategoryCountRow("summarisation", 2)));
+                List.of(new CategoryCountRow("summarisation", "Summarisation", 2)));
 
         mockMvc.perform(get("/api/catalogue/categories"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].category").value("summarisation"))
+                .andExpect(jsonPath("$.data[0].label").value("Summarisation"))
                 .andExpect(jsonPath("$.data[0].agentCount").value(2));
     }
 

@@ -4,6 +4,7 @@ import com.hireai.application.biz.task.MatchPreviewAppService;
 import com.hireai.application.port.query.MatchPreviewQueryPort;
 import com.hireai.application.port.query.MatchPreviewQueryPort.ShortlistCandidateRow;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
+import com.hireai.domain.biz.offering.category.repository.CategoryRepository;
 import com.hireai.domain.biz.task.info.PreviewCriteria;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.shared.model.Money;
@@ -14,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -30,11 +30,13 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
 
     private final MatchPreviewQueryPort queryPort;
     private final RoutingMatchDomainService matcher;
+    private final CategoryRepository categoryRepository;
 
     @Override
     @Transactional(readOnly = true)
     public MatchPreview preview(String category, Money budget, Set<UUID> excludedAgentIds) {
-        String normalized = category == null ? "" : category.trim().toLowerCase(Locale.ROOT);
+        // An unknown slug is a 400 naming the valid ones (#80).
+        String normalized = categoryRepository.load().requireKnown(category);
         Set<UUID> excluded = excludedAgentIds == null ? Set.of() : excludedAgentIds;
         // Excluded before ranking, so they leave the shortlist and the near-misses alike.
         List<ShortlistCandidateRow> rows = queryPort.findBookableCandidates(normalized).stream()

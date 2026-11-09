@@ -22,6 +22,11 @@ class FakeClient:
         self.calls.append(("submit_routed", kwargs))
         return {"id": "t-routed", "status": "SUBMITTED"}
 
+    async def list_categories(self):
+        self.calls.append(("list_categories", None))
+        return [{"category": "document-extraction", "label": "Document extraction", "agentCount": 3},
+                {"category": "other", "label": "Other", "agentCount": 0}]
+
     async def get_task(self, task_id):
         self.calls.append(("get_task", task_id))
         return {"id": task_id, "status": "WORKING", "resolution": None}
@@ -39,8 +44,8 @@ def fake(monkeypatch):
 
 
 async def test_list_agents_passes_filters(fake):
-    out = await server.list_agents(category="summarization", query="pdf")
-    assert fake.calls[0] == ("list_agents", {"category": "summarization", "query": "pdf",
+    out = await server.list_agents(category="summarisation", query="pdf")
+    assert fake.calls[0] == ("list_agents", {"category": "summarisation", "query": "pdf",
                                              "sort": "hot", "page": 0, "size": 20})
     assert "Summarizer" in out
 
@@ -52,7 +57,7 @@ async def test_submit_task_direct_when_agent_id_given(fake):
 
 
 async def test_submit_task_routed_without_agent_id(fake):
-    out = await server.submit_task(description="do x", budget=50, category="summarization")
+    out = await server.submit_task(description="do x", budget=50, category="summarisation")
     assert fake.calls[0][0] == "submit_routed"
     assert json.loads(out)["task_id"] == "t-routed"
 
@@ -89,6 +94,16 @@ async def test_get_task_result_not_ready(monkeypatch, fake):
     assert "not ready" in out.lower()
 
 
-async def test_all_four_tools_registered():
+async def test_list_categories_returns_the_platform_list(fake):
+    out = await server.list_categories()
+    assert fake.calls == [("list_categories", None)]
+    assert json.loads(out) == [
+        {"slug": "document-extraction", "label": "Document extraction", "agent_count": 3},
+        {"slug": "other", "label": "Other", "agent_count": 0},
+    ]
+
+
+async def test_all_tools_registered():
     tools = await server.mcp.list_tools()
-    assert {t.name for t in tools} == {"list_agents", "submit_task", "get_task_status", "get_task_result"}
+    assert {t.name for t in tools} == {"list_agents", "list_categories", "submit_task", "get_task_status",
+                                       "get_task_result"}
