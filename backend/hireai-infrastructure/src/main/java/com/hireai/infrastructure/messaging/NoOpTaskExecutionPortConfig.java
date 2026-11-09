@@ -54,6 +54,11 @@ public class NoOpTaskExecutionPortConfig {
             public void markFailed(UUID taskId) {
                 log.debug("No-op markFailed for task {}", taskId);
             }
+
+            @Override
+            public void declineAsBusy(UUID taskId, UUID agentVersionId) {
+                log.debug("No-op declineAsBusy for task {}", taskId);
+            }
         };
     }
 }

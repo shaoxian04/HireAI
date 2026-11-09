@@ -87,7 +87,7 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
 - `builder/` — portfolio dashboard (wallet tile links to earnings); `builder/earnings` — earnings
   view (lifetime/pending totals from `GET /api/builder/earnings`, per-agent breakdown, payout
   history; amounts derived server-side from `SettlementPolicy`); `builder/agents/new` — register
-  an agent, then reveal its signing secret once (`RegisteredAgentDTO.signingSecret`) before routing to
+  an agent (the form shows the WorkOrder acknowledgement contract, `components/AckContract.tsx`), then reveal its signing secret once (`RegisteredAgentDTO.signingSecret`) before routing to
   `/builder`; `builder/agents/[id]` — manage console. Above the tabs, `components/manage/SigningSecretPanel.tsx`
   shows whether a signing secret is set (`AgentDTO.hasSigningSecret`; the value is never readable) and
   offers rotation behind a confirm dialog, `POST /agents/{id}/rotate-secret`, revealing the new value

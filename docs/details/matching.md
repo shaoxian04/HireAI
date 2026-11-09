@@ -126,6 +126,20 @@ Agent has an AgentSigningSecret, `X-HireAI-Signature` (see **Signature** below).
 
 Nothing else is sent: no Client identity and no budget.
 
+**Acknowledgement contract.** The Builder-facing rules for answering a WorkOrder (also shown on the
+registration form, `frontend/components/AckContract.tsx`):
+
+- **Accept:** reply any 2xx (202 recommended) within the 15s read timeout, then do the work asynchronously.
+  A slower reply, a refused connection or any other non-2xx is a failed send and is retried (see
+  **Send retries**); after the last attempt the task fails with `EXECUTION_FAILED` against the Agent.
+- **Decline as busy:** reply 429 or 503. The platform does not retry, records a `BUSY` row in the
+  [dispatch history](data-model.md#dispatch-attempts) and writes **no** reputation event. The task then ends
+  `FAILED` with FailureReason `AGENT_BUSY`, a refund and a `task.failed` webhook
+  (`TaskExecutionPort.declineAsBusy`). This applies to routed tasks too until routed failover (#78)
+  re-routes them instead.
+- **Deliver only through the callback:** the result is accepted only as a POST to `callbackUrl`. Anything
+  in the WorkOrder's HTTP response body is ignored.
+
 **Signature.** Every WorkOrder to an Agent with a signing secret carries
 
 ```
@@ -180,10 +194,11 @@ internal address with the client-webhook error (400 `VALIDATION_ERROR`). The dev
 
 **Send retries.** Only a failure the Agent is accountable for counts as a failed attempt: its endpoint
 refused or was unreachable, did not answer within the read timeout (the contract is a 2xx within 15s),
-replied with a non-2xx status (`AgentSendFailedException`, which carries the status for later busy handling),
+replied with a non-2xx status other than 429/503 (`AgentSendFailedException`, which carries the status),
 or its host now resolves to an internal address (the send-time guard; nothing is sent). A 3xx counts as a
 non-2xx reply: the dispatch client (`AgentDispatchRestClientConfig`) never follows redirects and never
-resends a POST by itself, so the Agent gets exactly one WorkOrder per attempt.
+resends a POST by itself, so the Agent gets exactly one WorkOrder per attempt. A 429/503 is a busy decline
+(`AgentBusyException`), never a failed attempt: see **Acknowledgement contract**.
 The work-order connect and read timeouts are 5s and 15s. The consumer never waits in place: it republishes
 the message to a retry queue and acknowledges it, so other dispatches keep flowing.
 

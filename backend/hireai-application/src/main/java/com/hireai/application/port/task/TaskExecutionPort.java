@@ -41,4 +41,15 @@ public interface TaskExecutionPort {
      * task has already ended.
      */
     void markFailed(UUID taskId);
+
+    /**
+     * The Agent declined the WorkOrder as busy (429/503): under a row lock, a task still QUEUED for
+     * {@code agentVersionId} records a {@code BUSY} dispatch attempt and ends FAILED with
+     * {@code AGENT_BUSY}, a refund and a client {@code task.failed} webhook. No reputation event:
+     * declining at capacity is never a fault. A no-op when the task has moved on (another outcome
+     * committed first, or it is assigned to another version).
+     *
+     * <p>Routed tasks end the same way for now; routed failover (#78) re-routes them instead.
+     */
+    void declineAsBusy(UUID taskId, UUID agentVersionId);
 }

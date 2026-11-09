@@ -201,4 +201,27 @@ class TaskExecutionPortImplTest {
         verifyNoInteractions(settlementWriteAppService, reputationWriteAppService, webhookOutboxAppService,
                 dispatchAttemptRepository);
     }
+
+    @Test
+    void aBusyReplyForAVersionTheTaskNoLongerWaitsOnIsANoOp() {
+        TaskModel task = queuedTask();
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
+
+        port().declineAsBusy(task.id(), UUID.randomUUID());
+
+        verify(taskRepository, never()).save(any());
+        verifyNoInteractions(settlementWriteAppService, reputationWriteAppService, webhookOutboxAppService,
+                dispatchAttemptRepository);
+    }
+
+    @Test
+    void aBusyReplyForAnExecutingTaskIsANoOp() {
+        TaskModel task = queuedTask().markExecuting();
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
+
+        port().declineAsBusy(task.id(), task.agentVersionId());
+
+        verify(taskRepository, never()).save(any());
+        verifyNoInteractions(settlementWriteAppService, reputationWriteAppService, webhookOutboxAppService);
+    }
 }

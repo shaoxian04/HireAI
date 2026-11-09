@@ -118,7 +118,22 @@ class AgentDispatchClientTest {
 
         assertThatThrownBy(() -> client.dispatch(messageTo(webhook), "the-token", null))
                 .isInstanceOfSatisfying(AgentSendFailedException.class,
-                        e -> org.assertj.core.api.Assertions.assertThat(e.statusCode()).hasValue(500));
+                        e -> {
+                            org.assertj.core.api.Assertions.assertThat(e.statusCode()).hasValue(500);
+                            org.assertj.core.api.Assertions.assertThat(e).isNotInstanceOf(AgentBusyException.class);
+                        });
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {429, 503})
+    void a429Or503ReplyIsABusyDecline(int status) {
+        String webhook = "https://agent.example.com/run";
+        server.expect(requestTo(webhook)).andRespond(withStatus(HttpStatus.valueOf(status)));
+        AgentDispatchClient client = client(builder.build(), PUBLIC_DNS, false);
+
+        assertThatThrownBy(() -> client.dispatch(messageTo(webhook), "the-token", null))
+                .isInstanceOfSatisfying(AgentBusyException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.statusCode()).hasValue(status));
     }
 
     @Test

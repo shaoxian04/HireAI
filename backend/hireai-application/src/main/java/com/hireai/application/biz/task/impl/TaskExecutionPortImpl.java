@@ -127,6 +127,25 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
         log.info("Task {} marked FAILED, escrow refunded, EXECUTION_FAILED recorded", taskId);
     }
 
+    @Override
+    public void declineAsBusy(UUID taskId, UUID agentVersionId) {
+        // Same lock order as markFailed (task row, then wallet row in settleRejected).
+        TaskModel task = loadForUpdate(taskId);
+        if (task.status() != TaskStatus.QUEUED || !agentVersionId.equals(task.agentVersionId())) {
+            log.info("Task {} is {} (version {}); ignoring busy reply from version {}", taskId,
+                    task.status(), task.agentVersionId(), agentVersionId);
+            return;
+        }
+        TaskModel failed = task.markFailed(FailureReason.AGENT_BUSY);
+        taskRepository.save(failed);
+        settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
+        // Declining at capacity is part of the acknowledgement contract: no reputation event.
+        webhookOutboxAppService.enqueueFailed(failed, "FAILED");
+        appendAttempt(taskId, agentVersionId, DispatchOutcome.BUSY);
+        log.info("Task {} declined as busy by version {}: FAILED (AGENT_BUSY), escrow refunded", taskId,
+                agentVersionId);
+    }
+
     private TaskModel loadForUpdate(UUID taskId) {
         return taskRepository.findByIdForUpdate(taskId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));

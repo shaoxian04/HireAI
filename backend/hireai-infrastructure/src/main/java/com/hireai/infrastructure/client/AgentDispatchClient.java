@@ -36,8 +36,9 @@ import java.time.Clock;
  *   <li>Every WorkOrder to an Agent that has an AgentSigningSecret is signed over the exact
  *       body bytes ({@link #SIGNATURE_HEADER}), so the Agent can prove it came from HireAI.</li>
  * </ul>
- * A failure of the HTTP send itself (non-2xx reply, unreachable endpoint, timeout) is thrown as
- * {@link AgentSendFailedException}; anything else (e.g. a non-HTTPS URL) is a platform-side error.
+ * A 429 or 503 reply is the Agent declining as busy and is thrown as {@link AgentBusyException}.
+ * Any other failure of the HTTP send itself (non-2xx reply, unreachable endpoint, timeout) is thrown
+ * as {@link AgentSendFailedException}; anything else (e.g. a non-HTTPS URL) is a platform-side error.
  */
 @Component
 @Slf4j
@@ -97,6 +98,10 @@ public class AgentDispatchClient {
                     .retrieve()
                     .onStatus(status -> !status.is2xxSuccessful(), (request, response) -> {
                         int status = response.getStatusCode().value();
+                        if (AgentBusyException.isBusyStatus(status)) {
+                            throw new AgentBusyException("Agent webhook for task " + message.taskId()
+                                    + " declined as busy (" + status + ")", status);
+                        }
                         throw new AgentSendFailedException("Agent webhook for task " + message.taskId()
                                 + " replied " + status, status, null);
                     })

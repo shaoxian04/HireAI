@@ -23,6 +23,7 @@ import { Button, Field, Input } from "@/components/ui";
 import { PageHeader } from "@/components/PageHeader";
 import { MAX_EXECUTION_HINT, MAX_EXECUTION_SECONDS } from "@/lib/agentLimits";
 import { SecretReveal } from "@/components/SecretReveal";
+import { AckContract } from "@/components/AckContract";
 
 function RegisterAgent() {
   const router = useRouter();
@@ -153,6 +154,7 @@ function RegisterAgent() {
                 required
               />
             </Field>
+            <AckContract />
             <div className="grid gap-4 sm:grid-cols-3">
               <Field
                 label="Max execution seconds"

@@ -47,4 +47,10 @@ public class StubTaskExecutionPort implements TaskExecutionPort {
     public void markFailed(UUID taskId) {
         failed.add(taskId);
     }
+
+    @Override
+    public void declineAsBusy(UUID taskId, UUID agentVersionId) {
+        attempts.add(DispatchOutcome.BUSY);
+        failed.add(taskId);
+    }
 }
