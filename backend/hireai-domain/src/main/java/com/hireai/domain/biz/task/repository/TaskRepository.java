@@ -37,7 +37,6 @@ public interface TaskRepository {
      * Operational reliability columns — unmapped on TaskDO by design; see V24.
      */
 
-    /** Open (routed) tasks waiting for an Agent. Pinned direct bookings are never listed (#77). */
     List<UUID> findIdsAwaitingAgent();
 
     /** Ids still SUBMITTED (never routed) whose task was created before {@code cutoff}. */

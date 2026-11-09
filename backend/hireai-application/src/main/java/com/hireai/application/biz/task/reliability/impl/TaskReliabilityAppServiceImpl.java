@@ -89,10 +89,13 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
         if (maybeTask.isEmpty() || maybeTask.get().status() != TaskStatus.AWAITING_AGENT) {
             return; // matched or cancelled since the sweep listed it — nothing to do
         }
-        if (taskRepository.findPinnedAgentVersionId(taskId).isPresent()) {
-            // A direct booking fails fast at dispatch when its Agent or version is gone (#77); there
-            // is no other Agent to try and the pinned one won't come back, so never retry it here.
-            log.info("Re-match sweeper: task {} is a pinned booking; not retried", taskId);
+        Optional<UUID> pinned = taskRepository.findPinnedAgentVersionId(taskId);
+        if (pinned.isPresent()) {
+            // Dispatch no longer parks a pinned booking here (it fails fast, #77), so this is a task
+            // parked before that change. Never retry it (no other Agent may be tried, and the pinned
+            // one is unavailable), but never strand its escrow either: end it the fail-fast way.
+            log.info("Re-match sweeper: pinned task {} is AWAITING_AGENT; cancelling as unavailable", taskId);
+            taskWriteAppService.cancelPinnedAsUnavailable(taskId, pinned.get());
             return;
         }
         int attempts = taskWriteAppService.registerMatchAttempt(taskId);

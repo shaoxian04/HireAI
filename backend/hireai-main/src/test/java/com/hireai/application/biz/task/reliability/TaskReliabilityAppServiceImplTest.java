@@ -96,12 +96,13 @@ class TaskReliabilityAppServiceImplTest {
     }
 
     @Test
-    void pinnedTaskIsNeverRetriedByTheRematchSweeper() {
+    void aParkedPinnedTaskIsCancelledAsUnavailableNotRetried() {
         UUID pinned = UUID.randomUUID();
         givenTaskInStatus(TaskStatus.AWAITING_AGENT);
         when(taskRepository.findPinnedAgentVersionId(taskId)).thenReturn(Optional.of(pinned));
         service.rematchOne(taskId);
         verifyNoInteractions(routingAppService);
+        verify(taskWriteAppService).cancelPinnedAsUnavailable(taskId, pinned);
         verify(taskWriteAppService, never()).registerMatchAttempt(any());
         verify(taskWriteAppService, never()).cancelAwaitingAgentWithRefund(any());
     }

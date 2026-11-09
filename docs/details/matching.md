@@ -94,7 +94,8 @@ invite a second, paid submit.
   (`TaskWriteAppService.cancelPinnedAsUnavailable`, row-locked): `AGENT_UNAVAILABLE`, a full refund, a
   `task.failed` webhook and an `UNAVAILABLE` row in the dispatch history. Deactivating or publishing a new
   version never counts against the Builder, so no reputation event is written. The re-match sweeper never
-  lists or retries a pinned task.
+  retries a pinned task: one it finds `AWAITING_AGENT` (parked there before this rule) is cancelled the
+  same way on its first sweep, so its escrow is never stranded.
 - **The deadline is stamped at assignment**, so one query catches both a silent agent and a lost publish.
   Only a silent agent is blamed: a task still `QUEUED` normally never reached the agent, so its timeout
   refunds without a reputation event (`TaskModel.timeoutIsAgentFault`). The rare task left `QUEUED` after a

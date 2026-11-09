@@ -89,23 +89,25 @@ class PinnedFailFastIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
-    void theRematchSweeperSkipsPinnedTasks() {
+    void aPinnedTaskParkedAwaitingAgentIsCancelledAndRefundedByOneSweepWithoutARetry() throws Exception {
         SeededAgent seeded = seedAgent("https://agent.example/run", "SUSPENDED");
         UUID taskId = UUID.randomUUID();
-        // A pinned task parked AWAITING_AGENT (as dispatch left them before #77).
+        // A pinned task parked AWAITING_AGENT with escrow frozen, as dispatch left them before #77.
         jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, output_spec, category, status, "
                         + "gmt_create, pinned_agent_version_id) VALUES (?, ?, 'Pinned', 'Pinned task', 30.00, "
                         + "'{\"format\":\"JSON\"}'::jsonb, 'general', 'AWAITING_AGENT', now(), ?)",
                 taskId, DEV_USER, seeded.versionId());
+        jdbc.update("UPDATE wallets SET available_balance = available_balance - 30.00, "
+                + "escrow_balance = escrow_balance + 30.00 WHERE user_id = ?", DEV_USER);
 
-        assertThat(taskReliabilityAppService.awaitingAgentTaskIds()).doesNotContain(taskId);
+        // The sweep still lists it, so its escrow can never be stranded.
+        assertThat(taskReliabilityAppService.awaitingAgentTaskIds()).contains(taskId);
         taskReliabilityAppService.rematchOne(taskId);
 
-        assertThat(status(taskId)).isEqualTo("AWAITING_AGENT");
+        assertFailedFast(taskId, seeded.versionId());
+        // Ended, not retried: no match attempt was spent on it.
         assertThat(jdbc.queryForObject("SELECT match_attempts FROM tasks WHERE id = ?", Integer.class, taskId))
                 .isZero();
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM dispatch_attempts WHERE task_id = ?",
-                Integer.class, taskId)).isZero();
     }
 
     private void assertFailedFast(UUID taskId, UUID versionId) throws Exception {
