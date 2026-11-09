@@ -66,7 +66,7 @@ describe("dispute outcome poll — live update while DISPUTED", () => {
       </AuthProvider>,
     );
 
-    expect(await screen.findByText("DISPUTED")).toBeInTheDocument();
+    expect(await screen.findByText("In dispute")).toBeInTheDocument();
 
     // Regression guard: the outcome-poll effect used to depend on the whole `task` object,
     // which the main poller replaces with a brand-new object every POLL_MS (2000ms) tick

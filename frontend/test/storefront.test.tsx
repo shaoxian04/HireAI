@@ -36,7 +36,7 @@ describe("agent storefront", () => {
     expect(screen.getByText(/example output/i)).toBeInTheDocument(); // sample output block
     expect(screen.getByText(/valid json/i)).toBeInTheDocument(); // output contract
     expect(screen.getByText(/output matched the spec exactly/i)).toBeInTheDocument(); // review
-    expect(screen.getByRole("link", { name: /book this agent/i })).toHaveAttribute(
+    expect(screen.getAllByRole("link", { name: /book this agent/i })[0]).toHaveAttribute(
       "href",
       "/client/agents/ag-1/book",
     );

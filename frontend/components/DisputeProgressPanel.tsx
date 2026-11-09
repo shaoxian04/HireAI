@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { api, ApiError } from "@/lib/api";
 import { Card, Button } from "@/components/ui";
 import type { DisputeOutcomeDTO, RulingCategory, RejectReason } from "@/lib/types";
+import { rationaleText } from "@/lib/rulings";
 
 const CATEGORY_LABEL: Record<RulingCategory, string> = {
   FULFILLED: "Fulfilled — pay the builder",
@@ -12,7 +13,7 @@ const CATEGORY_LABEL: Record<RulingCategory, string> = {
   NOT_FULFILLED: "Not fulfilled — full refund",
 };
 
-const REJECT_LABEL: Record<RejectReason, string> = {
+export const REJECT_LABEL: Record<RejectReason, string> = {
   A_MISMATCH: "Output doesn’t match the request",
   B_FACTUAL: "Factually wrong",
   C_INCOMPLETE: "Incomplete",
@@ -55,7 +56,7 @@ function Stage({
         {!last && <span className="w-px flex-1 bg-line" />}
       </div>
       <div className={last ? "" : "pb-5"}>
-        <p className={`font-mono text-[0.7rem] font-semibold uppercase tracking-wider ${TITLE_COLOR[state]}`}>
+        <p className={`text-xs font-semibold ${TITLE_COLOR[state]}`}>
           {title}
         </p>
         {children && <div className="mt-1 space-y-1 text-sm text-muted">{children}</div>}
@@ -109,7 +110,7 @@ export function DisputeProgressPanel({
     arbBody = (
       <>
         <p className="text-fg">{CATEGORY_LABEL[arb.category]}</p>
-        {arb.rationale && <p>{arb.rationale}</p>}
+        {rationaleText(arb.rationale) && <p>{rationaleText(arb.rationale)}</p>}
       </>
     );
   } else if (s === "OPEN" || s === "ARBITRATING") {
@@ -131,7 +132,7 @@ export function DisputeProgressPanel({
     admBody = (
       <>
         <p className="text-fg">{CATEGORY_LABEL[admin.category]}</p>
-        {admin.rationale && <p>{admin.rationale}</p>}
+        {rationaleText(admin.rationale) && <p>{rationaleText(admin.rationale)}</p>}
       </>
     );
   } else if (s === "ESCALATED") {
@@ -154,7 +155,7 @@ export function DisputeProgressPanel({
       <div className="flex items-center justify-between gap-3">
         <p className="eyebrow">Dispute</p>
         {s === "RESOLVED" && outcome.effectiveCategory && (
-          <span className="font-mono text-xs text-accent">Resolved · {CATEGORY_LABEL[outcome.effectiveCategory]}</span>
+          <span className="text-xs text-accent">Resolved · {CATEGORY_LABEL[outcome.effectiveCategory]}</span>
         )}
       </div>
 
@@ -178,13 +179,13 @@ export function DisputeProgressPanel({
             a final decision.
           </p>
           {error && (
-            <p role="alert" className="font-mono text-xs text-red">
+            <p role="alert" className="text-xs text-red">
               {error}
             </p>
           )}
           <div className="flex gap-2">
             <Button onClick={() => act("accept-ruling")} disabled={busy}>
-              Accept ruling ▸
+              Accept ruling
             </Button>
             <Button variant="ghost" onClick={() => act("appeal")} disabled={busy}>
               Appeal to a human

@@ -72,7 +72,7 @@ export function RatingPrompt({ taskId, onRated }: Props) {
       <button
         type="button"
         onClick={() => setDismissed(false)}
-        className="font-mono text-xs text-dim underline underline-offset-2 hover:text-muted"
+        className="text-xs text-dim underline underline-offset-2 hover:text-muted"
       >
         Rate this task
       </button>
@@ -91,7 +91,7 @@ export function RatingPrompt({ taskId, onRated }: Props) {
         <button
           type="button"
           onClick={() => setDismissed(true)}
-          className="font-mono text-xs text-dim hover:text-muted"
+          className="text-xs text-dim hover:text-muted"
         >
           Not now
         </button>
@@ -109,15 +109,23 @@ export function RatingPrompt({ taskId, onRated }: Props) {
               onClick={() => setRating(n)}
               onMouseEnter={() => setHovered(n)}
               onMouseLeave={() => setHovered(null)}
-              className={`text-2xl leading-none transition-colors ${
-                shown != null && n <= shown ? "text-accent" : "text-line-bright hover:text-muted"
+              className={`rounded p-0.5 transition ${
+                shown != null && n <= shown ? "scale-110 text-amber" : "text-line-bright hover:text-amber/60"
               }`}
             >
-              ★
+              <svg viewBox="0 0 24 24" className="size-8" aria-hidden>
+                <path
+                  d="M12 2.8l2.85 5.78 6.38.93-4.62 4.5 1.09 6.35L12 17.36l-5.7 3 1.09-6.35-4.62-4.5 6.38-.93z"
+                  fill="currentColor"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
           ))}
         </div>
-        {shown != null && <span className="font-mono text-xs text-dim">{HINT[shown]}</span>}
+        {shown != null && <span className="text-xs text-dim">{HINT[shown]}</span>}
       </div>
 
       {rating != null && (
@@ -139,7 +147,7 @@ export function RatingPrompt({ taskId, onRated }: Props) {
       )}
 
       {error && (
-        <p role="alert" className="font-mono text-xs text-red">
+        <p role="alert" className="text-xs text-red">
           {error}
         </p>
       )}

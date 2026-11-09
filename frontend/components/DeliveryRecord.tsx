@@ -22,7 +22,7 @@ export function DeliveryRecord({
   // let the absence of evidence read as a clean record.
   if (!reliabilityCount) {
     return (
-      <span className={`text-dim ${className}`}>No completed tasks yet — unproven</span>
+      <span className={`text-dim ${className}`}>None settled yet — unproven</span>
     );
   }
 

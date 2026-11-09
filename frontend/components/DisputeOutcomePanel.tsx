@@ -18,13 +18,13 @@ export function DisputeOutcomePanel({ outcome }: { outcome: DisputeOutcomeDTO })
     <Card className="space-y-4 border-t border-line">
       <p className="eyebrow">Arbitration outcome</p>
       {effective && !allFallback && (
-        <p className="font-mono text-sm text-fg">{CATEGORY_LABEL[effective]}</p>
+        <p className="text-sm text-fg">{CATEGORY_LABEL[effective]}</p>
       )}
       <ul className="space-y-3">
         {outcome.rulings.map((r, i) => (
           <li key={i} className="space-y-1">
             {r.decidedBy === "FALLBACK" ? (
-              <p className="font-mono text-xs text-amber">
+              <p className="text-xs text-amber">
                 Auto-resolved (arbitrator unavailable) — full refund.
               </p>
             ) : (

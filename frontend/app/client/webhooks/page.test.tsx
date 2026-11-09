@@ -84,7 +84,7 @@ describe("WebhooksPage", () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText("DEAD")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Failed", { selector: "[data-status=DEAD]" })).toBeInTheDocument());
     expect(screen.getByRole("button", { name: /resend/i })).toBeInTheDocument();
   });
 
@@ -112,12 +112,12 @@ describe("WebhooksPage", () => {
 
     renderPage();
 
-    await waitFor(() => expect(screen.getByText("DEAD")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Failed", { selector: "[data-status=DEAD]" })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /resend/i }));
 
     await waitFor(() => expect(redeliverCalled).toBe(true));
-    await waitFor(() => expect(screen.getByText("PENDING")).toBeInTheDocument());
-    expect(screen.queryByText("DEAD")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Pending", { selector: "[data-status=PENDING]" })).toBeInTheDocument());
+    expect(screen.queryByText("Failed", { selector: "[data-status=DEAD]" })).not.toBeInTheDocument();
   });
 
   it("the DEAD health banner survives an unrelated status filter (account-scoped, not filter-scoped)", async () => {
@@ -178,8 +178,11 @@ describe("WebhooksPage", () => {
 
     renderPage();
 
+    // A secret loaded with the page starts masked; Show reveals it.
+    await user.click(await screen.findByRole("button", { name: /^show$/i }));
     await screen.findByText(/whsec_old/);
     await user.click(screen.getByRole("button", { name: /rotate secret/i }));
+    await user.click(await screen.findByRole("button", { name: /rotate now/i }));
 
     await waitFor(() => expect(rotateCalled).toBe(true));
     await waitFor(() => expect(screen.getByText(/whsec_new/)).toBeInTheDocument());
@@ -211,6 +214,8 @@ describe("WebhooksPage", () => {
 
     await screen.findByText("Active");
     await user.click(screen.getByRole("button", { name: /^deactivate$/i }));
+    // it asks first
+    await user.click(await screen.findByRole("button", { name: /deactivate webhook/i }));
 
     await waitFor(() => expect(deactivateCalled).toBe(true));
     await waitFor(() => expect(screen.getByText("Inactive")).toBeInTheDocument());

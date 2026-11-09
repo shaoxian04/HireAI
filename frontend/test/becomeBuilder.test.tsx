@@ -6,7 +6,7 @@ import { AuthProvider } from "@/lib/auth";
 import BecomeBuilderPage from "@/app/client/become-builder/page";
 
 const replace = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, push: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, push: vi.fn() }), usePathname: () => "/client/become-builder" }));
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
@@ -25,7 +25,7 @@ function renderPage() {
 describe("become-builder", () => {
   it("upgrades to builder after accepting terms and routes to /builder", async () => {
     renderPage();
-    await userEvent.click(screen.getByLabelText(/accept/i));
+    await userEvent.click(screen.getByLabelText(/agree to the builder terms/i));
     await userEvent.click(screen.getByRole("button", { name: /become a builder/i }));
     await vi.waitFor(() => expect(replace).toHaveBeenCalledWith("/builder"));
     expect(localStorage.getItem("hireai.token")).toBe("expanded-jwt");
