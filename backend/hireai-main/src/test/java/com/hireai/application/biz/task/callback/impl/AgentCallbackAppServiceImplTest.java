@@ -65,7 +65,7 @@ class AgentCallbackAppServiceImplTest {
         UUID agentVersionId = task.agentVersionId();
         when(dispatchTokenService.verify("good"))
                 .thenReturn(new DispatchTokenClaims(task.id(), agentVersionId, Instant.now().plusSeconds(60)));
-        when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         service().recordResult(task.id(), "good", result());
@@ -112,7 +112,7 @@ class AgentCallbackAppServiceImplTest {
         // agent version than the one assigned to the loaded task -> must fail like a bad token.
         when(dispatchTokenService.verify("wrong-agent"))
                 .thenReturn(new DispatchTokenClaims(task.id(), otherVersionId, Instant.now().plusSeconds(60)));
-        when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
 
         assertThatThrownBy(() -> service().recordResult(task.id(), "wrong-agent", result()))
                 .isInstanceOf(DispatchTokenInvalidException.class);
@@ -125,7 +125,7 @@ class AgentCallbackAppServiceImplTest {
         UUID taskId = UUID.randomUUID();
         when(dispatchTokenService.verify("good"))
                 .thenReturn(new DispatchTokenClaims(taskId, UUID.randomUUID(), Instant.now().plusSeconds(60)));
-        when(taskRepository.findById(taskId)).thenReturn(Optional.empty());
+        when(taskRepository.findByIdForUpdate(taskId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service().recordResult(taskId, "good", result()))
                 .isInstanceOf(DomainException.class);
@@ -146,7 +146,7 @@ class AgentCallbackAppServiceImplTest {
         when(dispatchTokenService.verify("dup"))
                 .thenReturn(new DispatchTokenClaims(resultReceived.id(), agentVersionId,
                         Instant.now().plusSeconds(60)));
-        when(taskRepository.findById(resultReceived.id())).thenReturn(Optional.of(resultReceived));
+        when(taskRepository.findByIdForUpdate(resultReceived.id())).thenReturn(Optional.of(resultReceived));
 
         // Duplicate callback: must be a silent no-op (first result wins), not throw.
         service().recordResult(resultReceived.id(), "dup", result());
@@ -162,7 +162,7 @@ class AgentCallbackAppServiceImplTest {
         AgentResultInfo failedResult = new AgentResultInfo("FAILED", "{}", null, "error");
         when(dispatchTokenService.verify("tok"))
                 .thenReturn(new DispatchTokenClaims(task.id(), agentVersionId, Instant.now().plusSeconds(60)));
-        when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         service().recordResult(task.id(), "tok", failedResult);

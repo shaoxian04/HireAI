@@ -29,8 +29,28 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
     private final SettlementWriteAppService settlementWriteAppService;
 
     @Override
+    public boolean isAwaitingDispatch(UUID taskId, UUID agentVersionId) {
+        // Row-locked so the check reads the committed state of a concurrent callback, timeout
+        // or failure rather than a stale snapshot. The lock lasts only for this short tx: the
+        // send itself happens outside any transaction, so an Agent that calls back before
+        // replying to the WorkOrder never waits on the consumer.
+        return taskRepository.findByIdForUpdate(taskId)
+                .map(task -> task.status() == TaskStatus.QUEUED
+                        && agentVersionId.equals(task.agentVersionId()))
+                .orElse(false);
+    }
+
+    @Override
     public void markExecuting(UUID taskId) {
-        taskRepository.save(load(taskId).markExecuting());
+        // Row-locked: an early callback (QUEUED → RESULT_RECEIVED) or a timeout that committed
+        // first is seen here, and markExecuting() is then a no-op instead of overwriting it.
+        TaskModel task = loadForUpdate(taskId);
+        TaskModel executing = task.markExecuting();
+        if (executing == task) {
+            log.info("Task {} already {}; mark EXECUTING is a no-op", taskId, task.status());
+            return;
+        }
+        taskRepository.save(executing);
         log.info("Task {} marked EXECUTING", taskId);
     }
 
@@ -71,11 +91,6 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
         // freezing the client's escrow forever. Every escrow exit is a recorded settlement.
         settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
         log.info("Task {} marked FAILED and escrow refunded", taskId);
-    }
-
-    private TaskModel load(UUID taskId) {
-        return taskRepository.findById(taskId)
-                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
     }
 
     private TaskModel loadForUpdate(UUID taskId) {

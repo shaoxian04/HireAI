@@ -41,9 +41,7 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 
 All tracked in #53. Fixes are in #56 unless noted.
 
-- **Early callback is dropped, unreproduced.** `AgentCallbackAppServiceImpl.recordResult` no-ops unless the task is EXECUTING. A result posted before `TaskDispatchConsumer` runs `markExecuting` is lost, and the task later times out against the agent.
 - **Token can expire before the deadline, confirmed.** The consumer issues the dispatch token with a fixed 900s TTL, while `execution_deadline` is `maxExecutionSeconds` + grace with no upper bound on `maxExecutionSeconds`.
-- **Duplicate and stale dispatch, unreproduced.** A `markExecuting` failure after a successful POST makes RabbitMQ retry the POST, and the consumer never checks task status before sending.
 - **Dispatch-DLQ failure is silent, confirmed.** `TaskExecutionPortImpl.markFailed` refunds, but emits no webhook and no reputation event.
 - **Superseded pinned version stalls, confirmed.** `findCandidateByVersionId` requires the current version, so a direct booking whose version is replaced retries until it is cancelled. What happens next is the failover spec (#58).
 - **No failover after assignment, confirmed.** Neither mode switches agents once one is assigned (#58).

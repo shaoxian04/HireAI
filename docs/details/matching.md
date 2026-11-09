@@ -88,8 +88,9 @@ invite a second, paid submit.
 - **Pinned tasks never substitute.** A direct booking retries only its exact version, because the client's
   spec and price are frozen to it (Invariant #4).
 - **The deadline is stamped at assignment**, so one query catches both a silent agent and a lost publish.
-  Only a silent agent is blamed: a task still `QUEUED` never reached the agent, so its timeout refunds
-  without a reputation event (`TaskModel.timeoutIsAgentFault`).
+  Only a silent agent is blamed: a task still `QUEUED` normally never reached the agent, so its timeout
+  refunds without a reputation event (`TaskModel.timeoutIsAgentFault`). The rare task left `QUEUED` after a
+  good send whose mark-executing step failed (see the consumer order below) is also not blamed.
 - **SUBMITTED sweeper.** `SubmittedTaskSweeper` picks up tasks still `SUBMITTED` after
   `hireai.matching.submitted-min-age` (by the injected `Clock`) and re-runs routing, or the pinned dispatch
   for a direct booking. Each run counts against the same `match_attempts` counter and
@@ -124,3 +125,15 @@ Nothing else is sent: no Client identity and no budget.
 
 **Duplicate deliveries.** An Agent may receive the same WorkOrder more than once and must treat a repeat
 `taskId` as the same job, not a new one. Only the first result for a task is recorded.
+
+The consumer keeps repeats to the minimum, in this order:
+
+1. It loads the task under a row lock and drops the message unless the task is still `QUEUED` for that
+   version, so a WorkOrder for a refunded, timed-out or already-answered task never goes out.
+2. It issues the token and sends. A failed send is retried, so an Agent may see one WorkOrder per send the
+   platform considered failed (for example a 5xx or a read timeout after the Agent had already received it).
+3. It marks the task `EXECUTING` under a row lock. A failure here, after a successful send, is logged and the
+   message is acknowledged, never redelivered.
+
+The callback loads the task under the same row lock and accepts a result while the task is `QUEUED` or
+`EXECUTING`, so calling back before the platform has recorded the start is safe.

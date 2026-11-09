@@ -74,6 +74,52 @@ class TaskModelTransitionsTest {
     }
 
     @Test
+    void recordResultAcceptsQueuedSourceForAnEarlyCallback() {
+        // #63: an Agent may call back before the platform has marked the task EXECUTING.
+        TaskModel queued = submitted().assignAndQueue(UUID.randomUUID());
+        TaskResultModel result = TaskResultModel.record(queued.id(), "COMPLETED", "{}", null);
+
+        TaskModel received = queued.recordResult(result);
+
+        assertThat(received.status()).isEqualTo(TaskStatus.RESULT_RECEIVED);
+        assertThat(received.result()).isSameAs(result);
+    }
+
+    @Test
+    void recordResultRejectsAwaitingCapacityAndTerminalSources() {
+        TaskResultModel result = TaskResultModel.record(UUID.randomUUID(), "COMPLETED", "{}", null);
+        TaskModel awaiting = submitted().markAwaitingCapacity();
+        TaskModel failed = submitted().assignAndQueue(UUID.randomUUID()).markFailed();
+        TaskModel timedOut = submitted().assignAndQueue(UUID.randomUUID()).markTimedOut();
+
+        assertThatThrownBy(() -> awaiting.recordResult(result)).isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> failed.recordResult(result)).isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> timedOut.recordResult(result)).isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void markExecutingIsANoOpFromAnyLaterState() {
+        TaskModel executing = submitted().assignAndQueue(UUID.randomUUID()).markExecuting();
+        TaskModel received = submitted().assignAndQueue(UUID.randomUUID())
+                .recordResult(TaskResultModel.record(UUID.randomUUID(), "COMPLETED", "{}", null));
+        TaskModel failed = submitted().assignAndQueue(UUID.randomUUID()).markFailed();
+        TaskModel timedOut = submitted().assignAndQueue(UUID.randomUUID()).markTimedOut();
+        TaskModel pendingReview = received.passValidation();
+
+        assertThat(executing.markExecuting().status()).isEqualTo(TaskStatus.EXECUTING);
+        assertThat(received.markExecuting().status()).isEqualTo(TaskStatus.RESULT_RECEIVED);
+        assertThat(failed.markExecuting().status()).isEqualTo(TaskStatus.FAILED);
+        assertThat(timedOut.markExecuting().status()).isEqualTo(TaskStatus.TIMED_OUT);
+        assertThat(pendingReview.markExecuting().status()).isEqualTo(TaskStatus.PENDING_REVIEW);
+    }
+
+    @Test
+    void markExecutingRejectsAwaitingCapacitySource() {
+        TaskModel awaiting = submitted().markAwaitingCapacity();
+        assertThatThrownBy(awaiting::markExecuting).isInstanceOf(DomainException.class);
+    }
+
+    @Test
     void recordResultRejectsNonExecutingSource() {
         TaskResultModel result = TaskResultModel.record(UUID.randomUUID(), "COMPLETED", "{}", null);
         assertThatThrownBy(() -> submitted().recordResult(result))
