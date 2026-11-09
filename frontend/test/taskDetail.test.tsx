@@ -39,15 +39,15 @@ describe("task detail polling", () => {
       </AuthProvider>,
     );
 
-    // First poll: EXECUTING badge.
-    expect(await screen.findByText("EXECUTING")).toBeInTheDocument();
+    // First poll: EXECUTING badge (shown by its readable label).
+    expect(await screen.findByText("Executing")).toBeInTheDocument();
 
     // Subsequent polls (2s interval) advance through RESULT_RECEIVED to PENDING_REVIEW — the
     // state the client actually reviews. RESULT_RECEIVED is a transient the poller may skip.
     expect(
-      await screen.findByText("PENDING_REVIEW", {}, { timeout: 8000 }),
+      await screen.findByText("Needs review", {}, { timeout: 8000 }),
     ).toBeInTheDocument();
-    expect(await screen.findByText(/agent status/i)).toHaveTextContent(/COMPLETED/);
+    expect(await screen.findByText(/the agent reported/i)).toHaveTextContent(/completed/);
     // Pretty-printed payload is present.
     expect(screen.getByText(/"summary": "all good"/)).toBeInTheDocument();
     // Result URL link rendered.

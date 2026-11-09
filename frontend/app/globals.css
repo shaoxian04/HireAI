@@ -1,36 +1,76 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────────────────
-   HireAI — "Mission Control" design system
-   Dark graphite console · acid-lime signal · monospace instrumentation.
-   Tokens live in @theme so they're both Tailwind utilities (bg-canvas, text-accent…)
-   and raw CSS vars (var(--color-accent)) for the bespoke effects below.
+   HireAI design system — "work docket".
+   HireAI is a clearing house: a task is a work order, its output spec is a
+   contract, and money moves only when the work passes inspection. The visual
+   language borrows from job tickets and inspection stamps: cool form-grey paper,
+   navy ink, a cobalt "official" colour for actions and selection, and stamp
+   colours (pass / hold / fail) that only ever mean a status.
+   Type: Big Shoulders Display (condensed, industrial) for headings and big
+   figures; Public Sans (a forms typeface) for everything you read; IBM Plex
+   Mono only for machine data (IDs, keys, URLs, JSON).
+   Tokens live in @theme so they're Tailwind utilities (bg-canvas, text-accent…)
+   and raw CSS vars (var(--color-accent)).
    ───────────────────────────────────────────────────────────────────────── */
 @theme {
-  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, "SFMono-Regular", monospace;
-  --font-display: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-public), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", monospace;
+  --font-display: var(--font-shoulders), "Arial Narrow", ui-sans-serif, sans-serif;
 
-  /* surfaces */
-  --color-canvas: #0a0c0e; /* NOT named `base`: a color named base hijacks the `text-base` font-size utility */
-  --color-ink: #0a0c0e; /* dark text on accent/light fills (text-base is a font-size in Tailwind) */
-  --color-surface: #101418;
-  --color-surface-2: #161b21;
-  --color-line: #232932;
-  --color-line-bright: #313945;
+  /* paper & surfaces */
+  --color-canvas: #eceff4; /* NOT named `base`: a colour named base hijacks the `text-base` font-size utility */
+  --color-surface: #ffffff;
+  --color-surface-2: #f4f6f9;
+  --color-line: #d8dde6;
+  --color-line-bright: #b9c1cf;
 
-  /* text */
-  --color-fg: #e9edec;
-  --color-muted: #8b939d;
-  --color-dim: #5a626d;
+  /* ink */
+  --color-fg: #131a2e;
+  --color-muted: #475166;
+  --color-dim: #5a6377; /* 5.2:1 on canvas, 6.0:1 on white */
 
-  /* signal + semantics */
-  --color-accent: #c7f24a;
-  --color-accent-2: #a6d92f;
-  --color-cyan: #4fd6e6;
-  --color-amber: #f5b740;
-  --color-red: #ff5f4d;
-  --color-violet: #b69bff;
+  /* cobalt: the "official" colour — primary action, links, current selection */
+  --color-accent: #2541e0;
+  --color-accent-2: #1a31b8;
+  --color-ink: #ffffff; /* text on any coloured fill (accent, amber…) */
+  --color-brand: #2541e0; /* big cobalt surfaces that carry white text: hero, auth panel, price header */
+  --color-night: #131a2e; /* dark panels that carry white text in both themes */
+
+  /* stamps: only ever a status */
+  --color-green: #0b7a50;
+  --color-cyan: #0a6f8a;
+  --color-amber: #9a5800;
+  --color-red: #bf2f1c;
+  --color-violet: #6a43d1;
+}
+
+/*
+ * Dark theme: "night shift" — the same docket, on navy paper. Every pair below is
+ * ≥5.2:1 (dim on surface-2 is the lowest). The accent brightens so it reads as text on
+ * navy; coloured fills then take dark ink. Big brand surfaces keep a saturated cobalt
+ * with white text. Set by <html data-theme>, chosen in the nav's theme switch.
+ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-canvas: #0d1322;
+  --color-surface: #151d31;
+  --color-surface-2: #1b243b;
+  --color-line: #28324c;
+  --color-line-bright: #3a4665;
+  --color-fg: #e8ecf5;
+  --color-muted: #aab3c8;
+  --color-dim: #8d97ad;
+  --color-accent: #8a9cff;
+  --color-accent-2: #a3b1ff;
+  --color-ink: #0b1230;
+  --color-brand: #2b45d6;
+  --color-night: #070b16;
+  --color-green: #4cc38a;
+  --color-cyan: #4fc3dc;
+  --color-amber: #f0b44c;
+  --color-red: #ff7a66;
+  --color-violet: #b39dff;
 }
 
 /* ── base ─────────────────────────────────────────────────────────────── */
@@ -47,8 +87,13 @@ body {
 }
 
 ::selection {
-  background: var(--color-accent);
-  color: #0a0c0e;
+  background: color-mix(in oklab, var(--color-accent) 22%, transparent);
+  color: var(--color-fg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 *::-webkit-scrollbar {
@@ -64,80 +109,150 @@ body {
   background: transparent;
 }
 
-/* ── ambient background: ruled grid + scope glow (fixed, behind all) ───── */
-.bg-grid {
-  position: fixed;
-  inset: 0;
-  z-index: -10;
-  pointer-events: none;
-  background-color: var(--color-canvas);
-  background-image:
-    linear-gradient(to right, color-mix(in oklab, var(--color-line) 55%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in oklab, var(--color-line) 55%, transparent) 1px, transparent 1px);
-  background-size: 60px 60px;
-  -webkit-mask-image: radial-gradient(120% 80% at 50% -10%, #000 30%, transparent 78%);
-  mask-image: radial-gradient(120% 80% at 50% -10%, #000 30%, transparent 78%);
+/* ── primitives ───────────────────────────────────────────────────────── */
+
+/* A field the server (or the form) rejected: red edge, kept while focused. */
+input[aria-invalid="true"],
+textarea[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: var(--color-red);
 }
-.bg-grid::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(55rem 38rem at 78% -8%, color-mix(in oklab, var(--color-accent) 13%, transparent), transparent 60%),
-    radial-gradient(48rem 36rem at 8% 2%, color-mix(in oklab, var(--color-cyan) 9%, transparent), transparent 58%);
+input[aria-invalid="true"]:focus,
+textarea[aria-invalid="true"]:focus,
+select[aria-invalid="true"]:focus {
+  --tw-ring-color: color-mix(in srgb, var(--color-red) 25%, transparent);
 }
 
-/* ── instrumentation primitives ───────────────────────────────────────── */
+/* Section label: small, muted, sentence case. */
 .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--color-muted);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-fg);
+}
+
+/* Display heading: condensed, tight, heavy. */
+.display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.005em;
+  line-height: 0.95;
+}
+
+/*
+ * Page masthead: a white band behind each page's title that runs edge to edge.
+ * Full-bleed via a spread box-shadow clipped to the band's height, so it never
+ * widens the page or causes a horizontal scroll.
+ */
+.page-masthead::before,
+.page-masthead::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: -1;
+  clip-path: inset(0 -100vmax);
+}
+.page-masthead::before {
+  top: -2.5rem;
+  bottom: 0;
+  background: var(--color-surface);
+  box-shadow: 0 0 0 100vmax var(--color-surface);
+}
+.page-masthead::after {
+  bottom: 0;
+  height: 1px;
+  background: var(--color-line);
+  box-shadow: 0 0 0 100vmax var(--color-line);
 }
 
 .panel {
   position: relative;
-  background:
-    linear-gradient(180deg, color-mix(in oklab, var(--color-surface) 92%, transparent), var(--color-surface));
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 0.5rem;
+}
+.panel-hover {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.panel-hover:hover {
+  border-color: var(--color-line-bright);
+  box-shadow: 0 1px 0 var(--color-line-bright);
+}
+
+/*
+ * Docket: a work-order ticket. Used only for things that ARE contracts or
+ * settlements (an agent's output contract, a task's brief, the landing ticket):
+ * a perforated tear line and punched notches on both edges.
+ */
+.docket {
+  position: relative;
+  background: var(--color-surface);
   border: 1px solid var(--color-line);
   border-radius: 0.75rem;
 }
-.panel-hover {
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+.docket-tear {
+  position: relative;
+  border-top: 2px dashed var(--color-line);
 }
-.panel-hover:hover {
-  border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-line));
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-accent) 20%, transparent),
-    0 18px 40px -28px color-mix(in oklab, var(--color-accent) 60%, transparent);
-  transform: translateY(-2px);
-}
-
-/* HUD corner ticks */
-.hud::before,
-.hud::after {
+.docket-tear::before,
+.docket-tear::after {
   content: "";
   position: absolute;
-  width: 10px;
-  height: 10px;
-  border: 1px solid color-mix(in oklab, var(--color-accent) 55%, transparent);
-  pointer-events: none;
+  top: -11px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--docket-bg, var(--color-canvas));
+  border: 1px solid var(--color-line);
 }
-.hud::before {
-  top: -1px;
-  left: -1px;
-  border-right: 0;
-  border-bottom: 0;
+.docket-tear::before {
+  left: -11px;
+  clip-path: inset(0 0 0 50%);
 }
-.hud::after {
-  bottom: -1px;
-  right: -1px;
-  border-left: 0;
-  border-top: 0;
+.docket-tear::after {
+  right: -11px;
+  clip-path: inset(0 50% 0 0);
 }
 
-.glow {
-  box-shadow: 0 0 24px -6px color-mix(in oklab, var(--color-accent) 55%, transparent);
+/*
+ * Stamp: the inspection mark for a settled outcome. Bordered, slightly rotated,
+ * condensed type. Colour comes from `currentColor` so a text-* class sets it.
+ */
+.stamp {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.35rem 0.85rem 0.4rem;
+  border: 3px solid currentColor;
+  border-radius: 0.4rem;
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.6rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  transform: rotate(-6deg);
+  mix-blend-mode: multiply;
+}
+:root[data-theme="dark"] .stamp {
+  mix-blend-mode: normal;
+}
+.stamp small {
+  font-family: var(--font-sans);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* Horizontal chip/tab rows scroll by touch; the edge fade signals it, so hide the bar. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 .tabular {
@@ -145,11 +260,20 @@ body {
   font-feature-settings: "tnum" 1;
 }
 
-.grain {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+/* Loading placeholder block. Size it with utilities; it carries the shimmer. */
+.skeleton {
+  border-radius: 0.375rem;
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-2) 0%,
+    color-mix(in oklab, var(--color-surface-2) 60%, var(--color-line)) 50%,
+    var(--color-surface-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
 }
 
-/* ── live status dot ──────────────────────────────────────────────────── */
+/* ── live status dot (only for things that are actually in progress) ──── */
 .dot-live {
   position: relative;
 }
@@ -162,65 +286,160 @@ body {
   animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
-/* ── ticker / marquee ─────────────────────────────────────────────────── */
-.ticker {
-  display: inline-flex;
-  white-space: nowrap;
-  animation: marquee 38s linear infinite;
-}
-.ticker-mask {
-  -webkit-mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
-  mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
-}
+/* ── motion ─────────────────────────────────────────────────────────────
+   Everything here answers either the page arriving or the user scrolling to
+   something. Gated on [data-motion] (set before paint unless the user prefers
+   reduced motion), so nothing is ever hidden from someone who can't see it move. */
 
-/* ── pipeline flow line ───────────────────────────────────────────────── */
-.flow {
-  position: relative;
-  height: 2px;
-  background: var(--color-line-bright);
-  overflow: hidden;
-}
-.flow::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  width: 38%;
-  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
-  animation: flow 2.6s linear infinite;
-}
-
-/* ── entrance reveal (staggered via inline animation-delay) ────────────── */
-.reveal {
+/* scroll reveal: rise into place once, staggered by --i */
+:root[data-motion] .reveal {
   opacity: 0;
-  animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  transform: translateY(18px);
+  transition:
+    opacity 0.55s ease,
+    transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition-delay: calc(min(var(--i, 0), 8) * 80ms);
+}
+:root[data-motion] .reveal[data-shown] {
+  opacity: 1;
+  transform: none;
+}
+/* a tick inside a revealed block lands with the same pop as the hero's contract */
+:root[data-motion] .reveal .reveal-tick {
+  transform: scale(0.3);
+  opacity: 0;
+  transition:
+    transform 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.4),
+    opacity 0.2s ease;
+  transition-delay: calc(min(var(--i, 0), 8) * 80ms + 250ms);
+}
+:root[data-motion] .reveal[data-shown] .reveal-tick {
+  transform: none;
+  opacity: 1;
 }
 
-@keyframes rise {
+/* console pages settle in on arrival. Fill "backwards", not "both": a transform animation that
+   stays applied after it ends turns <main> into the containing block for position:fixed children
+   (the phone booking bar would stick to the bottom of the page instead of the screen). */
+:root[data-motion] .page-in {
+  animation: page-in 0.4s ease-out backwards;
+}
+@keyframes page-in {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(8px);
   }
+}
+
+/* status track segments fill left to right on load */
+:root[data-motion] .track-fill {
+  transform-origin: left center;
+  animation: track-fill 0.45s ease-out both;
+}
+@keyframes track-fill {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* vertical bars (weekly payouts) rise from the baseline, staggered by --i */
+:root[data-motion] .bar-rise {
+  transform-origin: bottom center;
+  animation: bar-rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+@keyframes bar-rise {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+/* scroll-linked: the escrow rail draws across the six steps as they scroll past,
+   and the queued dockets behind the hero drift apart. Browsers without scroll-driven
+   animations show the finished state. */
+@supports (animation-timeline: view()) {
+  :root[data-motion] .scroll-draw {
+    transform-origin: left center;
+    animation: track-fill linear both;
+    animation-timeline: view();
+    animation-range: entry 30% cover 55%;
+  }
+  :root[data-motion] .scroll-drift {
+    animation: drift linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 60vh;
+  }
+}
+@keyframes drift {
+  to {
+    translate: 1.4rem 1.6rem;
+  }
+}
+
+/* theme switch: the icon turns as it swaps */
+.theme-icon {
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+button:hover > .theme-icon {
+  transform: rotate(-20deg);
+}
+
+/* ── the one orchestrated moment: the landing docket gets inspected ────── */
+.inspect-check {
+  opacity: 0;
+  transform: scale(0.4);
+  animation: check-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.3) forwards;
+}
+.inspect-stamp {
+  opacity: 0;
+  animation: stamp-down 0.45s cubic-bezier(0.2, 0.9, 0.25, 1.15) forwards;
+}
+.inspect-fade {
+  opacity: 0;
+  animation: fade-in 0.4s ease forwards;
+}
+
+@keyframes check-in {
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1);
   }
 }
-@keyframes marquee {
-  from {
-    transform: translateX(0);
+@keyframes stamp-down {
+  0% {
+    opacity: 0;
+    transform: rotate(-6deg) scale(2.2);
   }
-  to {
-    transform: translateX(-50%);
+  70% {
+    opacity: 1;
+    transform: rotate(-6deg) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(-6deg) scale(1);
   }
 }
-@keyframes flow {
+/* mobile menu: drops in from under the bar, answering the tap */
+.menu-in {
+  animation: menu-in 0.18s ease-out;
+}
+@keyframes menu-in {
   from {
-    transform: translateX(-100%);
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@keyframes fade-in {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
   }
   to {
-    transform: translateX(360%);
+    background-position: -100% 0;
   }
 }
 @keyframes ping {
@@ -234,29 +453,55 @@ body {
     opacity: 0;
   }
 }
-@keyframes blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
-}
-
-.animate-blink {
-  animation: blink 1.4s steps(2, end) infinite;
-}
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
   }
-  .reveal {
-    opacity: 1;
+}
+
+/* Data tables on phones: each row becomes a small card (first cell as its heading, the rest as
+   labelled values from data-label), so no column (status above all) scrolls out of view. */
+@media (max-width: 639px) {
+  .stack-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .stack-table tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 1rem;
+    padding: 0.85rem 1rem;
+  }
+  .stack-table td {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0 !important;
+  }
+  .stack-table td:first-child {
+    flex-basis: 100%;
+    font-weight: 600;
+  }
+  .stack-table td[data-label]::before {
+    content: attr(data-label);
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--color-dim);
+  }
+  .stack-table td[colspan] {
+    flex-basis: 100%;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
   }
 }

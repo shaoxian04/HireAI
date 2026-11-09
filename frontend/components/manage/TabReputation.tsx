@@ -7,6 +7,7 @@ import type {
   ReputationComponentDTO,
   ReputationEventDTO,
 } from "@/lib/types";
+import { SkeletonRows } from "@/components/ui";
 
 interface Props {
   agentId: string;
@@ -96,7 +97,7 @@ function Evidence({ component, noun }: { component: ReputationComponentDTO; noun
 
   if (sampleCount === 0) {
     return (
-      <p className="font-mono text-[0.68rem] text-dim">
+      <p className="text-xs text-dim">
         No {noun}s yet · showing the neutral starting point
       </p>
     );
@@ -104,7 +105,7 @@ function Evidence({ component, noun }: { component: ReputationComponentDTO; noun
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-baseline justify-between gap-2 font-mono text-[0.68rem]">
+      <div className="flex items-baseline justify-between gap-2 text-xs">
         <span className="text-muted">
           {sampleCount} {noun}
           {sampleCount === 1 ? "" : "s"}
@@ -136,12 +137,12 @@ function ComponentCard({
     <section className="space-y-3 rounded-xl border border-line bg-surface p-5">
       <div className="flex items-center justify-between gap-2">
         <p className="eyebrow">{name}</p>
-        <span className="rounded border border-line bg-surface-2 px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-wider text-dim">
+        <span className="rounded border border-line bg-surface-2 px-2 py-0.5 text-xs text-dim">
           {pct(component.weight)}% of score
         </span>
       </div>
 
-      <p className={`tabular text-4xl font-extrabold ${TEXT[tone]}`}>
+      <p className={`tabular text-4xl font-semibold ${TEXT[tone]}`}>
         {component.sampleCount === 0 ? "—" : fmt(component.value)}
       </p>
 
@@ -257,14 +258,14 @@ export function TabReputation({ agentId }: Props) {
 
   if (error) {
     return (
-      <p role="alert" className="font-mono text-xs text-red">
+      <p role="alert" className="text-xs text-red">
         {error}
       </p>
     );
   }
 
   if (!data) {
-    return <p className="font-mono text-sm text-dim">Loading…</p>;
+    return <SkeletonRows label="Loading…" rows={3} />;
   }
 
   const { score, reliability, satisfaction, unproven, recentEvents } = data;
@@ -278,15 +279,21 @@ export function TabReputation({ agentId }: Props) {
           <div className="sm:w-64 sm:shrink-0">
             <p className="eyebrow mb-2">Reputation</p>
             <p
-              className={`tabular text-6xl font-extrabold leading-none ${
-                unproven ? "text-dim" : TEXT[v.tone === "dim" ? "fg" : v.tone]
-              }`}
+              className={`tabular text-6xl font-semibold leading-none ${unproven ? "text-dim" : TEXT[v.tone === "dim" ? "fg" : v.tone]}`}
             >
               {unproven ? "—" : fmt(score)}
             </p>
             <div className="mt-4">
-              <Meter value={unproven ? NEUTRAL : score} tone={unproven ? "dim" : v.tone} />
-              <div className="mt-1.5 flex justify-between font-mono text-[0.6rem] text-dim">
+              {unproven ? (
+                // No score yet: an empty, hatched track — not a mark at the midpoint, which reads as "average".
+                <div
+                  className="h-1.5 w-full rounded-full bg-[repeating-linear-gradient(135deg,var(--color-line)_0_4px,transparent_4px_8px)]"
+                  aria-hidden
+                />
+              ) : (
+                <Meter value={score} tone={v.tone} />
+              )}
+              <div className="mt-1.5 flex justify-between text-xs text-dim">
                 <span>0</span>
                 <span>50 · neutral start</span>
                 <span>100</span>
@@ -326,7 +333,7 @@ export function TabReputation({ agentId }: Props) {
       <section>
         <p className="eyebrow mb-3">Recent events</p>
         {recentEvents.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center font-mono text-xs text-dim">
+          <p className="rounded-xl border border-dashed border-line px-4 py-6 text-center text-xs text-dim">
             No events yet. Every completed task adds one.
           </p>
         ) : (
@@ -338,7 +345,7 @@ export function TabReputation({ agentId }: Props) {
                 <li key={event.id} className="flex items-center justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
                     <p className={`text-sm font-semibold ${TEXT[tone]}`}>{label}</p>
-                    <p className="font-mono text-[0.65rem] text-dim">
+                    <p className="text-xs text-dim">
                       {event.eventType === "RATING" ? "Satisfaction" : "Reliability"}
                       {event.taskId && ` · task ${event.taskId.slice(0, 8)}`}
                     </p>
@@ -347,13 +354,13 @@ export function TabReputation({ agentId }: Props) {
                     {/* On the same 0–100 scale as everything else on the page: this is what the
                         event actually contributed, which is how a 4★ rating turns out to be a 75. */}
                     <span
-                      className="tabular font-mono text-xs"
+                      className="tabular font-medium text-xs"
                       aria-label={`counted ${counted} out of 100`}
                     >
                       <span aria-hidden className={TEXT[tone]}>{counted}</span>
                       <span aria-hidden className="text-dim">/100</span>
                     </span>
-                    <span className="tabular font-mono text-[0.65rem] text-dim">
+                    <span className="tabular font-medium text-xs text-dim">
                       {new Date(event.occurredAt).toLocaleDateString()}
                     </span>
                   </div>

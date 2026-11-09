@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, ApiError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
-import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
+import { Badge, Button, Card, Field, Input, Select, SkeletonRows, ConfirmDialog } from "@/components/ui";
 import type { ApiKeyDTO, WebhookDeliveryDTO, WebhookSubscriptionDTO } from "@/lib/types";
+import { PageHeader } from "@/components/PageHeader";
 
 type StatusFilter = "" | "PENDING" | "DELIVERED" | "DEAD";
 
@@ -18,6 +19,9 @@ function ClientWebhooks() {
   const [rotating, setRotating] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
   const [copied, setCopied] = useState(false);
+  // A secret you just created or rotated is shown so you can copy it; one loaded later starts masked.
+  const [revealed, setRevealed] = useState(false);
+  const [confirming, setConfirming] = useState<"rotate" | "deactivate" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deliveries, setDeliveries] = useState<WebhookDeliveryDTO[] | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
@@ -42,6 +46,7 @@ function ClientWebhooks() {
     api<WebhookSubscriptionDTO>(`/webhooks/subscription?apiKeyId=${apiKeyId}`)
       .then((s) => {
         setSubscription(s);
+        setRevealed(false);
         setCallbackUrl(s.callbackUrl);
       })
       .catch((e) => {
@@ -103,6 +108,7 @@ function ClientWebhooks() {
         body: JSON.stringify({ apiKeyId: selectedKeyId, callbackUrl }),
       });
       setSubscription(s);
+      setRevealed(true);
       setCallbackUrl(s.callbackUrl);
       setCopied(false);
     } catch (e) {
@@ -122,8 +128,11 @@ function ClientWebhooks() {
         { method: "POST" },
       );
       setSubscription(s);
+      setRevealed(true);
       setCopied(false);
+      setConfirming(null);
     } catch (e) {
+      setConfirming(null);
       setError(e instanceof ApiError ? e.message : "Rotate secret failed");
     } finally {
       setRotating(false);
@@ -136,8 +145,10 @@ function ClientWebhooks() {
     setDeactivating(true);
     try {
       await api<void>(`/webhooks/subscription/deactivate?apiKeyId=${selectedKeyId}`, { method: "POST" });
+      setConfirming(null);
       loadSubscription(selectedKeyId);
     } catch (e) {
+      setConfirming(null);
       setError(e instanceof ApiError ? e.message : "Deactivate failed");
     } finally {
       setDeactivating(false);
@@ -166,20 +177,36 @@ function ClientWebhooks() {
 
   return (
     <div className="space-y-10">
-      <header>
-        <p className="eyebrow flex items-center gap-2">
-          <span className="inline-block h-px w-6 bg-accent" />
-          Client console
-        </p>
-        <h1 className="mt-3 text-3xl font-extrabold tracking-tight">Webhooks</h1>
-        <p className="mt-2 text-sm text-muted">
-          Push task-lifecycle events to your own endpoint instead of polling — register a callback URL
-          per API key, then verify each delivery with its signing secret.
-        </p>
-      </header>
+      <ConfirmDialog
+        open={confirming === "rotate"}
+        title="Rotate the signing secret?"
+        confirmLabel="Rotate now"
+        busy={rotating}
+        onConfirm={rotateSecret}
+        onCancel={() => setConfirming(null)}
+      >
+        A new secret is issued and the current one stops verifying at once. Update your endpoint with the
+        new secret, or it will reject the next delivery.
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirming === "deactivate"}
+        title="Stop webhook deliveries?"
+        confirmLabel="Deactivate webhook"
+        danger
+        busy={deactivating}
+        onConfirm={deactivate}
+        onCancel={() => setConfirming(null)}
+      >
+        Task updates for this key stop being pushed to your endpoint. You can register the callback again
+        later; you would then get a new signing secret.
+      </ConfirmDialog>
+      <PageHeader
+        title="Webhooks"
+        description="Get task updates pushed to your own endpoint instead of polling. Register a callback URL per API key, then verify each delivery with its signing secret."
+      />
 
       {error && (
-        <p role="alert" className="rounded-md border border-red/30 bg-red/10 px-3 py-2 font-mono text-xs text-red">
+        <p role="alert" className="rounded-md border border-red/30 bg-red/10 px-3 py-2 text-xs text-red">
           {error}
         </p>
       )}
@@ -189,9 +216,9 @@ function ClientWebhooks() {
         <h2 className="text-lg font-bold tracking-tight">Subscription</h2>
 
         {keys === null ? (
-          <p className="font-mono text-sm text-dim">Loading API keys…</p>
+          <SkeletonRows label="Loading API keys…" rows={3} />
         ) : keys.length === 0 ? (
-          <p className="font-mono text-sm text-muted">
+          <p className="text-sm text-muted">
             No API keys yet. Create one on the{" "}
             <a href="/client/keys" className="text-accent hover:underline">
               API keys
@@ -231,11 +258,11 @@ function ClientWebhooks() {
                 </Button>
                 {subscription && (
                   <>
-                    <Button type="button" variant="ghost" onClick={rotateSecret} disabled={rotating}>
+                    <Button type="button" variant="secondary" onClick={() => setConfirming("rotate")} disabled={rotating}>
                       {rotating ? "…" : "Rotate secret"}
                     </Button>
                     {subscription.active && (
-                      <Button type="button" variant="ghost" onClick={deactivate} disabled={deactivating}>
+                      <Button type="button" variant="danger" onClick={() => setConfirming("deactivate")} disabled={deactivating}>
                         {deactivating ? "…" : "Deactivate"}
                       </Button>
                     )}
@@ -247,7 +274,7 @@ function ClientWebhooks() {
             {subscription && (
               <div className="space-y-3 rounded-md border border-line bg-surface-2 p-4">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted">
+                  <span className="text-sm font-medium text-fg">
                     Signing secret
                   </span>
                   <Badge status={subscription.active ? "RESOLVED" : "CANCELLED"}>
@@ -256,13 +283,18 @@ function ClientWebhooks() {
                 </div>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 truncate rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm text-accent">
-                    {subscription.signingSecret}
+                    {revealed
+                      ? subscription.signingSecret
+                      : `${subscription.signingSecret.slice(0, 6)}${"•".repeat(18)}`}
                   </code>
+                  <Button type="button" variant="secondary" onClick={() => setRevealed((r) => !r)}>
+                    {revealed ? "Hide" : "Show"}
+                  </Button>
                   <Button type="button" onClick={copySecret}>
                     {copied ? "Copied ✓" : "Copy"}
                   </Button>
                 </div>
-                <p className="font-mono text-xs text-dim">
+                <p className="text-xs text-dim">
                   Keep this private. Each delivery carries a <code>t=…,v1=…</code> header — verify it as
                   HMAC-SHA256 of <code>{"{timestamp}.{body}"}</code> using this secret before trusting the payload.
                 </p>
@@ -291,7 +323,7 @@ function ClientWebhooks() {
         </div>
 
         {hasDeadDeliveries && (
-          <p className="rounded-md border border-red/30 bg-red/10 px-3 py-2 font-mono text-xs text-red">
+          <p className="rounded-md border border-red/30 bg-red/10 px-3 py-2 text-xs text-red">
             One or more deliveries exhausted retries and are marked DEAD — resend once your endpoint is
             reachable again.
           </p>
@@ -300,7 +332,7 @@ function ClientWebhooks() {
         <Card className="overflow-x-auto p-0">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-line text-left font-mono text-[0.65rem] uppercase tracking-wider text-dim">
+              <tr className="border-b border-line bg-surface-2 text-left text-xs font-semibold text-muted">
                 <th className="p-3">Status</th>
                 <th className="p-3">Event</th>
                 <th className="p-3">Task</th>
@@ -314,13 +346,13 @@ function ClientWebhooks() {
               {(deliveries ?? []).map((d) => (
                 <tr key={d.eventId} className="border-b border-line/50 hover:bg-surface-2/50">
                   <td className="p-3">
-                    <Badge status={d.status}>{d.status}</Badge>
+                    <Badge status={d.status} />
                   </td>
-                  <td className="p-3 font-mono text-xs text-fg">{d.eventType}</td>
+                  <td className="p-3 text-xs text-fg">{d.eventType}</td>
                   <td className="p-3 font-mono text-xs text-dim">{d.taskId}</td>
-                  <td className="p-3 font-mono text-xs text-muted">{d.attempts}</td>
-                  <td className="p-3 font-mono text-xs text-red">{d.lastError ?? "—"}</td>
-                  <td className="p-3 font-mono text-xs text-dim">
+                  <td className="p-3 text-xs text-muted">{d.attempts}</td>
+                  <td className="p-3 text-xs text-red">{d.lastError ?? "—"}</td>
+                  <td className="p-3 text-xs text-dim">
                     {new Date(d.deliveredAt ?? d.nextAttemptAt ?? d.createdAt).toLocaleString()}
                   </td>
                   <td className="p-3 text-right">
@@ -336,14 +368,18 @@ function ClientWebhooks() {
               ))}
               {deliveries !== null && deliveries.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-3 font-mono text-xs text-dim">
-                    No deliveries yet.
+                  <td colSpan={7} className="px-3 py-8 text-center">
+                    <p className="text-sm font-semibold text-fg">No deliveries yet</p>
+                    <p className="mx-auto mt-1 max-w-md text-xs text-muted">
+                      A row appears here each time a task submitted with this key changes status and we push the
+                      update to your endpoint, with its response code and any retries.
+                    </p>
                   </td>
                 </tr>
               )}
               {deliveries === null && (
                 <tr>
-                  <td colSpan={7} className="p-3 font-mono text-xs text-dim">
+                  <td colSpan={7} className="p-3 text-xs text-dim">
                     Loading delivery log…
                   </td>
                 </tr>

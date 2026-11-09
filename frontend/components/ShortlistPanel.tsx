@@ -19,8 +19,8 @@ export function ShortlistPanel({ open, shortlist, nearMisses, budget, onSelect, 
     <Modal open={open} onClose={onClose} ariaLabel="Pick your agent">
       <div className="flex items-center justify-between gap-4 border-b border-line px-6 py-4">
         <div>
-          <h2 className="text-lg font-extrabold tracking-tight">Pick your agent</h2>
-          <p className="mt-0.5 font-mono text-xs text-muted">
+          <h2 className="text-lg font-bold tracking-tight">Pick your agent</h2>
+          <p className="mt-0.5 text-xs text-muted">
             {shortlist.length} in budget · ranked for your task · budget {budget} cr
           </p>
         </div>
@@ -28,14 +28,14 @@ export function ShortlistPanel({ open, shortlist, nearMisses, budget, onSelect, 
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="grid size-8 place-items-center rounded-md border border-line font-mono text-dim transition hover:border-line-bright hover:text-fg"
+          className="grid size-8 place-items-center rounded-md border border-line text-dim transition hover:border-line-bright hover:text-fg"
         >
           ✕
         </button>
       </div>
 
       {empty ? (
-        <p className="px-6 py-8 font-mono text-sm text-dim">
+        <p className="px-6 py-8 text-sm text-dim">
           No agents match this category yet. Adjust the category or budget and search again.
         </p>
       ) : (
@@ -49,10 +49,10 @@ export function ShortlistPanel({ open, shortlist, nearMisses, budget, onSelect, 
           )}
           {nearMisses.length > 0 && (
             <details className="border-t border-line px-6 py-4">
-              <summary className="cursor-pointer font-mono text-xs uppercase tracking-wider text-muted">
+              <summary className="cursor-pointer text-xs text-muted">
                 Above your budget · {nearMisses.length}
               </summary>
-              <p className="mt-2 font-mono text-xs text-dim">
+              <p className="mt-2 text-xs text-dim">
                 These cost more than your {budget} cr budget — selecting one pays its price.
               </p>
               <div className="mt-3 space-y-3">
@@ -85,7 +85,7 @@ function Avatar({ name, logoUrl, size = 44 }: { name: string; logoUrl: string | 
     <span
       aria-hidden
       style={dim}
-      className="grid shrink-0 place-items-center rounded-full border border-line-bright bg-surface font-mono text-base font-bold text-muted"
+      className="grid shrink-0 place-items-center rounded-full border border-line-bright bg-surface text-base font-bold text-muted"
     >
       {name.trim().charAt(0).toUpperCase() || "?"}
     </span>
@@ -104,15 +104,11 @@ function OptionCard({
   const best = rank === 1;
   return (
     <div
-      className={`flex flex-col gap-3 rounded-lg border p-4 transition ${
-        best ? "border-accent/55 glow" : "border-line bg-surface-2 hover:border-line-bright"
-      }`}
+      className={`flex flex-col gap-3 rounded-lg border p-4 transition ${best ? "border-accent/55" : "border-line bg-surface-2 hover:border-line-bright"}`}
     >
       <div className="flex items-start justify-between gap-2">
         <span
-          className={`rounded px-1.5 py-0.5 font-mono text-[0.6rem] font-bold tracking-wider ${
-            best ? "bg-accent text-ink" : "border border-line text-dim"
-          }`}
+          className={`rounded px-1.5 py-0.5 text-xs font-bold ${best ? "bg-accent text-ink" : "border border-line text-dim"}`}
         >
           {best ? "★ BEST MATCH" : `#${rank}`}
         </span>
@@ -128,7 +124,7 @@ function OptionCard({
           {option.tagline && <p className="truncate text-xs text-muted">{option.tagline}</p>}
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-muted">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
         <DeliveryRecord
           reliabilitySum={option.reliabilitySum}
           reliabilityCount={option.reliabilityCount}
@@ -138,11 +134,9 @@ function OptionCard({
         )}
       </div>
       <div className="mt-auto flex items-center justify-between pt-1">
-        <span className="inline-flex items-center gap-1.5 font-mono text-xs">
+        <span className="inline-flex items-center gap-1.5 text-xs">
           <span
-            className={`size-1.5 rounded-full ${
-              option.availability === "AVAILABLE" ? "bg-accent" : "bg-amber"
-            }`}
+            className={`size-1.5 rounded-full ${option.availability === "AVAILABLE" ? "bg-accent" : "bg-amber"}`}
           />
           {option.availability === "AVAILABLE" ? "available" : "busy"}
         </span>
@@ -151,7 +145,7 @@ function OptionCard({
           className="!px-3 !py-1.5"
           onClick={() => onSelect(option)}
         >
-          Select<span aria-hidden> ▸</span>
+          Select<span aria-hidden></span>
         </Button>
       </div>
     </div>
@@ -171,7 +165,7 @@ function NearMissRow({
         <Avatar name={option.agentName} logoUrl={option.logoUrl} size={36} />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{option.agentName}</p>
-          <p className="truncate font-mono text-xs text-dim">
+          <p className="truncate text-xs text-dim">
             <DeliveryRecord
               reliabilitySum={option.reliabilitySum}
               reliabilityCount={option.reliabilityCount}

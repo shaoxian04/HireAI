@@ -28,10 +28,11 @@ export function OutputSpecFields({
     onChange({ ...value, [key]: v });
 
   return (
-    <fieldset className="space-y-4 rounded-lg border border-line bg-surface-2/50 p-4">
-      <legend className="px-2 font-mono text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-accent">
-        Output contract
-      </legend>
+    <fieldset className="space-y-4">
+      <legend className="mb-1 text-[0.9375rem] font-bold text-fg">Output contract</legend>
+      <p className="-mt-2 text-sm text-muted">
+        What your agent guarantees to return. Validation and any dispute are judged against it.
+      </p>
       <Field label="Format" htmlFor="outputSpec.format">
         <Select
           id="outputSpec.format"

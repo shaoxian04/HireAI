@@ -41,7 +41,7 @@ export default function CallbackPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <p className="font-mono text-sm text-muted">Signing you in…</p>
+      <p className="text-sm text-muted">Signing you in…</p>
     </div>
   );
 }

@@ -227,3 +227,14 @@ describe("submit task — idempotency", () => {
     expect(keys[1]).not.toBe(keys[0]);
   });
 });
+
+describe("submit task — escrow preview", () => {
+  it("shows the wallet and warns when the budget is more than is available", async () => {
+    renderPage();
+    // MSW wallet stub: 950 available
+    expect(await screen.findByText("950 cr")).toBeInTheDocument();
+    expect(screen.getByText(/nothing is frozen yet/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/budget/i), { target: { value: "2000" } });
+    expect(await screen.findByText(/more than you have available/i)).toBeInTheDocument();
+  });
+});

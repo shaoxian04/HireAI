@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { RoleGuard } from "@/components/RoleGuard";
-import { Card, Badge } from "@/components/ui";
+import { Card, Badge, SkeletonRows, ButtonLink } from "@/components/ui";
+import { PageHeader } from "@/components/PageHeader";
+
+/** How many recent tasks the overview shows before "Show all". */
+const TASK_PREVIEW = 10;
 import type {
   AdminOverviewDTO,
   AdminTaskRowDTO,
@@ -13,11 +16,21 @@ import type {
   AdminAgentRowDTO,
 } from "@/lib/types";
 
-function Tile({ label, value }: { label: string; value: string | number }) {
+function Tile({
+  label,
+  value,
+  tone = "text-fg",
+  className = "",
+}: {
+  label: string;
+  value: string | number;
+  tone?: string;
+  className?: string;
+}) {
   return (
-    <div className="rounded-md border border-line bg-surface-2 p-4">
-      <p className="font-mono text-[0.65rem] uppercase tracking-[0.18em] text-dim">{label}</p>
-      <p className="mt-1 text-2xl font-extrabold tabular tracking-tight text-fg">{value}</p>
+    <div className={`bg-surface px-5 py-4 ${className}`}>
+      <p className="text-xs text-dim">{label}</p>
+      <p className={`display tabular mt-1 text-[2.4rem] ${tone}`}>{value}</p>
     </div>
   );
 }
@@ -28,6 +41,7 @@ function AdminOverview() {
   const [users, setUsers] = useState<AdminUserRowDTO[]>([]);
   const [agents, setAgents] = useState<AdminAgentRowDTO[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +69,7 @@ function AdminOverview() {
   if (error) {
     return (
       <Card>
-        <p role="alert" className="font-mono text-sm text-red">
+        <p role="alert" className="text-sm text-red">
           {error}
         </p>
       </Card>
@@ -64,38 +78,68 @@ function AdminOverview() {
   if (!overview) {
     return (
       <Card>
-        <p className="font-mono text-sm text-dim">Loading overview…</p>
+        <SkeletonRows label="Loading overview…" rows={3} />
       </Card>
     );
   }
 
   return (
     <div className="space-y-8">
-      <div>
-        <p className="eyebrow">Platform</p>
-        <h1 className="mt-1 text-2xl font-extrabold tracking-tight">Admin overview</h1>
-      </div>
+      <PageHeader
+        title="Admin overview"
+        description="Disputes that need a decision, and where the platform's money and work stand."
+        actions={
+          <ButtonLink href="/admin/disputes">Review disputes</ButtonLink>
+        }
+      />
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <Link href="/admin/disputes" className="contents">
-          <Tile label="Disputes · needs attention" value={overview.disputesOpen + overview.disputesEscalated} />
-        </Link>
-        <Tile label="Escalated" value={overview.disputesEscalated} />
-        <Tile label="Arbitrating" value={overview.disputesArbitrating} />
-        <Tile label="Resolved disputes" value={overview.disputesResolved} />
-        <Tile label="Tasks" value={overview.tasksTotal} />
-        <Tile label="Users" value={overview.usersTotal} />
-        <Tile label="Agents" value={overview.agentsTotal} />
-        <Tile label="Escrow held" value={`${overview.escrowHeld} cr`} />
-        <Tile label="Commission earned" value={`${overview.commissionEarned} cr`} />
+      <section className="space-y-3">
+        <h2 className="eyebrow">Disputes</h2>
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line lg:grid-cols-4">
+          <Tile
+            label="Need attention"
+            value={overview.disputesOpen + overview.disputesEscalated}
+            tone={overview.disputesOpen + overview.disputesEscalated > 0 ? "text-amber" : "text-fg"}
+          />
+          <Tile label="Escalated" value={overview.disputesEscalated} tone={overview.disputesEscalated > 0 ? "text-red" : "text-fg"} />
+          <Tile label="Arbitrating" value={overview.disputesArbitrating} />
+          <Tile label="Resolved" value={overview.disputesResolved} />
+        </div>
       </section>
 
       <section className="space-y-3">
-        <h2 className="eyebrow">Recent tasks</h2>
-        <Card className="overflow-x-auto p-0">
-          <table className="w-full text-sm">
+        <h2 className="eyebrow">Platform</h2>
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 lg:grid-cols-5">
+          <Tile label="Tasks" value={overview.tasksTotal} />
+          <Tile label="Users" value={overview.usersTotal} />
+          <Tile label="Agents" value={overview.agentsTotal} />
+          <Tile label="Escrow held" value={`${overview.escrowHeld} cr`} tone="text-accent" />
+          {/* spans the leftover cells on 2- and 3-column grids, so no row ends in an empty box */}
+          <Tile
+            label="Commission earned"
+            value={`${overview.commissionEarned} cr`}
+            className="col-span-2 lg:col-span-1"
+          />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="eyebrow">Recent tasks</h2>
+          {tasks.length > TASK_PREVIEW && (
+            <button
+              type="button"
+              onClick={() => setShowAllTasks((v) => !v)}
+              className="text-sm font-semibold text-accent hover:underline"
+            >
+              {showAllTasks ? "Show fewer" : `Show all ${tasks.length}`}
+            </button>
+          )}
+        </div>
+        <Card className="overflow-hidden rounded-xl p-0 sm:overflow-x-auto">
+          <table className="stack-table w-full text-sm sm:min-w-[34rem]">
             <thead>
-              <tr className="border-b border-line text-left font-mono text-[0.65rem] uppercase tracking-wider text-dim">
+              <tr className="border-b border-line bg-surface-2 text-left text-xs font-semibold text-muted">
                 <th className="p-3">Title</th>
                 <th className="p-3">Client</th>
                 <th className="p-3">Status</th>
@@ -103,19 +147,19 @@ function AdminOverview() {
               </tr>
             </thead>
             <tbody>
-              {tasks.map((t) => (
+              {(showAllTasks ? tasks : tasks.slice(0, TASK_PREVIEW)).map((t) => (
                 <tr key={t.id} className="border-b border-line/50">
                   <td className="p-3 text-fg">{t.title}</td>
-                  <td className="p-3 font-mono text-xs text-muted">{t.clientName}</td>
-                  <td className="p-3">
-                    <Badge status={t.status}>{t.status}</Badge>
+                  <td data-label="Client" className="p-3 text-xs text-muted">{t.clientName}</td>
+                  <td data-label="Status" className="p-3">
+                    <Badge status={t.status} />
                   </td>
-                  <td className="p-3 tabular text-accent">{t.budget} cr</td>
+                  <td data-label="Budget" className="p-3 tabular font-semibold text-fg">{t.budget} cr</td>
                 </tr>
               ))}
               {tasks.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="p-3 font-mono text-xs text-dim">
+                  <td colSpan={4} className="p-3 text-xs text-dim">
                     No tasks yet.
                   </td>
                 </tr>
@@ -125,13 +169,13 @@ function AdminOverview() {
         </Card>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
+      <section className="grid gap-8">
         <div className="space-y-3">
           <h2 className="eyebrow">Users &amp; wallets</h2>
-          <Card className="overflow-x-auto p-0">
-            <table className="w-full text-sm">
+          <Card className="overflow-hidden rounded-xl p-0 sm:overflow-x-auto">
+            <table className="stack-table w-full text-sm sm:min-w-[34rem]">
               <thead>
-                <tr className="border-b border-line text-left font-mono text-[0.65rem] uppercase tracking-wider text-dim">
+                <tr className="border-b border-line bg-surface-2 text-left text-xs font-semibold text-muted">
                   <th className="p-3">User</th>
                   <th className="p-3">Roles</th>
                   <th className="p-3">Available</th>
@@ -141,10 +185,10 @@ function AdminOverview() {
               <tbody>
                 {users.map((u) => (
                   <tr key={u.id} className="border-b border-line/50">
-                    <td className="p-3 font-mono text-xs text-fg">{u.email}</td>
-                    <td className="p-3 font-mono text-[0.65rem] text-muted">{u.roles.join(", ")}</td>
-                    <td className="p-3 tabular text-muted">{u.availableBalance} cr</td>
-                    <td className="p-3 tabular text-muted">{u.escrowBalance} cr</td>
+                    <td className="p-3 text-xs text-fg">{u.email}</td>
+                    <td data-label="Roles" className="p-3 text-xs text-muted">{u.roles.join(", ")}</td>
+                    <td data-label="Available" className="p-3 tabular text-muted">{u.availableBalance} cr</td>
+                    <td data-label="Escrow" className="p-3 tabular text-muted">{u.escrowBalance} cr</td>
                   </tr>
                 ))}
               </tbody>
@@ -153,10 +197,10 @@ function AdminOverview() {
         </div>
         <div className="space-y-3">
           <h2 className="eyebrow">Agents</h2>
-          <Card className="overflow-x-auto p-0">
-            <table className="w-full text-sm">
+          <Card className="overflow-hidden rounded-xl p-0 sm:overflow-x-auto">
+            <table className="stack-table w-full text-sm sm:min-w-[34rem]">
               <thead>
-                <tr className="border-b border-line text-left font-mono text-[0.65rem] uppercase tracking-wider text-dim">
+                <tr className="border-b border-line bg-surface-2 text-left text-xs font-semibold text-muted">
                   <th className="p-3">Name</th>
                   <th className="p-3">Builder</th>
                   <th className="p-3">Status</th>
@@ -167,11 +211,11 @@ function AdminOverview() {
                 {agents.map((a) => (
                   <tr key={a.id} className="border-b border-line/50">
                     <td className="p-3 text-fg">{a.name}</td>
-                    <td className="p-3 font-mono text-xs text-muted">{a.builderName}</td>
-                    <td className="p-3">
-                      <Badge status={a.status}>{a.status}</Badge>
+                    <td data-label="Builder" className="p-3 text-xs text-muted">{a.builderName}</td>
+                    <td data-label="Status" className="p-3">
+                      <Badge status={a.status} />
                     </td>
-                    <td className="p-3 tabular text-muted">{a.price == null ? "—" : `${a.price} cr`}</td>
+                    <td data-label="Price" className="p-3 tabular text-muted">{a.price == null ? "—" : `${a.price} cr`}</td>
                   </tr>
                 ))}
               </tbody>

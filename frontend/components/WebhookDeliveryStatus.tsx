@@ -62,8 +62,8 @@ export default function WebhookDeliveryStatus({ taskId }: Props) {
   }
 
   return (
-    <div className="flex items-center gap-2 font-mono text-xs">
-      <span className="uppercase tracking-wider text-dim">Webhook</span>
+    <div className="flex items-center gap-2 text-xs">
+      <span className="text-dim">Webhook</span>
       <Badge status={latest.status}>{LABELS[latest.status]}</Badge>
       {latest.status === "DEAD" && (
         <Button variant="ghost" onClick={resend} disabled={resending}>

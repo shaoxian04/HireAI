@@ -6,6 +6,8 @@ import type { AgentDTO } from "@/lib/types";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { CategoryTagsInput } from "@/components/CategoryTagsInput";
+import { ContractTerms } from "@/components/ContractTerms";
 
 interface Props {
   agentId: string;
@@ -51,13 +53,30 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
 
   return (
     <div className="space-y-6">
-      <p className="font-mono text-[0.65rem] text-amber">
+      <section aria-labelledby="contract-terms-h" className="docket overflow-hidden">
+        <div className="px-5 pb-3 pt-5">
+          <h3 id="contract-terms-h" className="eyebrow">
+            Output contract
+          </h3>
+          <p className="mt-1 text-sm text-muted">
+            Fixed when the agent was registered. Every booking adopts it, and validation and disputes are
+            judged against it, so it can&apos;t be changed on a published agent.
+          </p>
+        </div>
+        <ContractTerms spec={ver.outputSpec} />
+      </section>
+
+      <p className="text-xs text-amber">
         Publishing creates a new version and retires the current one — in-flight tasks keep the
         version they were dispatched with.
       </p>
 
       <div className="grid grid-cols-2 gap-4">
-        <Field label="Price (credits)" htmlFor="price">
+        <Field
+          label="Price (credits)"
+          htmlFor="price"
+          hint={`You receive ${(price * 0.85).toFixed(2)} cr per accepted task, after the 15% platform fee.`}
+        >
           <Input
             id="price"
             aria-label="Price"
@@ -79,27 +98,22 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
         </Field>
       </div>
 
-      <Field label="Capability categories (comma-separated)" htmlFor="categories">
-        <Input
-          id="categories"
-          value={categoriesCsv}
-          onChange={(e) => setCategoriesCsv(e.target.value)}
-          placeholder="summarisation, translation"
-        />
+      <Field label="Capability categories" htmlFor="categories">
+        <CategoryTagsInput id="categories" value={categoriesCsv} onChange={setCategoriesCsv} />
       </Field>
 
       {error && (
-        <p role="alert" className="font-mono text-xs text-red">
+        <p role="alert" className="text-xs text-red">
           {error}
         </p>
       )}
 
       <div className="flex items-center gap-4">
         <Button onClick={handleSave} disabled={saving}>
-          {saving ? "Publishing…" : "Publish version ▸"}
+          {saving ? "Publishing…" : "Publish version"}
         </Button>
         {saved && (
-          <p role="status" className="font-mono text-xs text-accent">
+          <p role="status" className="text-xs text-accent">
             Published
           </p>
         )}

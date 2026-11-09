@@ -59,7 +59,7 @@ describe("direct booking", () => {
 
     renderBooking();
     expect(await screen.findByText(/summariser bot/i)).toBeInTheDocument();
-    expect(screen.getByText(/you.ll pay/i)).toHaveTextContent(/10 cr/); // fixed price, shown not typed
+    expect(screen.getByText(/you.ll pay/i).parentElement).toHaveTextContent(/10 cr/); // fixed price, shown not typed
     expect(screen.queryByLabelText(/budget/i)).not.toBeInTheDocument(); // no editable budget input at all
     expect(screen.getByText(/valid json/i)).toBeInTheDocument(); // adopted contract, read-only
     expect(screen.queryByLabelText(/category/i)).not.toBeInTheDocument(); // no category/spec inputs

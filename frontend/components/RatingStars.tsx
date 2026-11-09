@@ -9,12 +9,12 @@ export function RatingStars({
   showCount?: boolean;
 }) {
   if (!count || avg == null) {
-    return <span className="font-mono text-[0.65rem] uppercase tracking-wider text-dim">No reviews yet</span>;
+    return <span className="text-xs text-dim">No reviews yet</span>;
   }
   const filled = Math.round(avg);
   return (
     <span
-      className="inline-flex items-center gap-1.5 font-mono text-xs"
+      className="inline-flex items-center gap-1.5 text-xs"
       aria-label={
         showCount
           ? `Rated ${avg.toFixed(1)} out of 5 from ${count} reviews`

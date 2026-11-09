@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
-import { Button, Card, Field, Input } from "@/components/ui";
+import { Button, Field, Input, SkeletonRows, Textarea } from "@/components/ui";
+import { ContractTerms } from "@/components/ContractTerms";
+import { errorFor, toFormError, useFocusOnFieldError, validateForm, type FormError } from "@/lib/formErrors";
 import type { AgentProfileDTO, DirectBookRequest, TaskDTO } from "@/lib/types";
 import { directBookSignature, useIdempotencyKey } from "@/lib/useIdempotencyKey";
+import { PageHeader } from "@/components/PageHeader";
 
 function BookingForm() {
   const { id } = useParams<{ id: string }>();
@@ -20,8 +22,11 @@ function BookingForm() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
 
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FormError | null>(null);
+  // A field error clears the moment that field (or any other) is edited, so it never goes stale.
+  const clearFieldError = () => setError((er) => (er?.field ? null : er));
   const [submitting, setSubmitting] = useState(false);
+  useFocusOnFieldError(error);
   // Built here rather than in onSubmit so the idempotency signature is derived from the very
   // object that gets sent: retrying the same booking reuses one key (deduped server-side),
   // while an edited title or description starts a fresh one.
@@ -47,19 +52,26 @@ function BookingForm() {
     return (
       <p
         role="alert"
-        className="rounded-md border border-red/30 bg-red/10 px-3 py-2 font-mono text-xs text-red"
+        className="rounded-md border border-red/30 bg-red/10 px-3 py-2 text-xs text-red"
       >
         {profileError}
       </p>
     );
   if (!profile)
-    return <p className="font-mono text-sm text-dim">Loading agent profile…</p>;
+    return <SkeletonRows label="Loading agent profile…" rows={3} />;
 
   const { card } = profile;
+
+  const bookErrors = { title: "Title", description: "Description" };
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    const invalid = validateForm(e.currentTarget as HTMLFormElement);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
     setSubmitting(true);
     try {
       const created = await api<TaskDTO>("/tasks/direct", {
@@ -69,7 +81,7 @@ function BookingForm() {
       });
       router.push(`/client/tasks/${created.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Booking failed");
+      setError(toFormError(err, bookErrors, "Booking failed. Check your connection and try again."));
     } finally {
       setSubmitting(false);
     }
@@ -77,84 +89,80 @@ function BookingForm() {
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <div>
-        <Link
-          href={`/client/agents/${id}`}
-          className="font-mono text-xs text-dim transition hover:text-accent"
-        >
-          ← storefront
-        </Link>
-        <p className="eyebrow mt-4 flex items-center gap-2">
-          <span className="inline-block h-px w-6 bg-accent" />
-          Direct booking
-        </p>
-        <h1 className="mt-3 text-3xl font-extrabold tracking-tight">
-          Book {card.name}
-        </h1>
-        <p className="mt-2 text-sm text-muted">
-          You accept this agent&apos;s declared output contract; credits freeze in escrow on submit.
-        </p>
-      </div>
+      <PageHeader
+        back={{ href: `/client/agents/${id}`, label: "Agent details" }}
+        title={`Book ${card.name}`}
+        description="Booking adopts this agent's output contract. Its price freezes in escrow when you submit, and comes back to you if the work fails it."
+      />
 
-      {/* Adopted output contract — read-only */}
-      <section>
-        <p className="eyebrow mb-2">Output contract</p>
-        <div className="rounded-md border border-line bg-surface-2 p-4 font-mono text-xs text-muted">
-          <p>
-            format ▸ <span className="text-cyan">{profile.outputSpec.format}</span>
-          </p>
-          {profile.outputSpec.schema && (
-            <p className="mt-1">schema ▸ {profile.outputSpec.schema}</p>
-          )}
-          {profile.outputSpec.acceptanceCriteria && (
-            <p className="mt-1">accepts ▸ {profile.outputSpec.acceptanceCriteria}</p>
-          )}
-        </div>
-      </section>
+      <div className="docket overflow-hidden">
+        <section aria-labelledby="contract-h">
+          <div className="px-5 pb-3 pt-5">
+            <h2 id="contract-h" className="eyebrow">
+              The contract you&apos;re adopting
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              The agent&apos;s result is validated against these terms before you see it.
+            </p>
+          </div>
+          <ContractTerms spec={profile.outputSpec} />
+        </section>
 
-      <Card>
-        <form onSubmit={onSubmit} className="space-y-4" noValidate>
-          <Field label="Title" htmlFor="title">
+        <div className="docket-tear" />
+
+        <form onSubmit={onSubmit} noValidate className="space-y-4 bg-surface-2 p-5 sm:p-6">
+          <h2 className="eyebrow">Your brief</h2>
+          <Field label="Title" htmlFor="title" error={errorFor(error, "title")}>
             <Input
               id="title"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => { setTitle(e.target.value); clearFieldError(); }}
+              placeholder="e.g. Summarise the Q2 board report"
               required
             />
           </Field>
-          <Field label="Description" htmlFor="description">
-            <textarea
+          <Field
+            label="Description"
+            htmlFor="description"
+            error={errorFor(error, "description")}
+            hint="What the agent should work on and anything it must know. It is sent to the agent as written."
+          >
+            <Textarea
               id="description"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              className="block w-full rounded-md border border-line bg-surface-2 px-3 py-2 font-mono text-sm text-fg shadow-inner transition placeholder:text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
+              onChange={(e) => { setDescription(e.target.value); clearFieldError(); }}
+              rows={5}
               required
             />
           </Field>
-          {/* Escrow summary row — the price is fixed and non-editable; this is the exact amount that freezes in escrow on submit. */}
-          <p className="font-mono text-xs text-dim">
-            You&apos;ll pay{" "}
-            <span className="tabular text-accent">{card.price} cr</span>
-            {", frozen in escrow"}
-            {" "}· ≤{" "}
-            <span className="tabular">{card.maxExecutionSeconds}s</span>{" "}
-            execution
+
+          <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line text-sm">
+            <div className="bg-surface px-4 py-3">
+              <dt className="text-xs text-dim">You&apos;ll pay</dt>
+              <dd className="display tabular mt-0.5 text-2xl text-accent">{card.price} cr</dd>
+            </div>
+            <div className="bg-surface px-4 py-3">
+              <dt className="text-xs text-dim">Agent must deliver within</dt>
+              <dd className="display tabular mt-0.5 text-2xl">{card.maxExecutionSeconds}s</dd>
+            </div>
+          </dl>
+          <p className="text-xs text-dim">
+            The price is fixed by the agent and frozen in escrow, not charged, until you accept the result.
           </p>
 
-          {error && (
+          {error && !error.field && (
             <p
               role="alert"
-              className="rounded-md border border-red/30 bg-red/10 px-3 py-2 font-mono text-xs text-red"
+              className="rounded-md border border-red/30 bg-red/10 px-3 py-2 text-sm text-red"
             >
-              {error}
+              {error.message}
             </p>
           )}
           <Button type="submit" disabled={submitting} className="w-full">
-            {submitting ? "Booking…" : "Book & freeze escrow ▸"}
+            {submitting ? "Booking…" : `Book and freeze ${card.price} cr`}
           </Button>
         </form>
-      </Card>
+      </div>
     </div>
   );
 }

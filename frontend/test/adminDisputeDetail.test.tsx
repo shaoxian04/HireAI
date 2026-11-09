@@ -41,6 +41,6 @@ describe("admin dispute detail", () => {
     await userEvent.type(screen.getByLabelText(/rationale/i), "backstop refund");
     await userEvent.click(screen.getByRole("button", { name: /issue ruling/i }));
 
-    expect(await screen.findByText("RESOLVED")).toBeInTheDocument();
+    expect(await screen.findByText("Resolved", { selector: "[data-status=RESOLVED]" })).toBeInTheDocument();
   });
 });

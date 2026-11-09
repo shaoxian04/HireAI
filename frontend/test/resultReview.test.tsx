@@ -26,6 +26,9 @@ describe("ResultReviewBar", () => {
     renderBar((t) => (resolved = t));
 
     await user.click(screen.getByRole("button", { name: /accept result/i }));
+    // nothing is paid until the client confirms
+    expect(resolved).toBeNull();
+    await user.click(await screen.findByRole("button", { name: /accept and/i }));
 
     await waitFor(() => expect(resolved).not.toBeNull());
     expect((resolved as TaskDTO | null)!.resolution).toBe("ACCEPTED");

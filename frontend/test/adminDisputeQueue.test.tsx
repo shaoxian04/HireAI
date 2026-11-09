@@ -29,6 +29,6 @@ describe("admin dispute queue", () => {
       </AuthProvider>,
     );
     expect(await screen.findByText("Summarise the Q3 report")).toBeInTheDocument();
-    expect(await screen.findByText("ESCALATED")).toBeInTheDocument();
+    expect(await screen.findByText("Escalated", { selector: "[data-status=ESCALATED]" })).toBeInTheDocument();
   });
 });

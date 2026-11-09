@@ -6,15 +6,14 @@ import type { AgentStatsDTO } from "@/lib/types";
 import { StatTile } from "@/components/StatTile";
 import { Sparkline } from "@/components/Sparkline";
 import { Badge } from "@/components/ui/Badge";
+import { SkeletonRows } from "@/components/ui";
+import { formatDuration } from "@/lib/format";
 
 interface Props {
   agentId: string;
 }
 
-function fmt(seconds: number | null): string {
-  if (seconds == null) return "—";
-  return `${seconds}s`;
-}
+const fmt = formatDuration;
 
 function fmtPct(rate: number | null): string {
   if (rate == null) return "—";
@@ -33,14 +32,14 @@ export function TabStats({ agentId }: Props) {
 
   if (error) {
     return (
-      <p role="alert" className="font-mono text-xs text-red">
+      <p role="alert" className="text-xs text-red">
         {error}
       </p>
     );
   }
 
   if (!stats) {
-    return <p className="font-mono text-sm text-dim">Loading…</p>;
+    return <SkeletonRows label="Loading…" rows={3} />;
   }
 
   const { volume, performance, earnings } = stats;
@@ -50,7 +49,7 @@ export function TabStats({ agentId }: Props) {
       {/* Stat tile grid */}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4">
         <StatTile value={volume.total} label="Total" />
-        <StatTile value={volume.completed} label="Completed" tone="accent" />
+        <StatTile value={volume.completed} label="Completed" tone={volume.completed > 0 ? "accent" : "fg"} />
         <StatTile
           value={volume.failed}
           label="Failed"
@@ -68,10 +67,10 @@ export function TabStats({ agentId }: Props) {
         />
         <StatTile value={fmt(performance.avgTurnaroundSeconds)} label="Avg turnaround" />
         <StatTile value={fmtPct(performance.onTimeRate)} label="On-time %" />
-        <StatTile value={`${earnings.creditsInEscrow} cr`} label="Escrow" tone="amber" />
+        <StatTile value={`${earnings.creditsInEscrow} cr`} label="Escrow" tone={earnings.creditsInEscrow > 0 ? "amber" : "fg"} />
       </div>
 
-      <p className="font-mono text-[0.6rem] uppercase tracking-wider text-dim">
+      <p className="text-xs text-dim">
         Escrow is the value of tasks awaiting acceptance — accepted payouts land in your wallet.
       </p>
 
@@ -84,16 +83,21 @@ export function TabStats({ agentId }: Props) {
       {/* Recent tasks */}
       <div>
         <p className="eyebrow mb-3">Recent tasks</p>
+        {stats.recentTasks.length === 0 && (
+          <p className="rounded-lg border border-dashed border-line-bright bg-surface px-4 py-6 text-center text-sm text-muted">
+            No tasks yet. They appear here once a client books this agent or routing picks it.
+          </p>
+        )}
         <ul className="space-y-2">
           {stats.recentTasks.map((t) => (
             <li
               key={t.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-line bg-surface-2 px-4 py-3"
+              className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface px-4 py-3"
             >
               <p className="truncate text-sm text-fg">{t.title}</p>
               <div className="flex shrink-0 items-center gap-3">
-                <Badge status={t.status}>{t.status}</Badge>
-                <span className="font-mono text-[0.6rem] text-dim">
+                <Badge status={t.status} />
+                <span className="text-xs text-dim">
                   {new Date(t.createdAt).toLocaleDateString()}
                 </span>
               </div>

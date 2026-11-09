@@ -80,7 +80,7 @@ describe("CategoryCombobox", () => {
     server.use(http.get("*/api/catalogue/categories", () => fail("INTERNAL_ERROR", "boom", 500)));
     const onChange = vi.fn();
     render(<CategoryCombobox value="" onChange={onChange} />);
-    const input = await screen.findByPlaceholderText("category");
+    const input = await screen.findByPlaceholderText("Category");
     fireEvent.change(input, { target: { value: "anything" } });
     expect(onChange).toHaveBeenCalledWith("anything");
   });

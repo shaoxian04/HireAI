@@ -35,7 +35,7 @@ describe("builder earnings", () => {
     renderBuilder();
     // From the MSW /api/wallet stub: availableBalance 950.
     expect(await screen.findByText("950.00")).toBeInTheDocument();
-    expect(screen.getByText(/wallet cr/)).toBeInTheDocument();
+    expect(screen.getByText(/wallet balance/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /view earnings/i })).toHaveAttribute(
       "href",
       "/builder/earnings",
@@ -56,11 +56,23 @@ describe("builder agent list", () => {
   it("lists an agent and activates it", async () => {
     renderBuilder();
     expect(await screen.findByText("Summariser")).toBeInTheDocument();
-    expect(screen.getByText("PENDING_VERIFICATION")).toBeInTheDocument();
+    expect(screen.getByText("Not activated")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /activate/i }));
 
-    expect(await screen.findByText("ACTIVE")).toBeInTheDocument();
+    expect(await screen.findByText("Active", { selector: "[data-status=ACTIVE]" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /activate/i })).not.toBeInTheDocument();
+    // and says so
+    expect(screen.getByRole("status")).toHaveTextContent(/summariser is active/i);
+  });
+
+  it("narrows the list by search and shows a way out when nothing matches", async () => {
+    renderBuilder();
+    expect(await screen.findByText("Summariser")).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText(/find an agent/i), "zzz-no-such-agent");
+    expect(screen.queryByText("Summariser")).not.toBeInTheDocument();
+    expect(screen.getByText(/no agents match/i)).toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText(/find an agent/i));
+    expect(screen.getByText("Summariser")).toBeInTheDocument();
   });
 });

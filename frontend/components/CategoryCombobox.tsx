@@ -11,7 +11,7 @@ interface Props {
 }
 
 const INPUT_CLS =
-  "block w-full rounded-md border border-line bg-surface-2 px-3 py-2 font-mono text-sm text-fg shadow-inner transition placeholder:text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25";
+  "block h-10 w-full rounded-md border border-line-bright bg-surface px-3 text-sm text-fg transition placeholder:text-dim focus:border-accent/70 focus:outline-none focus:ring-2 focus:ring-accent/20";
 
 /**
  * Strict, searchable category picker. Options come from GET /catalogue/categories. `onChange` is
@@ -58,7 +58,7 @@ export function CategoryCombobox({ value, onChange, id }: Props) {
         className={INPUT_CLS}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="category"
+        placeholder="Category"
       />
     );
   }
@@ -111,7 +111,7 @@ export function CategoryCombobox({ value, onChange, id }: Props) {
         onChange={(e) => onInput(e.target.value)}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
-        placeholder="search categories…"
+        placeholder="Search categories, e.g. summarisation"
       />
       {open && (
         <ul
@@ -120,7 +120,7 @@ export function CategoryCombobox({ value, onChange, id }: Props) {
           className="absolute z-20 mt-2 max-h-64 w-full overflow-auto rounded-md border border-line-bright bg-surface shadow-xl"
         >
           {filtered.length === 0 ? (
-            <li className="px-3.5 py-3 font-mono text-xs text-dim">
+            <li className="px-3.5 py-3 text-xs text-dim">
               No matching category — try the marketplace.
             </li>
           ) : (
@@ -131,12 +131,10 @@ export function CategoryCombobox({ value, onChange, id }: Props) {
                 aria-selected={i === highlight}
                 onMouseDown={(e) => { e.preventDefault(); commit(c.category); }}
                 onMouseEnter={() => setHighlight(i)}
-                className={`flex cursor-pointer items-center justify-between gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0 ${
-                  i === highlight ? "bg-surface-2" : ""
-                }`}
+                className={`flex cursor-pointer items-center justify-between gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0 ${i === highlight ? "bg-accent/10 text-accent" : ""}`}
               >
                 <span className="font-medium">{c.category}</span>
-                <span className="rounded-full border border-line px-2 py-0.5 font-mono text-[0.66rem] text-muted">
+                <span className="rounded-full border border-line px-2 py-0.5 text-xs text-muted">
                   {c.agentCount} {c.agentCount === 1 ? "agent" : "agents"}
                 </span>
               </li>

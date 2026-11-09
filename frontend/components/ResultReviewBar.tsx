@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { TaskDTO, RejectReason } from "@/lib/types";
-import { Button, Field } from "@/components/ui";
+import { Button, ConfirmDialog, Field } from "@/components/ui";
 
 interface Props {
   taskId: string;
+  /** The credits held in escrow for this task, named in the accept confirmation. */
+  budget?: number;
   /** Called with the RESOLVED task returned by the backend. */
   onResolved: (task: TaskDTO) => void;
 }
@@ -23,20 +25,23 @@ const REJECT_REASONS: { value: RejectReason; label: string }[] = [
  * Reject opens a dispute: the client picks a required reason category and an optional detail;
  * an arbitrator reviews the dispute and issues a ruling (refund, split, or uphold payment).
  */
-export function ResultReviewBar({ taskId, onResolved }: Props) {
+export function ResultReviewBar({ taskId, budget, onResolved }: Props) {
   const [rejecting, setRejecting] = useState(false);
   const [reasonCategory, setReasonCategory] = useState<RejectReason | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingAccept, setConfirmingAccept] = useState(false);
 
   async function acceptResult() {
     setBusy(true);
     setError(null);
     try {
       const task = await api<TaskDTO>(`/tasks/${taskId}/accept`, { method: "POST" });
+      setConfirmingAccept(false);
       onResolved(task);
     } catch (e) {
+      setConfirmingAccept(false);
       setError(e instanceof ApiError ? e.message : "Failed to submit your decision");
     } finally {
       setBusy(false);
@@ -64,6 +69,17 @@ export function ResultReviewBar({ taskId, onResolved }: Props) {
 
   return (
     <section aria-label="Review result" className="space-y-3 border-t border-line pt-5">
+      <ConfirmDialog
+        open={confirmingAccept}
+        title="Accept this result and pay the builder?"
+        confirmLabel={budget != null ? `Accept and release ${budget} cr` : "Accept and pay"}
+        busy={busy}
+        onConfirm={acceptResult}
+        onCancel={() => setConfirmingAccept(false)}
+      >
+        {budget != null ? `The ${budget} credits held in escrow are released` : "The credits held in escrow are released"}{" "}
+        to the builder, less the platform&apos;s 15% fee. Once you accept, this result can no longer be disputed.
+      </ConfirmDialog>
       <p className="eyebrow">Your decision</p>
       <p className="text-sm text-muted">
         Accepting pays the builder out of escrow. Rejecting opens a dispute that an arbitrator
@@ -71,14 +87,14 @@ export function ResultReviewBar({ taskId, onResolved }: Props) {
         payment to the builder.
       </p>
       {error && (
-        <p role="alert" className="font-mono text-xs text-red">
+        <p role="alert" className="text-xs text-red">
           {error}
         </p>
       )}
       {!rejecting ? (
         <div className="flex items-center gap-3">
-          <Button onClick={acceptResult} disabled={busy}>
-            Accept result ▸
+          <Button onClick={() => setConfirmingAccept(true)} disabled={busy}>
+            Accept result
           </Button>
           <Button variant="ghost" onClick={() => setRejecting(true)} disabled={busy}>
             Reject
@@ -91,7 +107,7 @@ export function ResultReviewBar({ taskId, onResolved }: Props) {
               {REJECT_REASONS.map(({ value, label }) => (
                 <label
                   key={value}
-                  className="flex cursor-pointer items-center gap-3 rounded-md border border-line bg-canvas px-3 py-2.5 font-mono text-xs text-fg hover:border-line-bright"
+                  className="flex cursor-pointer items-center gap-3 rounded-md border border-line bg-surface px-3 py-2.5 text-sm text-fg hover:border-accent/50"
                 >
                   <input
                     type="radio"
@@ -113,7 +129,7 @@ export function ResultReviewBar({ taskId, onResolved }: Props) {
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={2}
-              className="w-full rounded-md border border-line bg-canvas p-3 font-mono text-xs text-fg"
+              className="w-full rounded-md border border-line-bright bg-surface p-3 text-sm text-fg"
             />
           </Field>
           <div className="flex items-center gap-3">

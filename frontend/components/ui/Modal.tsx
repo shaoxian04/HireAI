@@ -7,10 +7,12 @@ interface ModalProps {
   onClose: () => void;
   ariaLabel: string;
   children: ReactNode;
+  /** "sm" for a short confirmation; default "md" for forms and pickers. */
+  size?: "sm" | "md";
 }
 
 /** Accessible overlay dialog: backdrop + Esc close, focus trap, body scroll-lock, focus restore. */
-export function Modal({ open, onClose, ariaLabel, children }: ModalProps) {
+export function Modal({ open, onClose, ariaLabel, children, size = "md" }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
 
@@ -62,7 +64,7 @@ export function Modal({ open, onClose, ariaLabel, children }: ModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-canvas/70 p-4 backdrop-blur-sm sm:p-8"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-night/55 p-4 backdrop-blur-sm sm:p-8"
       onClick={() => onCloseRef.current()}
     >
       <div
@@ -72,7 +74,7 @@ export function Modal({ open, onClose, ariaLabel, children }: ModalProps) {
         aria-label={ariaLabel}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="panel reveal my-6 w-full max-w-2xl outline-none"
+        className={`panel my-6 w-full shadow-2xl outline-none ${size === "sm" ? "mt-[18vh] max-w-md" : "max-w-2xl"}`}
       >
         {children}
       </div>

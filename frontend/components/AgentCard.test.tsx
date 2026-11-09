@@ -75,10 +75,10 @@ describe("CategoryBar", () => {
     expect(onSelect).toHaveBeenCalledWith("");
   });
 
-  it("applies accent classes to the active chip", () => {
+  it("fills the active chip with the accent", () => {
     render(<CategoryBar categories={cats} active="coding" onSelect={vi.fn()} />);
     const codingBtn = screen.getByRole("button", { name: /coding/ });
-    expect(codingBtn.className).toContain("text-accent");
+    expect(codingBtn.className).toContain("bg-accent");
   });
 
   it("sets aria-pressed=true on the active chip and false on others", () => {

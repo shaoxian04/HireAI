@@ -42,12 +42,12 @@ describe("client tasks console", () => {
   it("lists the seeded task with its title and status", async () => {
     renderClientTasks();
     expect(await screen.findByText("Summarise Q2 report")).toBeInTheDocument();
-    expect(await screen.findByText("EXECUTING")).toBeInTheDocument();
+    expect(await screen.findByText("Executing")).toBeInTheDocument();
   });
 
   it("shows a link to submit a new task", async () => {
     renderClientTasks();
-    await screen.findByText(/treasury/i);
+    await screen.findByRole("heading", { name: /my tasks/i });
     expect(screen.getByRole("link", { name: /submit task/i })).toHaveAttribute(
       "href",
       "/client/tasks/new",
@@ -63,7 +63,7 @@ describe("client tasks console", () => {
       }),
     );
     renderClientTasks();
-    const topupInput = (await screen.findByLabelText(/top-up amount/i)) as HTMLInputElement;
+    const topupInput = (await screen.findByLabelText(/add credits to your wallet/i)) as HTMLInputElement;
     expect(topupInput.value).toBe("50");
     await userEvent.clear(topupInput);
     expect(topupInput.value).toBe("");
@@ -76,9 +76,9 @@ describe("client tasks console", () => {
 
   it("shows a validation error instead of submitting 0 when top-up is cleared and left empty", async () => {
     renderClientTasks();
-    const topupInput = (await screen.findByLabelText(/top-up amount/i)) as HTMLInputElement;
+    const topupInput = (await screen.findByLabelText(/add credits to your wallet/i)) as HTMLInputElement;
     await userEvent.clear(topupInput);
     await userEvent.click(screen.getByRole("button", { name: /add/i }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/amount/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/credits to add/i);
   });
 });
