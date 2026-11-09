@@ -100,7 +100,8 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   best-match highlight, a plain-language `DeliveryRecord`, above-budget near-miss drawer; booking is
   `POST /tasks/direct`, so a near-miss pick pays above the typed budget; `localStorage` draft — **no reputation number and no stars**: the shortlist once divided the routing composite by 20
   and drew it as a five-star client rating, which is a different quantity entirely); `client/tasks/[id]` — polls
-  result; at `PENDING_REVIEW` renders the `ResultReviewBar` (accept / reject with an A/B/C reason), then on
+  the task every 2 s, backing off to 30 s while nothing changes and snapping back on any status change;
+  shows an `InspectionReport` above the result; at `PENDING_REVIEW` renders the `ResultReviewBar` (accept, confirmed in a `ConfirmDialog` naming the escrowed amount / reject with an A/B/C reason), then on
   `RESOLVED` shows the settled summary plus a dismissible `RatingPrompt` (`POST /api/tasks/{id}/review`,
   accepted-only and once per task — a rating left later beats one never given, so it must stay skippable).
   On a **terminal failure** (`SPEC_VIOLATION`/`TIMED_OUT`/`FAILED`/`CANCELLED`)
@@ -137,16 +138,74 @@ role users see no switcher; the nav links shown depend on `activeSurface`:
 `components/RequireAuth` and `components/RoleGuard` are client guards. `RoleGuard` reads `hireai.token`
 directly so it doesn't bounce an authenticated user before context rehydrates.
 
+## Design rules
+
+The identity is a **work docket**: a task is a work order, its output spec is a contract, and money moves
+only when the work passes. Tokens live in `app/globals.css` (`@theme`, with a `:root[data-theme="dark"]`
+override block). Follow these rules on every surface:
+
+- **Type.** Big Shoulders (`display` class / `font-display`) for page titles and big figures; Public Sans
+  for everything you read, in sentence case; IBM Plex Mono (`font-mono`) only for machine data — IDs, keys,
+  URLs and JSON. No uppercase or letter-spaced labels.
+- **Colour.** Use tokens, never raw hex or `white`/`black`, so both themes work. `accent` is for actions,
+  links and the current selection; text on any coloured fill is `text-ink`. Big cobalt surfaces that carry
+  white text use `bg-brand`; dark panels use `bg-night`. Green/amber/red/cyan only ever mean a status.
+- **Docket motifs.** `.docket` + `.docket-tear` (perforation with punched notches) only for things that are
+  contracts or work orders: a task, an output contract, the new-task form, the wallet, agent cards.
+  `.stamp` marks a settled outcome (PAID / REFUNDED) or an inspection verdict (PASSED / FAILED on the
+  inspection report and the landing hero).
+- **Structure.** List and form pages open with `PageHeader`, which draws the full-width white masthead.
+  Detail pages (a task, an agent, a dispute) open on a docket instead. Lists of records are tables or
+  divided rows; cards are for browsing (the marketplace).
+- **Motion.** Only on arrival or scroll, and only where it shows something: `Reveal` (scroll-in,
+  staggered), `CountUp` (wallet figures), the status-track fill, the stamp thump, and two scroll-linked
+  effects (the escrow rail, the hero's docket queue). All of it is gated on `data-motion`, which the boot
+  script sets only when the user hasn't asked for reduced motion — so nothing is ever hidden from them.
+- **Theme.** `ThemeToggle` (in the nav and on the auth pages) stores the choice in `localStorage`
+  (`hireai.theme`); with no choice it follows the system. `THEME_BOOT_SCRIPT` runs in `<head>` before first
+  paint, so there's no flash of the wrong theme.
+- **States.** Loading uses `Skeleton`/`SkeletonRows` (each carries an sr-only label). Empty states say
+  what will appear and what to do next. Never show invented numbers: the landing page's example task is
+  labelled as an example.
+- **Status text.** Show `statusLabel(status)` ("Needs review"), never the raw enum. `Badge` does this by
+  default and keeps the enum in `data-status`, which tests should select on.
+- **Forms.** Errors go under the field they belong to: pass `error` to `Field`, which wires
+  `aria-describedby`/`aria-invalid` and announces it. `lib/formErrors.ts` turns the backend's
+  `"<field>: <reason>"` validation message into a field error (`toFormError`, `errorFor`) and moves focus to
+  that field (`useFocusOnFieldError`); only errors that belong to no field use the form-level alert box.
+- **Destructive actions ask first.** Anything hard to undo (suspend/deactivate an agent, revoke a key,
+  rotate or deactivate a webhook) goes through `ConfirmDialog`, whose button names the action exactly.
+- **Fixed elements** never live inside `<main>` directly: its arrival animation would make it their
+  containing block. Use `BottomBar` (a portal) for anything pinned to the screen.
+- **Links that look like buttons** are `ButtonLink`, never a `<Button>` inside a `<Link>` (invalid HTML,
+  and two Tab stops for one control).
+- **Tables on phones.** Give a data table `stack-table` and a `data-label` on every cell after the first;
+  below `sm` each row becomes a small card, so no column scrolls out of view.
+
 ## UI kit & tests
 
-- `components/ui/` — `Button, Input, Select, Card, Field, Badge, Modal` (+ `statusColor(status)`); `Badge`
-  takes a `status` prop and colours itself; `Modal` is an accessible overlay dialog (focus-trap incl.
+- `components/ui/` — `Button, ButtonLink, Input, Textarea, Select, Card, Field, Badge, Modal, ConfirmDialog, Skeleton, SkeletonRows`
+  (+ `statusColor(status)`, `statusLabel(status)`); `Badge` takes a `status` prop, colours itself and
+  renders the readable label; `components/PageHeader.tsx` is the page title block + masthead;
+  `components/ThemeToggle.tsx`, `Reveal.tsx`, `CountUp.tsx` and `RichText.tsx` (safe Markdown subset for
+  task descriptions) are shared presentation helpers;
+  `components/ResultView.tsx` renders an agent's result for reading, with the raw payload behind a toggle;
+  `Modal` is an accessible overlay dialog (focus-trap incl.
   `summary`/`select`/`textarea`, Esc-to-close, body scroll-lock). `components/CategoryCombobox.tsx` (strict
-  searchable category picker) and `components/TaskFailurePanel.tsx` (per-failure panels) are feature components.
+  searchable category picker), `components/CategoryTagsInput.tsx` (a builder's categories as tags, with
+  existing categories suggested), `components/ContractTerms.tsx` (an output contract as a labelled list),
+  `components/InspectionReport.tsx` (the validation report above a delivered result: each automated check
+  ticked or crossed, then the acceptance criteria left for the client to judge),
+  `components/StartLink.tsx` (landing CTAs that route by sign-in state and role),
+  `components/FlashBanner.tsx` + `lib/flash.ts` (a one-shot success message carried across a navigation,
+  shown by `AppShell`), `components/BottomBar.tsx` (a phone-only bar pinned to the screen, portalled to
+  `<body>`), `components/SignedOutOnly.tsx`, `lib/rulings.ts` (ruling stamps, who-decided labels, and
+  `rationaleText`, which hides a note that is only the category enum) and `components/TaskFailurePanel.tsx` (per-failure panels) are feature components.
   `lib/outputSpecFields.tsx` is the shared output-spec sub-form. `components/manage/Tab*.tsx` are the
   builder manage-console panels; `components/DeliveryRecord.tsx` (client-facing delivery facts, no score)
   and `components/RatingPrompt.tsx` are the Module 5 client surfaces. `lib/useIdempotencyKey.ts` supplies the
-  `Idempotency-Key` for both booking pages; `lib/taskStage.ts` maps `TaskStatus` to the six-stage pipeline.
+  `Idempotency-Key` for both booking pages; `lib/taskStage.ts` maps `TaskStatus` to the six-stage pipeline. `lib/format.ts` holds `formatDuration` (seconds as "4m 23s") and
+  `moneyState(task)` (where a task's budget is: in escrow, paid out, refunded or split).
 - Tests: **Vitest + React Testing Library + MSW** — `npx vitest run`. `e2e/smoke.spec.ts` is not part of
   that run and needs Playwright, which is not in `package.json`. Auth-dependent tests
   must seed **both** `hireai.token` and `hireai.auth`. The gate is **all three** of `npm run lint`,
