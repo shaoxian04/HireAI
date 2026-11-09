@@ -24,7 +24,14 @@ public record TaskDTO(
         BigDecimal commissionAmount,
         BigDecimal refundAmount,
         /** Why the task ended without a delivered result (FailureReason name); absent otherwise. */
-        String failureReason
+        String failureReason,
+        /** The capability category the task was matched on (lowercase). */
+        String category,
+        /**
+         * The Agent the task was booked with or assigned to; absent when none was (a routed task
+         * that never found one) and on list/command responses, which don't resolve it.
+         */
+        UUID agentId
 ) {
 
     public record OutputSpecDTO(String format, String schema, String acceptanceCriteria) {

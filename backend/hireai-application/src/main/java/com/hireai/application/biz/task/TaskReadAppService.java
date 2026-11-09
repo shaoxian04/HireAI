@@ -9,6 +9,7 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -23,6 +24,14 @@ import java.util.UUID;
 public interface TaskReadAppService {
 
     TaskModel getForClient(@NonNull UUID taskId, @NonNull UUID clientId);
+
+    /**
+     * The Agent a task was booked with: the version it was assigned to, else the version the
+     * Client pinned (a direct booking that never got assigned). Empty for a routed task that never
+     * found an Agent. Takes a task the caller has already loaded for its owner. The web rebook
+     * excludes this Agent from the new shortlist (#79).
+     */
+    Optional<UUID> findBookedAgentId(@NonNull TaskModel task);
 
     TaskResultModel getResult(@NonNull UUID taskId, @NonNull UUID clientId);
 

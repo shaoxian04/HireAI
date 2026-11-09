@@ -11,7 +11,7 @@ top of `rank`.
 
 | Flow | Who decides | Path |
 |---|---|---|
-| Web submit | Client, from a shortlist | `GET /api/tasks/match-preview` runs `rank`, then the pick calls `POST /api/tasks/direct` |
+| Web submit | Client, from a shortlist | `GET /api/tasks/match-preview` runs `rank` (minus any `exclude`d Agents), then the pick calls `POST /api/tasks/direct` |
 | API / MCP routed submit | Platform | `POST /api/tasks`, then `route()` runs `selectOne` |
 | Re-match of a held routed task | Platform | Sweeper calls `route()` again over fresh candidates |
 | Direct booking, or re-match of one | Client already chose | `dispatchDirect()`, no matching |

@@ -4,16 +4,20 @@ import com.hireai.domain.shared.model.Money;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * Read service for the frontend match preview: given a category + budget, returns an in-budget
  * shortlist (ranked by the domain matcher) and an above-budget near-miss list. No task is created
  * and no escrow is frozen — picking happens later via direct booking.
+ *
+ * <p>{@code excludedAgentIds} leaves those Agents (every version of them) out of both lists. The
+ * web "Choose another agent" rebook passes the Agent that just failed the task (#79).
  */
 public interface MatchPreviewAppService {
 
-    MatchPreview preview(String category, Money budget);
+    MatchPreview preview(String category, Money budget, Set<UUID> excludedAgentIds);
 
     record MatchPreview(List<AgentOption> shortlist, List<AgentOption> nearMisses) {
     }

@@ -310,6 +310,7 @@ function TaskDetail() {
 
       {TERMINAL_FAILURE.has(task.status) && (
         <TaskFailurePanel
+          taskId={task.id}
           status={task.status}
           failureReason={task.failureReason}
           budget={task.budget}

@@ -104,7 +104,8 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   Find-agents gated on a real category) → match-preview **shortlist → pick → book** at the
   agent's price (the `ShortlistPanel` opens in a `Modal` popout of ranked agent cards: profile avatars,
   best-match highlight, a plain-language `DeliveryRecord`, above-budget near-miss drawer; booking is
-  `POST /tasks/direct`, so a near-miss pick pays above the typed budget; `localStorage` draft — **no reputation number and no stars**: the shortlist once divided the routing composite by 20
+  `POST /tasks/direct`, so a near-miss pick pays above the typed budget; `localStorage` draft; the
+  preview call goes through `fetchMatchPreview` in `lib/rebook.ts`, the one place that sends `exclude` — **no reputation number and no stars**: the shortlist once divided the routing composite by 20
   and drew it as a five-star client rating, which is a different quantity entirely); `client/tasks/[id]` — polls
   the task every 2 s, backing off to 30 s while nothing changes and snapping back on any status change;
   shows an `InspectionReport` above the result; at `PENDING_REVIEW` renders the `ResultReviewBar` (accept, confirmed in a `ConfirmDialog` naming the escrowed amount / reject with an A/B/C reason), then on
@@ -112,7 +113,8 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   accepted-only and once per task — a rating left later beats one never given, so it must stay skippable).
   On a **terminal failure** (`SPEC_VIOLATION`/`TIMED_OUT`/`FAILED`/`CANCELLED`)
   it renders a `TaskFailurePanel` (plain-English cause from the task's `failureReason`, falling back to per-status copy when it is absent, + `{budget} cr refunded` line; the spec-violation panel
-  fetches the real failing-check reason from `GET /api/tasks/{id}/validation`). **Once the task is in a dispute** the execution pipeline is replaced by a
+  fetches the real failing-check reason from `GET /api/tasks/{id}/validation`). Every failure panel's action is
+  **Choose another agent**, the rebook flow below. **Once the task is in a dispute** the execution pipeline is replaced by a
   `DisputeProgressPanel` — a reject→arbitrator→admin **timeline** with Accept-ruling / Appeal actions while a
   proposed ruling awaits; it persists after `RESOLVED`. `client/disputes` — the client's dispute list ("awaiting
   your decision" `RULED` rows first); `client/keys` — API-key management (create, with a reveal-once `Modal`
@@ -122,6 +124,13 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   resend); `client/agents/[id]` — agent storefront; `client/agents/[id]/book` — direct-booking form (adopts
   agent's `output_spec`). The `client/tasks/[id]` view also shows a per-task `WebhookDeliveryStatus`
   indicator with a resend action.
+- **Rebook a failed task.** "Choose another agent" links to `/client/tasks/new?rebook=<taskId>` (`rebookHref`); only
+  the id is in the URL. The new-task page reads `GET /api/tasks/{id}` and fills title, description, category and
+  budget from it, in place of the saved draft, which a rebook neither reads, writes nor clears. Its shortlist search
+  sends the task's `agentId` (the Agent it was booked with) as `exclude`, so that Agent is never offered, and a
+  notice says so. Booking is the normal `POST /tasks/direct` at the picked Agent's price: a new task and a new
+  escrow freeze. The failed task, already refunded, is not touched. If the task can't be loaded, the page says so
+  and shows a blank form. The page component sits in a `Suspense` boundary because it reads `useSearchParams`.
 - `admin/` — overview plus read-only task, user-wallet and agent browsers; `admin/disputes` — the dispute queue; `admin/disputes/[id]` — dispute detail with
   the tier-2 human-backstop ruling.
 

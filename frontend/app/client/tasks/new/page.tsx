@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { errorFor, toFormError, useFocusOnFieldError, validateForm, type FormError } from "@/lib/formErrors";
 
@@ -10,6 +10,7 @@ import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { ShortlistPanel } from "@/components/ShortlistPanel";
 import { CategoryCombobox } from "@/components/CategoryCombobox";
+import { fetchMatchPreview } from "@/lib/rebook";
 import type {
   AgentOptionDTO,
   DirectBookRequest,
@@ -35,6 +36,10 @@ interface Draft {
 
 function SubmitTask() {
   const router = useRouter();
+  // "Choose another agent" on a failed task opens this page with ?rebook=<taskId> (#79).
+  const rebookId = useSearchParams().get("rebook");
+  const [rebook, setRebook] = useState<RebookState>(rebookId ? { kind: "loading" } : { kind: "none" });
+  const excluded = rebook.kind === "ready" && rebook.agentId ? [rebook.agentId] : [];
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -66,7 +71,30 @@ function SubmitTask() {
       });
   }, []);
 
+  // A rebook fills the form from the failed task instead of the saved draft, and never touches the
+  // draft: that belongs to whatever new task the Client was writing before.
   useEffect(() => {
+    if (!rebookId) return;
+    let cancelled = false;
+    api<TaskDTO>(`/tasks/${encodeURIComponent(rebookId)}`)
+      .then((t) => {
+        if (cancelled) return;
+        setTitle(t.title);
+        setDescription(t.description);
+        setCategory(t.category ?? "");
+        setBudget(String(t.budget));
+        setRebook({ kind: "ready", title: t.title, agentId: t.agentId ?? null });
+      })
+      .catch(() => {
+        if (!cancelled) setRebook({ kind: "failed" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rebookId]);
+
+  useEffect(() => {
+    if (rebookId) return;
     const raw =
       typeof localStorage !== "undefined"
         ? localStorage.getItem(DRAFT_KEY)
@@ -88,20 +116,20 @@ function SubmitTask() {
     } catch {
       /* ignore a malformed draft */
     }
-  }, []);
+  }, [rebookId]);
 
   // Persist the draft whenever a field changes. Skip the first run: it fires on mount
   // alongside the restore effect above, and would otherwise overwrite the just-restored
   // draft with the blank initial state before it commits.
   useEffect(() => {
-    if (typeof localStorage === "undefined") return;
+    if (typeof localStorage === "undefined" || rebookId) return;
     if (firstPersist.current) {
       firstPersist.current = false;
       return;
     }
     const draft: Draft = { title, description, category, budget };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [title, description, category, budget]);
+  }, [title, description, category, budget, rebookId]);
 
   async function onFind(e: FormEvent) {
     e.preventDefault();
@@ -119,9 +147,7 @@ function SubmitTask() {
     }
     setLoading(true);
     try {
-      const result = await api<MatchPreviewDTO>(
-        `/tasks/match-preview?category=${encodeURIComponent(category)}&budget=${budgetNum}`,
-      );
+      const result = await fetchMatchPreview(category, budgetNum, excluded);
       setPreview(result);
       setPreviewOpen(true);
     } catch (err) {
@@ -141,7 +167,7 @@ function SubmitTask() {
         headers: { "Idempotency-Key": getIdempotencyKey() },
         body: JSON.stringify(bookingBody),
       });
-      if (typeof localStorage !== "undefined")
+      if (typeof localStorage !== "undefined" && !rebookId)
         localStorage.removeItem(DRAFT_KEY);
       router.push(`/client/tasks/${created.id}`);
     } catch (err) {
@@ -156,14 +182,16 @@ function SubmitTask() {
     <div className="mx-auto max-w-xl space-y-6">
       <PageHeader
         back={{ href: "/client/tasks", label: "My tasks" }}
-        title="Submit a task"
+        title={rebookId ? "Choose another agent" : "Submit a task"}
         description="Describe the task and find matching agents. Nothing is charged until you pick one; then that agent's price is frozen in escrow."
       />
+
+      <RebookNotice state={rebook} />
 
       <div className="docket overflow-hidden">
         <form onSubmit={onFind} noValidate>
           <div className="space-y-4 p-6">
-            <p className="font-mono text-xs text-dim">New work order</p>
+            <p className="font-mono text-xs text-dim">{rebookId ? "Replacement work order" : "New work order"}</p>
             <Field label="Title" htmlFor="title" error={errorFor(error, "title")}>
               <Input
                 id="title"
@@ -317,11 +345,46 @@ function EscrowPreview({ available, budget }: { available: number; budget: numbe
   );
 }
 
+type RebookState =
+  | { kind: "none" }
+  | { kind: "loading" }
+  | { kind: "failed" }
+  | { kind: "ready"; title: string; agentId: string | null };
+
+/** Says which failed task is being rebooked, and that the agent that failed it won't be offered. */
+function RebookNotice({ state }: { state: RebookState }) {
+  if (state.kind === "none") return null;
+  if (state.kind === "loading") {
+    return <p className="text-sm text-dim">Loading the task to rebook…</p>;
+  }
+  if (state.kind === "failed") {
+    return (
+      <p role="alert" className="rounded-md border border-amber/30 bg-amber/10 px-3 py-2 text-sm text-fg">
+        We couldn&apos;t load the task to rebook. Fill in the form to submit it again.
+      </p>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-l-4 border-line border-l-accent bg-surface px-4 py-3 text-sm">
+      <p className="font-semibold text-fg">Rebooking &ldquo;{state.title}&rdquo;</p>
+      <p className="mt-0.5 text-muted">
+        {state.agentId
+          ? "We filled in the task again. The agent that failed it is left off the shortlist."
+          : "We filled in the task again. Change anything you like before you search."}{" "}
+        The failed task stays as it was, already refunded; this books a new one.
+      </p>
+    </div>
+  );
+}
+
 export default function Page() {
   return (
     <AppShell>
       <RoleGuard role="CLIENT">
-        <SubmitTask />
+        {/* useSearchParams (the rebook id) needs a Suspense boundary to prerender. */}
+        <Suspense fallback={null}>
+          <SubmitTask />
+        </Suspense>
       </RoleGuard>
     </AppShell>
   );

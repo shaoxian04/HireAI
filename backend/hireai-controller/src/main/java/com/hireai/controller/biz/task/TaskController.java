@@ -30,6 +30,7 @@ import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
+import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskQuery;
 import com.hireai.domain.shared.model.Money;
 import com.hireai.utility.exception.DomainException;
@@ -47,6 +48,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -63,6 +65,9 @@ public class TaskController extends BaseController {
     private final CurrentUserProvider currentUser;
     private final CurrentApiKeyProvider currentApiKey;
     private final TaskReviewAppService reviewAppService;
+    /** At most this many Agents can be excluded from one match preview. */
+    static final int MAX_EXCLUDED_AGENTS = 20;
+
     private final MatchPreviewAppService matchPreviewAppService;
     private final ValidationReadAppService validationReadAppService;
     /** The client's star rating — distinct from reviewAppService, which is accept/reject. */
@@ -133,8 +138,9 @@ public class TaskController extends BaseController {
     @GetMapping("/{id}")
     public WebResult<TaskDTO> getById(@PathVariable("id") UUID id) {
         UUID clientId = currentUser.currentUserId();
-        TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId));
-        return ok(dto);
+        TaskModel task = readAppService.getForClient(id, clientId);
+        UUID agentId = readAppService.findBookedAgentId(task).orElse(null);
+        return ok(TaskModel2DTOConverter.toDTO(task, agentId));
     }
 
     @GetMapping("/{taskId}/result")
@@ -203,15 +209,33 @@ public class TaskController extends BaseController {
                 ratingAppService.review(id, clientId, request.rating(), request.reviewText())));
     }
 
+    /**
+     * {@code exclude} (repeatable) names Agents to leave out of both lists: the web rebook passes
+     * the Agent that just failed the task (#79).
+     */
     @GetMapping("/match-preview")
     public WebResult<MatchPreviewDTO> matchPreview(@RequestParam("category") String category,
-                                                   @RequestParam("budget") BigDecimal budget) {
+                                                   @RequestParam("budget") BigDecimal budget,
+                                                   @RequestParam(value = "exclude", required = false)
+                                                   List<UUID> exclude) {
         if (category == null || category.isBlank()) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "category is required");
         }
         if (budget == null || budget.signum() <= 0) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "budget must be positive");
         }
-        return ok(MatchPreview2DTOConverter.toDTO(matchPreviewAppService.preview(category, Money.of(budget))));
+        return ok(MatchPreview2DTOConverter.toDTO(
+                matchPreviewAppService.preview(category, Money.of(budget), excludedAgents(exclude))));
+    }
+
+    private static Set<UUID> excludedAgents(List<UUID> exclude) {
+        if (exclude == null) {
+            return Set.of();
+        }
+        if (exclude.size() > MAX_EXCLUDED_AGENTS) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "exclude: at most " + MAX_EXCLUDED_AGENTS + " agents");
+        }
+        return Set.copyOf(exclude);
     }
 }
