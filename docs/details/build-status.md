@@ -41,7 +41,6 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 
 All tracked in #53. Fixes are in #56 unless noted.
 
-- **Token can expire before the deadline, confirmed.** The consumer issues the dispatch token with a fixed 900s TTL, while `execution_deadline` is `maxExecutionSeconds` + grace with no upper bound on `maxExecutionSeconds`.
 - **QUEUED timeouts penalise the agent, confirmed.** `TaskReliabilityAppServiceImpl.timeoutOne` records `EXECUTION_TIMEOUT` for QUEUED tasks too, although the agent never received them.
 - **Dispatch-DLQ failure is silent, confirmed.** `TaskExecutionPortImpl.markFailed` refunds, but emits no webhook and no reputation event.
 - **Superseded pinned version stalls, confirmed.** `findCandidateByVersionId` requires the current version, so a direct booking whose version is replaced retries until it is cancelled. What happens next is the failover spec (#58).

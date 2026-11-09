@@ -13,16 +13,18 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.time.Duration;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.UUID;
 
 /**
  * HMAC-SHA256 compact dispatch token: {@code base64url(payloadJson).base64url(signature)}.
- * Payload carries {@code taskId, agentVersionId, exp (epoch seconds)}. The secret is a
- * server-side env value; tokens are short-lived and never stored. {@code verify} rejects a
- * bad signature (constant-time compare) and expiry by throwing {@link DispatchTokenInvalidException}.
+ * Payload carries {@code taskId, agentVersionId, exp (epoch seconds)}, where {@code exp} is the
+ * task's execution deadline plus {@link DispatchTokenService#CALLBACK_MARGIN}. The secret is a
+ * server-side env value; tokens are never stored. {@code verify} rejects a bad signature
+ * (constant-time compare) and expiry, judged by the injected {@link Clock}, by throwing
+ * {@link DispatchTokenInvalidException}.
  */
 @Service
 @Slf4j
@@ -34,17 +36,23 @@ public class HmacDispatchTokenService implements DispatchTokenService {
 
     private final byte[] secretKey;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Clock clock;
 
-    public HmacDispatchTokenService(@Value("${hireai.dispatch.token-secret}") String tokenSecret) {
+    public HmacDispatchTokenService(@Value("${hireai.dispatch.token-secret}") String tokenSecret,
+                                    Clock clock) {
         if (tokenSecret == null || tokenSecret.length() < 16) {
             throw new IllegalStateException("hireai.dispatch.token-secret must be at least 16 characters");
         }
         this.secretKey = tokenSecret.getBytes(StandardCharsets.UTF_8);
+        this.clock = clock;
     }
 
     @Override
-    public String issue(UUID taskId, UUID agentVersionId, Duration ttl) {
-        long exp = Instant.now().plus(ttl).getEpochSecond();
+    public String issue(UUID taskId, UUID agentVersionId, Instant executionDeadline) {
+        if (executionDeadline == null) {
+            throw new IllegalArgumentException("executionDeadline is required to issue a dispatch token");
+        }
+        long exp = executionDeadline.plus(CALLBACK_MARGIN).getEpochSecond();
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("taskId", taskId.toString());
         payload.put("agentVersionId", agentVersionId.toString());
@@ -84,7 +92,7 @@ public class HmacDispatchTokenService implements DispatchTokenService {
             UUID taskId = UUID.fromString(node.get("taskId").asText());
             UUID agentVersionId = UUID.fromString(node.get("agentVersionId").asText());
             Instant expiresAt = Instant.ofEpochSecond(node.get("exp").asLong());
-            if (expiresAt.isBefore(Instant.now())) {
+            if (expiresAt.isBefore(clock.instant())) {
                 throw new DispatchTokenInvalidException("Token expired");
             }
             return new DispatchTokenClaims(taskId, agentVersionId, expiresAt);

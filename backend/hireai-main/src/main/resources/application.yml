@@ -91,9 +91,9 @@ hireai:
     sweep-interval: ${EXECUTION_SWEEP_INTERVAL:PT30S}
     grace-seconds: ${EXECUTION_GRACE_SECONDS:60}
   dispatch:
-    # HMAC secret for short-lived dispatch tokens. MUST be overridden in real deploys.
+    # HMAC secret for dispatch tokens. MUST be overridden in real deploys. A token expires at
+    # the task's execution deadline + 5 minutes (DispatchTokenService.CALLBACK_MARGIN).
     token-secret: ${DISPATCH_TOKEN_SECRET:dev-only-dispatch-secret-change-me-32b}
-    token-ttl-seconds: ${DISPATCH_TOKEN_TTL_SECONDS:900}
     # Allow http://localhost webhooks only when explicitly enabled (dev/demo). HTTPS is
     # enforced in every other case (Hard Invariant #6).
     allow-insecure-localhost: ${DISPATCH_ALLOW_INSECURE_LOCALHOST:false}
