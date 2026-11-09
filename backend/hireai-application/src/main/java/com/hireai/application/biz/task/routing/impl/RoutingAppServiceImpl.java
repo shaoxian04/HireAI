@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -38,10 +39,12 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     private final AgentRepository agentRepository;
     private final RoutingMatchDomainService routingMatchDomainService;
     private final TaskDispatchPublisher taskDispatchPublisher;
+    /** The app's Clock bean (ClockConfig); tests pass a fixed one to pin the execution deadline. */
+    private final Clock clock;
 
     /**
-     * Public base URL the Agent uses to call back. NON-final so @RequiredArgsConstructor stays
-     * 5-arg (the unit test constructs the impl directly); the inline default applies in unit
+     * Public base URL the Agent uses to call back. NON-final so @RequiredArgsConstructor takes only the
+     * collaborators (the unit test constructs the impl directly); the inline default applies in unit
      * tests (plain `new`, no injection), while Spring overrides it from application.yml at
      * runtime. The property `hireai.platform.public-base-url` is owned by Plan 2's application.yml.
      */
@@ -116,7 +119,7 @@ public class RoutingAppServiceImpl implements RoutingAppService {
      * so the WorkOrder carries exactly the stamped value.
      */
     private DispatchMessage assignAndPublish(TaskRoutingView view, UUID agentVersionId, AgentCandidate target) {
-        Instant executionDeadline = Instant.now().truncatedTo(ChronoUnit.MICROS)
+        Instant executionDeadline = clock.instant().truncatedTo(ChronoUnit.MICROS)
                 .plusSeconds(target.maxExecutionSeconds() + executionGraceSeconds);
         taskWriteAppService.assignAndQueue(view.taskId(), agentVersionId, executionDeadline);
         DispatchMessage message = buildDispatchMessage(view, agentVersionId, target, executionDeadline);

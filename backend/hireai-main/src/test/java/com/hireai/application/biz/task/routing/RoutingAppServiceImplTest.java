@@ -14,7 +14,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -36,9 +38,12 @@ class RoutingAppServiceImplTest {
     private final RoutingMatchDomainService routingMatchDomainService = mock(RoutingMatchDomainService.class);
     private final TaskDispatchPublisher taskDispatchPublisher = mock(TaskDispatchPublisher.class);
 
+    private static final Instant NOW = Instant.parse("2030-01-01T00:00:00Z");
+    private final Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+
     private final RoutingAppServiceImpl service = new RoutingAppServiceImpl(
             taskReadAppService, taskWriteAppService, agentRepository,
-            routingMatchDomainService, taskDispatchPublisher);
+            routingMatchDomainService, taskDispatchPublisher, clock);
 
     // The task's adopted output spec snapshot (Invariant #4). In unit tests the view carries
     // this directly; candidates supply only webhookUrl/version identity.
@@ -89,14 +94,23 @@ class RoutingAppServiceImplTest {
                 .thenReturn(List.of(candidate));
         when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.of(chosenVersionId));
 
-        Instant before = Instant.now();
         service.route(taskId);
 
-        ArgumentCaptor<Instant> deadline = ArgumentCaptor.forClass(Instant.class);
-        verify(taskWriteAppService).assignAndQueue(eq(taskId), eq(chosenVersionId), deadline.capture());
-        Instant expectedMin = before.plusSeconds(120);
-        assertThat(deadline.getValue()).isAfterOrEqualTo(expectedMin.minusSeconds(1));
-        assertThat(deadline.getValue()).isBeforeOrEqualTo(Instant.now().plusSeconds(121));
+        // The clock is fixed at 2030-01-01T00:00:00Z: 60s max execution + 60s grace = 00:02:00.
+        verify(taskWriteAppService).assignAndQueue(taskId, chosenVersionId,
+                Instant.parse("2030-01-01T00:02:00Z"));
+    }
+
+    @Test
+    void directDispatchStampsTheDeadlineFromTheInjectedClock() {
+        UUID taskId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
+        when(agentRepository.findCandidateByVersionId(versionId)).thenReturn(Optional.of(candidate(versionId)));
+
+        service.dispatchDirect(taskId, versionId);
+
+        verify(taskWriteAppService).assignAndQueue(taskId, versionId, Instant.parse("2030-01-01T00:02:00Z"));
     }
 
     @Test
