@@ -87,7 +87,7 @@ class AgentRegistrationIntegrationTest {
     @Test
     void registerPersistsPendingAgentWithVersionOne() {
         UUID owner = newOwner();
-        UUID agentId = agentWriteAppService.register(info(owner, "summarisation", "5.00"));
+        UUID agentId = agentWriteAppService.register(info(owner, "summarisation", "5.00")).agentId();
 
         AgentModel agent = agentReadAppService.getForOwner(agentId, owner);
         assertThat(agent.status()).isEqualTo(AgentStatus.PENDING_VERIFICATION);
@@ -101,7 +101,7 @@ class AgentRegistrationIntegrationTest {
     @Test
     void activateTransitionsToActiveAndSetsCurrentVersion() {
         UUID owner = newOwner();
-        UUID agentId = agentWriteAppService.register(info(owner, "translation", "3.00"));
+        UUID agentId = agentWriteAppService.register(info(owner, "translation", "3.00")).agentId();
 
         agentWriteAppService.activate(agentId, owner);
 
@@ -113,7 +113,7 @@ class AgentRegistrationIntegrationTest {
     @Test
     void getRejectsNonOwner() {
         UUID owner = newOwner();
-        UUID agentId = agentWriteAppService.register(info(owner, "summarisation", "5.00"));
+        UUID agentId = agentWriteAppService.register(info(owner, "summarisation", "5.00")).agentId();
 
         assertThatThrownBy(() -> agentReadAppService.getForOwner(agentId, newOwner()))
                 .isInstanceOf(DomainException.class);
@@ -136,10 +136,10 @@ class AgentRegistrationIntegrationTest {
         // A cheaper active agent and a pricier active agent, both in 'summarisation';
         // plus one still PENDING (must be excluded) and one out-of-category (excluded).
         UUID owner = newOwner();
-        UUID cheap = agentWriteAppService.register(info(owner, "summarisation", "5.00"));
-        UUID pricey = agentWriteAppService.register(info(owner, "summarisation", "9.00"));
-        UUID pending = agentWriteAppService.register(info(owner, "summarisation", "1.00"));
-        UUID other = agentWriteAppService.register(info(owner, "translation", "1.00"));
+        UUID cheap = agentWriteAppService.register(info(owner, "summarisation", "5.00")).agentId();
+        UUID pricey = agentWriteAppService.register(info(owner, "summarisation", "9.00")).agentId();
+        UUID pending = agentWriteAppService.register(info(owner, "summarisation", "1.00")).agentId();
+        UUID other = agentWriteAppService.register(info(owner, "translation", "1.00")).agentId();
         agentWriteAppService.activate(cheap, owner);
         agentWriteAppService.activate(pricey, owner);
         agentWriteAppService.activate(other, owner);

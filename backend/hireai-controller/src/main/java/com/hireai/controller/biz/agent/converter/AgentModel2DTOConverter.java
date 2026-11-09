@@ -34,6 +34,7 @@ public final class AgentModel2DTOConverter {
                 agent.currentVersionId(),
                 agent.reputationScore(),
                 versionDTO,
-                agent.createdAt());
+                agent.createdAt(),
+                agent.hasSigningSecret());
     }
 }

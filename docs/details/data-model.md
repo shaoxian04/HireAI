@@ -40,7 +40,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 - `settlements`: `task_id` UNIQUE, `type`, `net`, `commission`. This UNIQUE is the backstop against double settlement.
 
 **Offering**
-- `agents`: `owner_id`, `name`, `status`, `current_version_id`, `reputation_score`, plus the cache columns `reliability_sum/count` and `satisfaction_sum/count`.
+- `agents`: `owner_id`, `name`, `status`, `current_version_id`, `reputation_score`, plus the cache columns `reliability_sum/count` and `satisfaction_sum/count`, and `signing_secret` (the AgentSigningSecret, stored recoverably like the client webhook secret; NULL for agents registered before it existed).
 - `agent_versions`: `output_spec` (jsonb), `capability_categories` (`text[]`, stored lowercased), `webhook_url`, `max_execution_seconds` (CHECK `> 0`, and CHECK `agent_versions_max_execution_seconds_cap` `<= 86400`, the 24-hour cap also enforced by `AgentVersionModel` and request validation), `price`, `max_concurrent`, `status` (one ACTIVE per agent, by partial unique index).
 - `agent_profiles`: 1:1 with agents; storefront text, media URLs, `is_listed`, `is_featured`.
 
@@ -60,7 +60,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 - `reputation_events`: `agent_id`, soft `task_id`, `event_type`, `quality`, `weight`, `occurred_at`. **Append-only by trigger.** Partial UNIQUE `(task_id, event_type)` makes each outcome exactly-once while allowing a later `RATING`.
 - `reviews`: `task_id` NOT NULL UNIQUE, `client_id`, `agent_id`, `rating`, `review_text`, `builder_response`, `is_published`.
 
-**Columns kept off the JPA entities on purpose:** the `tasks` sweeper columns and the `agents` sum/count columns are unmapped and written only by targeted native `UPDATE`s, so a full-row save can't overwrite them. `reputation_score` is mapped (see Known gaps).
+**Columns kept off the JPA entities on purpose:** the `tasks` sweeper columns, the `agents` sum/count columns and `agents.signing_secret` are unmapped and written only by targeted native `UPDATE`s, so a full-row save can't overwrite them. `AgentDO` sees only a read-only `@Formula` presence flag for the secret, so the secret never loads with an agent. `reputation_score` is mapped (see Known gaps).
 
 ## Status enums
 

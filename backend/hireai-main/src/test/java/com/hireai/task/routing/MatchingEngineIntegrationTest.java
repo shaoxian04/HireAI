@@ -147,7 +147,7 @@ class MatchingEngineIntegrationTest {
         UUID owner = newBuilder();
         UUID agentId = agentWriteAppService.register(new AgentRegisterInfo(owner, "Matching Agent",
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
-                List.of(category), webhookUrl, 60, new BigDecimal(price), maxConcurrent));
+                List.of(category), webhookUrl, 60, new BigDecimal(price), maxConcurrent)).agentId();
         agentWriteAppService.activate(agentId, owner);
         UUID versionId = agentRepository.findById(agentId).orElseThrow().currentVersion().id();
         return new AgentSeed(agentId, versionId);
@@ -285,7 +285,7 @@ class MatchingEngineIntegrationTest {
         String category = "capacity-cat";
         UUID agentId = agentWriteAppService.register(new AgentRegisterInfo(owner, "Capacity Agent",
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
-                List.of(category), "https://unused.example/hook-capacity", 60, new BigDecimal("10.00"), 8));
+                List.of(category), "https://unused.example/hook-capacity", 60, new BigDecimal("10.00"), 8)).agentId();
         agentWriteAppService.activate(agentId, owner);
 
         AgentModel agent = agentRepository.findById(agentId).orElseThrow();

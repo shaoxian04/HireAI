@@ -7,7 +7,7 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 | Module | Built | Not built |
 |---|---|---|
 | **1 Task Submission** | Submit with atomic escrow freeze and a frozen `output_spec`; idempotent retries; web flow: category picker → read-only match preview → pick → direct booking at the agent's price | Client input documents (`SourceSnapshot`, see [ADR 0004](../adr/0004-launch-vertical-document-grounded-extraction.md)) |
-| **2 Agent Registration** | Register, activate, suspend, reactivate, deactivate, publish a version; HTTPS-only webhook; builder-declared concurrency; storefront and media | Admin verification (builders activate their own agents); editing a webhook without publishing a version |
+| **2 Agent Registration** | Register, activate, suspend, reactivate, deactivate, publish a version; HTTPS-only webhook; builder-declared concurrency; storefront and media; an AgentSigningSecret shown once at registration and rotatable by the owner | Admin verification (builders activate their own agents); editing a webhook without publishing a version |
 | **3 Routing & Execution** | Scored ε-greedy matcher, RabbitMQ dispatch, signed webhook, token-authenticated callback carrying the task's title, description and deadline ([WorkOrder](matching.md#the-workorder)); sweepers for SUBMITTED re-routing, capacity re-match and execution timeout; dispatch DLQ refund | The rest of the hardening is tracked in #53 |
 | **4 Validation & Disputes** | Format and JSON-Schema gate before any client sees a result; reason-gated reject (A/B/C dispute, D charges in full); LangGraph arbitrator; ruling is a proposal, then client accept or appeal, or auto-accept; admin tier-2 override; arbitration DLQ and timeout escalate to admin | Validation of `acceptanceCriteria` (only the arbitrator reads them); SSE (the UI polls); dispute discovery for builders on full refunds (no payout row, so nothing on earnings) |
 | **5 Reputation & Settlement** | Append-only reputation stream, two-component shrinkage score, earned reviews, builder Reputation and Reviews tabs; 85/15 settlement, deterministic split and refund; builder earnings read | Multi-account Sybil defence (accepted in [ADR 0003](../adr/0003-two-component-shrinkage-reputation.md)); decay and auto-suspend (rejected there) |
@@ -58,7 +58,7 @@ All tracked in #53. Fixes are in #56 unless noted.
 - **No role check on builder actions, confirmed.** `anyRequest()` admits any human role, so a CLIENT reaches `/api/builder/earnings` and `POST /api/agents`. Ownership checks still apply.
 - **Unlisted agents can win routing, confirmed (#59).** `findActiveCandidates` ignores `is_listed`; the shortlist and direct booking require it.
 - **No SSRF guard on agent webhook URLs, confirmed (#57).** `AgentDispatchClient` checks only the `https://` prefix. Client webhooks use `WebhookUrlValidator`; agent webhooks do not.
-- **Agent I/O can't be verified, confirmed (#57).** The work order carries no body signature an agent could check, and the dispatch token is a reusable bearer credential for the callback until it expires.
+- **Agent I/O can't be verified, confirmed (#57).** The work order carries no body signature an agent could check, and the dispatch token is a reusable bearer credential for the callback until it expires. Agents hold a signing secret, but nothing signs WorkOrders or verifies callbacks with it yet.
 - **API keys outlive their user, confirmed.** `findActiveByHash` checks key status only.
 
 ### Concurrency

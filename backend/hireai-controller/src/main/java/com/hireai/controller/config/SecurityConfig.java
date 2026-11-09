@@ -98,6 +98,10 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
                                 "/api/webhooks/deliveries/*/redeliver").hasAnyRole("CLIENT", "API_CLIENT")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // Agent signing-secret rotation: the owning BUILDER only, JWT-only (a leaked API
+                        // key cannot mint an agent secret). Ownership is then checked by the app service.
+                        .requestMatchers(org.springframework.http.HttpMethod.POST,
+                                "/api/agents/*/rotate-secret").hasRole("BUILDER")
                         // Public catalogue browse: reachable by any human role or an API_CLIENT key
                         // (powers the MCP list_agents tool). GET only; owner-private fields are already
                         // stripped from the catalogue DTOs (Hard Invariant #5).

@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.Formula;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -39,6 +40,14 @@ public class AgentDO {
     @Column(name = "gmt_create", nullable = false)
     private Instant gmtCreate;
 
+    /**
+     * Read-only presence flag for {@code signing_secret}. The secret column itself is deliberately
+     * unmapped: full-row saves of this entity never touch it (written only by
+     * {@link AgentJpaRepository#updateSigningSecret}), and the secret is never loaded with the agent.
+     */
+    @Formula("(signing_secret IS NOT NULL)")
+    private boolean hasSigningSecret;
+
     protected AgentDO() {
     }
 
@@ -60,4 +69,5 @@ public class AgentDO {
     public UUID getCurrentVersionId() { return currentVersionId; }
     public BigDecimal getReputationScore() { return reputationScore; }
     public Instant getGmtCreate() { return gmtCreate; }
+    public boolean hasSigningSecret() { return hasSigningSecret; }
 }

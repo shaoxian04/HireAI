@@ -28,9 +28,16 @@ public final class AgentModel {
     private final BigDecimal reputationScore;
     private final AgentVersionModel currentVersion;
     private final Instant createdAt;
+    /**
+     * Whether an AgentSigningSecret is stored for this Agent. The secret itself is never part of
+     * the model (it is written and read only through targeted repository calls), so no read path
+     * can leak it. False for Agents registered before signing secrets existed, until rotated.
+     */
+    private final boolean hasSigningSecret;
 
     public AgentModel(UUID id, UUID ownerId, String name, AgentStatus status, UUID currentVersionId,
-                      BigDecimal reputationScore, AgentVersionModel currentVersion, Instant createdAt) {
+                      BigDecimal reputationScore, AgentVersionModel currentVersion, Instant createdAt,
+                      boolean hasSigningSecret) {
         this.id = id;
         this.ownerId = ownerId;
         this.name = name;
@@ -39,6 +46,7 @@ public final class AgentModel {
         this.reputationScore = reputationScore;
         this.currentVersion = currentVersion;
         this.createdAt = createdAt;
+        this.hasSigningSecret = hasSigningSecret;
     }
 
     /** Factory for the REGISTER transition: builds a PENDING_VERIFICATION agent + version v1. */
@@ -51,7 +59,7 @@ public final class AgentModel {
         AgentVersionModel version = AgentVersionModel.create(agentId, 1, outputSpec,
                 capabilityCategories, webhookUrl, maxExecutionSeconds, pricing, maxConcurrent);
         return new AgentModel(agentId, ownerId, name.trim(), AgentStatus.PENDING_VERIFICATION,
-                null, DEFAULT_REPUTATION, version, Instant.now());
+                null, DEFAULT_REPUTATION, version, Instant.now(), false);
     }
 
     /** Immutable ACTIVATE transition: PENDING_VERIFICATION -> ACTIVE, sets current_version_id. */
@@ -64,7 +72,7 @@ public final class AgentModel {
             throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION, "Agent has no version to activate");
         }
         return new AgentModel(id, ownerId, name, AgentStatus.ACTIVE, currentVersion.id(),
-                reputationScore, currentVersion, createdAt);
+                reputationScore, currentVersion, createdAt, hasSigningSecret);
     }
 
     /**
@@ -83,7 +91,7 @@ public final class AgentModel {
         AgentVersionModel next = currentVersion.supersededBy(pricing, maxExecutionSeconds, capabilityCategories);
         UUID newCurrentVersionId = currentVersionId != null ? next.id() : currentVersionId;
         return new AgentModel(id, ownerId, name, status, newCurrentVersionId,
-                reputationScore, next, createdAt);
+                reputationScore, next, createdAt, hasSigningSecret);
     }
 
     /** ACTIVE -> SUSPENDED: pause routing/booking; reversible via reactivate(). */
@@ -93,7 +101,7 @@ public final class AgentModel {
                     "Only an ACTIVE agent can be suspended; was " + status);
         }
         return new AgentModel(id, ownerId, name, AgentStatus.SUSPENDED, currentVersionId,
-                reputationScore, currentVersion, createdAt);
+                reputationScore, currentVersion, createdAt, hasSigningSecret);
     }
 
     /** SUSPENDED -> ACTIVE: resume routing/booking. */
@@ -103,7 +111,7 @@ public final class AgentModel {
                     "Only a SUSPENDED agent can be reactivated; was " + status);
         }
         return new AgentModel(id, ownerId, name, AgentStatus.ACTIVE, currentVersionId,
-                reputationScore, currentVersion, createdAt);
+                reputationScore, currentVersion, createdAt, hasSigningSecret);
     }
 
     /** ACTIVE or SUSPENDED -> DEACTIVATED: terminal retirement (no return). */
@@ -113,7 +121,7 @@ public final class AgentModel {
                     "Only an ACTIVE or SUSPENDED agent can be deactivated; was " + status);
         }
         return new AgentModel(id, ownerId, name, AgentStatus.DEACTIVATED, currentVersionId,
-                reputationScore, currentVersion, createdAt);
+                reputationScore, currentVersion, createdAt, hasSigningSecret);
     }
 
     /** Only an ACTIVE agent is routable / bookable. */
@@ -141,4 +149,5 @@ public final class AgentModel {
     public BigDecimal reputationScore() { return reputationScore; }
     public AgentVersionModel currentVersion() { return currentVersion; }
     public Instant createdAt() { return createdAt; }
+    public boolean hasSigningSecret() { return hasSigningSecret; }
 }

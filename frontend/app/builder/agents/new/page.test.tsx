@@ -140,3 +140,24 @@ describe("agent registration — max parallel tasks", () => {
     expect(captured!.maxConcurrent).toBe(8);
   });
 });
+
+describe("agent registration — signing secret", () => {
+  it("reveals the signing secret once, with a copy action, before leaving the page", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    server.use(
+      http.post("*/api/agents", () => ok({ id: "a-1", name: "Bot", signingSecret: "agsec_abc123" })),
+    );
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Bot" } });
+    fireEvent.change(screen.getByLabelText(/categories/i), { target: { value: "summarisation" } });
+    fireEvent.change(screen.getByLabelText(/webhook/i), { target: { value: "https://a.example/run" } });
+    fireEvent.click(screen.getByRole("button", { name: /register agent/i }));
+
+    expect(await screen.findByText("agsec_abc123")).toBeInTheDocument();
+    expect(screen.getByText(/won.t see it again/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("agsec_abc123"));
+    expect(await screen.findByRole("button", { name: /copied/i })).toBeInTheDocument();
+  });
+});

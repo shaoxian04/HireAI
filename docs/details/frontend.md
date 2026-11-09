@@ -87,7 +87,11 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
 - `builder/` — portfolio dashboard (wallet tile links to earnings); `builder/earnings` — earnings
   view (lifetime/pending totals from `GET /api/builder/earnings`, per-agent breakdown, payout
   history; amounts derived server-side from `SettlementPolicy`); `builder/agents/new` — register
-  an agent; `builder/agents/[id]` — manage console (tabs: Storefront · Pricing · Stats ·
+  an agent, then reveal its signing secret once (`RegisteredAgentDTO.signingSecret`) before routing to
+  `/builder`; `builder/agents/[id]` — manage console. Above the tabs, `components/manage/SigningSecretPanel.tsx`
+  shows whether a signing secret is set (`AgentDTO.hasSigningSecret`; the value is never readable) and
+  offers rotation behind a confirm dialog, `POST /agents/{id}/rotate-secret`, revealing the new value
+  once in a modal. An agent without a secret gets an amber prompt to get one instead. Tabs: Storefront · Pricing · Stats ·
   **Reputation** · Reviews; image uploader via `apiUpload`). **Reputation** renders the owner-only
   breakdown from `GET /api/agents/{id}/reputation`: the score on a marked 0–100 scale (50 = the
   neutral start), Reliability and Satisfaction as separate meters, and the event stream with each
@@ -191,6 +195,7 @@ override block). Follow these rules on every surface:
   renders the readable label; `components/PageHeader.tsx` is the page title block + masthead;
   `components/ThemeToggle.tsx`, `Reveal.tsx`, `CountUp.tsx` and `RichText.tsx` (safe Markdown subset for
   task descriptions) are shared presentation helpers;
+  `components/SecretReveal.tsx` shows a once-only secret with a copy action and a can't-see-it-again warning;
   `components/ResultView.tsx` renders an agent's result for reading, with the raw payload behind a toggle;
   `Modal` is an accessible overlay dialog (focus-trap incl.
   `summary`/`select`/`textarea`, Esc-to-close, body scroll-lock). `components/CategoryCombobox.tsx` (strict

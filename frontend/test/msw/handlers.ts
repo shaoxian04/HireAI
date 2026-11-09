@@ -70,6 +70,7 @@ export const handlers = [
           outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
         },
         createdAt: "2026-06-06T10:00:00Z",
+        hasSigningSecret: true,
       },
     ]),
   ),
@@ -89,6 +90,7 @@ export const handlers = [
         outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
       },
       createdAt: "2026-06-06T10:00:00Z",
+      hasSigningSecret: true,
     }),
   ),
 
@@ -519,6 +521,7 @@ const AGENT_DTO_A1 = {
     outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
   },
   createdAt: "2026-06-06T10:00:00Z",
+  hasSigningSecret: true,
 };
 
 export const manageHandlers = [
