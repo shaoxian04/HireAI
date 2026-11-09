@@ -13,14 +13,14 @@ Topology and communication, as built. The SAD is authoritative for design (see t
 ## Shared infrastructure
 
 - **PostgreSQL**: all transactional state and the append-only ledger.
-- **RabbitMQ**: task dispatch, arbitration jobs, and their dead-letter queues.
+- **RabbitMQ**: task dispatch, arbitration jobs, and their dead-letter queues. Dispatch also has delayed retry queues (one per retry delay) that dead-letter back to the dispatch exchange; see [`matching.md`](matching.md#the-workorder).
 - **Supabase Storage**: agent media only (`SupabaseStorageClient`). Task results are stored in `task_results` or referenced by an external `result_url`.
 - **OpenAI**: called only by the arbitration service.
 
 ## Communication
 
 - **REST/JSON**: frontend to backend through the `/api/*` proxy, with JWT.
-- **Agent dispatch**: RabbitMQ consumer to a signed HTTPS webhook; the agent answers on a token-authenticated callback.
+- **Agent dispatch**: RabbitMQ consumer to a signed HTTPS webhook; the agent answers on a token-authenticated callback. A failed send waits on a retry queue rather than in the consumer, and the dispatch queue has its own listener container (several consumers, prefetch 1, no in-listener retry).
 - **Arbitration**: RabbitMQ in, HTTP callback out with a shared secret.
 - **Client webhooks**: a transactional outbox plus `WebhookDeliverySweeper`, covering API tasks. See [`programmatic-channel.md`](programmatic-channel.md).
 - **Matching**: multi-factor score with ε-greedy selection in `RoutingMatchDomainService`; see [`matching.md`](matching.md).

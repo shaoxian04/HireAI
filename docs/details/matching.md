@@ -81,7 +81,7 @@ invite a second, paid submit.
 | Re-match attempts exhausted | `CANCELLED` | Yes | Yes | No |
 | Past `execution_deadline` while `EXECUTING` | `TIMED_OUT` | Yes | Yes | `EXECUTION_TIMEOUT` |
 | Past `execution_deadline` while still `QUEUED` | `TIMED_OUT` | Yes | Yes | No |
-| Dispatch dead-letters | `FAILED` | Yes | No | No |
+| Every dispatch attempt failed (Agent unreachable, timed out or non-2xx) | `FAILED` | Yes | Yes | `EXECUTION_FAILED` |
 
 - **`AWAITING_AGENT`** means no `ACTIVE` agent covers the category within budget, or a pinned agent went
   inactive or was superseded. Load is soft, so a busy agent never causes it. The re-match sweeper
@@ -137,10 +137,34 @@ The consumer keeps repeats to the minimum, in this order:
 
 1. It loads the task under a row lock and drops the message unless the task is still `QUEUED` for that
    version, so a WorkOrder for a refunded, timed-out or already-answered task never goes out.
-2. It issues the token and sends. A failed send is retried, so an Agent may see one WorkOrder per send the
-   platform considered failed (for example a 5xx or a read timeout after the Agent had already received it).
+2. It issues the token and sends. A failed send is retried (see the schedule below), so an Agent may see one
+   WorkOrder per send the platform considered failed (for example a 5xx or a read timeout after the Agent had
+   already received it).
 3. It marks the task `EXECUTING` under a row lock. A failure here, after a successful send, is logged and the
    message is acknowledged, never redelivered.
 
 The callback loads the task under the same row lock and accepts a result while the task is `QUEUED` or
 `EXECUTING`, so calling back before the platform has recorded the start is safe.
+
+**Send retries.** Only a failure the Agent is accountable for counts as a failed attempt: its endpoint
+refused or was unreachable, did not answer within the read timeout (the contract is a 2xx within 15s), or
+replied with a non-2xx status (`AgentSendFailedException`, which carries the status for later busy handling).
+The work-order connect and read timeouts are 5s and 15s. The consumer never waits in place: it republishes
+the message to a retry queue and acknowledges it, so other dispatches keep flowing.
+
+A platform-side failure (the row-locked task check, issuing the token, an invalid webhook URL, or scheduling
+the retry) never counts against the Agent. The consumer logs it and acknowledges the message, so it never
+reaches the DLQ or `EXECUTION_FAILED`. The task stays `QUEUED` and its execution timeout refunds it without a
+reputation event.
+
+- `hireai.dispatch.retry-delays` (default `5s,10s,15s`) are the waits between attempts, so three delays mean
+  four attempts in total. Startup fails if they add up to more than `hireai.execution.grace-seconds`, so
+  retrying never eats into the Agent's execution time. Tests use millisecond delays.
+- Each delay has its own queue, `task.dispatch.retry.<millis>ms`. The message carries that delay as its
+  per-message TTL, and expiry dead-letters it back to the dispatch exchange. The attempt number travels in
+  the `x-hireai-dispatch-attempt` header.
+- When the last attempt fails, the consumer rejects the message and it dead-letters to `task.dispatch.dlq`.
+  The DLQ listener then fails the task (`FAILED`, refund, `task.failed` webhook, `EXECUTION_FAILED`).
+- `hireai.dispatch.consumers` (default 4) consumers each take one message at a time, so a hanging Agent
+  holds only the consumer that is waiting on it.
+- Every attempt re-runs step 1, so a task that ended while its message waited is dropped, not sent.

@@ -8,7 +8,7 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 |---|---|---|
 | **1 Task Submission** | Submit with atomic escrow freeze and a frozen `output_spec`; idempotent retries; web flow: category picker → read-only match preview → pick → direct booking at the agent's price | Client input documents (`SourceSnapshot`, see [ADR 0004](../adr/0004-launch-vertical-document-grounded-extraction.md)) |
 | **2 Agent Registration** | Register, activate, suspend, reactivate, deactivate, publish a version; HTTPS-only webhook; builder-declared concurrency; storefront and media; an AgentSigningSecret shown once at registration and rotatable by the owner | Admin verification (builders activate their own agents); editing a webhook without publishing a version |
-| **3 Routing & Execution** | Scored ε-greedy matcher, RabbitMQ dispatch, signed webhook, token-authenticated callback carrying the task's title, description and deadline ([WorkOrder](matching.md#the-workorder)); sweepers for SUBMITTED re-routing, capacity re-match and execution timeout; dispatch DLQ refund | The rest of the hardening is tracked in #53 |
+| **3 Routing & Execution** | Scored ε-greedy matcher, RabbitMQ dispatch, signed webhook, token-authenticated callback carrying the task's title, description and deadline ([WorkOrder](matching.md#the-workorder)); sweepers for SUBMITTED re-routing, capacity re-match and execution timeout; delayed send retries, then FAILED with a refund, webhook and `EXECUTION_FAILED` | The rest of the hardening is tracked in #53 |
 | **4 Validation & Disputes** | Format and JSON-Schema gate before any client sees a result; reason-gated reject (A/B/C dispute, D charges in full); LangGraph arbitrator; ruling is a proposal, then client accept or appeal, or auto-accept; admin tier-2 override; arbitration DLQ and timeout escalate to admin | Validation of `acceptanceCriteria` (only the arbitrator reads them); SSE (the UI polls); dispute discovery for builders on full refunds (no payout row, so nothing on earnings) |
 | **5 Reputation & Settlement** | Append-only reputation stream, two-component shrinkage score, earned reviews, builder Reputation and Reviews tabs; 85/15 settlement, deterministic split and refund; builder earnings read | Multi-account Sybil defence (accepted in [ADR 0003](../adr/0003-two-component-shrinkage-reputation.md)); decay and auto-suspend (rejected there) |
 | **6 Discovery & Dashboard** | Authenticated catalogue, agent profiles, direct booking, builder console and earnings | Anonymous public catalogue |
@@ -41,7 +41,7 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 
 All tracked in #53. Fixes are in #56 unless noted.
 
-- **Dispatch-DLQ failure is silent, confirmed.** `TaskExecutionPortImpl.markFailed` refunds, but emits no webhook and no reputation event.
+- **A 429 or 503 WorkOrder reply is sent twice, confirmed.** The shared Apache HttpClient behind `AgentDispatchClient` retries a 429/503 POST once by itself, after about 1s, inside one send attempt, so the Agent receives a duplicate WorkOrder and the consumer waits. A dedicated dispatch client (#69) and busy handling (#76) cover it.
 - **Superseded pinned version stalls, confirmed.** `findCandidateByVersionId` requires the current version, so a direct booking whose version is replaced retries until it is cancelled. What happens next is the failover spec (#58).
 - **No failover after assignment, confirmed.** Neither mode switches agents once one is assigned (#58).
 

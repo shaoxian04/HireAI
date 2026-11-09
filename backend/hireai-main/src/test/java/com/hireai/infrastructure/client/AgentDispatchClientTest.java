@@ -17,6 +17,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class AgentDispatchClientTest {
@@ -88,5 +89,27 @@ class AgentDispatchClientTest {
         assertThatThrownBy(() -> client.dispatch(messageTo("http://agent.example.com/run"), "the-token"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("HTTPS");
+    }
+
+    @Test
+    void aNon2xxReplyIsAnAgentSendFailureCarryingTheStatus() {
+        String webhook = "https://agent.example.com/run";
+        server.expect(requestTo(webhook)).andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
+        AgentDispatchClient client = new AgentDispatchClient(builder, objectMapper, false);
+
+        assertThatThrownBy(() -> client.dispatch(messageTo(webhook), "the-token"))
+                .isInstanceOfSatisfying(AgentSendFailedException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.statusCode()).hasValue(500));
+    }
+
+    @Test
+    void anUnreachableOrTimedOutEndpointIsAnAgentSendFailureWithoutAStatus() {
+        String webhook = "https://agent.example.com/run";
+        server.expect(requestTo(webhook)).andRespond(withException(new java.net.SocketTimeoutException("Read timed out")));
+        AgentDispatchClient client = new AgentDispatchClient(builder, objectMapper, false);
+
+        assertThatThrownBy(() -> client.dispatch(messageTo(webhook), "the-token"))
+                .isInstanceOfSatisfying(AgentSendFailedException.class,
+                        e -> org.assertj.core.api.Assertions.assertThat(e.statusCode()).isEmpty());
     }
 }

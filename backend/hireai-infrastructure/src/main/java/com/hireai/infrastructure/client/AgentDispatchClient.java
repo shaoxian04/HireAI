@@ -9,7 +9,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.net.URI;
 
@@ -22,6 +24,8 @@ import java.net.URI;
  * {@code RestClient.Builder} bean by {@link DispatchRestClientConfig} (a
  * {@code RestClientCustomizer}); the client builds straight from the supplied builder so
  * any pre-installed request factory — e.g. a test's {@code MockRestServiceServer} — is preserved.
+ * A failure of the HTTP send itself (non-2xx reply, unreachable endpoint, timeout) is thrown as
+ * {@link AgentSendFailedException}; anything else (e.g. a non-HTTPS URL) is a platform-side error.
  */
 @Component
 @Slf4j
@@ -44,14 +48,22 @@ public class AgentDispatchClient {
         requireSecureWebhook(webhookUrl);
         WebhookDispatchBody body = buildBody(message);
 
-        restClient.post()
-                .uri(URI.create(webhookUrl))
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .header("X-Correlation-ID", message.correlationId())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(body)
-                .retrieve()
-                .toBodilessEntity();
+        try {
+            restClient.post()
+                    .uri(URI.create(webhookUrl))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .header("X-Correlation-ID", message.correlationId())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientResponseException ex) {
+            throw new AgentSendFailedException("Agent webhook for task " + message.taskId()
+                    + " replied " + ex.getStatusCode().value(), ex.getStatusCode().value(), ex);
+        } catch (ResourceAccessException ex) {
+            throw new AgentSendFailedException("Agent webhook for task " + message.taskId()
+                    + " was unreachable or timed out", null, ex);
+        }
 
         log.info("Dispatched task {} to webhook (correlationId={})", message.taskId(), message.correlationId());
     }
