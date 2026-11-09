@@ -109,3 +109,15 @@ Nothing else is sent: no Client identity and no budget.
 
 **Duplicate deliveries.** An Agent may receive the same WorkOrder more than once and must treat a repeat
 `taskId` as the same job, not a new one. Only the first result for a task is recorded.
+
+The consumer keeps repeats to the minimum, in this order:
+
+1. It loads the task under a row lock and drops the message unless the task is still `QUEUED` for that
+   version, so a WorkOrder for a refunded, timed-out or already-answered task never goes out.
+2. It issues the token and sends. A failed send is retried, so an Agent may see one WorkOrder per send the
+   platform considered failed (for example a 5xx or a read timeout after the Agent had already received it).
+3. It marks the task `EXECUTING` under a row lock. A failure here, after a successful send, is logged and the
+   message is acknowledged, never redelivered.
+
+The callback loads the task under the same row lock and accepts a result while the task is `QUEUED` or
+`EXECUTING`, so calling back before the platform has recorded the start is safe.

@@ -20,6 +20,12 @@ public class StubTaskExecutionPort implements TaskExecutionPort {
     public final CopyOnWriteArrayList<UUID> timedOut = new CopyOnWriteArrayList<>();
     public final CopyOnWriteArrayList<UUID> failed = new CopyOnWriteArrayList<>();
 
+    /** The round-trip test's message names no real task, so every message is dispatchable. */
+    @Override
+    public boolean isAwaitingDispatch(UUID taskId, UUID agentVersionId) {
+        return true;
+    }
+
     @Override
     public void markExecuting(UUID taskId) {
         executing.add(taskId);

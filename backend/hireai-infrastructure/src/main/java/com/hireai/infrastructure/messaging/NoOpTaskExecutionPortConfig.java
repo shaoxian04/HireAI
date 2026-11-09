@@ -30,6 +30,11 @@ public class NoOpTaskExecutionPortConfig {
                 + "Dispatch will not transition task status until Plan 3's adapter is on the classpath.");
         return new TaskExecutionPort() {
             @Override
+            public boolean isAwaitingDispatch(UUID taskId, UUID agentVersionId) {
+                return true;
+            }
+
+            @Override
             public void markExecuting(UUID taskId) {
                 log.debug("No-op markExecuting for task {}", taskId);
             }

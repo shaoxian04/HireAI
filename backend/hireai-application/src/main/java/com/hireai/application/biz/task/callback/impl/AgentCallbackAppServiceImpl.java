@@ -25,7 +25,7 @@ import java.util.UUID;
 
 /**
  * Verifies the dispatch token, confirms it authorises THIS task, then records the agent's
- * result. For a COMPLETED result: moves task EXECUTING → RESULT_RECEIVED, persists the
+ * result. For a COMPLETED result: moves task QUEUED/EXECUTING → RESULT_RECEIVED, persists the
  * task_results child, and invokes the Module 4 validation gate (→ PENDING_REVIEW on pass,
  * SPEC_VIOLATION + auto-refund on fail). For a non-COMPLETED agentStatus: marks task FAILED
  * and refunds the client's escrow. A duplicate callback (task already past EXECUTING) is
@@ -52,24 +52,27 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
             throw new DispatchTokenInvalidException(
                     "Dispatch token task " + claims.taskId() + " does not match callback task " + taskId);
         }
-        TaskModel task = taskRepository.findById(taskId)
+        // Row-locked (task row first, then the wallet row inside settlement: the usual lock
+        // order), so a concurrent mark-EXECUTING, timeout or second callback reads this
+        // callback's committed outcome instead of overwriting it.
+        TaskModel task = taskRepository.findByIdForUpdate(taskId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
         if (!claims.agentVersionId().equals(task.agentVersionId())) {
             throw new DispatchTokenInvalidException(
                     "Dispatch token agent version " + claims.agentVersionId()
                             + " does not match task " + taskId + " assignment " + task.agentVersionId());
         }
-        // First-result-wins idempotency: if the task is no longer EXECUTING, the first callback
-        // has already been processed (task is RESULT_RECEIVED or beyond). Return without
-        // re-processing — no second insert into task_results, so the UNIQUE constraint is never
-        // triggered. The first result is preserved unchanged.
-        if (task.status() != TaskStatus.EXECUTING) {
-            log.info("Task {} is already in status {} (not EXECUTING); treating duplicate callback as " +
-                     "no-op — first result wins", taskId, task.status());
+        // A result is accepted while the task is QUEUED or EXECUTING: a fast Agent may call back
+        // before the dispatch consumer marks the task EXECUTING. Any later status means the first
+        // callback was already processed (or the task ended): first result wins, no-op. There is
+        // no second insert into task_results, so its UNIQUE constraint is never triggered.
+        if (task.status() != TaskStatus.QUEUED && task.status() != TaskStatus.EXECUTING) {
+            log.info("Task {} is already in status {}; treating callback as a no-op — first result wins",
+                     taskId, task.status());
             return;
         }
-        // Non-COMPLETED MUST branch first: markFailed() requires EXECUTING; recordResult() moves
-        // the task to RESULT_RECEIVED, making markFailed() illegal if called afterwards.
+        // Non-COMPLETED MUST branch first: markFailed() requires QUEUED/EXECUTING; recordResult()
+        // moves the task to RESULT_RECEIVED, making markFailed() illegal if called afterwards.
         if (!"COMPLETED".equalsIgnoreCase(result.agentStatus())) {
             TaskModel failed = task.markFailed();
             taskRepository.save(failed);

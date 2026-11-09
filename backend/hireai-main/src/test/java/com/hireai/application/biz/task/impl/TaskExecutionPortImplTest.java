@@ -44,7 +44,7 @@ class TaskExecutionPortImplTest {
     @Test
     void markExecutingTransitionsQueuedToExecuting() {
         TaskModel task = queuedTask();
-        when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
+        when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
         port().markExecuting(task.id());
@@ -113,7 +113,7 @@ class TaskExecutionPortImplTest {
     @Test
     void throwsNotFoundForMissingTask() {
         UUID taskId = UUID.randomUUID();
-        when(taskRepository.findById(taskId)).thenReturn(Optional.empty());
+        when(taskRepository.findByIdForUpdate(taskId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> port().markExecuting(taskId))
                 .isInstanceOf(DomainException.class);

@@ -110,15 +110,29 @@ public final class TaskModel {
         return copyWith(TaskStatus.QUEUED, agentVersionId, this.result);
     }
 
-    /** QUEUED → EXECUTING: the task was dispatched to the agent. */
+    /**
+     * QUEUED → EXECUTING: the WorkOrder reached the agent. Idempotent: from any state past
+     * QUEUED (the agent already called back, or the task timed out / failed meanwhile) it is a
+     * no-op that returns {@code this}. Only the pre-assignment states (SUBMITTED,
+     * AWAITING_CAPACITY) are illegal sources.
+     */
     public TaskModel markExecuting() {
-        requireStatus(TaskStatus.QUEUED, "markExecuting");
+        if (this.status == TaskStatus.SUBMITTED || this.status == TaskStatus.AWAITING_CAPACITY) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Illegal transition markExecuting from " + this.status);
+        }
+        if (this.status != TaskStatus.QUEUED) {
+            return this;
+        }
         return copyWith(TaskStatus.EXECUTING, this.agentVersionId, this.result);
     }
 
-    /** EXECUTING → RESULT_RECEIVED: the agent posted a result back. */
+    /**
+     * QUEUED/EXECUTING → RESULT_RECEIVED: the agent posted a result back. QUEUED is allowed
+     * because a fast agent may call back before the dispatch consumer marks the task EXECUTING.
+     */
     public TaskModel recordResult(TaskResultModel result) {
-        requireStatus(TaskStatus.EXECUTING, "recordResult");
+        requireStatusIn("recordResult", TaskStatus.QUEUED, TaskStatus.EXECUTING);
         requirePresent(result, "result");
         return copyWith(TaskStatus.RESULT_RECEIVED, this.agentVersionId, result);
     }
