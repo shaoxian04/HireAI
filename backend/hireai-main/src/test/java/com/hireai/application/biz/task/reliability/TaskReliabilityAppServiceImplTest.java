@@ -142,6 +142,18 @@ class TaskReliabilityAppServiceImplTest {
         verify(taskRepository).save(argThat(t -> t.status() == TaskStatus.TIMED_OUT));
         verify(settlementWriteAppService).settleRejected(taskId, clientId, budget);
         verify(webhookOutboxAppService).enqueueFailed(any(), eq("TIMED_OUT"));
+        verify(reputationWriteAppService).recordOutcome(eq(taskId), any(), eq(clientId),
+                eq(com.hireai.domain.biz.reputation.enums.ReputationEventType.EXECUTION_TIMEOUT));
+    }
+
+    @Test
+    void queuedTimeoutRefundsWithoutPenalisingTheAgent() {
+        givenTaskInStatusForUpdate(TaskStatus.QUEUED);
+        service.timeoutOne(taskId);
+        verify(taskRepository).save(argThat(t -> t.status() == TaskStatus.TIMED_OUT));
+        verify(settlementWriteAppService).settleRejected(taskId, clientId, budget);
+        verify(webhookOutboxAppService).enqueueFailed(any(), eq("TIMED_OUT"));
+        verifyNoInteractions(reputationWriteAppService);
     }
 
     @Test

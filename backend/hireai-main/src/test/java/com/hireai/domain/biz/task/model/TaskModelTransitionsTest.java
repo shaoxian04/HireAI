@@ -116,6 +116,13 @@ class TaskModelTransitionsTest {
     }
 
     @Test
+    void aTimeoutIsTheAgentsFaultOnlyOnceItIsExecuting() {
+        TaskModel queued = submitted().assignAndQueue(UUID.randomUUID());
+        assertThat(queued.timeoutIsAgentFault()).isFalse();
+        assertThat(queued.markExecuting().timeoutIsAgentFault()).isTrue();
+    }
+
+    @Test
     void markFailedFromQueuedOrExecuting() {
         TaskModel fromQueued = submitted().assignAndQueue(UUID.randomUUID()).markFailed();
         assertThat(fromQueued.status()).isEqualTo(TaskStatus.FAILED);

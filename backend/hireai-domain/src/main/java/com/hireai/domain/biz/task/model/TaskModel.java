@@ -156,6 +156,15 @@ public final class TaskModel {
         return copyWith(TaskStatus.TIMED_OUT, this.agentVersionId, this.result);
     }
 
+    /**
+     * Whether a timeout now is the Agent's fault: only once the Agent accepted the WorkOrder
+     * (EXECUTING). A task still QUEUED never reached it (lost or undelivered message), so a
+     * timeout from there refunds the client without penalising the Agent (#66).
+     */
+    public boolean timeoutIsAgentFault() {
+        return this.status == TaskStatus.EXECUTING;
+    }
+
     /** QUEUED/EXECUTING → FAILED: dispatch/execution failed terminally. */
     public TaskModel markFailed() {
         requireStatusIn("markFailed", TaskStatus.QUEUED, TaskStatus.EXECUTING);

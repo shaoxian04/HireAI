@@ -79,7 +79,8 @@ invite a second, paid submit.
 | Still `SUBMITTED` after the routing attempts | `CANCELLED` | Yes | Yes | No |
 | No eligible agent | `AWAITING_CAPACITY`, escrow held | No | No | No |
 | Re-match attempts exhausted | `CANCELLED` | Yes | Yes | No |
-| Past `execution_deadline` | `TIMED_OUT` | Yes | Yes | `EXECUTION_TIMEOUT` |
+| Past `execution_deadline` while `EXECUTING` | `TIMED_OUT` | Yes | Yes | `EXECUTION_TIMEOUT` |
+| Past `execution_deadline` while still `QUEUED` | `TIMED_OUT` | Yes | Yes | No |
 | Dispatch dead-letters | `FAILED` | Yes | No | No |
 
 - **`AWAITING_CAPACITY` is misnamed.** Load is soft, so capacity never causes it. It means no `ACTIVE`
@@ -87,6 +88,8 @@ invite a second, paid submit.
 - **Pinned tasks never substitute.** A direct booking retries only its exact version, because the client's
   spec and price are frozen to it (Invariant #4).
 - **The deadline is stamped at assignment**, so one query catches both a silent agent and a lost publish.
+  Only a silent agent is blamed: a task still `QUEUED` never reached the agent, so its timeout refunds
+  without a reputation event (`TaskModel.timeoutIsAgentFault`).
 - **SUBMITTED sweeper.** `SubmittedTaskSweeper` picks up tasks still `SUBMITTED` after
   `hireai.matching.submitted-min-age` (by the injected `Clock`) and re-runs routing, or the pinned dispatch
   for a direct booking. Each run counts against the same `match_attempts` counter and
