@@ -118,7 +118,7 @@ class DirectBookingIntegrationTest {
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
                 List.of(category), "https://agent.example.com/hook", 120,
                 new BigDecimal(price), 5);
-        UUID agentId = agentWriteAppService.register(info);
+        UUID agentId = agentWriteAppService.register(info).agentId();
         agentWriteAppService.activate(agentId, ownerId);
 
         // Mark the profile as listed

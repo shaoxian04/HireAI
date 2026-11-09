@@ -15,6 +15,8 @@ import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
 import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
+import com.hireai.domain.biz.offering.agent.info.AgentRegistration;
+import com.hireai.domain.biz.offering.agent.service.AgentSigningSecretGenerator;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentActivateDomainServiceImpl;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentDeactivateDomainServiceImpl;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentReactivateDomainServiceImpl;
@@ -45,6 +47,12 @@ class AgentWriteAppServiceImplTest {
         final Map<UUID, AgentModel> store = new HashMap<>();
         /** version-id -> persisted version snapshot (mirrors what the JPA impl does). */
         final Map<UUID, AgentVersionModel> versionStore = new HashMap<>();
+        /** agent-id -> signing secret (the column the JPA impl writes with a targeted UPDATE). */
+        final Map<UUID, String> secrets = new HashMap<>();
+
+        @Override public void updateSigningSecret(UUID agentId, String signingSecret) {
+            secrets.put(agentId, signingSecret);
+        }
 
         @Override public AgentModel save(AgentModel agent) {
             store.put(agent.id(), agent);
@@ -152,7 +160,8 @@ class AgentWriteAppServiceImplTest {
     private final AgentWriteAppService service = new AgentWriteAppServiceImpl(
             repository, profileRepository, new AgentRegisterDomainServiceImpl(),
             new AgentActivateDomainServiceImpl(), new AgentSuspendDomainServiceImpl(),
-            new AgentReactivateDomainServiceImpl(), new AgentDeactivateDomainServiceImpl(), publisher, urlValidator);
+            new AgentReactivateDomainServiceImpl(), new AgentDeactivateDomainServiceImpl(), publisher,
+            new AgentSigningSecretGenerator(), urlValidator);
 
     private AgentRegisterInfo info(UUID ownerId) {
         return new AgentRegisterInfo(ownerId, "Summariser Bot",
@@ -163,7 +172,7 @@ class AgentWriteAppServiceImplTest {
     @Test
     void registerPersistsPendingAgentAndPublishesEvent() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
 
         AgentModel saved = repository.findById(agentId).orElseThrow();
         assertThat(saved.status()).isEqualTo(AgentStatus.PENDING_VERIFICATION);
@@ -173,9 +182,39 @@ class AgentWriteAppServiceImplTest {
     }
 
     @Test
+    void registerIssuesASigningSecretAndReturnsItOnce() {
+        AgentRegistration registration = service.register(info(UUID.randomUUID()));
+
+        assertThat(registration.signingSecret()).startsWith("agsec_");
+        assertThat(repository.secrets).containsEntry(registration.agentId(), registration.signingSecret());
+    }
+
+    @Test
+    void rotateReplacesTheSecretForTheOwner() {
+        UUID ownerId = UUID.randomUUID();
+        AgentRegistration registration = service.register(info(ownerId));
+
+        String rotated = service.rotateSigningSecret(registration.agentId(), ownerId);
+
+        assertThat(rotated).startsWith("agsec_").isNotEqualTo(registration.signingSecret());
+        assertThat(repository.secrets).containsEntry(registration.agentId(), rotated);
+    }
+
+    @Test
+    void rotateRejectsANonOwnerAsNotFoundAndKeepsTheSecret() {
+        AgentRegistration registration = service.register(info(UUID.randomUUID()));
+
+        assertThatThrownBy(() -> service.rotateSigningSecret(registration.agentId(), UUID.randomUUID()))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).resultCode())
+                .isEqualTo(ResultCode.NOT_FOUND);
+        assertThat(repository.secrets).containsEntry(registration.agentId(), registration.signingSecret());
+    }
+
+    @Test
     void activateTransitionsToActiveAndPublishesEvent() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
 
         service.activate(agentId, ownerId);
 
@@ -188,7 +227,7 @@ class AgentWriteAppServiceImplTest {
     @Test
     void activateRejectsNonOwner() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
 
         assertThatThrownBy(() -> service.activate(agentId, UUID.randomUUID()))
                 .isInstanceOf(DomainException.class);
@@ -205,7 +244,7 @@ class AgentWriteAppServiceImplTest {
     @Test
     void publishNewVersionCreatesIncrementedActiveVersionAndReturnsRefreshedModel() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
         UUID v1Id = repository.findById(agentId).orElseThrow().currentVersion().id();
 
         AgentModel result = service.publishNewVersion(agentId, ownerId,
@@ -223,7 +262,7 @@ class AgentWriteAppServiceImplTest {
     @Test
     void publishNewVersionRejectsForeignOwner() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
         assertThatThrownBy(() -> service.publishNewVersion(agentId, UUID.randomUUID(),
                 new PublishVersionInfo(new BigDecimal("10.00"), 60, List.of("summarisation"))))
                 .isInstanceOf(DomainException.class);
@@ -241,7 +280,7 @@ class AgentWriteAppServiceImplTest {
     @Test
     void suspendReactivateDeactivateTransitionOwnedAgent() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
         service.activate(agentId, ownerId);
 
         service.suspend(agentId, ownerId);
@@ -260,7 +299,7 @@ class AgentWriteAppServiceImplTest {
     @Test
     void suspendRejectsForeignOwner() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
         service.activate(agentId, ownerId);
         assertThatThrownBy(() -> service.suspend(agentId, UUID.randomUUID()))
                 .isInstanceOf(DomainException.class);
@@ -280,7 +319,7 @@ class AgentWriteAppServiceImplTest {
     @Test
     void publishingAVersionRechecksTheCarriedOverWebhook() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
         urlValidator.blocked.add("https://agent.example.com/hook");
 
         assertThatThrownBy(() -> service.publishNewVersion(agentId, ownerId,

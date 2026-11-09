@@ -25,6 +25,7 @@ import com.hireai.domain.biz.identity.service.OAuthAccountLinkingDomainService;
 import com.hireai.domain.biz.identity.service.impl.OAuthAccountLinkingDomainServiceImpl;
 import com.hireai.domain.biz.task.webhookdelivery.WebhookBackoffPolicy;
 import com.hireai.domain.biz.identity.webhooksubscription.service.WebhookSecretGenerator;
+import com.hireai.domain.biz.offering.agent.service.AgentSigningSecretGenerator;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
 import com.hireai.domain.biz.task.service.impl.TaskSubmitDomainServiceImpl;
 import com.hireai.domain.biz.ledger.settlement.service.SettlementDomainService;
@@ -141,6 +142,11 @@ public class DomainServiceConfig {
     @Bean
     public WebhookSecretGenerator webhookSecretGenerator() {
         return new WebhookSecretGenerator();
+    }
+
+    @Bean
+    public AgentSigningSecretGenerator agentSigningSecretGenerator() {
+        return new AgentSigningSecretGenerator();
     }
 
     @Bean

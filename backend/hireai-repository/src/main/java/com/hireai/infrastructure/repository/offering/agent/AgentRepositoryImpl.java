@@ -79,6 +79,13 @@ public class AgentRepositoryImpl implements AgentRepository {
     }
 
     @Override
+    public void updateSigningSecret(UUID agentId, String signingSecret) {
+        if (agentJpa.updateSigningSecret(agentId, signingSecret) != 1) {
+            throw new DomainException(ResultCode.NOT_FOUND, "Agent not found: " + agentId);
+        }
+    }
+
+    @Override
     public Optional<AgentModel> findById(UUID agentId) {
         return agentJpa.findById(agentId).map(this::toModel);
     }
@@ -163,7 +170,7 @@ public class AgentRepositoryImpl implements AgentRepository {
         return new AgentModel(
                 entity.getId(), entity.getOwnerId(), entity.getName(),
                 AgentStatus.valueOf(entity.getStatus()), entity.getCurrentVersionId(),
-                entity.getReputationScore(), version, entity.getGmtCreate());
+                entity.getReputationScore(), version, entity.getGmtCreate(), entity.hasSigningSecret());
     }
 
     private AgentVersionModel toVersionModel(AgentVersionDO entity) {

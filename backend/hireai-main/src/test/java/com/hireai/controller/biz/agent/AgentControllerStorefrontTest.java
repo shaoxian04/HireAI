@@ -188,7 +188,7 @@ class AgentControllerStorefrontTest {
                 categories, "https://agent.example.com/hook", maxExec, 5,
                 Pricing.of(price), AgentVersionStatus.ACTIVE, Instant.now());
         return new AgentModel(AGENT_ID, OWNER_ID, "Test Agent",
-                AgentStatus.ACTIVE, version.id(), new BigDecimal("50.00"), version, Instant.now());
+                AgentStatus.ACTIVE, version.id(), new BigDecimal("50.00"), version, Instant.now(), true);
     }
 
     @Test

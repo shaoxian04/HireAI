@@ -63,6 +63,15 @@ public interface AgentJpaRepository extends JpaRepository<AgentDO, UUID> {
                          @Param("satisfactionCount") long satisfactionCount,
                          @Param("score") BigDecimal score);
 
+    /**
+     * Targeted write of the signing secret; the column is unmapped on {@link AgentDO}. Flushes
+     * first (a just-registered agent's INSERT must land before this UPDATE) and clears after, so a
+     * later load in the same transaction re-reads the presence flag.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query(value = "UPDATE agents SET signing_secret = :secret WHERE id = :agentId", nativeQuery = true)
+    int updateSigningSecret(@Param("agentId") UUID agentId, @Param("secret") String secret);
+
     interface ReputationAggregateRow {
         BigDecimal getReliabilitySum();
         long getReliabilityCount();

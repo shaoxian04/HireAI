@@ -1,6 +1,7 @@
 package com.hireai.application.biz.offering.agent;
 
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
+import com.hireai.domain.biz.offering.agent.info.AgentRegistration;
 import com.hireai.domain.biz.offering.agent.info.PublishVersionInfo;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import org.jspecify.annotations.NonNull;
@@ -10,7 +11,7 @@ import java.util.UUID;
 
 /**
  * Orchestrates agent WRITE use cases. {@code register} creates an Agent + version v1 in
- * PENDING_VERIFICATION and returns the new agent id; {@code activate} transitions an owned
+ * PENDING_VERIFICATION and returns the new agent id with its signing secret; {@code activate} transitions an owned
  * agent to ACTIVE; {@code publishNewVersion} publishes a new ACTIVE version superseding the
  * prior one. Owner identity is supplied by the caller (derived server-side from the JWT,
  * Invariant #5); all mutating operations enforce an explicit owner check.
@@ -18,7 +19,18 @@ import java.util.UUID;
 @Validated
 public interface AgentWriteAppService {
 
-    UUID register(@NonNull AgentRegisterInfo registerInfo);
+    /**
+     * Registers the agent and issues its AgentSigningSecret in the same transaction. The returned
+     * secret is the only time it leaves the platform; no read returns it.
+     */
+    AgentRegistration register(@NonNull AgentRegisterInfo registerInfo);
+
+    /**
+     * Replaces the agent's AgentSigningSecret (or issues the first one, for an agent registered
+     * before secrets existed) and returns the new value, once. Owner-only: throws
+     * {@code DomainException(NOT_FOUND)} for a foreign or missing agent.
+     */
+    String rotateSigningSecret(@NonNull UUID agentId, @NonNull UUID ownerId);
 
     void activate(@NonNull UUID agentId, @NonNull UUID ownerId);
 

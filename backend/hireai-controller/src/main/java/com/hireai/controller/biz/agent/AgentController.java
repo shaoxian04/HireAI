@@ -14,12 +14,15 @@ import com.hireai.controller.biz.agent.dto.AgentReputationDTO;
 import com.hireai.controller.biz.agent.dto.AgentStatsDTO;
 import com.hireai.controller.biz.agent.dto.PublishVersionRequest;
 import com.hireai.controller.biz.agent.dto.RegisterAgentRequest;
+import com.hireai.controller.biz.agent.dto.RegisteredAgentDTO;
+import com.hireai.controller.biz.agent.dto.SigningSecretDTO;
 import com.hireai.controller.biz.agent.dto.RespondReviewRequest;
 import com.hireai.controller.biz.agent.dto.ReviewDTO;
 import com.hireai.controller.biz.agent.dto.UpdateProfileRequest;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
+import com.hireai.domain.biz.offering.agent.info.AgentRegistration;
 import com.hireai.domain.biz.offering.agent.info.PublishVersionInfo;
 import com.hireai.domain.biz.offering.storefront.info.ProfileUpdateInfo;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
@@ -75,7 +78,7 @@ public class AgentController extends BaseController {
     }
 
     @PostMapping
-    public WebResult<AgentDTO> register(@Valid @RequestBody RegisterAgentRequest request) {
+    public WebResult<RegisteredAgentDTO> register(@Valid @RequestBody RegisterAgentRequest request) {
         UUID ownerId = currentUser.currentUserId();
         RegisterAgentRequest.OutputSpecRequest specRequest = request.outputSpec();
         AgentRegisterInfo info = new AgentRegisterInfo(
@@ -87,9 +90,21 @@ public class AgentController extends BaseController {
                 request.maxExecutionSeconds(),
                 request.price(),
                 request.maxConcurrent() == null ? defaultMaxConcurrent : request.maxConcurrent());
-        UUID agentId = writeAppService.register(info);
-        AgentDTO dto = AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId));
-        return ok(dto);
+        AgentRegistration registration = writeAppService.register(info);
+        AgentDTO dto = AgentModel2DTOConverter.toDTO(
+                readAppService.getForOwner(registration.agentId(), ownerId));
+        return ok(new RegisteredAgentDTO(dto, registration.signingSecret()));
+    }
+
+    /**
+     * Owner-only: replaces the agent's AgentSigningSecret and returns the new value, once. Also how
+     * an agent registered before secrets existed gets its first one. BUILDER-only in SecurityConfig
+     * (JWT-only: an API key cannot mint agent secrets); a foreign agent is NOT_FOUND.
+     */
+    @PostMapping("/{agentId}/rotate-secret")
+    public WebResult<SigningSecretDTO> rotateSigningSecret(@PathVariable("agentId") UUID agentId) {
+        String secret = writeAppService.rotateSigningSecret(agentId, currentUser.currentUserId());
+        return ok(new SigningSecretDTO(agentId, secret));
     }
 
     @PostMapping("/{agentId}/activate")

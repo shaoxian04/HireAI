@@ -31,6 +31,7 @@ Stored in the `user_roles` join table; a user may hold several of `CLIENT`, `BUI
 | `POST /api/tasks/*/accept`, `/reject` | `CLIENT`, `BUILDER`, `ADMIN` (human-only) |
 | `/api/keys/**`, `/api/webhooks/subscription/**` | `CLIENT` (JWT-only: a leaked key cannot mint keys or repoint a callback) |
 | `/api/admin/**` | `ADMIN` |
+| `POST /api/agents/*/rotate-secret` | `BUILDER` (JWT-only; the app service then requires ownership, a foreign agent is `NOT_FOUND`) |
 | `GET /api/catalogue/**` | `CLIENT`, `BUILDER`, `ADMIN`, `API_CLIENT` |
 | Anything else | `CLIENT`, `BUILDER`, `ADMIN` |
 

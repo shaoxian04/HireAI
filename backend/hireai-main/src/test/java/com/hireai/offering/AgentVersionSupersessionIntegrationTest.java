@@ -80,7 +80,7 @@ class AgentVersionSupersessionIntegrationTest {
     @Test
     void publishNewVersionSupersedesPriorActiveAndKeepsHistory() {
         UUID owner = newOwner();
-        UUID agentId = agentWriteAppService.register(info(owner, "summarisation", "5.00"));
+        UUID agentId = agentWriteAppService.register(info(owner, "summarisation", "5.00")).agentId();
         agentWriteAppService.activate(agentId, owner);
 
         AgentModel v1 = agentReadAppService.getForOwner(agentId, owner);

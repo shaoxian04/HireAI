@@ -28,6 +28,13 @@ public interface AgentRepository {
      */
     void publishNewVersion(AgentModel agent);
 
+    /**
+     * Targeted write of the agent's AgentSigningSecret only (never part of a full-row save, so a
+     * concurrent lifecycle save can't wipe it and the secret never rides on {@link AgentModel}).
+     * Replaces any previous secret.
+     */
+    void updateSigningSecret(UUID agentId, String signingSecret);
+
     Optional<AgentModel> findById(UUID agentId);
 
     List<AgentModel> findByOwnerId(UUID ownerId, AgentQuery query);

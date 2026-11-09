@@ -18,10 +18,11 @@ import { AppShell } from "@/components/AppShell";
 import { setFlash } from "@/lib/flash";
 import { CategoryTagsInput } from "@/components/CategoryTagsInput";
 import { EMPTY_OUTPUT_SPEC, OutputSpecFields } from "@/lib/outputSpecFields";
-import type { AgentDTO, CreateAgentRequest, OutputSpecDTO } from "@/lib/types";
+import type { CreateAgentRequest, OutputSpecDTO, RegisteredAgentDTO } from "@/lib/types";
 import { Button, Field, Input } from "@/components/ui";
 import { PageHeader } from "@/components/PageHeader";
 import { MAX_EXECUTION_HINT, MAX_EXECUTION_SECONDS } from "@/lib/agentLimits";
+import { SecretReveal } from "@/components/SecretReveal";
 
 function RegisterAgent() {
   const router = useRouter();
@@ -37,6 +38,8 @@ function RegisterAgent() {
   // A field error clears the moment that field (or any other) is edited, so it never goes stale.
   const clearFieldError = () => setError((er) => (er?.field ? null : er));
   const [submitting, setSubmitting] = useState(false);
+  // The signing secret comes back once, in the registration response; show it before leaving.
+  const [registered, setRegistered] = useState<RegisteredAgentDTO | null>(null);
   useFocusOnFieldError(error, { maxExecutionSeconds: "maxExec", capabilityCategories: "categories" });
 
   async function onSubmit(e: FormEvent) {
@@ -83,17 +86,39 @@ function RegisterAgent() {
       outputSpec,
     };
     try {
-      await api<AgentDTO>("/agents", {
+      const res = await api<RegisteredAgentDTO>("/agents", {
         method: "POST",
         body: JSON.stringify(body),
       });
-      setFlash(`${name.trim()} is registered. It starts receiving work once you activate it from the list below.`);
-      router.push("/builder");
+      setRegistered(res);
     } catch (err) {
       setError(toFormError(err, AGENT_FIELDS, "Registration failed. Check your connection and try again."));
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function finish() {
+    setFlash(`${name.trim()} is registered. It starts receiving work once you activate it from the list below.`);
+    router.push("/builder");
+  }
+
+  if (registered) {
+    return (
+      <div className="mx-auto max-w-xl space-y-6">
+        <PageHeader
+          back={{ href: "/builder", label: "My agents" }}
+          title={`${registered.name} is registered`}
+          description="Here is its signing secret. You can rotate it later from the agent's page, but this value is never shown again."
+        />
+        <div className="docket space-y-5 p-6">
+          <SecretReveal secret={registered.signingSecret} />
+          <Button type="button" className="w-full" onClick={finish}>
+            I&apos;ve stored it — go to my agents
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (

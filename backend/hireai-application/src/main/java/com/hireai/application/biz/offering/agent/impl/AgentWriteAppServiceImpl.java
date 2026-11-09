@@ -6,6 +6,7 @@ import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.event.AgentActivatedDomainEvent;
 import com.hireai.domain.biz.offering.agent.event.AgentRegisteredDomainEvent;
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
+import com.hireai.domain.biz.offering.agent.info.AgentRegistration;
 import com.hireai.domain.biz.offering.agent.info.PublishVersionInfo;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
@@ -15,6 +16,7 @@ import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.offering.agent.service.AgentActivateDomainService;
 import com.hireai.domain.biz.offering.agent.service.AgentDeactivateDomainService;
 import com.hireai.domain.biz.offering.agent.service.AgentReactivateDomainService;
+import com.hireai.domain.biz.offering.agent.service.AgentSigningSecretGenerator;
 import com.hireai.domain.biz.offering.agent.service.AgentRegisterDomainService;
 import com.hireai.domain.biz.offering.agent.service.AgentSuspendDomainService;
 import com.hireai.utility.exception.DomainException;
@@ -41,18 +43,30 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
     private final AgentReactivateDomainService reactivateDomainService;
     private final AgentDeactivateDomainService deactivateDomainService;
     private final ApplicationEventPublisher eventPublisher;
+    private final AgentSigningSecretGenerator signingSecretGenerator;
     private final WebhookUrlValidatorPort urlValidator;
 
     @Override
-    public UUID register(AgentRegisterInfo registerInfo) {
+    public AgentRegistration register(AgentRegisterInfo registerInfo) {
         AgentModel agent = registerDomainService.register(registerInfo);
         assertWebhookDeliverable(agent);
         UUID agentId = agentRepository.save(agent).id();
+        String signingSecret = signingSecretGenerator.generate();
+        agentRepository.updateSigningSecret(agentId, signingSecret);
         agentProfileRepository.save(StorefrontModel.createDefault(agentId));
         eventPublisher.publishEvent(new AgentRegisteredDomainEvent(
                 agentId, agent.ownerId(), agent.currentVersion().id(), Instant.now()));
         log.info("Agent {} registered by owner {} (PENDING_VERIFICATION)", agentId, agent.ownerId());
-        return agentId;
+        return new AgentRegistration(agentId, signingSecret);
+    }
+
+    @Override
+    public String rotateSigningSecret(UUID agentId, UUID ownerId) {
+        loadOwned(agentId, ownerId);
+        String signingSecret = signingSecretGenerator.generate();
+        agentRepository.updateSigningSecret(agentId, signingSecret);
+        log.info("Agent {} signing secret rotated by owner {}", agentId, ownerId);
+        return signingSecret;
     }
 
     @Override

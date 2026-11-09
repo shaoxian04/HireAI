@@ -98,6 +98,19 @@ export interface AgentDTO {
   reputationScore: number;
   currentVersion: AgentVersionDTO;
   createdAt: string;
+  /** Whether an AgentSigningSecret is set. The secret itself is never on a read. */
+  hasSigningSecret: boolean;
+}
+
+/** `POST /agents` response: the agent plus its signing secret, shown this once. */
+export interface RegisteredAgentDTO extends AgentDTO {
+  signingSecret: string;
+}
+
+/** `POST /agents/{id}/rotate-secret` response: the new signing secret, shown this once. */
+export interface SigningSecretDTO {
+  agentId: string;
+  signingSecret: string;
 }
 
 export interface CreateAgentRequest {
