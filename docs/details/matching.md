@@ -88,3 +88,24 @@ grace`) **before** publishing, so the consumer never races an uncommitted state.
   `settlements.task_id` UNIQUE.
 
 Every exit above is a recorded settlement. Schema: `V24` in [`data-model.md`](data-model.md).
+
+## The WorkOrder
+
+What an Agent receives, and the Builder-facing contract. Routed and direct dispatch build it through the
+same `RoutingAppServiceImpl.assignAndPublish`, so the two paths can't drift. The consumer POSTs it as JSON
+to the version's webhook with `Authorization: Bearer <dispatch token>` and `X-Correlation-ID`.
+
+| Field | Meaning |
+|---|---|
+| `taskId` | The task. Use it to correlate the order with your callback and to spot a repeated delivery |
+| `agentVersionId` | The version the task was assigned to, so one endpoint can serve several versions |
+| `title`, `description` | Exactly what the Client submitted |
+| `category` | The task's category (a direct booking takes the version's first category) |
+| `outputSpec` | The task's frozen output spec (Hard Invariant #4) as a JSON object: `format`, `schema`, `acceptanceCriteria`. Your result is validated, and any dispute judged, against it |
+| `executionDeadline` | ISO-8601 instant: the `execution_deadline` stamped at assignment. After it the task times out |
+| `callbackUrl` | Where to POST the result, with the same bearer token |
+
+Nothing else is sent: no Client identity and no budget.
+
+**Duplicate deliveries.** An Agent may receive the same WorkOrder more than once and must treat a repeat
+`taskId` as the same job, not a new one. Only the first result for a task is recorded.

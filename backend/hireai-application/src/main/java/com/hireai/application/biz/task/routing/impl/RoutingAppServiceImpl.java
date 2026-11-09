@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -84,13 +85,7 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                 .orElseThrow(() -> new DomainException(ResultCode.INTERNAL_ERROR,
                         "Matcher returned an agentVersionId absent from candidates: " + agentVersionId));
 
-        // Commit the QUEUED transition FIRST so the consumer always sees a durable QUEUED row.
-        Instant executionDeadline = Instant.now()
-                .plusSeconds(winner.maxExecutionSeconds() + executionGraceSeconds);
-        taskWriteAppService.assignAndQueue(taskId, agentVersionId, executionDeadline);
-
-        DispatchMessage message = buildDispatchMessage(taskId, agentVersionId, view, winner);
-        taskDispatchPublisher.publish(message);
+        DispatchMessage message = assignAndPublish(view, agentVersionId, winner);
         log.info("Task {} assigned to agentVersion {} and dispatch published (correlationId={})",
                 taskId, agentVersionId, message.correlationId());
     }
@@ -108,30 +103,40 @@ public class RoutingAppServiceImpl implements RoutingAppService {
             taskWriteAppService.markAwaitingCapacity(taskId);
             return;
         }
-        AgentCandidate target = maybeTarget.get();
-        // Same ordering contract as route(): QUEUED commits FIRST (REQUIRES_NEW), then publish.
-        Instant executionDeadline = Instant.now()
-                .plusSeconds(target.maxExecutionSeconds() + executionGraceSeconds);
-        taskWriteAppService.assignAndQueue(taskId, agentVersionId, executionDeadline);
-        DispatchMessage message = buildDispatchMessage(taskId, agentVersionId, view, target);
-        taskDispatchPublisher.publish(message);
+        DispatchMessage message = assignAndPublish(view, agentVersionId, maybeTarget.get());
         log.info("Task {} direct-dispatched to agentVersion {} (correlationId={})",
                 taskId, agentVersionId, message.correlationId());
     }
 
-    private DispatchMessage buildDispatchMessage(UUID taskId, UUID agentVersionId,
-                                                 TaskRoutingView view, AgentCandidate winner) {
+    /**
+     * The one path both routed and direct dispatch take, so the WorkOrder can't drift between
+     * them. The QUEUED transition (with the execution deadline) commits FIRST in its own
+     * transaction so the consumer always sees a durable QUEUED row; only then is the message
+     * published. The deadline is truncated to microseconds, the precision the task row stores,
+     * so the WorkOrder carries exactly the stamped value.
+     */
+    private DispatchMessage assignAndPublish(TaskRoutingView view, UUID agentVersionId, AgentCandidate target) {
+        Instant executionDeadline = Instant.now().truncatedTo(ChronoUnit.MICROS)
+                .plusSeconds(target.maxExecutionSeconds() + executionGraceSeconds);
+        taskWriteAppService.assignAndQueue(view.taskId(), agentVersionId, executionDeadline);
+        DispatchMessage message = buildDispatchMessage(view, agentVersionId, target, executionDeadline);
+        taskDispatchPublisher.publish(message);
+        return message;
+    }
+
+    private DispatchMessage buildDispatchMessage(TaskRoutingView view, UUID agentVersionId,
+                                                 AgentCandidate target, Instant executionDeadline) {
         String correlationId = UUID.randomUUID().toString();
-        String callbackUrl = publicBaseUrl + "/api/agent-callbacks/" + taskId + "/result";
+        String callbackUrl = publicBaseUrl + "/api/agent-callbacks/" + view.taskId() + "/result";
         TaskDispatchPayload payload = new TaskDispatchPayload(
-                view.category(),               // title placeholder uses category in this slice
-                view.category(),               // description placeholder
+                view.title(),
+                view.description(),
                 view.category(),
-                null,                          // expectedDeliverableJson: not enriched in this slice
                 // Hard Invariant #4: use the task's adopted copy (frozen at submit time) as the binding
                 // contract. The candidate supplies only webhookUrl/version identity — not the spec.
                 view.outputSpecJson(),
+                executionDeadline,
                 callbackUrl);
-        return new DispatchMessage(taskId, agentVersionId, winner.webhookUrl(), correlationId, payload);
+        return new DispatchMessage(view.taskId(), agentVersionId, target.webhookUrl(), correlationId, payload);
     }
 }

@@ -35,5 +35,5 @@ cloudflared tunnel --url http://localhost:9000     # -> https://<random>.tryclou
 
 ## Wire contracts
 
-- **Receives:** `{ taskId, category, title, description, expectedDeliverable, outputSpec, callbackUrl }` with headers `Authorization: Bearer <token>` and `X-Correlation-ID: <id>`.
+- **Receives:** the WorkOrder (shape and rules in `docs/details/matching.md`) with headers `Authorization: Bearer <token>` and `X-Correlation-ID: <id>`. The stub logs the title and description it received, then returns its staged output whatever was asked.
 - **Sends** to `callbackUrl`: `{ agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }` with `Authorization: Bearer <same token>`.

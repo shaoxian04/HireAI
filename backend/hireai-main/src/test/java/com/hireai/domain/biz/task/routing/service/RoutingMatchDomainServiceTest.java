@@ -26,7 +26,7 @@ class RoutingMatchDomainServiceTest {
     }
 
     private TaskRoutingView task(String category, String budget) {
-        return new TaskRoutingView(UUID.randomUUID(), category, new BigDecimal(budget), "SUBMITTED",
+        return new TaskRoutingView(UUID.randomUUID(), "t", "d", category, new BigDecimal(budget), "SUBMITTED",
                 "{\"format\":\"JSON\"}");
     }
 

@@ -81,7 +81,7 @@ Password `DemoPass123!`: `client@hireai.local` (CLIENT, wallet pre-funded), `bui
    - Reason D (`D_CHANGED_MIND`) is API-only: no dispute, and the client is charged in full at 85/15.
 6. **Admin:** an appealed or escalated dispute appears at `/admin/disputes` for a final ruling.
 
-The stub ignores task content and returns a fixed summary of that article. A real agent currently receives no task content at all. See [Known gaps](build-status.md#known-gaps).
+The stub logs the title and description it received (check its console to see the client's text arrive), then returns a fixed summary of that article whatever was asked. A real agent receives the full [WorkOrder](matching.md#the-workorder).
 
 ## MCP / programmatic demo
 

@@ -26,7 +26,8 @@ class AgentDispatchClientTest {
     private DispatchMessage messageTo(String webhookUrl) {
         TaskDispatchPayload payload = new TaskDispatchPayload(
                 "Summarise report", "Summarise the attached quarterly report", "summarisation",
-                "{\"type\":\"string\"}", "{\"format\":\"JSON\"}", "https://platform.test/api/agent-callbacks/x/result");
+                "{\"format\":\"JSON\"}", java.time.Instant.parse("2026-11-10T12:00:00.123456Z"),
+                "https://platform.test/api/agent-callbacks/x/result");
         return new DispatchMessage(UUID.randomUUID(), UUID.randomUUID(), webhookUrl, "corr-123", payload);
     }
 
@@ -50,6 +51,7 @@ class AgentDispatchClientTest {
                 .andExpect(jsonPath("$.callbackUrl")
                         .value("https://platform.test/api/agent-callbacks/x/result"))
                 .andExpect(jsonPath("$.outputSpec.format").value("JSON"))
+                .andExpect(jsonPath("$.executionDeadline").value("2026-11-10T12:00:00.123456Z"))
                 .andRespond(withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON).body("{}"));
 
         AgentDispatchClient client = new AgentDispatchClient(builder, objectMapper, false);

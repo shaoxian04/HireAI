@@ -45,7 +45,8 @@ class RoutingAppServiceImplTest {
     private static final String TASK_OUTPUT_SPEC = "{\"format\":\"TEXT\",\"schema\":\"task-snap\"}";
 
     private TaskRoutingView view(UUID taskId) {
-        return new TaskRoutingView(taskId, "summarisation", new BigDecimal("30.00"), "SUBMITTED",
+        return new TaskRoutingView(taskId, "Summarise report", "Summarise the attached report",
+                "summarisation", new BigDecimal("30.00"), "SUBMITTED",
                 TASK_OUTPUT_SPEC);
     }
 
