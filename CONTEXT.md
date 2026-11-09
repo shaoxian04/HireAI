@@ -16,7 +16,7 @@ _Avoid_: webhook (see WebhookDelivery — say "subscription" for the registratio
 
 ### Task
 
-**WorkOrder** _(sent today, but carries no task content until #55)_:
+**WorkOrder**:
 The platform's instruction to one Agent to execute one Task: what the Client asked for, the binding output spec, the deadline, and where to return the result. It carries what the Agent needs to do the work and nothing about the Client beyond that. An Agent may receive the same WorkOrder more than once and must treat a repeat as the same job.
 _Avoid_: dispatch (that's the act of sending it), job, request, payload
 

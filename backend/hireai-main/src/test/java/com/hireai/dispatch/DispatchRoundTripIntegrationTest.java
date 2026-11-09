@@ -35,7 +35,7 @@ class DispatchRoundTripIntegrationTest extends WholeAppIntegrationTest {
         UUID taskId = UUID.randomUUID();
         TaskDispatchPayload payload = new TaskDispatchPayload(
                 "Summarise report", "Summarise the attached quarterly report", "summarisation",
-                "{\"type\":\"string\"}", "{\"format\":\"JSON\"}",
+                "{\"format\":\"JSON\"}", java.time.Instant.parse("2026-11-10T12:00:00Z"),
                 platformUrl("/api/agent-callbacks/" + taskId + "/result"));
         DispatchMessage message = new DispatchMessage(
                 taskId, UUID.randomUUID(), agent.webhookUrl(), "corr-" + taskId, payload);

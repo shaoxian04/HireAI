@@ -43,6 +43,8 @@ class TaskReadAppServiceGetRoutingViewTest {
         TaskRoutingView view = service().getRoutingView(task.id());
 
         assertThat(view.taskId()).isEqualTo(task.id());
+        assertThat(view.title()).isEqualTo("title");
+        assertThat(view.description()).isEqualTo("desc");
         assertThat(view.category()).isEqualTo("translation");
         assertThat(view.budget()).isEqualByComparingTo(new BigDecimal("42.50"));
         assertThat(view.status()).isEqualTo("SUBMITTED");

@@ -41,9 +41,12 @@ class SpineContractsTest {
         UUID taskId = UUID.randomUUID();
         String outputSpecJson = "{\"format\":\"JSON\",\"schema\":\"{}\"}";
         TaskRoutingView view = new TaskRoutingView(
-                taskId, "SUMMARISATION", new BigDecimal("25.00"), "SUBMITTED", outputSpecJson);
+                taskId, "Summarise doc", "Summarise the attached report", "SUMMARISATION",
+                new BigDecimal("25.00"), "SUBMITTED", outputSpecJson);
 
         assertThat(view.taskId()).isEqualTo(taskId);
+        assertThat(view.title()).isEqualTo("Summarise doc");
+        assertThat(view.description()).isEqualTo("Summarise the attached report");
         assertThat(view.category()).isEqualTo("SUMMARISATION");
         assertThat(view.budget()).isEqualByComparingTo("25.00");
         assertThat(view.status()).isEqualTo("SUBMITTED");
@@ -54,14 +57,15 @@ class SpineContractsTest {
     void taskDispatchPayloadExposesAllAccessors() {
         TaskDispatchPayload payload = new TaskDispatchPayload(
                 "Summarise doc", "Summarise the attached report", "SUMMARISATION",
-                "{\"format\":\"TEXT\"}", "{\"format\":\"TEXT\",\"acceptanceCriteria\":\"concise\"}",
+                "{\"format\":\"TEXT\",\"acceptanceCriteria\":\"concise\"}",
+                java.time.Instant.parse("2026-11-10T12:00:00Z"),
                 "https://platform.example.com/api/agent-callbacks/abc/result");
 
         assertThat(payload.title()).isEqualTo("Summarise doc");
         assertThat(payload.description()).isEqualTo("Summarise the attached report");
         assertThat(payload.category()).isEqualTo("SUMMARISATION");
-        assertThat(payload.expectedDeliverableJson()).isEqualTo("{\"format\":\"TEXT\"}");
         assertThat(payload.outputSpecJson()).isEqualTo("{\"format\":\"TEXT\",\"acceptanceCriteria\":\"concise\"}");
+        assertThat(payload.executionDeadline()).isEqualTo(java.time.Instant.parse("2026-11-10T12:00:00Z"));
         assertThat(payload.callbackUrl()).isEqualTo("https://platform.example.com/api/agent-callbacks/abc/result");
     }
 
@@ -71,7 +75,7 @@ class SpineContractsTest {
         UUID agentVersionId = UUID.randomUUID();
         TaskDispatchPayload payload = new TaskDispatchPayload(
                 "Summarise doc", "Summarise the attached report", "SUMMARISATION",
-                "{\"format\":\"TEXT\"}", "{\"format\":\"TEXT\"}",
+                "{\"format\":\"TEXT\"}", java.time.Instant.parse("2026-11-10T12:00:00Z"),
                 "https://platform.example.com/api/agent-callbacks/abc/result");
         DispatchMessage message = new DispatchMessage(
                 taskId, agentVersionId, "https://agent.example.com/webhook", "corr-123", payload);

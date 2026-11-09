@@ -6,11 +6,15 @@ platform's callback URL. This is a stand-in for a real third-party Agent.
 """
 import asyncio
 import json
+import logging
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Request
 
 app = FastAPI(title="HireAI demo stub agent")
+# uvicorn configures its own loggers only; give ours a handler so the lines reach the console.
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(message)s")
+log = logging.getLogger("demo-agent")
 
 # Hard-coded demo output: the summary of demo-article.txt (paste that article as the task
 # description during the demo). The stub does no real summarisation - the pairing is staged.
@@ -32,6 +36,13 @@ async def run(request: Request, authorization: str = Header(default="")):
     body = await request.json()
     task_id = body["taskId"]
     callback_url = body["callbackUrl"]
+    # Log the task content so a live run visibly proves the WorkOrder carries the client's
+    # request. The stub still returns its staged output regardless of what was asked.
+    log.info(
+        "WorkOrder %s (version %s, category %s, deadline %s): title=%r description=%r",
+        task_id, body.get("agentVersionId"), body.get("category"), body.get("executionDeadline"),
+        body.get("title"), body.get("description"),
+    )
 
     # Process asynchronously so the dispatch POST returns immediately (202-style).
     asyncio.create_task(_complete(task_id, callback_url, token))

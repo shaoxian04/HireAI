@@ -60,11 +60,12 @@ public class AgentDispatchClient {
         TaskDispatchPayload payload = message.payload();
         return new WebhookDispatchBody(
                 message.taskId(),
-                payload.category(),
+                message.agentVersionId(),
                 payload.title(),
                 payload.description(),
-                readJson(payload.expectedDeliverableJson()),
+                payload.category(),
                 readJson(payload.outputSpecJson()),
+                payload.executionDeadline() == null ? null : payload.executionDeadline().toString(),
                 payload.callbackUrl());
     }
 

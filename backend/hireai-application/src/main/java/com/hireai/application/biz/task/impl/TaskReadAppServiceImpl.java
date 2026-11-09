@@ -58,7 +58,7 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
         // Serialise the task's stored output_spec snapshot: this is the binding contract
         // (Hard Invariant #4) that must travel with the dispatch, not the agent version's live spec.
         String outputSpecJson = outputSpecJsonMapper.toJson(task.outputSpec());
-        return new TaskRoutingView(task.id(), task.category(), task.budget().value(),
-                task.status().name(), outputSpecJson);
+        return new TaskRoutingView(task.id(), task.title(), task.description(), task.category(),
+                task.budget().value(), task.status().name(), outputSpecJson);
     }
 }

@@ -90,8 +90,8 @@ Read the relevant file on demand — don't preload everything.
 
 - **`docs/details/build-status.md`** — what's built in each module, and the single list of known gaps.
   **Read before starting any feature — to see what already exists.**
-- **`docs/details/matching.md`** — how agents are ranked, shortlisted and routed, and the re-match and timeout sweepers.
-  **Read before touching matching, routing, or the submit flow.**
+- **`docs/details/matching.md`** — how agents are ranked, shortlisted and routed, the re-match and timeout sweepers, and the WorkOrder an Agent receives.
+  **Read before touching matching, routing, dispatch, or the submit flow.**
 - **`docs/details/architecture.md`** — services, polyglot topology, tech stack, communication patterns.
   **Read before any cross-service or infrastructure change.**
 - **`docs/details/ddd-conventions.md`** — layering (`controller → application → domain ← infrastructure`), aggregate boundaries, naming suffixes, the five rules.
