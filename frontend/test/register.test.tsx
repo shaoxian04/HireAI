@@ -27,7 +27,8 @@ describe("register screen", () => {
   it("registers a CLIENT and redirects to /client", async () => {
     renderRegister();
     await userEvent.type(screen.getByLabelText(/email/i), "new@test.local");
-    await userEvent.type(screen.getByLabelText(/password/i), "Sup3rSecret!");
+    await userEvent.type(screen.getByLabelText(/^password$/i), "Sup3rSecret!");
+    await userEvent.type(screen.getByLabelText(/confirm password/i), "Sup3rSecret!");
     await userEvent.click(screen.getByRole("button", { name: /create account/i }));
     await vi.waitFor(() => expect(replace).toHaveBeenCalledWith("/client"));
     expect(localStorage.getItem("hireai.token")).toBeTruthy();
@@ -36,8 +37,19 @@ describe("register screen", () => {
   it("shows an error when the email is already registered", async () => {
     renderRegister();
     await userEvent.type(screen.getByLabelText(/email/i), "taken@test.local");
-    await userEvent.type(screen.getByLabelText(/password/i), "Sup3rSecret!");
+    await userEvent.type(screen.getByLabelText(/^password$/i), "Sup3rSecret!");
+    await userEvent.type(screen.getByLabelText(/confirm password/i), "Sup3rSecret!");
     await userEvent.click(screen.getByRole("button", { name: /create account/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/already registered/i);
+  });
+
+  it("stops a mismatched confirmation before anything is sent", async () => {
+    renderRegister();
+    await userEvent.type(screen.getByLabelText(/email/i), "new@test.local");
+    await userEvent.type(screen.getByLabelText(/^password$/i), "Sup3rSecret!");
+    await userEvent.type(screen.getByLabelText(/confirm password/i), "Sup3rSecreT!");
+    await userEvent.click(screen.getByRole("button", { name: /create account/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/don.t match/i);
+    expect(screen.getByLabelText(/confirm password/i)).toHaveFocus();
   });
 });

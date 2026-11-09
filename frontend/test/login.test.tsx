@@ -52,4 +52,16 @@ describe("login screen", () => {
     await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/bad credentials/i);
   });
+
+  it("checks the form itself and puts the error under the field, focused, with no request sent", async () => {
+    renderLogin();
+    await userEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+    const email = screen.getByLabelText(/^email$/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/email is required/i);
+    expect(email).toHaveAttribute("aria-invalid", "true");
+    expect(email).toHaveFocus();
+    // editing the field clears its error
+    await userEvent.type(email, "a");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });
