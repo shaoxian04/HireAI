@@ -1,12 +1,15 @@
 "use client";
 
+import { REJECT_LABEL } from "@/components/DisputeProgressPanel";
+import type { RejectReason } from "@/lib/types";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { AppShell } from "@/components/AppShell";
 import { RoleGuard } from "@/components/RoleGuard";
-import { Card, Badge, Button } from "@/components/ui";
+import { Card, Badge, SkeletonRows } from "@/components/ui";
 import type { AdminDisputeRowDTO } from "@/lib/types";
+import { PageHeader } from "@/components/PageHeader";
 
 function AdminDisputes() {
   const [rows, setRows] = useState<AdminDisputeRowDTO[]>([]);
@@ -17,6 +20,8 @@ function AdminDisputes() {
   useEffect(() => {
     let cancelled = false;
     const filter = needsAttentionOnly ? "needs_attention" : "all";
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- show the loading state again when the filter changes
+    setLoading(true);
     api<AdminDisputeRowDTO[]>(`/admin/disputes?filter=${filter}`)
       .then((r) => {
         if (!cancelled) {
@@ -37,33 +42,43 @@ function AdminDisputes() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow">Backstop</p>
-          <h1 className="mt-1 text-2xl font-extrabold tracking-tight">Disputes</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant={needsAttentionOnly ? "primary" : "ghost"} onClick={() => setNeedsAttentionOnly(true)}>
-            Needs attention
-          </Button>
-          <Button variant={needsAttentionOnly ? "ghost" : "primary"} onClick={() => setNeedsAttentionOnly(false)}>
-            All
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Disputes"
+        description="Rejected results the arbitrator escalated, or that are still being decided. Open one to rule on it."
+        actions={
+          <div className="flex rounded-md border border-line-bright bg-surface p-0.5" role="group" aria-label="Filter">
+            <button
+              type="button"
+              aria-pressed={needsAttentionOnly}
+              onClick={() => setNeedsAttentionOnly(true)}
+              className={`rounded px-3 py-1.5 text-sm font-medium transition ${needsAttentionOnly ? "bg-accent text-ink" : "text-muted hover:text-fg"}`}
+            >
+              Needs attention
+            </button>
+            <button
+              type="button"
+              aria-pressed={!needsAttentionOnly}
+              onClick={() => setNeedsAttentionOnly(false)}
+              className={`rounded px-3 py-1.5 text-sm font-medium transition ${!needsAttentionOnly ? "bg-accent text-ink" : "text-muted hover:text-fg"}`}
+            >
+              All
+            </button>
+          </div>
+        }
+      />
 
       {error && (
         <Card>
-          <p role="alert" className="font-mono text-sm text-red">
+          <p role="alert" className="text-sm text-red">
             {error}
           </p>
         </Card>
       )}
 
-      <Card className="overflow-x-auto p-0">
-        <table className="w-full text-sm">
+      <Card className="overflow-hidden p-0 sm:overflow-x-auto">
+        <table className="stack-table w-full text-sm" aria-busy={loading}>
           <thead>
-            <tr className="border-b border-line text-left font-mono text-[0.65rem] uppercase tracking-wider text-dim">
+            <tr className="border-b border-line bg-surface-2 text-left text-xs font-semibold text-muted">
               <th className="p-3">Task</th>
               <th className="p-3">Reason</th>
               <th className="p-3">Status</th>
@@ -73,29 +88,41 @@ function AdminDisputes() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {!loading && rows.map((r) => (
               <tr key={r.disputeId} className="border-b border-line/50 hover:bg-surface-2/50">
                 <td className="p-3 text-fg">{r.taskTitle}</td>
-                <td className="p-3 font-mono text-xs text-muted">{r.reasonCategory}</td>
-                <td className="p-3">
-                  <Badge status={r.status}>{r.status}</Badge>
+                <td data-label="Reason" className="p-3 text-xs text-muted">{REJECT_LABEL[r.reasonCategory as RejectReason] ?? r.reasonCategory}</td>
+                <td data-label="Status" className="p-3">
+                  <Badge status={r.status} />
                 </td>
-                <td className="p-3 font-mono text-xs text-muted">{r.clientName}</td>
-                <td className="p-3 font-mono text-xs text-dim">{new Date(r.createdAt).toLocaleString()}</td>
+                <td data-label="Raised by" className="p-3 text-xs text-muted">{r.clientName}</td>
+                <td data-label="Opened" className="p-3 text-xs text-dim">{new Date(r.createdAt).toLocaleString()}</td>
                 <td className="p-3 text-right">
                   <Link
                     href={`/admin/disputes/${r.disputeId}`}
-                    className="font-mono text-xs font-semibold text-accent hover:underline"
+                    className="text-sm font-semibold text-accent hover:underline"
                   >
-                    Review →
+                    Review<span className="sr-only">: {r.taskTitle}</span>
                   </Link>
                 </td>
               </tr>
             ))}
+            {loading && (
+              <tr>
+                <td colSpan={6} className="p-0">
+                  <div className="p-4">
+                    <SkeletonRows label="Loading disputes…" rows={4} />
+                  </div>
+                </td>
+              </tr>
+            )}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-3 font-mono text-xs text-dim">
-                  Nothing here.
+                <td colSpan={6} className="px-6 py-14 text-center">
+                  <p className="font-semibold text-fg">No disputes in this view</p>
+                  <p className="mt-1 text-sm text-muted">
+                    Disputes appear here when a client rejects a result and the arbitrator escalates it.
+                  </p>
                 </td>
               </tr>
             )}
