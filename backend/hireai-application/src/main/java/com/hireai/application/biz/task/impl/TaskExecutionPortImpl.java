@@ -1,6 +1,9 @@
 package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.application.biz.reputation.ReputationWriteAppService;
+import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
+import com.hireai.domain.biz.reputation.enums.ReputationEventType;
 import com.hireai.application.port.task.TaskExecutionPort;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.enums.TaskStatus;
@@ -27,6 +30,8 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
 
     private final TaskRepository taskRepository;
     private final SettlementWriteAppService settlementWriteAppService;
+    private final ReputationWriteAppService reputationWriteAppService;
+    private final WebhookOutboxAppService webhookOutboxAppService;
 
     @Override
     public boolean isAwaitingDispatch(UUID taskId, UUID agentVersionId) {
@@ -90,7 +95,12 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
         // Stranded-escrow fix (spec §6.3): the DLQ path previously marked FAILED without refunding,
         // freezing the client's escrow forever. Every escrow exit is a recorded settlement.
         settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
-        log.info("Task {} marked FAILED and escrow refunded", taskId);
+        // The Agent could not be reached on any attempt: a zero-quality sample against it, and
+        // the client's integration learns of the failure. Both join this transaction.
+        reputationWriteAppService.recordOutcome(taskId, failed.agentVersionId(), failed.clientId(),
+                ReputationEventType.EXECUTION_FAILED);
+        webhookOutboxAppService.enqueueFailed(failed, "FAILED");
+        log.info("Task {} marked FAILED, escrow refunded, EXECUTION_FAILED recorded", taskId);
     }
 
     private TaskModel loadForUpdate(UUID taskId) {

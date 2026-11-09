@@ -36,7 +36,7 @@ import static org.mockito.Mockito.doThrow;
  */
 class DispatchRaceIntegrationTest extends WholeAppIntegrationTest {
 
-    /** Longer than the listener's whole retry schedule (1s + 2s), so a redelivery would show. */
+    /** Longer than the harness's whole dispatch retry schedule (3 × 500ms), so a resend would show. */
     private static final Duration QUIET_PERIOD = Duration.ofSeconds(5);
 
     @Autowired TaskWriteAppService taskWriteAppService;

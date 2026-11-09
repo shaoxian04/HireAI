@@ -38,7 +38,9 @@ spring:
     password: ${RABBITMQ_PASSWORD:guest}
     listener:
       simple:
-        # Bounded listener-side retry; on exhaustion the message dead-letters to the DLQ.
+        # Bounded listener-side retry for the default container (arbitration and the dispatch
+        # DLQ listener). The dispatch queue itself does NOT use it: it has its own container
+        # (RabbitDispatchConfig) and retries failed sends on delayed retry queues instead.
         retry:
           enabled: true
           max-attempts: 3
@@ -97,6 +99,12 @@ hireai:
     # Allow http://localhost webhooks only when explicitly enabled (dev/demo). HTTPS is
     # enforced in every other case (Hard Invariant #6).
     allow-insecure-localhost: ${DISPATCH_ALLOW_INSECURE_LOCALHOST:false}
+    # Waits between WorkOrder send attempts (N delays = N + 1 attempts). A failed send waits on a
+    # retry queue, not in the consumer; after the last attempt the task is FAILED with a refund.
+    # Startup fails if they add up to more than execution.grace-seconds.
+    retry-delays: ${DISPATCH_RETRY_DELAYS:5s,10s,15s}
+    # Concurrent dispatch consumers (prefetch 1 each), so one hanging Agent holds only one.
+    consumers: ${DISPATCH_CONSUMERS:4}
   auth:
     # HS256 signing secret for authentication JWTs. MUST be overridden in real deploys.
     # Dev default is >= 32 bytes (HS256 minimum). Never a real secret in git.

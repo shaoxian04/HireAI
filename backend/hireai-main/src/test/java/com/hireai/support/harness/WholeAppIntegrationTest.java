@@ -30,6 +30,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * queues with another cached context. Test methods in one context do share them: use fresh
  * IDs, and distinct categories when matching must see only your Agents.
  *
+ * <p>Dispatch retries use a short schedule ({@code hireai.dispatch.retry-delays} of three 500ms
+ * delays); override it with your own {@code @DynamicPropertySource} if a test needs another.
+ *
  * <p>Skips the whole class when Docker is unavailable, like the other integration tests. Runs
  * under the {@code test} profile (permissive security, sweepers off).
  */
@@ -72,6 +75,9 @@ public abstract class WholeAppIntegrationTest {
         registry.add("hireai.platform.public-base-url", () -> "http://localhost:" + port);
         registry.add("hireai.dispatch.allow-insecure-localhost", () -> "true");
         registry.add("hireai.dispatch.token-secret", () -> DISPATCH_TOKEN_SECRET);
+        // A short dispatch retry schedule (4 attempts in total) so failed sends dead-letter in
+        // well under two seconds instead of the production 5s/10s/15s.
+        registry.add("hireai.dispatch.retry-delays", () -> "500ms,500ms,500ms");
     }
 
     @Autowired

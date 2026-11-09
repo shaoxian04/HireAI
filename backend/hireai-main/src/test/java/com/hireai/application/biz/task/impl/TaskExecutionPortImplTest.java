@@ -1,6 +1,9 @@
 package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.application.biz.reputation.ReputationWriteAppService;
+import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
+import com.hireai.domain.biz.reputation.enums.ReputationEventType;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -30,9 +33,12 @@ class TaskExecutionPortImplTest {
 
     @Mock TaskRepository taskRepository;
     @Mock SettlementWriteAppService settlementWriteAppService;
+    @Mock ReputationWriteAppService reputationWriteAppService;
+    @Mock WebhookOutboxAppService webhookOutboxAppService;
 
     private TaskExecutionPortImpl port() {
-        return new TaskExecutionPortImpl(taskRepository, settlementWriteAppService);
+        return new TaskExecutionPortImpl(taskRepository, settlementWriteAppService,
+                reputationWriteAppService, webhookOutboxAppService);
     }
 
     private TaskModel queuedTask() {
@@ -145,6 +151,25 @@ class TaskExecutionPortImplTest {
     }
 
     @Test
+    void markFailedRecordsExecutionFailedAgainstTheAgentAndNotifiesTheClient() {
+        UUID clientId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        TaskModel queued = TaskModel.submit(clientId, "title", "desc", Money.of("10.00"),
+                new OutputSpec(OutputFormat.TEXT, null, "summary"), "general")
+                .assignAndQueue(versionId);
+        when(taskRepository.findByIdForUpdate(queued.id())).thenReturn(Optional.of(queued));
+        when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        port().markFailed(queued.id());
+
+        verify(reputationWriteAppService).recordOutcome(queued.id(), versionId, clientId,
+                ReputationEventType.EXECUTION_FAILED);
+        ArgumentCaptor<TaskModel> failed = ArgumentCaptor.forClass(TaskModel.class);
+        verify(webhookOutboxAppService).enqueueFailed(failed.capture(), org.mockito.ArgumentMatchers.eq("FAILED"));
+        assertThat(failed.getValue().status()).isEqualTo(TaskStatus.FAILED);
+    }
+
+    @Test
     void duplicateMarkFailedIsANoOp() {
         // arrange: findById -> task already FAILED
         UUID taskId = UUID.randomUUID();
@@ -162,8 +187,8 @@ class TaskExecutionPortImplTest {
         TaskExecutionPortImpl port = port();
         port.markFailed(taskId);
 
-        // verify: no save, no settlement call
+        // verify: no save, no settlement, reputation or webhook
         verify(taskRepository, never()).save(any());
-        verifyNoInteractions(settlementWriteAppService);
+        verifyNoInteractions(settlementWriteAppService, reputationWriteAppService, webhookOutboxAppService);
     }
 }

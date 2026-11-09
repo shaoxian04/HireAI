@@ -86,7 +86,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 **Outbox and sweeper (at-least-once):**
 - The terminal transition writes a `webhook_deliveries` row in the settling transaction. Its `id` doubles as the client-facing event id.
 - An API task whose key has no active subscription gets no row, and registering later does not replay it.
-- A dispatch that dead-letters ends `FAILED` with a refund and **no event**: polling is the only signal. See [Known gaps](build-status.md#known-gaps).
+- A dispatch whose every send attempt failed ends `FAILED` with a refund and a `task.failed` event (`reason` `FAILED`). Retry schedule: [`matching.md`](matching.md#the-workorder).
 - `WebhookDeliverySweeper` claims due rows with `FOR UPDATE SKIP LOCKED`, which is safe across instances, then signs and POSTs over a redirect-disabled `RestClient`. Failures back off exponentially with a cap until `DEAD`. Values: `hireai.webhooks.*` in `application.yml`.
 
 **Signature:** `X-HireAI-Signature: t=<unix-ts>,v1=<hex hmac-sha256(secret,"{ts}.{body}")>`, with `X-HireAI-Event-Id` and `X-HireAI-Event-Type`. The client recomputes over `"{t}.{rawBody}"` and constant-time-compares `v1`.

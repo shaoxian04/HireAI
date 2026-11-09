@@ -25,5 +25,10 @@ public interface TaskExecutionPort {
 
     void markTimedOut(UUID taskId);
 
+    /**
+     * The dispatch ran out of attempts (the DLQ listener): QUEUED/EXECUTING → FAILED under a row
+     * lock, with a refund, an {@code EXECUTION_FAILED} reputation event and a client
+     * {@code task.failed} webhook. A no-op once the task has already ended.
+     */
     void markFailed(UUID taskId);
 }
