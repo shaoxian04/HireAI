@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -41,7 +42,7 @@ class RoutingAppServiceDirectDispatchTest {
 
     private final RoutingAppServiceImpl service = new RoutingAppServiceImpl(
             taskReadAppService, taskWriteAppService, agentRepository,
-            routingMatchDomainService, taskDispatchPublisher);
+            routingMatchDomainService, taskDispatchPublisher, Clock.systemUTC());
 
     private static final String TASK_OUTPUT_SPEC = "{\"format\":\"JSON\",\"schema\":\"task-snap\"}";
     private static final String CANDIDATE_OUTPUT_SPEC = "{\"format\":\"TEXT\",\"schema\":\"agent-live\"}";

@@ -15,7 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,6 +37,8 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
     private final WebhookOutboxAppService webhookOutboxAppService;
     private final ReputationWriteAppService reputationWriteAppService;
     private final int rematchMaxAttempts;
+    /** The app's Clock bean (ClockConfig); tests pass their own to pick the moment a sweep runs at. */
+    private final Clock clock;
 
     public TaskReliabilityAppServiceImpl(TaskRepository taskRepository,
                                          RoutingAppService routingAppService,
@@ -44,7 +46,8 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
                                          SettlementWriteAppService settlementWriteAppService,
                                          WebhookOutboxAppService webhookOutboxAppService,
                                          ReputationWriteAppService reputationWriteAppService,
-                                         @Value("${hireai.matching.rematch-max-attempts:3}") int rematchMaxAttempts) {
+                                         @Value("${hireai.matching.rematch-max-attempts:3}") int rematchMaxAttempts,
+                                         Clock clock) {
         if (rematchMaxAttempts < 1) {
             throw new IllegalStateException("rematch-max-attempts must be >= 1; got " + rematchMaxAttempts);
         }
@@ -55,6 +58,7 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
         this.webhookOutboxAppService = webhookOutboxAppService;
         this.reputationWriteAppService = reputationWriteAppService;
         this.rematchMaxAttempts = rematchMaxAttempts;
+        this.clock = clock;
     }
 
     @Override
@@ -88,7 +92,7 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
     @Override
     @Transactional(readOnly = true)
     public List<UUID> executionExpiredTaskIds() {
-        return taskRepository.findIdsExecutionExpired(Instant.now());
+        return taskRepository.findIdsExecutionExpired(clock.instant());
     }
 
     @Override
