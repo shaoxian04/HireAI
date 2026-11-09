@@ -17,7 +17,7 @@ import java.util.UUID;
  * inside the app service. Per-id work is a cross-bean call with its own transactions, so one
  * poisoned id can't block the rest.
  *
- * <p><b>Single-instance assumption</b> (same as {@link CapacityRematchSweeper}): the routing writes
+ * <p><b>Single-instance assumption</b> (same as {@link AwaitingAgentRematchSweeper}): the routing writes
  * this drives read the task unlocked, and {@code @Scheduled(fixedDelay)} only serializes within one
  * JVM, so it assumes a SINGLE backend instance.
  */

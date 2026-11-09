@@ -14,7 +14,7 @@ export type TaskStatus =
   | "RESULT_RECEIVED"
   | "PENDING_REVIEW"
   | "RESOLVED"
-  | "AWAITING_CAPACITY"
+  | "AWAITING_AGENT"
   | "TIMED_OUT"
   | "SPEC_VIOLATION"
   | "FAILED"

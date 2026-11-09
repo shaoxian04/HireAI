@@ -44,7 +44,7 @@ import static org.awaitility.Awaitility.await;
  * every winner assertion below is exact, not probabilistic.
  *
  * <p>Runs under the {@code test} profile only (not {@code dev}, unlike RoutingIntegrationTest):
- * {@code CapacityRematchSweeper}/{@code ExecutionTimeoutSweeper} are {@code @Profile("!test")},
+ * {@code AwaitingAgentRematchSweeper}/{@code ExecutionTimeoutSweeper} are {@code @Profile("!test")},
  * so cases 36/37 below drive {@link TaskReliabilityAppService#rematchOne} directly instead of
  * racing a background sweep. None of the seeded agents' webhooks are ever actually reachable
  * (dummy https URLs, never asserted on) — every case here asserts on the routing DECISION
@@ -211,12 +211,12 @@ class MatchingEngineIntegrationTest {
         assertThat(assignedVersion).isEqualTo(agentA.versionId());
     }
 
-    // Case 36: submit into a category with NO eligible agent -> AWAITING_CAPACITY. Then a
-    // matching agent is registered+activated (capacity now exists), and
-    // TaskReliabilityAppService.rematchOne is called directly (the CapacityRematchSweeper is
+    // Case 36: submit into a category with NO eligible agent -> AWAITING_AGENT. Then a
+    // matching agent is registered+activated (an eligible agent now exists), and
+    // TaskReliabilityAppService.rematchOne is called directly (the AwaitingAgentRematchSweeper is
     // @Profile("!test") and never runs here) -> the task is rescued into QUEUED/EXECUTING.
     @Test
-    void rematchRescuesAnAwaitingCapacityTaskOnceCapacityAppears() {
+    void rematchRescuesAnAwaitingAgentTaskOnceAnAgentAppears() {
         UUID client = newClient();
         seedWallet(client, "100.00");
         String category = "rescue-cat";
@@ -225,7 +225,7 @@ class MatchingEngineIntegrationTest {
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             String status = jdbc.queryForObject("SELECT status FROM tasks WHERE id = ?", String.class, taskId);
-            assertThat(status).isEqualTo("AWAITING_CAPACITY");
+            assertThat(status).isEqualTo("AWAITING_AGENT");
         });
 
         AgentSeed rescuer = registerActiveAgent(category, "10.00", 5, "https://unused.example/hook-rescue");
@@ -241,8 +241,8 @@ class MatchingEngineIntegrationTest {
         assertThat(assignedVersion).isEqualTo(rescuer.versionId());
     }
 
-    // Case 37: submit into a category that NEVER gets an eligible agent. Three rematchOne calls
-    // exhaust the default rematch-max-attempts=3 bound -> CANCELLED with a full escrow refund:
+    // Case 37: submit into a category that NEVER gets an eligible agent. Two rematchOne calls
+    // exhaust the default rematch-max-attempts=2 bound -> CANCELLED with a full escrow refund:
     // the client wallet's available balance returns to exactly its pre-submit value, and a
     // REJECT settlement row is recorded for the task (Hard Invariants #1/#2).
     @Test
@@ -257,12 +257,11 @@ class MatchingEngineIntegrationTest {
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             String status = jdbc.queryForObject("SELECT status FROM tasks WHERE id = ?", String.class, taskId);
-            assertThat(status).isEqualTo("AWAITING_CAPACITY");
+            assertThat(status).isEqualTo("AWAITING_AGENT");
         });
 
-        taskReliabilityAppService.rematchOne(taskId); // attempt 1 of 3
-        taskReliabilityAppService.rematchOne(taskId); // attempt 2 of 3
-        taskReliabilityAppService.rematchOne(taskId); // attempt 3 of 3 -> exhausted -> CANCELLED + refund
+        taskReliabilityAppService.rematchOne(taskId); // attempt 1 of 2
+        taskReliabilityAppService.rematchOne(taskId); // attempt 2 of 2 -> exhausted -> CANCELLED + refund
 
         String status = jdbc.queryForObject("SELECT status FROM tasks WHERE id = ?", String.class, taskId);
         assertThat(status).isEqualTo("CANCELLED");

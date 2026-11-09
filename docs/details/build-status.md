@@ -64,7 +64,7 @@ All tracked in #53. Fixes are in #56 unless noted.
 ### Concurrency
 
 - **`tasks` has no `@Version`.** Writes are last-writer-wins outside the locked settlement path.
-- **Single-instance sweepers.** `CapacityRematchSweeper` and `SubmittedTaskSweeper` run through unlocked reads. Before scaling out, `assignAndQueue` and `cancelAwaitingCapacityWithRefund` must become status-conditional or row-locked. Money stays safe through `settlements.task_id UNIQUE`.
+- **Single-instance sweepers.** `AwaitingAgentRematchSweeper` and `SubmittedTaskSweeper` run through unlocked reads. Before scaling out, `assignAndQueue` and `cancelAwaitingAgentWithRefund` must become status-conditional or row-locked. Money stays safe through `settlements.task_id UNIQUE`.
 - **`adminRule` does not lock then re-read.** It is safe today through the same constraint.
 - **Spend caps have a TOCTOU window.** Concurrent submits under one key can slightly overshoot (accepted).
 - **Wallet version conflicts return 500**, not a retryable 409. Money is safe; the loser's transaction rolls back.
@@ -74,5 +74,4 @@ All tracked in #53. Fixes are in #56 unless noted.
 - `TaskFailurePanel` links to `/marketplace`, which doesn't exist.
 - `app/client/agents/[id]/page.tsx` still shows "Demo ratings" copy.
 - `app/client/page.tsx` says "verified" agents, but nothing verifies them.
-- The `AWAITING_CAPACITY` client copy says no agent has capacity, but load never causes that state.
 - `arbitration/tests/test_health.py` reads the real `.env`, so with keys set locally it starts a live consumer and hangs. CI has no keys.

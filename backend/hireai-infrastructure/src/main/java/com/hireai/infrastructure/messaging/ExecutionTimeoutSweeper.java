@@ -16,7 +16,7 @@ import java.util.UUID;
  * cross-bean call with its own transactions; one poisoned id can't block the rest.
  *
  * <p><b>Single-instance assumption (tracked follow-up, not fixed here):</b> the per-task transition
- * writes this drives ({@code assignAndQueue} / {@code cancelAwaitingCapacityWithRefund}) read the
+ * writes this drives ({@code assignAndQueue} / {@code cancelAwaitingAgentWithRefund}) read the
  * task unlocked in the rematch path, so this sweeper assumes a SINGLE backend instance —
  * {@code @Scheduled(fixedDelay)} only serializes within one JVM. Before scaling to more than one
  * replica, those transition writes must be made status-conditional (or row-locked) to prevent a

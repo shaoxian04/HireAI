@@ -77,7 +77,7 @@ class RoutingAppServiceDirectDispatchTest {
         InOrder inOrder = inOrder(taskWriteAppService, taskDispatchPublisher);
         inOrder.verify(taskWriteAppService).assignAndQueue(eq(taskId), eq(versionId), any(Instant.class));
         inOrder.verify(taskDispatchPublisher).publish(any(DispatchMessage.class));
-        verify(taskWriteAppService, never()).markAwaitingCapacity(any());
+        verify(taskWriteAppService, never()).markAwaitingAgent(any());
     }
 
     /**
@@ -107,10 +107,10 @@ class RoutingAppServiceDirectDispatchTest {
 
     /**
      * Deactivation race: findCandidateByVersionId returns empty (agent was deactivated/suspended
-     * between booking and dispatch). Must mark AWAITING_CAPACITY, NEVER publish, and NOT throw.
+     * between booking and dispatch). Must mark AWAITING_AGENT, NEVER publish, and NOT throw.
      */
     @Test
-    void deactivationRaceMarksAwaitingCapacityNeverPublishes() {
+    void deactivationRaceMarksAwaitingAgentNeverPublishes() {
         UUID taskId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
@@ -119,7 +119,7 @@ class RoutingAppServiceDirectDispatchTest {
         // Must not throw.
         service.dispatchDirect(taskId, versionId);
 
-        verify(taskWriteAppService).markAwaitingCapacity(taskId);
+        verify(taskWriteAppService).markAwaitingAgent(taskId);
         verify(taskDispatchPublisher, never()).publish(any());
         verify(taskWriteAppService, never()).assignAndQueue(any(), any(), any());
     }

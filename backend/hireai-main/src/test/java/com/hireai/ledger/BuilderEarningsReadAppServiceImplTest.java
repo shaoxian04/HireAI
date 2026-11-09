@@ -70,7 +70,7 @@ class BuilderEarningsReadAppServiceImplTest {
                 row(AGENT_A, "A", "12.00", "EXECUTING", null, null),
                 row(AGENT_A, "A", "20.00", "RESULT_RECEIVED", null, null),
                 row(AGENT_A, "A", "8.00", "PENDING_REVIEW", null, null),
-                row(AGENT_A, "A", "4.00", "AWAITING_CAPACITY", null, null),
+                row(AGENT_A, "A", "4.00", "AWAITING_AGENT", null, null),
                 row(AGENT_A, "A", "99.00", "RESOLVED", "ACCEPTED", Instant.now()),
                 row(AGENT_A, "A", "99.00", "TIMED_OUT", null, null)),
                 List.of(new OwnedAgentRow(AGENT_A, "A")));

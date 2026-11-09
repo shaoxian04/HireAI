@@ -79,7 +79,7 @@ class RoutingAppServiceImplTest {
         InOrder inOrder = inOrder(taskWriteAppService, taskDispatchPublisher);
         inOrder.verify(taskWriteAppService).assignAndQueue(eq(taskId), eq(versionId), any(Instant.class));
         inOrder.verify(taskDispatchPublisher).publish(any(DispatchMessage.class));
-        verify(taskWriteAppService, never()).markAwaitingCapacity(any());
+        verify(taskWriteAppService, never()).markAwaitingAgent(any());
     }
 
     @Test
@@ -156,7 +156,7 @@ class RoutingAppServiceImplTest {
     }
 
     @Test
-    void onNoMatchMarksAwaitingCapacityAndPublishesNothing() {
+    void onNoMatchMarksAwaitingAgentAndPublishesNothing() {
         UUID taskId = UUID.randomUUID();
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
         when(agentRepository.findActiveCandidates(any(), any())).thenReturn(List.of());
@@ -164,7 +164,7 @@ class RoutingAppServiceImplTest {
 
         service.route(taskId);
 
-        verify(taskWriteAppService).markAwaitingCapacity(taskId);
+        verify(taskWriteAppService).markAwaitingAgent(taskId);
         verify(taskWriteAppService, never()).assignAndQueue(any(), any(), any());
         verify(taskDispatchPublisher, never()).publish(any());
     }

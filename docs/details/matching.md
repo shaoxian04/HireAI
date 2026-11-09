@@ -77,14 +77,16 @@ invite a second, paid submit.
 |---|---|---|---|---|
 | Routing throws after submit | Stays `SUBMITTED`, escrow held | No | No | No |
 | Still `SUBMITTED` after the routing attempts | `CANCELLED` | Yes | Yes | No |
-| No eligible agent | `AWAITING_CAPACITY`, escrow held | No | No | No |
+| No eligible agent | `AWAITING_AGENT`, escrow held | No | No | No |
 | Re-match attempts exhausted | `CANCELLED` | Yes | Yes | No |
 | Past `execution_deadline` while `EXECUTING` | `TIMED_OUT` | Yes | Yes | `EXECUTION_TIMEOUT` |
 | Past `execution_deadline` while still `QUEUED` | `TIMED_OUT` | Yes | Yes | No |
 | Every dispatch attempt failed | `FAILED` | Yes | Yes | `EXECUTION_FAILED` |
 
-- **`AWAITING_CAPACITY` is misnamed.** Load is soft, so capacity never causes it. It means no `ACTIVE`
-  agent covers the category within budget, or a pinned agent went inactive or was superseded.
+- **`AWAITING_AGENT`** means no `ACTIVE` agent covers the category within budget, or a pinned agent went
+  inactive or was superseded. Load is soft, so a busy agent never causes it. The re-match sweeper
+  (`AwaitingAgentRematchSweeper`) retries it up to `hireai.matching.rematch-max-attempts` times,
+  then cancels with a refund.
 - **Pinned tasks never substitute.** A direct booking retries only its exact version, because the client's
   spec and price are frozen to it (Invariant #4).
 - **The deadline is stamped at assignment**, so one query catches both a silent agent and a lost publish.
@@ -93,9 +95,9 @@ invite a second, paid submit.
   good send whose mark-executing step failed (see the consumer order below) is also not blamed.
 - **SUBMITTED sweeper.** `SubmittedTaskSweeper` picks up tasks still `SUBMITTED` after
   `hireai.matching.submitted-min-age` (by the injected `Clock`) and re-runs routing, or the pinned dispatch
-  for a direct booking. Each run counts against the same `match_attempts` counter and
-  `rematch-max-attempts` bound as the re-match sweeper, and a routing exception counts as a failed attempt.
-  A task routed to `AWAITING_CAPACITY` carries its used attempts over to the re-match sweeper.
+  for a direct booking. Each run counts against the same `match_attempts` counter as the re-match sweeper,
+  but has its own limit, `hireai.matching.submitted-max-attempts`. A routing exception counts as
+  a failed attempt. A task routed to `AWAITING_AGENT` carries its used attempts over to the re-match sweeper.
 - **Sweeper transactions.** `timeoutOne` runs in one row-locked transaction. `rematchOne` and
   `rerouteSubmittedOne` are deliberately not transactional, because they publish to RabbitMQ and own their
   commit-before-publish ordering. The `SUBMITTED` cancel locks the task row before refunding.

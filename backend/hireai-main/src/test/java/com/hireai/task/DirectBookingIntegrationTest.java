@@ -198,13 +198,13 @@ class DirectBookingIntegrationTest {
 
     /**
      * Deactivation race: the agent was suspended between booking-validation and dispatch.
-     * dispatchDirect must NOT throw; it must mark the task AWAITING_CAPACITY and never publish.
+     * dispatchDirect must NOT throw; it must mark the task AWAITING_AGENT and never publish.
      * Escrow stays frozen (already verified in other tests; not re-asserted here). The race is
      * exercised by seeding a SUBMITTED task row directly (bypassing book() which would 404 on
      * an inactive agent), suspending the agent, then calling dispatchDirect directly.
      */
     @Test
-    void deactivatedAgentLandsAwaitingCapacityWithEscrowHeld() {
+    void deactivatedAgentLandsAwaitingAgentWithEscrowHeld() {
         UUID client = newClient();
         walletWriteAppService.topUp(client, Money.of("50.00"), "seed");
 
@@ -228,11 +228,11 @@ class DirectBookingIntegrationTest {
         // Suspend the agent to simulate the deactivation race.
         jdbc.update("UPDATE agents SET status = 'SUSPENDED' WHERE id = ?", agentId);
 
-        // dispatchDirect must NOT throw, must mark AWAITING_CAPACITY, must NOT publish.
+        // dispatchDirect must NOT throw, must mark AWAITING_AGENT, must NOT publish.
         routingAppService.dispatchDirect(taskId, agentVersionId);
 
         String status = jdbc.queryForObject("SELECT status FROM tasks WHERE id = ?", String.class, taskId);
-        assertThat(status).isEqualTo("AWAITING_CAPACITY");
+        assertThat(status).isEqualTo("AWAITING_AGENT");
 
         verify(taskDispatchPublisher, never()).publish(any());
     }

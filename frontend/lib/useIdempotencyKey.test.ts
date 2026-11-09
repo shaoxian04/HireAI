@@ -55,7 +55,7 @@ describe("useIdempotencyKey", () => {
 
   it("does not reuse a key across mounts, even for an identical payload", () => {
     // Load-bearing: idempotency_keys rows never expire. A key that survived navigation
-    // would pin the client to a stale task (e.g. stuck AWAITING_CAPACITY, or CANCELLED)
+    // would pin the client to a stale task (e.g. stuck AWAITING_AGENT, or CANCELLED)
     // and a deliberate resubmit could never create a new one.
     const first = renderHook(() => useIdempotencyKey("summary|report|12|a-1"));
     const firstKey = first.result.current();

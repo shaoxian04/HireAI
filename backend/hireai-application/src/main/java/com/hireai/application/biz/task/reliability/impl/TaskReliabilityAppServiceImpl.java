@@ -37,7 +37,10 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
     private final SettlementWriteAppService settlementWriteAppService;
     private final WebhookOutboxAppService webhookOutboxAppService;
     private final ReputationWriteAppService reputationWriteAppService;
+    /** Re-match sweeper bound: an AWAITING_AGENT task is cancelled + refunded at this attempt. */
     private final int rematchMaxAttempts;
+    /** SUBMITTED sweeper bound: a stranded SUBMITTED task is cancelled + refunded at this attempt. */
+    private final int submittedMaxAttempts;
     /** How long a task may sit SUBMITTED before the SUBMITTED sweeper treats it as stranded. */
     private final Duration submittedMinAge;
     /** The app's Clock bean (ClockConfig); tests pass their own to pick the moment a sweep runs at. */
@@ -49,11 +52,15 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
                                          SettlementWriteAppService settlementWriteAppService,
                                          WebhookOutboxAppService webhookOutboxAppService,
                                          ReputationWriteAppService reputationWriteAppService,
-                                         @Value("${hireai.matching.rematch-max-attempts:3}") int rematchMaxAttempts,
+                                         @Value("${hireai.matching.rematch-max-attempts:2}") int rematchMaxAttempts,
+                                         @Value("${hireai.matching.submitted-max-attempts:3}") int submittedMaxAttempts,
                                          @Value("${hireai.matching.submitted-min-age:PT30S}") Duration submittedMinAge,
                                          Clock clock) {
         if (rematchMaxAttempts < 1) {
             throw new IllegalStateException("rematch-max-attempts must be >= 1; got " + rematchMaxAttempts);
+        }
+        if (submittedMaxAttempts < 1) {
+            throw new IllegalStateException("submitted-max-attempts must be >= 1; got " + submittedMaxAttempts);
         }
         this.taskRepository = taskRepository;
         this.routingAppService = routingAppService;
@@ -65,29 +72,30 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
             throw new IllegalStateException("submitted-min-age must be >= 0; got " + submittedMinAge);
         }
         this.rematchMaxAttempts = rematchMaxAttempts;
+        this.submittedMaxAttempts = submittedMaxAttempts;
         this.submittedMinAge = submittedMinAge;
         this.clock = clock;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<UUID> awaitingCapacityTaskIds() {
-        return taskRepository.findIdsAwaitingCapacity();
+    public List<UUID> awaitingAgentTaskIds() {
+        return taskRepository.findIdsAwaitingAgent();
     }
 
     @Override
     public void rematchOne(UUID taskId) {
         Optional<TaskModel> maybeTask = taskRepository.findById(taskId);
-        if (maybeTask.isEmpty() || maybeTask.get().status() != TaskStatus.AWAITING_CAPACITY) {
+        if (maybeTask.isEmpty() || maybeTask.get().status() != TaskStatus.AWAITING_AGENT) {
             return; // matched or cancelled since the sweep listed it — nothing to do
         }
         int attempts = taskWriteAppService.registerMatchAttempt(taskId);
         routeOrDispatchPinned(taskId);
         boolean stillHeld = taskRepository.findById(taskId)
-                .map(t -> t.status() == TaskStatus.AWAITING_CAPACITY)
+                .map(t -> t.status() == TaskStatus.AWAITING_AGENT)
                 .orElse(false);
         if (stillHeld && attempts >= rematchMaxAttempts) {
-            taskWriteAppService.cancelAwaitingCapacityWithRefund(taskId);
+            taskWriteAppService.cancelAwaitingAgentWithRefund(taskId);
         }
     }
 
@@ -103,8 +111,8 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
         if (maybeTask.isEmpty() || maybeTask.get().status() != TaskStatus.SUBMITTED) {
             return; // routed or cancelled since the sweep listed it
         }
-        // Shares match_attempts with the re-match sweeper: a task that reaches AWAITING_CAPACITY
-        // from here carries the attempts it has already used.
+        // Shares the match_attempts counter with the re-match sweeper (each has its own limit): a
+        // task that reaches AWAITING_AGENT from here carries the attempts it has already used.
         int attempts = taskWriteAppService.registerMatchAttempt(taskId);
         try {
             routeOrDispatchPinned(taskId);
@@ -114,7 +122,7 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
         boolean stillSubmitted = taskRepository.findById(taskId)
                 .map(t -> t.status() == TaskStatus.SUBMITTED)
                 .orElse(false);
-        if (stillSubmitted && attempts >= rematchMaxAttempts) {
+        if (stillSubmitted && attempts >= submittedMaxAttempts) {
             taskWriteAppService.cancelSubmittedWithRefund(taskId);
         }
     }

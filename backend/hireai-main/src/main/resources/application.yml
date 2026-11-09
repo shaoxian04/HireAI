@@ -77,12 +77,13 @@ hireai:
     weight-load: ${MATCHING_WEIGHT_LOAD:0.20}
     weight-exploration: ${MATCHING_WEIGHT_EXPLORATION:0.20}
     epsilon: ${MATCHING_EPSILON:0.10}
-    # AWAITING_CAPACITY re-match sweeper: attempt-bounded fail-fast (~30s worst case), then
-    # CANCELLED + full refund.
+    # AWAITING_AGENT re-match sweeper: attempt-bounded fail-fast, then CANCELLED + full refund.
     rematch-interval: ${MATCHING_REMATCH_INTERVAL:PT10S}
-    rematch-max-attempts: ${MATCHING_REMATCH_MAX_ATTEMPTS:3}
+    rematch-max-attempts: ${MATCHING_REMATCH_MAX_ATTEMPTS:2}
     # SUBMITTED sweeper: re-runs routing for tasks still SUBMITTED after submitted-min-age (the
-    # after-submit routing step failed). Shares rematch-max-attempts, then CANCELLED + refund.
+    # after-submit routing step failed). Shares the match_attempts counter with the re-match
+    # sweeper but has its own limit, then CANCELLED + refund.
+    submitted-max-attempts: ${MATCHING_SUBMITTED_MAX_ATTEMPTS:3}
     submitted-sweep-interval: ${MATCHING_SUBMITTED_SWEEP_INTERVAL:PT10S}
     submitted-min-age: ${MATCHING_SUBMITTED_MIN_AGE:PT30S}
     # Applied when a registration omits maxConcurrent.

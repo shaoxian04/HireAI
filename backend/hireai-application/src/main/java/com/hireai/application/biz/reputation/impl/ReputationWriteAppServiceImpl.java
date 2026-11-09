@@ -78,7 +78,7 @@ public class ReputationWriteAppServiceImpl implements ReputationWriteAppService 
                 : agentRepository.findReputationTargetByVersionId(agentVersionId);
 
         // No resolvable agent means there is nobody to attribute the outcome to — the same
-        // situation as a capacity cancellation. Deliberately NOT an exception: emission is a
+        // situation as an awaiting-agent cancellation. Deliberately NOT an exception: emission is a
         // side-effect of a settlement, and reputation bookkeeping must never abort the money path
         // that triggered it (a client's auto-refund is not contingent on us finding an agent row).
         if (resolved.isEmpty()) {

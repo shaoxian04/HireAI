@@ -38,7 +38,7 @@ export function directBookSignature(body: DirectBookRequest | null): string {
  *   fingerprint is rejected as `409 IDEMPOTENCY_CONFLICT` — editing the form is a new intent;
  * - held in a ref, so unmounting discards it. That is deliberate: `idempotency_keys` rows never
  *   expire, so a key persisted across navigation would pin the client to a stale task forever (one
- *   stuck in `AWAITING_CAPACITY`, say, or already `CANCELLED`). Both submit pages navigate away on
+ *   stuck in `AWAITING_AGENT`, say, or already `CANCELLED`). Both submit pages navigate away on
  *   success, so a later deliberate resubmit correctly creates a new task.
  *
  * Returns a getter rather than the key itself so the ref is only read/written inside an event

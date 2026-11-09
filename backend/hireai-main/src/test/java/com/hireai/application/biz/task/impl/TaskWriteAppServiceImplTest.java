@@ -71,16 +71,16 @@ class TaskWriteAppServiceImplTest {
     }
 
     @Test
-    void markAwaitingCapacityTransitionsAndSaves() {
+    void markAwaitingAgentTransitionsAndSaves() {
         TaskModel task = submittedTask();
         when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        service().markAwaitingCapacity(task.id());
+        service().markAwaitingAgent(task.id());
 
         ArgumentCaptor<TaskModel> captor = ArgumentCaptor.forClass(TaskModel.class);
         verify(taskRepository).save(captor.capture());
-        assertThat(captor.getValue().status()).isEqualTo(TaskStatus.AWAITING_CAPACITY);
+        assertThat(captor.getValue().status()).isEqualTo(TaskStatus.AWAITING_AGENT);
     }
 
     @Test
@@ -138,11 +138,11 @@ class TaskWriteAppServiceImplTest {
         TaskModel task = TaskModel.submit(clientId, "title", "desc", budget,
                 new OutputSpec(OutputFormat.TEXT, null, "summary"), "general");
         UUID taskId = task.id();
-        task = task.markAwaitingCapacity();
+        task = task.markAwaitingAgent();
         when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        service().cancelAwaitingCapacityWithRefund(taskId);
+        service().cancelAwaitingAgentWithRefund(taskId);
 
         verify(taskRepository).save(argThat(t -> t.status() == TaskStatus.CANCELLED));
         verify(settlementWriteAppService).settleRejected(taskId, clientId, budget);
@@ -150,12 +150,12 @@ class TaskWriteAppServiceImplTest {
     }
 
     @Test
-    void cancelIsANoOpWhenTaskAlreadyLeftAwaitingCapacity() {
+    void cancelIsANoOpWhenTaskAlreadyLeftAwaitingAgent() {
         UUID taskId = UUID.randomUUID();
         TaskModel task = submittedTask();
         when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
 
-        service().cancelAwaitingCapacityWithRefund(taskId);
+        service().cancelAwaitingAgentWithRefund(taskId);
 
         verify(taskRepository, never()).save(any());
         verifyNoInteractions(settlementWriteAppService);
