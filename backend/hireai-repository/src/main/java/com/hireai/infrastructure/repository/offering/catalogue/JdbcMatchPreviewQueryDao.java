@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.Array;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -15,7 +16,7 @@ import java.util.UUID;
 /**
  * JDBC implementation of {@link MatchPreviewQueryPort}. Mirrors the catalogue card projection
  * (agents + agent_profiles + agent_versions) over the same eligible set routed selection uses
- * ({@link MatchCandidateSql}: ACTIVE, listed, category), plus the load columns the matcher scores.
+ * ({@link MatchCandidateSql}: ACTIVE, listed, category, client deadline), plus the load columns the matcher scores.
  * No price filter: the app service partitions by budget (shortlist vs near-misses). Category is
  * lowercased before binding (categories are stored lowercase).
  */
@@ -46,9 +47,10 @@ public class JdbcMatchPreviewQueryDao implements MatchPreviewQueryPort {
     }
 
     @Override
-    public List<ShortlistCandidateRow> findBookableCandidates(String category) {
+    public List<ShortlistCandidateRow> findBookableCandidates(String category, Long longestExecutionSeconds) {
         var params = new MapSqlParameterSource()
-                .addValue("category", category == null ? "" : category.trim().toLowerCase(Locale.ROOT));
+                .addValue("category", category == null ? "" : category.trim().toLowerCase(Locale.ROOT))
+                .addValue("longestExecutionSeconds", longestExecutionSeconds, Types.BIGINT);
         return jdbc.query(SQL, params, (rs, i) -> new ShortlistCandidateRow(
                 rs.getObject("agent_id", UUID.class),
                 rs.getObject("agent_version_id", UUID.class),

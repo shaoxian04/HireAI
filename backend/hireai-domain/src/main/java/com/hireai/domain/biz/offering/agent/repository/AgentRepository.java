@@ -46,7 +46,17 @@ public interface AgentRepository {
 
     List<AgentModel> findByOwnerId(UUID ownerId, AgentQuery query);
 
-    List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice);
+    /**
+     * The routable candidates for a category within budget. {@code longestExecutionSeconds} is the
+     * largest max execution time that still fits the Client's deadline at this moment
+     * ({@code ClientDeadline.longestExecutionSeconds}); null = no deadline.
+     */
+    List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice, Long longestExecutionSeconds);
+
+    /** {@link #findActiveCandidates(String, BigDecimal, Long)} without a client deadline. */
+    default List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice) {
+        return findActiveCandidates(category, maxPrice, null);
+    }
 
     /**
      * Looks up a single ACTIVE agent version by its id (no category/price filters).

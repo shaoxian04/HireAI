@@ -11,6 +11,7 @@ import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepo
 import com.hireai.domain.biz.task.event.TaskSubmittedDomainEvent;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.enums.FailureReason;
+import com.hireai.domain.biz.task.model.ClientDeadline;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
@@ -40,7 +41,7 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     private final SettlementWriteAppService settlementWriteAppService;
     private final WebhookOutboxAppService webhookOutboxAppService;
     private final DispatchAttemptRepository dispatchAttemptRepository;
-    /** The app's Clock bean (ClockConfig): stamps the UNAVAILABLE dispatch attempt. */
+    /** The app's Clock bean (ClockConfig): stamps the client deadline and the UNAVAILABLE dispatch attempt. */
     private final Clock clock;
 
     @Override
@@ -66,6 +67,11 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
         String correlationId = UUID.randomUUID().toString();
         TaskModel task = taskSubmitDomainService.submit(taskSubmitInfo);
         UUID taskId = taskRepository.save(task).id();
+        if (taskSubmitInfo.deadlineSeconds() != null) {
+            // Fixed now, at submit: every later selection (re-match, failover) measures against it.
+            taskRepository.stampClientDeadline(taskId,
+                    ClientDeadline.after(clock.instant(), taskSubmitInfo.deadlineSeconds()).at());
+        }
         walletWriteAppService.freeze(taskSubmitInfo.clientId(), taskSubmitInfo.budget(), taskId, correlationId);
         eventPublisher.publishEvent(new TaskSubmittedDomainEvent(
                 taskId, taskSubmitInfo.clientId(), taskSubmitInfo.budget(), task.createdAt(),

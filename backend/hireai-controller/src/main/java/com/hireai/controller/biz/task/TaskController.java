@@ -103,7 +103,8 @@ public class TaskController extends BaseController {
                 request.description(),
                 Money.of(request.budget()),
                 new OutputSpec(specRequest.format(), specRequest.schema(), specRequest.acceptanceCriteria()),
-                request.category());
+                request.category(),
+                request.deadlineSeconds());
         UUID taskId = submitOrchestrationAppService.submitRouted(
                 submitContext(clientId, idempotencyKey), info);
         TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId));
@@ -119,7 +120,8 @@ public class TaskController extends BaseController {
                 submitContext(clientId, idempotencyKey),
                 new DirectBookingInfo(clientId, request.title(), request.description(),
                         Money.of(request.budget()), request.agentId(),
-                        request.category() == null || request.category().isBlank() ? null : request.category()));
+                        request.category() == null || request.category().isBlank() ? null : request.category(),
+                        request.deadlineSeconds()));
         return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId)));
     }
 
@@ -212,14 +214,15 @@ public class TaskController extends BaseController {
 
     /**
      * A POST so the task text stays out of URLs. {@code exclude} names Agents to leave out of both
-     * lists: the web rebook passes the Agent that just failed the task (#79). {@code title},
-     * {@code description} and {@code deadlineSeconds} are validated here but do not affect the
-     * shortlist yet (relevance and the client deadline come with #85 and #83).
+     * lists: the web rebook passes the Agent that just failed the task (#79). {@code deadlineSeconds}
+     * leaves out Agents that can't finish in time, counted from this request (#83). {@code title} and
+     * {@code description} are validated here but do not affect the shortlist yet (relevance: #85).
      */
     @PostMapping("/match-preview")
     public WebResult<MatchPreviewDTO> matchPreview(@Valid @RequestBody MatchPreviewRequest request) {
         return ok(MatchPreview2DTOConverter.toDTO(matchPreviewAppService.preview(
-                request.category(), Money.of(request.budget()), excludedAgents(request.exclude()))));
+                request.category(), Money.of(request.budget()), excludedAgents(request.exclude()),
+                request.deadlineSeconds())));
     }
 
     private static Set<UUID> excludedAgents(List<UUID> exclude) {

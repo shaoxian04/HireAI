@@ -105,9 +105,10 @@ public class AgentRepositoryImpl implements AgentRepository {
     }
 
     @Override
-    public List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice) {
+    public List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice,
+                                                     Long longestExecutionSeconds) {
         String normalisedCategory = category == null ? "" : category.trim().toLowerCase();
-        return versionJpa.findActiveCandidates(normalisedCategory, maxPrice).stream()
+        return versionJpa.findActiveCandidates(normalisedCategory, maxPrice, longestExecutionSeconds).stream()
                 .map(this::rowToCandidate)
                 .toList();
     }

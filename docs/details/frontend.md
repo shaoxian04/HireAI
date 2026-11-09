@@ -104,7 +104,9 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   Find-agents gated on a real category) → match-preview **shortlist → pick → book** at the
   agent's price (the `ShortlistPanel` opens in a `Modal` popout of ranked agent cards: profile avatars,
   best-match highlight, a plain-language `DeliveryRecord`, above-budget near-miss drawer; booking is
-  `POST /tasks/direct`, so a near-miss pick pays above the typed budget; `localStorage` draft; the
+  `POST /tasks/direct`, so a near-miss pick pays above the typed budget; an optional **deadline** (number +
+  minutes/hours/days, `lib/deadline.ts` `toDeadlineSeconds`) is sent as `deadlineSeconds` with both the
+  preview and the booking, so Agents that can't finish in time aren't shown; `localStorage` draft; the
   preview call is a `POST /tasks/match-preview` with the task text in the body (never in the URL), sent only by `fetchMatchPreview` in `lib/rebook.ts`, the one place that sends `exclude` — **no reputation number and no stars**: the shortlist once divided the routing composite by 20
   and drew it as a five-star client rating, which is a different quantity entirely); `client/tasks/[id]` — polls
   the task every 2 s, backing off to 30 s while nothing changes and snapping back on any status change;

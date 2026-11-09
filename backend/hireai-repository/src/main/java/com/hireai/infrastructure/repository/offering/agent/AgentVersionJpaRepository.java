@@ -28,7 +28,7 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
 
     /**
      * Routed selection and failover candidates: the shared eligible set ({@link MatchCandidateSql}:
-     * ACTIVE, listed storefront, category) within budget. Returns the columns needed to build an
+     * ACTIVE, listed storefront, category, client deadline) within budget. Returns the columns needed to build an
      * AgentCandidate. The order is irrelevant; the ranking domain service decides.
      */
     @Query(value = """
@@ -45,7 +45,8 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
             ORDER BY a.reputation_score DESC
             """, nativeQuery = true)
     List<AgentCandidateRow> findActiveCandidates(@Param("category") String category,
-                                                 @Param("maxPrice") BigDecimal maxPrice);
+                                                 @Param("maxPrice") BigDecimal maxPrice,
+                                                 @Param("longestExecutionSeconds") Long longestExecutionSeconds);
 
     /**
      * Looks up a single ACTIVE agent version by its id. Returns the same columns as

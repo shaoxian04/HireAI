@@ -7,6 +7,7 @@ import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView;
 import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
+import com.hireai.domain.biz.task.model.ClientDeadline;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskQuery;
@@ -85,6 +86,7 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
         // (Hard Invariant #4) that must travel with the dispatch, not the agent version's live spec.
         String outputSpecJson = outputSpecJsonMapper.toJson(task.outputSpec());
         return new TaskRoutingView(task.id(), task.title(), task.description(), task.category(),
-                task.budget().value(), task.status().name(), outputSpecJson);
+                task.budget().value(), task.status().name(), outputSpecJson,
+                taskRepository.findClientDeadline(task.id()).map(ClientDeadline::new).orElse(null));
     }
 }

@@ -245,6 +245,8 @@ export interface DirectBookRequest {
   agentId: string;
   /** Optional slug the agent serves; defaults to the agent's first category. */
   category?: string;
+  /** Optional: seconds from booking the result is needed by; a slower agent is refused. */
+  deadlineSeconds?: number;
 }
 
 export type CatalogueSort = "hot" | "rating" | "price_asc" | "price_desc" | "newest";
@@ -475,6 +477,7 @@ export interface MatchPreviewRequest {
   description: string;
   category: string;
   budget: number;
+  /** Optional: seconds from now the result is needed by; slower agents are left out. */
   deadlineSeconds?: number;
   /** Agents to leave out of both lists (the Agent that failed a rebooked task). */
   exclude?: string[];

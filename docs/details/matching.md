@@ -32,10 +32,20 @@ eligible when:
   routed or failed over to, so it receives no work; the Builder dashboard warns about it (`AgentDTO.listed`);
 - its current version covers the category (a slug from the [category list](data-model.md#categories); an
   unknown one is rejected with a 400 before matching);
-- `price <= budget` (checked in `rank`).
+- `price <= budget` (checked in `rank`);
+- <a id="client-deadline"></a>when the Client set a **deadline**, it fits: `now + maxExecutionSeconds +
+  grace <= client deadline` (`hireai.execution.grace-seconds`, the same grace the execution deadline adds).
+  The deadline is the optional `deadlineSeconds` on routed submit, direct booking and match-preview, made
+  absolute once (`ClientDeadline`): at submit it is stored on the task (`tasks.client_deadline`); for
+  match-preview it is counted from the request. It is re-checked with that moment's `now` at every
+  selection (shortlist, initial routing, each re-match and each failover hop), so time spent on a failed
+  Agent can rule out a slower one. An Agent admitted this way never gets an execution deadline after the
+  Client's. A direct booking of an Agent that can't fit is refused with a 400 before anything is frozen;
+  a booked task's pinned dispatch is not re-checked.
 
 The SQL half of this lives once, in `MatchCandidateSql` (`ELIGIBLE_FROM` plus the load columns the score
-needs), shared by the shortlist query (`JdbcMatchPreviewQueryDao`) and the routed/failover query
+needs, and the deadline bound `:longestExecutionSeconds` = deadline - now - grace, null without a
+deadline), shared by the shortlist query (`JdbcMatchPreviewQueryDao`) and the routed/failover query
 (`AgentRepository.findActiveCandidates`). The budget filter and the score live once, in
 `RoutingMatchDomainService.rank`. So with `ε = 0` the shortlist's top Agent is the one a routed submit of
 the same task gets. A direct booking is not a selection: it needs an `ACTIVE`, listed agent at booking
@@ -102,10 +112,10 @@ invite a second, paid submit.
 | Pinned task: every dispatch attempt failed (Agent unreachable, timed out or non-2xx) | `FAILED` (`AGENT_UNREACHABLE`) | Yes | Yes | `EXECUTION_FAILED` |
 | Pinned task: the Agent declined as busy (429/503) | `FAILED` (`AGENT_BUSY`) | Yes | Yes | No |
 
-- **`AWAITING_AGENT`** means no eligible (`ACTIVE`, listed) agent covers the category within budget. Only routed tasks wait
-  there. Load is soft, so a busy agent never causes it. The re-match sweeper
-  (`AwaitingAgentRematchSweeper`) retries it up to `hireai.matching.rematch-max-attempts` times,
-  then cancels with a refund.
+- **`AWAITING_AGENT`** means no eligible (`ACTIVE`, listed) agent covers the category within budget and,
+  when set, the Client's deadline. Only routed tasks wait there. Load is soft, so a busy agent never causes
+  it. The re-match sweeper (`AwaitingAgentRematchSweeper`) retries it up to
+  `hireai.matching.rematch-max-attempts` times, then cancels with a refund and `NO_ELIGIBLE_AGENT`.
 - **Pinned tasks never substitute, and fail fast.** A direct booking is dispatched only to its exact version,
   because the client's spec and price are frozen to it (Invariant #4). If at dispatch the agent is not
   `ACTIVE` or the pinned version is no longer its current one, `dispatchDirect` cancels the task at once
@@ -123,7 +133,7 @@ invite a second, paid submit.
   - the failed attempt is recorded in the [dispatch history](data-model.md#dispatch-attempts) (`BUSY`, or
     `UNREACHABLE` plus `EXECUTION_FAILED` against that Agent);
   - the next candidate is picked from the same candidate query and matcher as initial routing (same budget
-    and eligibility), excluding every Agent already in the task's history, under any version
+    and eligibility, the Client's deadline measured from this hop), excluding every Agent already in the task's history, under any version
     (`RoutedFailoverDomainService`);
   - `TaskModel.reassign` swaps the version (only from `QUEUED`, never to the same version) and a new
     `execution_deadline` is stamped from now.

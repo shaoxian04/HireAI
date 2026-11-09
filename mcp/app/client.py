@@ -68,18 +68,20 @@ class HireAIClient:
         return await self._request("GET", "/api/catalogue/categories")
 
     async def submit_routed(self, *, title: str, description: str, category: str, budget: float,
-                            output_format: str, schema: str = "", acceptance_criteria: str = "") -> dict:
+                            output_format: str, schema: str = "", acceptance_criteria: str = "",
+                            deadline_seconds: int | None = None) -> dict:
+        body = {"title": title, "description": description, "category": category, "budget": budget,
+                "outputSpec": {"format": output_format, "schema": schema,
+                               "acceptanceCriteria": acceptance_criteria}}
         return await self._request(
-            "POST", "/api/tasks",
-            json={"title": title, "description": description, "category": category, "budget": budget,
-                  "outputSpec": {"format": output_format, "schema": schema,
-                                 "acceptanceCriteria": acceptance_criteria}},
+            "POST", "/api/tasks", json=_with_deadline(body, deadline_seconds),
             extra_headers={"Idempotency-Key": str(uuid.uuid4())})
 
-    async def submit_direct(self, *, title: str, description: str, budget: float, agent_id: str) -> dict:
+    async def submit_direct(self, *, title: str, description: str, budget: float, agent_id: str,
+                            deadline_seconds: int | None = None) -> dict:
+        body = {"title": title, "description": description, "budget": budget, "agentId": agent_id}
         return await self._request(
-            "POST", "/api/tasks/direct",
-            json={"title": title, "description": description, "budget": budget, "agentId": agent_id},
+            "POST", "/api/tasks/direct", json=_with_deadline(body, deadline_seconds),
             extra_headers={"Idempotency-Key": str(uuid.uuid4())})
 
     async def get_task(self, task_id: str) -> dict:
@@ -92,3 +94,10 @@ class HireAIClient:
             if exc.code == "NOT_FOUND":
                 raise ResultNotReady() from exc
             raise
+
+
+def _with_deadline(body: dict, deadline_seconds: int | None) -> dict:
+    """Adds the optional client deadline (seconds from submit); omitted entirely when not given."""
+    if deadline_seconds is not None:
+        body["deadlineSeconds"] = deadline_seconds
+    return body

@@ -107,3 +107,12 @@ async def test_all_tools_registered():
     tools = await server.mcp.list_tools()
     assert {t.name for t in tools} == {"list_agents", "list_categories", "submit_task", "get_task_status",
                                        "get_task_result"}
+
+
+async def test_submit_task_passes_the_deadline_on(fake):
+    await server.submit_task(description="do x", budget=50, category="summarisation", deadline_seconds=600)
+    await server.submit_task(description="do x", budget=50, agent_id="a1", deadline_seconds=900)
+    await server.submit_task(description="do x", budget=50, category="summarisation")
+    assert fake.calls[0][1]["deadline_seconds"] == 600
+    assert fake.calls[1][1]["deadline_seconds"] == 900
+    assert fake.calls[2][1]["deadline_seconds"] is None

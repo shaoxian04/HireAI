@@ -12,7 +12,17 @@ import java.util.UUID;
  */
 public interface MatchPreviewQueryPort {
 
-    List<ShortlistCandidateRow> findBookableCandidates(String category);
+    /**
+     * {@code longestExecutionSeconds}: the largest max execution time that fits the Client's deadline
+     * at this moment ({@code ClientDeadline.longestExecutionSeconds}); null = no deadline. A slower
+     * Agent is left out of both lists.
+     */
+    List<ShortlistCandidateRow> findBookableCandidates(String category, Long longestExecutionSeconds);
+
+    /** {@link #findBookableCandidates(String, Long)} without a client deadline. */
+    default List<ShortlistCandidateRow> findBookableCandidates(String category) {
+        return findBookableCandidates(category, null);
+    }
 
     record ShortlistCandidateRow(UUID agentId, UUID agentVersionId, String agentName, String tagline,
                                  String logoUrl, BigDecimal price, BigDecimal reputationScore,

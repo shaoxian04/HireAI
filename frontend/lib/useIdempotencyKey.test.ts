@@ -16,6 +16,7 @@ describe("directBookSignature", () => {
     expect(directBookSignature({ ...base })).toBe(directBookSignature({ ...base }));
     expect(directBookSignature({ ...base, budget: 40 })).not.toBe(directBookSignature(base));
     expect(directBookSignature({ ...base, agentId: "ag-2" })).not.toBe(directBookSignature(base));
+    expect(directBookSignature({ ...base, deadlineSeconds: 600 })).not.toBe(directBookSignature(base));
   });
 
   it("has no signature until something is bookable", () => {

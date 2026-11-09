@@ -5,12 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { errorFor, toFormError, useFocusOnFieldError, validateForm, type FormError } from "@/lib/formErrors";
 
-const TASK_FIELDS = { title: "Title", description: "Description", budget: "Budget" };
+const TASK_FIELDS = { title: "Title", description: "Description", budget: "Budget", deadlineSeconds: "Deadline" };
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { ShortlistPanel } from "@/components/ShortlistPanel";
 import { CategoryCombobox } from "@/components/CategoryCombobox";
 import { fetchMatchPreview } from "@/lib/rebook";
+import { DEADLINE_UNITS, toDeadlineSeconds, type DeadlineUnit } from "@/lib/deadline";
 import type {
   AgentOptionDTO,
   DirectBookRequest,
@@ -22,7 +23,7 @@ import {
   directBookSignature,
   useIdempotencyKey,
 } from "@/lib/useIdempotencyKey";
-import { Button, Card, Field, Input, Textarea } from "@/components/ui";
+import { Button, Card, Field, Input, Select, Textarea } from "@/components/ui";
 import { PageHeader } from "@/components/PageHeader";
 
 const DRAFT_KEY = "hireai.taskDraft";
@@ -32,6 +33,8 @@ interface Draft {
   description: string;
   category: string;
   budget: string;
+  deadline?: string;
+  deadlineUnit?: DeadlineUnit;
 }
 
 function SubmitTask() {
@@ -44,6 +47,9 @@ function SubmitTask() {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [budget, setBudget] = useState("30");
+  const [deadline, setDeadline] = useState("");
+  const [deadlineUnit, setDeadlineUnit] = useState<DeadlineUnit>("hours");
+  const deadlineSeconds = toDeadlineSeconds(deadline, deadlineUnit);
   const [preview, setPreview] = useState<MatchPreviewDTO | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [selected, setSelected] = useState<AgentOptionDTO | null>(null);
@@ -52,13 +58,16 @@ function SubmitTask() {
   // A field error clears the moment that field (or any other) is edited, so it never goes stale.
   const clearFieldError = () => setError((er) => (er?.field ? null : er));
   const [loading, setLoading] = useState(false);
-  useFocusOnFieldError(error);
+  useFocusOnFieldError(error, { deadlineSeconds: "deadline" });
   const firstPersist = useRef(true);
   // Built here rather than in onBook so the idempotency signature is derived from the very
   // object that gets sent: a retry of the *same* booking reuses one key (deduped server-side),
   // while editing a field or picking another agent starts a fresh one.
   const bookingBody: DirectBookRequest | null = selected
-    ? { title, description, budget: selected.price, agentId: selected.agentId } // the agent's price, not the typed budget
+    ? {
+        title, description, budget: selected.price, agentId: selected.agentId, // the agent's price, not the typed budget
+        ...(typeof deadlineSeconds === "number" ? { deadlineSeconds } : {}),
+      }
     : null;
   const getIdempotencyKey = useIdempotencyKey(directBookSignature(bookingBody));
 
@@ -113,6 +122,8 @@ function SubmitTask() {
             ? d.budget
             : "30",
       );
+      setDeadline(typeof d.deadline === "string" ? d.deadline : "");
+      if (d.deadlineUnit && DEADLINE_UNITS.some((u) => u.value === d.deadlineUnit)) setDeadlineUnit(d.deadlineUnit);
     } catch {
       /* ignore a malformed draft */
     }
@@ -127,14 +138,14 @@ function SubmitTask() {
       firstPersist.current = false;
       return;
     }
-    const draft: Draft = { title, description, category, budget };
+    const draft: Draft = { title, description, category, budget, deadline, deadlineUnit };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [title, description, category, budget, rebookId]);
+  }, [title, description, category, budget, deadline, deadlineUnit, rebookId]);
 
   async function onFind(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    const invalid = validateForm(e.currentTarget as HTMLFormElement);
+    const invalid = validateForm(e.currentTarget as HTMLFormElement, { deadline: "deadlineSeconds" });
     if (invalid) {
       setError(invalid);
       return;
@@ -145,10 +156,15 @@ function SubmitTask() {
       setError({ field: "budget", message: "Enter a budget in credits" });
       return;
     }
+    if (deadlineSeconds === "invalid") {
+      setError({ field: "deadlineSeconds", message: "Enter the deadline as a whole number, up to 30 days, or leave it empty" });
+      return;
+    }
     setLoading(true);
     try {
       const result = await fetchMatchPreview({
         title, description, category, budget: budgetNum, exclude: excluded,
+        ...(deadlineSeconds !== null ? { deadlineSeconds } : {}),
       });
       setPreview(result);
       setPreviewOpen(true);
@@ -244,6 +260,36 @@ function SubmitTask() {
                 onChange={(e) => { setBudget(e.target.value); clearFieldError(); }}
                 placeholder="30"
               />
+            </Field>
+            <Field
+              label="Deadline"
+              htmlFor="deadline"
+              error={errorFor(error, "deadlineSeconds")}
+              hint="Optional. How soon you need the result. Agents that can't finish in time aren't shown."
+            >
+              <div className="flex gap-2">
+                <Input
+                  id="deadline"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={deadline}
+                  onChange={(e) => { setDeadline(e.target.value); clearFieldError(); }}
+                  placeholder="No deadline"
+                  aria-describedby="deadline-note"
+                  aria-invalid={errorFor(error, "deadlineSeconds") ? true : undefined}
+                />
+                <Select
+                  aria-label="Deadline unit"
+                  value={deadlineUnit}
+                  onChange={(e) => { setDeadlineUnit(e.target.value as DeadlineUnit); clearFieldError(); }}
+                  className="w-32 shrink-0"
+                >
+                  {DEADLINE_UNITS.map((u) => (
+                    <option key={u.value} value={u.value}>{u.label}</option>
+                  ))}
+                </Select>
+              </div>
             </Field>
             {available !== null && <EscrowPreview available={available} budget={budgetValue} />}
             <Button

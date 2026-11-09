@@ -4,8 +4,11 @@ import com.hireai.domain.biz.task.enums.OutputFormat;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
+import com.hireai.domain.biz.task.model.ClientDeadline;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
@@ -19,7 +22,11 @@ public record SubmitTaskRequest(
         @DecimalMin(value = "0.01", message = "budget must be positive")
         @Digits(integer = 12, fraction = 2, message = "budget must have at most 2 decimal places")
         BigDecimal budget,
-        @NotNull @Valid OutputSpecRequest outputSpec
+        @NotNull @Valid OutputSpecRequest outputSpec,
+        /** Optional: how many seconds from submit the Client needs the result (#83). */
+        @Positive(message = "deadlineSeconds must be positive")
+        @Max(value = ClientDeadline.MAX_SECONDS, message = "deadlineSeconds must be at most 2592000 (30 days)")
+        Long deadlineSeconds
 ) {
 
     public record OutputSpecRequest(

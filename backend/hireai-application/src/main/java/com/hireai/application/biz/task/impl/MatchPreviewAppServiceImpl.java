@@ -6,13 +6,17 @@ import com.hireai.application.port.query.MatchPreviewQueryPort.ShortlistCandidat
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.category.repository.CategoryRepository;
 import com.hireai.domain.biz.task.info.PreviewCriteria;
+import com.hireai.domain.biz.task.model.ClientDeadline;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.shared.model.Money;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -31,15 +35,31 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
     private final MatchPreviewQueryPort queryPort;
     private final RoutingMatchDomainService matcher;
     private final CategoryRepository categoryRepository;
+    /** The app's Clock bean: the preview's deadline is counted from the request. */
+    private final Clock clock;
+
+    /**
+     * Grace added to an Agent's max execution time, as routing stamps it (same property). NON-final
+     * so {@code @RequiredArgsConstructor} skips it; the inline default applies in plain-{@code new}
+     * unit tests.
+     */
+    @Value("${hireai.execution.grace-seconds:60}")
+    private long executionGraceSeconds = 60;
 
     @Override
     @Transactional(readOnly = true)
-    public MatchPreview preview(String category, Money budget, Set<UUID> excludedAgentIds) {
+    public MatchPreview preview(String category, Money budget, Set<UUID> excludedAgentIds, Long deadlineSeconds) {
         // An unknown slug is a 400 naming the valid ones (#80).
         String normalized = categoryRepository.load().requireKnown(category);
         Set<UUID> excluded = excludedAgentIds == null ? Set.of() : excludedAgentIds;
         // Excluded before ranking, so they leave the shortlist and the near-misses alike.
-        List<ShortlistCandidateRow> rows = queryPort.findBookableCandidates(normalized).stream()
+        Long longestExecution = null;
+        if (deadlineSeconds != null) {
+            Instant now = clock.instant();
+            longestExecution = ClientDeadline.after(now, deadlineSeconds)
+                    .longestExecutionSeconds(now, executionGraceSeconds);
+        }
+        List<ShortlistCandidateRow> rows = queryPort.findBookableCandidates(normalized, longestExecution).stream()
                 .filter(r -> !excluded.contains(r.agentId()))
                 .toList();
 

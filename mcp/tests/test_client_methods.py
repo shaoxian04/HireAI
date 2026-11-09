@@ -56,6 +56,21 @@ async def test_submit_routed_posts_output_spec():
 
 
 @respx.mock
+async def test_submit_sends_the_deadline_only_when_given():
+    routed = respx.post(f"{BASE}/api/tasks").mock(return_value=ok({"id": "t2", "status": "SUBMITTED"}))
+    direct = respx.post(f"{BASE}/api/tasks/direct").mock(return_value=ok({"id": "t1", "status": "SUBMITTED"}))
+    await client().submit_routed(title="T", description="d", category="summarisation",
+                                 budget=50, output_format="TEXT", deadline_seconds=600)
+    await client().submit_direct(title="T", description="d", budget=50, agent_id="a1", deadline_seconds=900)
+    assert json.loads(routed.calls.last.request.content)["deadlineSeconds"] == 600
+    assert json.loads(direct.calls.last.request.content)["deadlineSeconds"] == 900
+
+    await client().submit_routed(title="T", description="d", category="summarisation",
+                                 budget=50, output_format="TEXT")
+    assert "deadlineSeconds" not in json.loads(routed.calls.last.request.content)
+
+
+@respx.mock
 async def test_get_task_returns_data():
     respx.get(f"{BASE}/api/tasks/t1").mock(return_value=ok({"id": "t1", "status": "WORKING"}))
     assert (await client().get_task("t1"))["status"] == "WORKING"

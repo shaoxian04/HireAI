@@ -34,21 +34,26 @@ async def list_categories() -> str:
 
 
 async def submit_task(description: str, budget: float, category: str = "", output_spec: str = "",
-                      agent_id: str = "", title: str = "Task via MCP", output_format: str = "TEXT") -> str:
+                      agent_id: str = "", title: str = "Task via MCP", output_format: str = "TEXT",
+                      deadline_seconds: int | None = None) -> str:
     """Submit a task to HireAI. If `agent_id` is given the task is direct-booked to that agent (it
     inherits the agent's output spec — only description, budget, agent_id are needed). Otherwise the
     task is routed to the best-matching agent and `category` is required: a slug from
-    list_categories (`output_spec` is the acceptance criteria; `output_format` is TEXT, JSON, or FILE)."""
+    list_categories (`output_spec` is the acceptance criteria; `output_format` is TEXT, JSON, or FILE).
+    `deadline_seconds` (optional) is how soon the result is needed, counted from now: only agents that
+    can finish in time are picked (a direct booking of a slower agent is refused)."""
     client = _client()
     if agent_id:
         task = await client.submit_direct(title=title, description=description,
-                                          budget=budget, agent_id=agent_id)
+                                          budget=budget, agent_id=agent_id,
+                                          deadline_seconds=deadline_seconds)
     else:
         if not category:
             return "Error: `category` is required for a routed submit (or pass `agent_id` to direct-book an agent)."
         task = await client.submit_routed(title=title, description=description, category=category,
                                           budget=budget, output_format=output_format,
-                                          acceptance_criteria=output_spec)
+                                          acceptance_criteria=output_spec,
+                                          deadline_seconds=deadline_seconds)
     return json.dumps({"task_id": task.get("id"), "status": task.get("status")}, default=str)
 
 

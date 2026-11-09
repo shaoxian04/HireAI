@@ -45,6 +45,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -335,7 +336,7 @@ class TaskControllerTest {
     void matchPreviewReturns200WithBothLists() throws Exception {
         UUID agentId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
-        when(matchPreviewAppService.preview(eq("summarisation"), eq(Money.of(new BigDecimal("30"))), eq(Set.of())))
+        when(matchPreviewAppService.preview(eq("summarisation"), eq(Money.of(new BigDecimal("30"))), eq(Set.of()), isNull()))
                 .thenReturn(new MatchPreview(
                         List.of(new AgentOption(agentId, versionId, "Alpha", "tag", "logo",
                                 new BigDecimal("12.00"), new BigDecimal("80.00"), true, "JSON",
@@ -367,7 +368,7 @@ class TaskControllerTest {
     void matchPreviewPassesEveryExcludedAgentToTheService() throws Exception {
         UUID failed = UUID.randomUUID();
         UUID other = UUID.randomUUID();
-        when(matchPreviewAppService.preview(eq("summarisation"), any(), eq(Set.of(failed, other))))
+        when(matchPreviewAppService.preview(eq("summarisation"), any(), eq(Set.of(failed, other)), isNull()))
                 .thenReturn(new MatchPreview(List.of(), List.of()));
 
         mockMvc.perform(post("/api/tasks/match-preview")
@@ -378,8 +379,8 @@ class TaskControllerTest {
     }
 
     @Test
-    void matchPreviewAcceptsAnOptionalDeadline() throws Exception {
-        when(matchPreviewAppService.preview(eq("summarisation"), any(), eq(Set.of())))
+    void matchPreviewPassesTheOptionalDeadlineOn() throws Exception {
+        when(matchPreviewAppService.preview(eq("summarisation"), any(), eq(Set.of()), eq(3600L)))
                 .thenReturn(new MatchPreview(List.of(), List.of()));
 
         mockMvc.perform(post("/api/tasks/match-preview")

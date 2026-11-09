@@ -83,6 +83,16 @@ public class TaskRepositoryImpl implements TaskRepository {
     }
 
     @Override
+    public void stampClientDeadline(UUID taskId, Instant clientDeadline) {
+        taskJpa.stampClientDeadline(taskId, clientDeadline);
+    }
+
+    @Override
+    public Optional<Instant> findClientDeadline(UUID taskId) {
+        return taskJpa.findClientDeadline(taskId);
+    }
+
+    @Override
     public void pinAgentVersion(UUID taskId, UUID agentVersionId) {
         taskJpa.pinAgentVersion(taskId, agentVersionId);
     }

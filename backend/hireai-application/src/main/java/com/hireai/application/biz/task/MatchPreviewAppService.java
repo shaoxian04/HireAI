@@ -14,10 +14,14 @@ import java.util.UUID;
  *
  * <p>{@code excludedAgentIds} leaves those Agents (every version of them) out of both lists. The
  * web "Choose another agent" rebook passes the Agent that just failed the task (#79).
+ *
+ * <p>{@code deadlineSeconds} (optional, null = none) is the Client deadline counted from this request
+ * (#83): an Agent that can't finish in time (now + max execution time + grace after it) is left out of
+ * both lists.
  */
 public interface MatchPreviewAppService {
 
-    MatchPreview preview(String category, Money budget, Set<UUID> excludedAgentIds);
+    MatchPreview preview(String category, Money budget, Set<UUID> excludedAgentIds, Long deadlineSeconds);
 
     record MatchPreview(List<AgentOption> shortlist, List<AgentOption> nearMisses) {
     }

@@ -28,6 +28,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -78,7 +79,7 @@ class RoutingAppServiceImplTest {
         UUID versionId = UUID.randomUUID();
         AgentCandidate candidate = candidate(versionId);
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00")))
+        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00"), null))
                 .thenReturn(List.of(candidate));
         when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.of(versionId));
 
@@ -98,7 +99,7 @@ class RoutingAppServiceImplTest {
         UUID chosenVersionId = UUID.randomUUID();
         AgentCandidate candidate = candidate(chosenVersionId);
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00")))
+        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00"), null))
                 .thenReturn(List.of(candidate));
         when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.of(chosenVersionId));
 
@@ -127,7 +128,7 @@ class RoutingAppServiceImplTest {
         UUID versionId = UUID.randomUUID();
         AgentCandidate candidate = candidate(versionId);
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates(eq("summarisation"), any())).thenReturn(List.of(candidate));
+        when(agentRepository.findActiveCandidates(eq("summarisation"), any(), isNull())).thenReturn(List.of(candidate));
         when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.of(versionId));
 
         service.route(taskId);
@@ -150,7 +151,7 @@ class RoutingAppServiceImplTest {
         UUID versionId = UUID.randomUUID();
         AgentCandidate candidate = candidate(versionId);
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates(eq("summarisation"), any())).thenReturn(List.of(candidate));
+        when(agentRepository.findActiveCandidates(eq("summarisation"), any(), isNull())).thenReturn(List.of(candidate));
         when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.of(versionId));
 
         service.route(taskId);
@@ -167,7 +168,7 @@ class RoutingAppServiceImplTest {
     void onNoMatchMarksAwaitingAgentAndPublishesNothing() {
         UUID taskId = UUID.randomUUID();
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates(any(), any())).thenReturn(List.of());
+        when(agentRepository.findActiveCandidates(any(), any(), any())).thenReturn(List.of());
         when(routingMatchDomainService.selectOne(any(), any())).thenReturn(Optional.empty());
 
         service.route(taskId);
@@ -181,7 +182,7 @@ class RoutingAppServiceImplTest {
 
     private void stubFailoverInputs(UUID taskId, List<AgentCandidate> candidates) {
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
-        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00")))
+        when(agentRepository.findActiveCandidates("summarisation", new BigDecimal("30.00"), null))
                 .thenReturn(candidates);
         when(dispatchAttemptRepository.findByTaskId(taskId)).thenReturn(List.of());
     }

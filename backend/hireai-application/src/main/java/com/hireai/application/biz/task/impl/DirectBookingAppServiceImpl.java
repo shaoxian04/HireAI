@@ -9,11 +9,15 @@ import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
+import com.hireai.domain.biz.task.model.ClientDeadline;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -33,6 +37,16 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
     private final AgentRepository agentRepository;
     private final StorefrontRepository agentProfileRepository;
     private final TaskWriteAppService taskWriteAppService;
+    /** The app's Clock bean: a booking's deadline is counted from the booking. */
+    private final Clock clock;
+
+    /**
+     * Grace added to the Agent's max execution time, as routing stamps it (same property). NON-final
+     * so {@code @RequiredArgsConstructor} skips it; the inline default applies in plain-{@code new}
+     * unit tests.
+     */
+    @Value("${hireai.execution.grace-seconds:60}")
+    private long executionGraceSeconds = 60;
 
     @Override
     public UUID book(DirectBookingInfo info) {
@@ -49,13 +63,15 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
 
         // Pricing rule (budget >= price) is owned by the agent version.
         agent.currentVersion().assertAffordable(info.budget());
+        assertFitsDeadline(agent, info.deadlineSeconds());
 
         // Adopt the agent's declared output_spec as the task's binding contract (Invariant #4).
         // The task category (stats/labels, rebook) is the client's choice when given, which the
         // agent must serve; otherwise the agent's first capability category.
         TaskSubmitInfo submitInfo = new TaskSubmitInfo(
                 info.clientId(), info.title(), info.description(), info.budget(),
-                agent.currentVersion().outputSpec(), taskCategory(agent, info.category()));
+                agent.currentVersion().outputSpec(), taskCategory(agent, info.category()),
+                info.deadlineSeconds());
 
         UUID taskId = taskWriteAppService.submitDirectlyBooked(submitInfo, agent.currentVersionId());
         log.info("Task {} direct-booked to agent {} (version {})",
@@ -75,6 +91,24 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
                             + String.join(", ", served));
         }
         return requested;
+    }
+
+    /**
+     * A booking never substitutes another Agent, so an Agent that can't finish within the Client's
+     * deadline (now + its max execution time + grace) is refused up front (400), before anything is
+     * frozen (#83).
+     */
+    private void assertFitsDeadline(AgentModel agent, Long deadlineSeconds) {
+        if (deadlineSeconds == null) {
+            return;
+        }
+        Instant now = clock.instant();
+        int maxExecution = agent.currentVersion().maxExecutionSeconds();
+        if (!ClientDeadline.after(now, deadlineSeconds).admits(maxExecution, now, executionGraceSeconds)) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "This agent can take up to " + maxExecution + "s (plus " + executionGraceSeconds
+                            + "s grace), so it can't finish within the " + deadlineSeconds + "s deadline");
+        }
     }
 
     private boolean isListed(UUID agentId) {

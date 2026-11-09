@@ -79,7 +79,8 @@ class AgentWriteAppServiceImplTest {
         @Override public List<AgentModel> findByOwnerId(UUID ownerId, AgentQuery query) {
             return store.values().stream().filter(a -> a.ownerId().equals(ownerId)).toList();
         }
-        @Override public List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice) {
+        @Override public List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice,
+                                                                Long longestExecutionSeconds) {
             return List.of();
         }
         @Override public java.util.Optional<AgentCandidate> findCandidateByVersionId(UUID agentVersionId) {

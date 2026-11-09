@@ -5,8 +5,12 @@ package com.hireai.infrastructure.repository.offering.agent;
  * ({@code JdbcMatchPreviewQueryDao}) and routed selection / failover
  * ({@link AgentVersionJpaRepository#findActiveCandidates}), so the two can't drift (#81).
  *
- * <p>Eligible = the agent is {@code ACTIVE}, its storefront is listed, and its current version covers
- * {@code :category}. Budget is applied by the ranking domain service ({@code price <= budget}); the
+ * <p>Eligible = the agent is {@code ACTIVE}, its storefront is listed, its current version covers
+ * {@code :category}, and, when the Client set a deadline, the version's max execution time is at most
+ * {@code :longestExecutionSeconds} (#83). The caller derives that bound from the deadline at the
+ * moment of selection ({@code ClientDeadline.longestExecutionSeconds}: deadline - now - grace), so this
+ * is exactly {@code now + max_execution_seconds + grace <= client_deadline}; a null bound means no
+ * deadline. Budget is applied by the ranking domain service ({@code price <= budget}); the
  * routed query also filters on price in SQL, which never changes the result. Everything here is a
  * compile-time constant so it can sit inside a {@code @Query} annotation.
  *
@@ -28,7 +32,10 @@ public final class MatchCandidateSql {
                        AND t.status IN ('RESOLVED','FAILED','TIMED_OUT','SPEC_VIOLATION'))     AS sample_count
             """;
 
-    /** FROM + WHERE of the eligible set; binds {@code :category} (lowercase slug). Aliases a, v, p. */
+    /**
+     * FROM + WHERE of the eligible set; binds {@code :category} (lowercase slug) and
+     * {@code :longestExecutionSeconds} (bigint, null = no client deadline). Aliases a, v, p.
+     */
     public static final String ELIGIBLE_FROM = """
             FROM agents a
             JOIN agent_versions v ON v.id = a.current_version_id
@@ -36,6 +43,8 @@ public final class MatchCandidateSql {
             WHERE a.status = 'ACTIVE'
               AND p.is_listed
               AND v.capability_categories && ARRAY[:category]::text[]
+              AND (CAST(:longestExecutionSeconds AS bigint) IS NULL
+                   OR v.max_execution_seconds <= CAST(:longestExecutionSeconds AS bigint))
             """;
 
     private MatchCandidateSql() {

@@ -349,3 +349,65 @@ describe("submit task — rebook a failed task", () => {
     expect(calledUrl!.search).toBe("");
   });
 });
+
+describe("submit task — deadline", () => {
+  it("sends the optional deadline, in seconds, with the preview and the booking", async () => {
+    let previewSent: Record<string, unknown> | null = null;
+    let booked: Record<string, unknown> | null = null;
+    server.use(
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        previewSent = (await request.json()) as Record<string, unknown>;
+        return ok(previewBody);
+      }),
+      http.post("*/api/tasks/direct", async ({ request }) => {
+        booked = (await request.json()) as Record<string, unknown>;
+        return ok({ id: "t-9", status: "SUBMITTED" });
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    fireEvent.change(screen.getByLabelText(/^deadline$/i), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText(/deadline unit/i), { target: { value: "hours" } });
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    await screen.findByRole("dialog", { name: /pick your agent/i });
+    expect(previewSent!.deadlineSeconds).toBe(7200);
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(await screen.findByRole("button", { name: /confirm & book/i }));
+    await waitFor(() => expect(booked).not.toBeNull());
+    expect(booked!.deadlineSeconds).toBe(7200);
+  });
+
+  it("sends no deadline when the field is left empty", async () => {
+    let previewSent: Record<string, unknown> | null = null;
+    server.use(
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        previewSent = (await request.json()) as Record<string, unknown>;
+        return ok(previewBody);
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    await waitFor(() => expect(previewSent).not.toBeNull());
+    expect(previewSent).not.toHaveProperty("deadlineSeconds");
+  });
+
+  it("refuses a deadline that is not a positive whole number", async () => {
+    let searched = false;
+    server.use(
+      http.post("*/api/tasks/match-preview", () => {
+        searched = true;
+        return ok(previewBody);
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    fireEvent.change(screen.getByLabelText(/^deadline$/i), { target: { value: "0" } });
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/deadline/i);
+    expect(searched).toBe(false);
+  });
+});

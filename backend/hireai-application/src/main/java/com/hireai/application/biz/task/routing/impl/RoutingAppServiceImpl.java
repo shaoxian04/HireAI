@@ -81,13 +81,14 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     @Override
     public void route(UUID taskId) {
         TaskRoutingView view = taskReadAppService.getRoutingView(taskId);
-        List<AgentCandidate> candidates =
-                agentRepository.findActiveCandidates(view.category(), view.budget());
+        Instant now = selectionInstant();
+        List<AgentCandidate> candidates = agentRepository.findActiveCandidates(
+                view.category(), view.budget(), longestExecutionSeconds(view, now));
         Optional<UUID> chosen = routingMatchDomainService.selectOne(view, candidates);
 
         if (chosen.isEmpty()) {
-            log.info("No ACTIVE agent matched task {} (category={}, budget={}); marking AWAITING_AGENT",
-                    taskId, view.category(), view.budget());
+            log.info("No ACTIVE agent matched task {} (category={}, budget={}, clientDeadline={}); "
+                    + "marking AWAITING_AGENT", taskId, view.category(), view.budget(), view.clientDeadline());
             taskWriteAppService.markAwaitingAgent(taskId);
             return;
         }
@@ -99,7 +100,7 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                 .orElseThrow(() -> new DomainException(ResultCode.INTERNAL_ERROR,
                         "Matcher returned an agentVersionId absent from candidates: " + agentVersionId));
 
-        DispatchMessage message = assignAndPublish(view, agentVersionId, winner);
+        DispatchMessage message = assignAndPublish(view, agentVersionId, winner, now);
         log.info("Task {} assigned to agentVersion {} and dispatch published (correlationId={})",
                 taskId, agentVersionId, message.correlationId());
     }
@@ -117,7 +118,7 @@ public class RoutingAppServiceImpl implements RoutingAppService {
             taskWriteAppService.cancelPinnedAsUnavailable(taskId, agentVersionId);
             return;
         }
-        DispatchMessage message = assignAndPublish(view, agentVersionId, maybeTarget.get());
+        DispatchMessage message = assignAndPublish(view, agentVersionId, maybeTarget.get(), selectionInstant());
         log.info("Task {} direct-dispatched to agentVersion {} (correlationId={})",
                 taskId, agentVersionId, message.correlationId());
     }
@@ -133,7 +134,10 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     public void failOver(UUID taskId) {
         TaskRoutingView view = taskReadAppService.getRoutingView(taskId);
         List<DispatchAttemptView> history = dispatchAttemptRepository.findByTaskId(taskId);
-        List<AgentCandidate> candidates = agentRepository.findActiveCandidates(view.category(), view.budget());
+        // The deadline is re-applied at this hop's own moment: time spent on the failed Agent counts.
+        Instant now = selectionInstant();
+        List<AgentCandidate> candidates = agentRepository.findActiveCandidates(
+                view.category(), view.budget(), longestExecutionSeconds(view, now));
         Optional<AgentCandidate> next = routedFailoverDomainService.selectNext(view, history, candidates);
         if (next.isEmpty()) {
             log.info("Task {}: no untried eligible Agent left after {} attempt(s); failing with "
@@ -142,7 +146,7 @@ public class RoutingAppServiceImpl implements RoutingAppService {
             return;
         }
         AgentCandidate target = next.get();
-        Instant executionDeadline = deadlineFor(target);
+        Instant executionDeadline = deadlineFor(target, now);
         taskWriteAppService.reassign(taskId, target.agentVersionId(), executionDeadline);
         DispatchMessage message = buildDispatchMessage(view, target.agentVersionId(), target, executionDeadline);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -164,12 +168,24 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     }
 
     /**
-     * Execution deadline for a dispatch to {@code target} starting now. Truncated to microseconds,
-     * the precision the task row stores, so the WorkOrder carries exactly the stamped value.
+     * The moment a selection is made. Truncated to microseconds, the precision the task row stores, so
+     * the WorkOrder carries exactly the stamped execution deadline. One instant serves both the
+     * client-deadline filter and the execution deadline, so an Agent admitted at the deadline's edge
+     * never gets an execution deadline after it.
      */
-    private Instant deadlineFor(AgentCandidate target) {
-        return clock.instant().truncatedTo(ChronoUnit.MICROS)
-                .plusSeconds(target.maxExecutionSeconds() + executionGraceSeconds);
+    private Instant selectionInstant() {
+        return clock.instant().truncatedTo(ChronoUnit.MICROS);
+    }
+
+    /** The candidate query's client-deadline bound at {@code now}; null when the task has no deadline. */
+    private Long longestExecutionSeconds(TaskRoutingView view, Instant now) {
+        return view.clientDeadline() == null ? null
+                : view.clientDeadline().longestExecutionSeconds(now, executionGraceSeconds);
+    }
+
+    /** Execution deadline for a dispatch to {@code target} starting at {@code now}. */
+    private Instant deadlineFor(AgentCandidate target, Instant now) {
+        return now.plusSeconds(target.maxExecutionSeconds() + executionGraceSeconds);
     }
 
     /**
@@ -178,8 +194,9 @@ public class RoutingAppServiceImpl implements RoutingAppService {
      * transaction so the consumer always sees a durable QUEUED row; only then is the message
      * published.
      */
-    private DispatchMessage assignAndPublish(TaskRoutingView view, UUID agentVersionId, AgentCandidate target) {
-        Instant executionDeadline = deadlineFor(target);
+    private DispatchMessage assignAndPublish(TaskRoutingView view, UUID agentVersionId, AgentCandidate target,
+                                             Instant now) {
+        Instant executionDeadline = deadlineFor(target, now);
         taskWriteAppService.assignAndQueue(view.taskId(), agentVersionId, executionDeadline);
         DispatchMessage message = buildDispatchMessage(view, agentVersionId, target, executionDeadline);
         taskDispatchPublisher.publish(message);

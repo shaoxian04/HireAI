@@ -2,6 +2,8 @@ package com.hireai.controller.biz.task.dto;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
+import com.hireai.domain.biz.task.model.ClientDeadline;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -25,7 +27,9 @@ public record MatchPreviewRequest(
         @Digits(integer = 12, fraction = 2, message = "budget must have at most 2 decimal places")
         BigDecimal budget,
         /** Optional: how many seconds from now the Client needs the result. */
-        @Positive(message = "deadlineSeconds must be positive") Long deadlineSeconds,
+        @Positive(message = "deadlineSeconds must be positive")
+        @Max(value = ClientDeadline.MAX_SECONDS, message = "deadlineSeconds must be at most 2592000 (30 days)")
+        Long deadlineSeconds,
         /** Optional: Agents to leave out of both lists (the web rebook passes the one that failed). */
         List<@NotNull UUID> exclude
 ) {
