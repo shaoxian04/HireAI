@@ -309,7 +309,12 @@ function TaskDetail() {
       )}
 
       {TERMINAL_FAILURE.has(task.status) && (
-        <TaskFailurePanel status={task.status} budget={task.budget} detail={validation} />
+        <TaskFailurePanel
+          status={task.status}
+          failureReason={task.failureReason}
+          budget={task.budget}
+          detail={validation}
+        />
       )}
 
       {!result && RESULT_READY.has(task.status) && (

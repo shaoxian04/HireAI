@@ -20,6 +20,29 @@ describe("TaskFailurePanel", () => {
     expect(screen.getByText(/17 cr refunded/i)).toBeTruthy();
   });
 
+  it.each([
+    ["FAILED", "AGENT_UNREACHABLE", /couldn't reach the agent/i],
+    ["FAILED", "AGENT_BUSY", /agent was busy/i],
+    ["CANCELLED", "AGENT_UNAVAILABLE", /agent you chose isn't available/i],
+    ["FAILED", "NO_ALTERNATIVE_AGENT", /no other agent could take it/i],
+    ["CANCELLED", "NO_ELIGIBLE_AGENT", /no agent was available/i],
+    ["CANCELLED", "DISPATCH_ABANDONED", /couldn't hand your task to an agent/i],
+    ["TIMED_OUT", "DISPATCH_ABANDONED", /couldn't hand your task to an agent/i],
+    ["TIMED_OUT", "EXECUTION_TIMEOUT", /ran out of time/i],
+    ["FAILED", "AGENT_REPORTED_FAILURE", /agent couldn't complete/i],
+    ["SPEC_VIOLATION", "SPEC_VIOLATION", /didn't meet the spec/i],
+  ] as const)("explains %s with reason %s in plain words", (status, failureReason, headline) => {
+    render(<TaskFailurePanel status={status} failureReason={failureReason} budget={8} />);
+    expect(screen.getByRole("heading", { name: headline })).toBeTruthy();
+    expect(screen.getByText(/8 cr refunded/i)).toBeTruthy();
+  });
+
+  it("explains the reason rather than the status when they differ", () => {
+    // A timeout while still queued is not the agent running out of time.
+    render(<TaskFailurePanel status="TIMED_OUT" failureReason="DISPATCH_ABANDONED" budget={5} />);
+    expect(screen.queryByText(/ran out of time/i)).toBeNull();
+  });
+
   it("shows the failed-check reason for spec-violation when detail is provided", () => {
     const detail: ValidationReportDTO = {
       verdict: "FAIL",

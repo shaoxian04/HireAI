@@ -1,5 +1,7 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.domain.biz.task.enums.FailureReason;
+
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
@@ -180,7 +182,7 @@ class TaskExecutionPortImplTest {
                 new OutputSpec(OutputFormat.TEXT, null, "summary"), "general")
                 .assignAndQueue(UUID.randomUUID())
                 .markExecuting()
-                .markFailed();
+                .markFailed(FailureReason.AGENT_UNREACHABLE);
 
         when(taskRepository.findByIdForUpdate(taskId)).thenReturn(Optional.of(failedTask));
 

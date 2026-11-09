@@ -1,5 +1,7 @@
 package com.hireai.domain.biz.task.model;
 
+import com.hireai.domain.biz.task.enums.FailureReason;
+
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.utility.exception.DomainException;
@@ -89,7 +91,7 @@ class TaskModelTransitionsTest {
     void recordResultRejectsAwaitingAgentAndTerminalSources() {
         TaskResultModel result = TaskResultModel.record(UUID.randomUUID(), "COMPLETED", "{}", null);
         TaskModel awaiting = submitted().markAwaitingAgent();
-        TaskModel failed = submitted().assignAndQueue(UUID.randomUUID()).markFailed();
+        TaskModel failed = submitted().assignAndQueue(UUID.randomUUID()).markFailed(FailureReason.AGENT_UNREACHABLE);
         TaskModel timedOut = submitted().assignAndQueue(UUID.randomUUID()).markTimedOut();
 
         assertThatThrownBy(() -> awaiting.recordResult(result)).isInstanceOf(DomainException.class);
@@ -102,7 +104,7 @@ class TaskModelTransitionsTest {
         TaskModel executing = submitted().assignAndQueue(UUID.randomUUID()).markExecuting();
         TaskModel received = submitted().assignAndQueue(UUID.randomUUID())
                 .recordResult(TaskResultModel.record(UUID.randomUUID(), "COMPLETED", "{}", null));
-        TaskModel failed = submitted().assignAndQueue(UUID.randomUUID()).markFailed();
+        TaskModel failed = submitted().assignAndQueue(UUID.randomUUID()).markFailed(FailureReason.AGENT_UNREACHABLE);
         TaskModel timedOut = submitted().assignAndQueue(UUID.randomUUID()).markTimedOut();
         TaskModel pendingReview = received.passValidation();
 
@@ -170,37 +172,37 @@ class TaskModelTransitionsTest {
 
     @Test
     void markFailedFromQueuedOrExecuting() {
-        TaskModel fromQueued = submitted().assignAndQueue(UUID.randomUUID()).markFailed();
+        TaskModel fromQueued = submitted().assignAndQueue(UUID.randomUUID()).markFailed(FailureReason.AGENT_UNREACHABLE);
         assertThat(fromQueued.status()).isEqualTo(TaskStatus.FAILED);
 
-        TaskModel fromExecuting = submitted().assignAndQueue(UUID.randomUUID()).markExecuting().markFailed();
+        TaskModel fromExecuting = submitted().assignAndQueue(UUID.randomUUID()).markExecuting().markFailed(FailureReason.AGENT_UNREACHABLE);
         assertThat(fromExecuting.status()).isEqualTo(TaskStatus.FAILED);
     }
 
     @Test
     void markFailedRejectsSubmittedSource() {
-        assertThatThrownBy(() -> submitted().markFailed())
+        assertThatThrownBy(() -> submitted().markFailed(FailureReason.AGENT_UNREACHABLE))
                 .isInstanceOf(DomainException.class);
     }
 
     @Test
     void markCancelledFromAwaitingAgent() {
         TaskModel awaiting = submitted().markAwaitingAgent();
-        TaskModel cancelled = awaiting.markCancelled();
+        TaskModel cancelled = awaiting.markCancelled(FailureReason.NO_ELIGIBLE_AGENT);
 
         assertThat(cancelled.status()).isEqualTo(TaskStatus.CANCELLED);
     }
 
     @Test
     void markCancelledFromSubmitted() {
-        TaskModel cancelled = submitted().markCancelled();
+        TaskModel cancelled = submitted().markCancelled(FailureReason.NO_ELIGIBLE_AGENT);
 
         assertThat(cancelled.status()).isEqualTo(TaskStatus.CANCELLED);
     }
 
     @Test
     void markCancelledRejectsOtherStatuses() {
-        assertThatThrownBy(() -> submitted().assignAndQueue(UUID.randomUUID()).markCancelled())
+        assertThatThrownBy(() -> submitted().assignAndQueue(UUID.randomUUID()).markCancelled(FailureReason.NO_ELIGIBLE_AGENT))
                 .isInstanceOf(DomainException.class);
     }
 

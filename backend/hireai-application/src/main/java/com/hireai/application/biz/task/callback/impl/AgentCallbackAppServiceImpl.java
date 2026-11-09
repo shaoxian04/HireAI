@@ -11,6 +11,7 @@ import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.application.port.security.DispatchTokenService;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.info.AgentResultInfo;
+import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
@@ -74,7 +75,7 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
         // Non-COMPLETED MUST branch first: markFailed() requires QUEUED/EXECUTING; recordResult()
         // moves the task to RESULT_RECEIVED, making markFailed() illegal if called afterwards.
         if (!"COMPLETED".equalsIgnoreCase(result.agentStatus())) {
-            TaskModel failed = task.markFailed();
+            TaskModel failed = task.markFailed(FailureReason.AGENT_REPORTED_FAILURE);
             taskRepository.save(failed);
             settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
             // The agent itself reported it could not deliver — a zero-quality sample.

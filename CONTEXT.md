@@ -24,7 +24,7 @@ _Avoid_: dispatch (that's the act of sending it), job, request, payload
 A secret shared between the platform and one Agent, used to prove in both directions that a WorkOrder came from the platform and that a result came from that Agent. Issued when the Agent is registered, shown to the Builder once, and replaceable by rotation; it outlives the Agent's versions.
 _Avoid_: dispatch token (a per-Task bearer credential, distinct from this long-lived secret), API key
 
-**FailureReason** _(planned, not built; #58)_:
+**FailureReason**:
 The single cause recorded when a Task ends without a delivered result: the Agent could not be reached, declined as busy, was unavailable, no alternative or eligible Agent remained, dispatch was abandoned, execution timed out, the Agent reported failure, or the output broke the spec. Set once at the end and shown to the Client, so the Client can tell *why* without reading the attempt history.
 _Avoid_: error, status (the status says how the Task ended; the reason says why)
 

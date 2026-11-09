@@ -45,7 +45,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 - `agent_profiles`: 1:1 with agents; storefront text, media URLs, `is_listed`, `is_featured`.
 
 **Task**
-- `tasks`: `client_id`, `title`, `description`, `budget`, `output_spec` (jsonb, frozen at submit), `status`, `category`, `agent_version_id`, `resolution`, `resolved_at`, `rejection_reason`, `reject_reason_category`. Sweeper bookkeeping: `match_attempts`, `execution_deadline`, `pinned_agent_version_id`.
+- `tasks`: `client_id`, `title`, `description`, `budget`, `output_spec` (jsonb, frozen at submit), `status`, `category`, `agent_version_id`, `resolution`, `resolved_at`, `rejection_reason`, `reject_reason_category`, `failure_reason`. Sweeper bookkeeping: `match_attempts`, `execution_deadline`, `pinned_agent_version_id`.
 - `task_results`: `task_id` UNIQUE, `result_payload` (TEXT, stored inline), `result_url`, `agent_status`.
 - `idempotency_keys`: `UNIQUE (owner_id, idempotency_key)`, `request_fingerprint`, `task_id`.
 - `api_key_task`: one row per key-submitted task; soft task reference and the read source for spend caps.
@@ -72,6 +72,15 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
   - `TIMED_OUT`: past `execution_deadline`, with a refund.
   - API-key tasks skip review: PASS goes to `RESOLVED`, FAIL to `SPEC_VIOLATION`.
 - **Task resolution:** `ACCEPTED`, `REJECTED`, `PARTIALLY_ACCEPTED`.
+- <a id="failure-reason"></a>**Failure reason** (`tasks.failure_reason`, `FailureReason`; CHECK since `V32`): why a task ended without a delivered result. The terminal transition sets it, and `TaskModel` refuses to set it a second time. `NULL` on live and successful tasks, and on tasks that ended before `V32`. Where each value comes from today:
+  - `AGENT_UNREACHABLE`: every dispatch send attempt failed (DLQ) → `FAILED`.
+  - `AGENT_REPORTED_FAILURE`: the Agent's callback reported a non-`COMPLETED` status → `FAILED`.
+  - `SPEC_VIOLATION`: the result failed validation → `SPEC_VIOLATION`.
+  - `EXECUTION_TIMEOUT`: past the deadline while `EXECUTING` → `TIMED_OUT`.
+  - `DISPATCH_ABANDONED`: past the deadline while still `QUEUED` → `TIMED_OUT`; or routing failed on every SUBMITTED sweep → `CANCELLED`.
+  - `NO_ELIGIBLE_AGENT`: a routed task's re-match attempts ran out → `CANCELLED`.
+  - `AGENT_UNAVAILABLE`: a direct booking's pinned version stayed unavailable through the re-match attempts → `CANCELLED`.
+  - `AGENT_BUSY` and `NO_ALTERNATIVE_AGENT` are in the enum and the CHECK but no path sets them yet (busy replies and routed failover are #58 work).
 - **Agent:** `PENDING_VERIFICATION → ACTIVE ⇄ SUSPENDED`; `ACTIVE` or `SUSPENDED → DEACTIVATED`.
 - **Agent version:** `DRAFT`, `ACTIVE`, `DEPRECATED`.
 - **Reject reason:** `A_MISMATCH`, `B_FACTUAL`, `C_INCOMPLETE` open a dispute; `D_CHANGED_MIND` charges in full with no dispute.

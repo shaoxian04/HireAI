@@ -65,6 +65,9 @@ public class TaskDO {
     @Column(name = "reject_reason_category")
     private String rejectReasonCategory;
 
+    @Column(name = "failure_reason")
+    private String failureReason;
+
     protected TaskDO() {
     }
 
@@ -72,7 +75,7 @@ public class TaskDO {
                          BigDecimal budget, String outputSpec, String category, String status,
                          UUID agentVersionId, Instant gmtCreate,
                          String resolution, Instant resolvedAt, String rejectionReason,
-                         String rejectReasonCategory) {
+                         String rejectReasonCategory, String failureReason) {
         this.id = id;
         this.clientId = clientId;
         this.title = title;
@@ -87,6 +90,7 @@ public class TaskDO {
         this.resolvedAt = resolvedAt;
         this.rejectionReason = rejectionReason;
         this.rejectReasonCategory = rejectReasonCategory;
+        this.failureReason = failureReason;
     }
 
     public UUID getId() { return id; }
@@ -103,4 +107,5 @@ public class TaskDO {
     public Instant getResolvedAt() { return resolvedAt; }
     public String getRejectionReason() { return rejectionReason; }
     public String getRejectReasonCategory() { return rejectReasonCategory; }
+    public String getFailureReason() { return failureReason; }
 }

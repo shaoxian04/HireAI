@@ -51,6 +51,7 @@ public final class TaskModel2DTOConverter {
                 task.rejectionReason(),
                 payout,
                 commission,
-                refund);
+                refund,
+                task.failureReason() == null ? null : task.failureReason().name());
     }
 }

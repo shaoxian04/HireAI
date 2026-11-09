@@ -81,12 +81,12 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 
 **SSRF guard** (`WebhookUrlValidator`, Inv #6 outbound), checked **at registration and before every delivery attempt**: HTTPS only; the host is DNS-resolved; loopback, link-local (incl. cloud metadata), RFC1918, CGNAT and IPv6 ULA are blocked. `WEBHOOKS_ALLOW_INSECURE_LOCALHOST` exempts `http://localhost` for dev.
 
-**Events:** `task.completed` (doorbell) and `task.failed` (doorbell plus `reason` and `refunded`). `reason` is one of `SPEC_VIOLATION`, `FAILED`, `TIMED_OUT`, `CANCELLED`.
+**Events:** `task.completed` (doorbell) and `task.failed` (doorbell plus `reason`, `failure_reason` and `refunded`). `reason` is the terminal status: `SPEC_VIOLATION`, `FAILED`, `TIMED_OUT` or `CANCELLED`. `failure_reason` is the task's [FailureReason](data-model.md#failure-reason) (why it ended), the same value `GET /api/tasks/{id}` returns as `failureReason`; it is `null` only for tasks that ended before reasons were recorded.
 
 **Outbox and sweeper (at-least-once):**
 - The terminal transition writes a `webhook_deliveries` row in the settling transaction. Its `id` doubles as the client-facing event id.
 - An API task whose key has no active subscription gets no row, and registering later does not replay it.
-- A dispatch whose every send attempt failed ends `FAILED` with a refund and a `task.failed` event (`reason` `FAILED`). Retry schedule: [`matching.md`](matching.md#the-workorder).
+- A dispatch whose every send attempt failed ends `FAILED` with a refund and a `task.failed` event (`reason` `FAILED`, `failure_reason` `AGENT_UNREACHABLE`). Retry schedule: [`matching.md`](matching.md#the-workorder).
 - `WebhookDeliverySweeper` claims due rows with `FOR UPDATE SKIP LOCKED`, which is safe across instances, then signs and POSTs over a redirect-disabled `RestClient`. Failures back off exponentially with a cap until `DEAD`. Values: `hireai.webhooks.*` in `application.yml`.
 
 **Signature:** `X-HireAI-Signature: t=<unix-ts>,v1=<hex hmac-sha256(secret,"{ts}.{body}")>`, with `X-HireAI-Event-Id` and `X-HireAI-Event-Type`. The client recomputes over `"{t}.{rawBody}"` and constant-time-compares `v1`.
@@ -95,7 +95,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 
 ## 6a. MCP server facade
 
-`mcp/` (official MCP SDK, stdio) exposes this channel as four tools with no business logic, authenticating with an API key from env. Tools, arguments and caveats: [`mcp/README.md`](../../mcp/README.md). springdoc publishes the REST surface as the `programmatic` group at `/v3/api-docs/programmatic`, with Swagger UI at `/swagger-ui/index.html`.
+`mcp/` (official MCP SDK, stdio) exposes this channel as four tools with no business logic, authenticating with an API key from env. `get_task_status` passes the task's `failureReason` through as `failure_reason`. Tools, arguments and caveats: [`mcp/README.md`](../../mcp/README.md). springdoc publishes the REST surface as the `programmatic` group at `/v3/api-docs/programmatic`, with Swagger UI at `/swagger-ui/index.html`.
 
 ## 7. Endpoint catalog
 
@@ -104,7 +104,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 | `POST /api/keys`, `GET /api/keys`, `POST /api/keys/{id}/revoke` | JWT `CLIENT` | Key management |
 | `POST /api/tasks` | `CLIENT`, `API_CLIENT` | Open submit |
 | `POST /api/tasks/direct` | `CLIENT`, `API_CLIENT` | Direct submit |
-| `GET /api/tasks`, `/api/tasks/{id}`, `/result`, `/validation` | `CLIENT`, `API_CLIENT` | Track, result, failing check |
+| `GET /api/tasks`, `/api/tasks/{id}`, `/result`, `/validation` | `CLIENT`, `API_CLIENT` | Track (incl. `failureReason` once a task ends without a result), result, failing check |
 | `GET /api/tasks/match-preview?category=&budget=` | `CLIENT`, `API_CLIENT` | Ranked shortlist; creates no task |
 | `GET /api/catalogue/**` | Any human role, `API_CLIENT` | Browse agents |
 | `/api/webhooks/subscription/**` | JWT `CLIENT` | Subscription |

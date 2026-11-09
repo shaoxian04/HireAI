@@ -1,6 +1,7 @@
 package com.hireai.domain.biz.task.model;
 
 import com.hireai.utility.result.ResultCode;
+import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.enums.TaskStatus;
@@ -33,16 +34,17 @@ public final class TaskModel {
     private final Instant resolvedAt;          // nullable until RESOLVED
     private final String rejectionReason;      // nullable; only set on REJECTED
     private final RejectReason rejectReasonCategory; // nullable; A/B/C/D once reviewed via reject
+    private final FailureReason failureReason; // nullable; set once when the task ends without a delivered result
 
     // Must stay in sync with the V9 rejection_reason DB CHECK and RejectTaskRequest's @Size(max).
     private static final int MAX_REASON_LENGTH = 500;
 
-    /** Canonical 15-arg constructor: used by the rehydration path and all transition helpers. */
+    /** Canonical 16-arg constructor: used by the rehydration path and all transition helpers. */
     public TaskModel(UUID id, UUID clientId, String title, String description,
                      Money budget, OutputSpec outputSpec, String category, TaskStatus status,
                      UUID agentVersionId, TaskResultModel result, Instant createdAt,
                      TaskResolution resolution, Instant resolvedAt, String rejectionReason,
-                     RejectReason rejectReasonCategory) {
+                     RejectReason rejectReasonCategory, FailureReason failureReason) {
         this.id = id;
         this.clientId = clientId;
         this.title = title;
@@ -58,6 +60,7 @@ public final class TaskModel {
         this.resolvedAt = resolvedAt;
         this.rejectionReason = rejectionReason;
         this.rejectReasonCategory = rejectReasonCategory;
+        this.failureReason = failureReason;
     }
 
     /** Pre-review rehydration overload (11-arg): delegates to the canonical constructor. */
@@ -65,7 +68,7 @@ public final class TaskModel {
                      Money budget, OutputSpec outputSpec, String category, TaskStatus status,
                      UUID agentVersionId, TaskResultModel result, Instant createdAt) {
         this(id, clientId, title, description, budget, outputSpec, category, status,
-                agentVersionId, result, createdAt, null, null, null, null);
+                agentVersionId, result, createdAt, null, null, null, null, null);
     }
 
     /** Factory for the SUBMIT transition: enforces invariants and creates a SUBMITTED task. */
@@ -146,7 +149,7 @@ public final class TaskModel {
     /** RESULT_RECEIVED → SPEC_VIOLATION: automated validation failed; result is rejected by the gate. */
     public TaskModel failValidation() {
         requireStatus(TaskStatus.RESULT_RECEIVED, "failValidation");
-        return copyWith(TaskStatus.SPEC_VIOLATION, this.agentVersionId, this.result);
+        return endWithoutResult(TaskStatus.SPEC_VIOLATION, FailureReason.SPEC_VIOLATION);
     }
 
     /** SUBMITTED → AWAITING_AGENT (idempotent from AWAITING_AGENT for re-match no-match passes). */
@@ -157,17 +160,23 @@ public final class TaskModel {
 
     /**
      * SUBMITTED|AWAITING_AGENT → CANCELLED: routing attempts exhausted before any Agent was
-     * assigned (the SUBMITTED sweeper or the re-match sweeper); the caller refunds escrow.
+     * assigned (the SUBMITTED sweeper or the re-match sweeper); the caller refunds escrow and
+     * names why no Agent was reached.
      */
-    public TaskModel markCancelled() {
+    public TaskModel markCancelled(FailureReason reason) {
         requireStatusIn("markCancelled", TaskStatus.SUBMITTED, TaskStatus.AWAITING_AGENT);
-        return copyWith(TaskStatus.CANCELLED, this.agentVersionId, this.result);
+        return endWithoutResult(TaskStatus.CANCELLED, reason);
     }
 
-    /** QUEUED/EXECUTING → TIMED_OUT: the agent did not respond in time. */
+    /**
+     * QUEUED/EXECUTING → TIMED_OUT: no result before the execution deadline. The reason follows
+     * {@link #timeoutIsAgentFault()}: EXECUTION_TIMEOUT once the Agent had the work, otherwise
+     * DISPATCH_ABANDONED (the WorkOrder never got through).
+     */
     public TaskModel markTimedOut() {
         requireStatusIn("markTimedOut", TaskStatus.QUEUED, TaskStatus.EXECUTING);
-        return copyWith(TaskStatus.TIMED_OUT, this.agentVersionId, this.result);
+        return endWithoutResult(TaskStatus.TIMED_OUT,
+                timeoutIsAgentFault() ? FailureReason.EXECUTION_TIMEOUT : FailureReason.DISPATCH_ABANDONED);
     }
 
     /**
@@ -179,10 +188,10 @@ public final class TaskModel {
         return this.status == TaskStatus.EXECUTING;
     }
 
-    /** QUEUED/EXECUTING → FAILED: dispatch/execution failed terminally. */
-    public TaskModel markFailed() {
+    /** QUEUED/EXECUTING → FAILED: dispatch/execution failed terminally, for the given reason. */
+    public TaskModel markFailed(FailureReason reason) {
         requireStatusIn("markFailed", TaskStatus.QUEUED, TaskStatus.EXECUTING);
-        return copyWith(TaskStatus.FAILED, this.agentVersionId, this.result);
+        return endWithoutResult(TaskStatus.FAILED, reason);
     }
 
     /** PENDING_REVIEW → RESOLVED (ACCEPTED): the client accepted the result. */
@@ -207,7 +216,7 @@ public final class TaskModel {
         }
         return new TaskModel(id, clientId, title, description, budget, outputSpec, category,
                 TaskStatus.DISPUTED, agentVersionId, result, createdAt,
-                this.resolution, this.resolvedAt, trimReason(reason), reasonCategory);
+                this.resolution, this.resolvedAt, trimReason(reason), reasonCategory, this.failureReason);
     }
 
     /** DISPUTED → RESOLVED: the arbitration ruling (or fallback) has been settled. */
@@ -216,7 +225,7 @@ public final class TaskModel {
         requirePresent(resolution, "resolution");
         return new TaskModel(id, clientId, title, description, budget, outputSpec, category,
                 TaskStatus.RESOLVED, agentVersionId, result, createdAt,
-                resolution, Instant.now(), this.rejectionReason, this.rejectReasonCategory);
+                resolution, Instant.now(), this.rejectionReason, this.rejectReasonCategory, this.failureReason);
     }
 
     /** PENDING_REVIEW → RESOLVED (REJECTED): client changed their mind (D); charged in full, no dispute. */
@@ -224,7 +233,8 @@ public final class TaskModel {
         requireStatus(TaskStatus.PENDING_REVIEW, "chargeChangedMind");
         return new TaskModel(id, clientId, title, description, budget, outputSpec, category,
                 TaskStatus.RESOLVED, agentVersionId, result, createdAt,
-                TaskResolution.REJECTED, Instant.now(), trimReason(reason), RejectReason.D_CHANGED_MIND);
+                TaskResolution.REJECTED, Instant.now(), trimReason(reason), RejectReason.D_CHANGED_MIND,
+                this.failureReason);
     }
 
     private static String trimReason(String reason) {
@@ -239,13 +249,28 @@ public final class TaskModel {
     private TaskModel resolved(TaskResolution resolution, String rejectionReason) {
         return new TaskModel(this.id, this.clientId, this.title, this.description, this.budget,
                 this.outputSpec, this.category, TaskStatus.RESOLVED, this.agentVersionId, this.result,
-                this.createdAt, resolution, Instant.now(), rejectionReason, this.rejectReasonCategory);
+                this.createdAt, resolution, Instant.now(), rejectionReason, this.rejectReasonCategory,
+                this.failureReason);
     }
 
     private TaskModel copyWith(TaskStatus newStatus, UUID newAgentVersionId, TaskResultModel newResult) {
         return new TaskModel(this.id, this.clientId, this.title, this.description, this.budget,
                 this.outputSpec, this.category, newStatus, newAgentVersionId, newResult, this.createdAt,
-                this.resolution, this.resolvedAt, this.rejectionReason, this.rejectReasonCategory);
+                this.resolution, this.resolvedAt, this.rejectionReason, this.rejectReasonCategory,
+                this.failureReason);
+    }
+
+    /** Terminal transition without a delivered result: records the FailureReason, exactly once. */
+    private TaskModel endWithoutResult(TaskStatus terminalStatus, FailureReason reason) {
+        requirePresent(reason, "failure reason");
+        if (this.failureReason != null) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Failure reason already set to " + this.failureReason + "; cannot record " + reason);
+        }
+        return new TaskModel(this.id, this.clientId, this.title, this.description, this.budget,
+                this.outputSpec, this.category, terminalStatus, this.agentVersionId, this.result,
+                this.createdAt, this.resolution, this.resolvedAt, this.rejectionReason,
+                this.rejectReasonCategory, reason);
     }
 
     private void requireStatus(TaskStatus expected, String transition) {
@@ -280,4 +305,5 @@ public final class TaskModel {
     public Instant resolvedAt() { return resolvedAt; }
     public String rejectionReason() { return rejectionReason; }
     public RejectReason rejectReasonCategory() { return rejectReasonCategory; }
+    public FailureReason failureReason() { return failureReason; }
 }

@@ -6,7 +6,7 @@ A thin [Model Context Protocol](https://modelcontextprotocol.io) server exposing
 
 - `list_agents(category?, query?, sort?, page?, size?)`: browse the agent catalogue.
 - `submit_task(description, budget, category?, output_spec?, agent_id?, title?, output_format?)`: direct-books when `agent_id` is given; otherwise routes, and `category` is then required.
-- `get_task_status(task_id)`: current status and resolution.
+- `get_task_status(task_id)`: current status, resolution and, for a task that ended without a result, `failure_reason` (the FailureReason; null otherwise).
 - `get_task_result(task_id)`: the result payload, or a "not ready" message.
 
 ## Caveats

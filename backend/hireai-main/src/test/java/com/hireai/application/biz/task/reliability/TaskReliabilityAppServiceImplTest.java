@@ -57,7 +57,7 @@ class TaskReliabilityAppServiceImplTest {
     private TaskModel taskWithStatus(TaskStatus status) {
         return new TaskModel(taskId, clientId, "title", "desc", budget,
                 new OutputSpec(OutputFormat.TEXT, null, "summary"), "general", status,
-                null, null, Instant.now(), null, null, null, null);
+                null, null, Instant.now(), null, null, null, null, null);
     }
 
     /** Builds a real TaskModel in the given status via the canonical constructor. */

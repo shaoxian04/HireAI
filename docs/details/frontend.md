@@ -111,7 +111,7 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   `RESOLVED` shows the settled summary plus a dismissible `RatingPrompt` (`POST /api/tasks/{id}/review`,
   accepted-only and once per task — a rating left later beats one never given, so it must stay skippable).
   On a **terminal failure** (`SPEC_VIOLATION`/`TIMED_OUT`/`FAILED`/`CANCELLED`)
-  it renders a `TaskFailurePanel` (plain-English cause + `{budget} cr refunded` line; the spec-violation panel
+  it renders a `TaskFailurePanel` (plain-English cause from the task's `failureReason`, falling back to per-status copy when it is absent, + `{budget} cr refunded` line; the spec-violation panel
   fetches the real failing-check reason from `GET /api/tasks/{id}/validation`). **Once the task is in a dispute** the execution pipeline is replaced by a
   `DisputeProgressPanel` — a reject→arbitrator→admin **timeline** with Accept-ruling / Appeal actions while a
   proposed ruling awaits; it persists after `RESOLVED`. `client/disputes` — the client's dispute list ("awaiting

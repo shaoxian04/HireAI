@@ -1,5 +1,6 @@
 package com.hireai.domain.biz.task.webhookdelivery;
 
+import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.task.webhookdelivery.enums.WebhookEventType;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -19,10 +20,17 @@ public final class WebhookPayloads {
              + "\",\"task_id\":\"" + taskId + "\",\"occurred_at\":\"" + at + "\"}";
     }
 
-    public static String failed(UUID eventId, UUID taskId, String reason, BigDecimal refundedAmount, Instant at) {
+    /**
+     * {@code reason} is the terminal status (how it ended); {@code failure_reason} is the
+     * {@link FailureReason} (why), or JSON null if none was recorded.
+     */
+    public static String failed(UUID eventId, UUID taskId, String reason, FailureReason failureReason,
+                                BigDecimal refundedAmount, Instant at) {
+        String failureReasonJson = failureReason == null ? "null" : "\"" + failureReason.name() + "\"";
         return "{\"event_id\":\"" + eventId + "\",\"type\":\"" + WebhookEventType.TASK_FAILED.wire()
              + "\",\"task_id\":\"" + taskId + "\",\"reason\":\"" + jsonEscape(reason)
-             + "\",\"refunded\":" + refundedAmount.toPlainString() + ",\"occurred_at\":\"" + at + "\"}";
+             + "\",\"failure_reason\":" + failureReasonJson
+             + ",\"refunded\":" + refundedAmount.toPlainString() + ",\"occurred_at\":\"" + at + "\"}";
     }
 
     /** Escapes a string for safe embedding inside a JSON double-quoted value (RFC 8259 §7). */

@@ -7,6 +7,7 @@ import com.hireai.domain.biz.reputation.enums.ReputationEventType;
 import com.hireai.application.port.task.TaskExecutionPort;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.enums.TaskStatus;
+import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.utility.exception.DomainException;
@@ -90,7 +91,7 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
             log.info("Task {} already {}; ignoring duplicate failure signal", taskId, task.status());
             return;
         }
-        TaskModel failed = task.markFailed();
+        TaskModel failed = task.markFailed(FailureReason.AGENT_UNREACHABLE);
         taskRepository.save(failed);
         // Stranded-escrow fix (spec §6.3): the DLQ path previously marked FAILED without refunding,
         // freezing the client's escrow forever. Every escrow exit is a recorded settlement.

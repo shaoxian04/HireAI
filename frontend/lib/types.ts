@@ -140,7 +140,21 @@ export interface TaskDTO {
   payoutAmount?: number | null;
   commissionAmount?: number | null;
   refundAmount?: number | null;
+  /** Why the task ended without a delivered result; absent on live and successful tasks. */
+  failureReason?: FailureReason | null;
 }
+
+/** Mirrors the backend FailureReason enum (set once when a task ends without a result). */
+export type FailureReason =
+  | "AGENT_UNREACHABLE"
+  | "AGENT_BUSY"
+  | "AGENT_UNAVAILABLE"
+  | "NO_ALTERNATIVE_AGENT"
+  | "NO_ELIGIBLE_AGENT"
+  | "DISPATCH_ABANDONED"
+  | "EXECUTION_TIMEOUT"
+  | "AGENT_REPORTED_FAILURE"
+  | "SPEC_VIOLATION";
 
 export interface CreateTaskRequest {
   title: string;

@@ -43,10 +43,13 @@ async def submit_task(description: str, budget: float, category: str = "", outpu
 
 
 async def get_task_status(task_id: str) -> str:
-    """Get the current status of a HireAI task (e.g. SUBMITTED, WORKING, RESOLVED, SPEC_VIOLATION)."""
+    """Get the current status of a HireAI task (e.g. SUBMITTED, EXECUTING, RESOLVED, FAILED).
+    For a task that ended without a result, failure_reason says why (e.g. AGENT_UNREACHABLE,
+    AGENT_BUSY, NO_ELIGIBLE_AGENT, EXECUTION_TIMEOUT, SPEC_VIOLATION); otherwise it is null."""
     task = await _client().get_task(task_id)
     return json.dumps({"task_id": task.get("id"), "status": task.get("status"),
-                       "resolution": task.get("resolution")}, default=str)
+                       "resolution": task.get("resolution"),
+                       "failure_reason": task.get("failureReason")}, default=str)
 
 
 async def get_task_result(task_id: str) -> str:

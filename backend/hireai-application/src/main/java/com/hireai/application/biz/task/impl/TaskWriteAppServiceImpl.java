@@ -7,6 +7,7 @@ import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.event.TaskSubmittedDomainEvent;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
+import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
@@ -106,7 +107,9 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
             log.info("Task {} is {} (not AWAITING_AGENT); skipping cancel", taskId, task.status());
             return;
         }
-        cancelWithRefund(task);
+        // A direct booking waits here only because its pinned version was unavailable.
+        boolean pinned = taskRepository.findPinnedAgentVersionId(taskId).isPresent();
+        cancelWithRefund(task, FailureReason.noAgentFound(pinned));
         log.info("Task {} CANCELLED after re-match exhaustion; escrow fully refunded", taskId);
     }
 
@@ -120,12 +123,13 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
             log.info("Task {} is {} (not SUBMITTED); skipping cancel", taskId, task.status());
             return;
         }
-        cancelWithRefund(task);
+        // Routing threw on every sweep: the platform never got the task to an Agent.
+        cancelWithRefund(task, FailureReason.DISPATCH_ABANDONED);
         log.info("Task {} CANCELLED after routing failed on every SUBMITTED sweep; escrow fully refunded", taskId);
     }
 
-    private void cancelWithRefund(TaskModel task) {
-        TaskModel cancelled = task.markCancelled();
+    private void cancelWithRefund(TaskModel task, FailureReason reason) {
+        TaskModel cancelled = task.markCancelled(reason);
         taskRepository.save(cancelled);
         settlementWriteAppService.settleRejected(task.id(), cancelled.clientId(), cancelled.budget());
         webhookOutboxAppService.enqueueFailed(cancelled, "CANCELLED");

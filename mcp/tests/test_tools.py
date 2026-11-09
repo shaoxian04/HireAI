@@ -65,7 +65,19 @@ async def test_submit_task_routed_requires_category(fake):
 
 async def test_get_task_status_shapes_output(fake):
     out = await server.get_task_status("t9")
-    assert json.loads(out) == {"task_id": "t9", "status": "WORKING", "resolution": None}
+    assert json.loads(out) == {"task_id": "t9", "status": "WORKING", "resolution": None,
+                               "failure_reason": None}
+
+
+async def test_get_task_status_shows_why_a_task_failed(monkeypatch, fake):
+    async def failed_task(task_id):
+        # The backend omits failureReason on live tasks and sets it once a task ends without a result.
+        return {"id": task_id, "status": "FAILED", "failureReason": "AGENT_UNREACHABLE"}
+
+    monkeypatch.setattr(fake, "get_task", failed_task)
+    out = await server.get_task_status("t9")
+    assert json.loads(out) == {"task_id": "t9", "status": "FAILED", "resolution": None,
+                               "failure_reason": "AGENT_UNREACHABLE"}
 
 
 async def test_get_task_result_not_ready(monkeypatch, fake):
