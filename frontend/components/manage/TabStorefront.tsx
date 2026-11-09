@@ -76,7 +76,7 @@ export function TabStorefront({ agentId, profile, onProfileChange }: Props) {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="What this agent does and who it's for"
-          className="block w-full rounded-md border border-line bg-surface-2 px-3 py-2 font-mono text-sm text-fg shadow-inner transition placeholder:text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-50"
+          className="block w-full rounded-md border border-line-bright bg-surface px-3 py-2 text-sm text-fg transition placeholder:text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-50"
         />
       </Field>
 
@@ -87,7 +87,7 @@ export function TabStorefront({ agentId, profile, onProfileChange }: Props) {
           value={sampleOutput}
           onChange={(e) => setSampleOutput(e.target.value)}
           placeholder='{"example": "output"}'
-          className="block w-full rounded-md border border-line bg-surface-2 px-3 py-2 font-mono text-sm text-fg shadow-inner transition placeholder:text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-50"
+          className="block w-full rounded-md border border-line-bright bg-surface px-3 py-2 font-mono text-sm text-fg transition placeholder:text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-50"
         />
       </Field>
 
@@ -110,7 +110,7 @@ export function TabStorefront({ agentId, profile, onProfileChange }: Props) {
 
       {/* Gallery */}
       <div className="space-y-3">
-        <p className="font-mono text-[0.7rem] uppercase tracking-[0.18em] text-muted">Gallery</p>
+        <p className="text-sm font-medium text-fg">Gallery</p>
         {profile.galleryUrls.length > 0 && (
           <div className="flex flex-wrap gap-3">
             {profile.galleryUrls.map((url) => (
@@ -124,7 +124,7 @@ export function TabStorefront({ agentId, profile, onProfileChange }: Props) {
                 <Button
                   type="button"
                   variant="ghost"
-                  className="absolute -right-1 -top-1 !px-1 !py-0.5 text-[0.6rem]"
+                  className="absolute -right-1 -top-1 !px-1 !py-0.5 text-xs"
                   onClick={() => removeGalleryImage(url)}
                 >
                   ×
@@ -142,7 +142,7 @@ export function TabStorefront({ agentId, profile, onProfileChange }: Props) {
       </div>
 
       {/* Listed toggle */}
-      <label className="flex cursor-pointer items-center gap-2 font-mono text-xs text-muted">
+      <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
         <input
           type="checkbox"
           checked={listed}
@@ -153,17 +153,17 @@ export function TabStorefront({ agentId, profile, onProfileChange }: Props) {
       </label>
 
       {error && (
-        <p role="alert" className="font-mono text-xs text-red">
+        <p role="alert" className="text-xs text-red">
           {error}
         </p>
       )}
 
       <div className="flex items-center gap-4">
         <Button onClick={handleSave} disabled={saving}>
-          {saving ? "Saving…" : "Save ▸"}
+          {saving ? "Saving…" : "Save"}
         </Button>
         {saved && (
-          <p role="status" className="font-mono text-xs text-accent">
+          <p role="status" className="text-xs text-accent">
             Saved
           </p>
         )}

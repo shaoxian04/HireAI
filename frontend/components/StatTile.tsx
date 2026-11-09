@@ -1,3 +1,4 @@
+/** One figure in a stat strip: small label above a monospaced value. Tone colours the value only when it carries meaning. */
 export function StatTile({
   value,
   label,
@@ -9,9 +10,9 @@ export function StatTile({
 }) {
   const toneCls = { fg: "text-fg", accent: "text-accent", amber: "text-amber", red: "text-red" }[tone];
   return (
-    <div className="bg-surface px-5 py-5">
-      <p className={`tabular text-3xl font-extrabold ${toneCls}`}>{value}</p>
-      <p className="mt-1 font-mono text-[0.6rem] uppercase tracking-[0.18em] text-dim">{label}</p>
+    <div className="bg-surface px-5 py-4">
+      <p className="text-xs text-dim">{label}</p>
+      <p className={`display tabular mt-1 text-[2.4rem] ${toneCls}`}>{value}</p>
     </div>
   );
 }

@@ -32,18 +32,16 @@ describe("builder earnings page", () => {
   it("renders totals, per-agent breakdown and payout history", async () => {
     renderEarnings();
 
-    // summary tiles (from the MSW stub)
-    expect(await screen.findByText("27.20")).toBeInTheDocument();
-    expect(screen.getByText("17.00")).toBeInTheDocument();
-    expect(screen.getByText("lifetime earned")).toBeInTheDocument();
-    expect(screen.getByText("pending · if accepted")).toBeInTheDocument();
+    // summary tiles (from the MSW stub), scoped to the stat grid: the per-agent table repeats
+    // the same figures
+    const statGrid = (await screen.findByText("lifetime earned")).closest("dl") as HTMLElement;
+    expect(within(statGrid).getByText("27.20")).toBeInTheDocument();
+    expect(within(statGrid).getByText("17.00")).toBeInTheDocument();
+    expect(within(statGrid).getByText("pending · if accepted")).toBeInTheDocument();
 
-    // third tile: paidTaskCount renders next to its label (scoped to the stat grid to avoid
-    // collision with the identical "paid tasks" dt labels in the per-agent breakdown rows)
-    const statGrid = screen.getByText("lifetime earned").closest("div.bg-line") as HTMLElement;
+    // third tile: paidTaskCount renders under its label
     const tileLabel = within(statGrid).getByText("paid tasks");
-    expect(tileLabel).toBeInTheDocument();
-    expect(tileLabel.previousElementSibling).toHaveTextContent("2");
+    expect(tileLabel.nextElementSibling).toHaveTextContent("2");
 
     // per-agent rows — zero-row agent included
     expect(screen.getByText("Analyst")).toBeInTheDocument();

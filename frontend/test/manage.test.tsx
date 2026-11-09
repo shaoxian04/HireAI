@@ -55,7 +55,7 @@ describe("manage agent console", () => {
 
     // Wait for initial load then switch to Stats tab
     await screen.findByRole("textbox", { name: /tagline/i });
-    await userEvent.click(screen.getByRole("button", { name: /stats/i }));
+    await userEvent.click(screen.getByRole("tab", { name: /stats/i }));
 
     // total volume tile
     expect(await screen.findByText("7")).toBeInTheDocument();
@@ -78,7 +78,7 @@ describe("manage agent console", () => {
 
     // Wait for initial load then switch to Reviews tab
     await screen.findByRole("textbox", { name: /tagline/i });
-    await userEvent.click(screen.getByRole("button", { name: /reviews/i }));
+    await userEvent.click(screen.getByRole("tab", { name: /reviews/i }));
 
     // Review text is visible
     expect(await screen.findByText(/output matched the spec exactly/i)).toBeInTheDocument();
@@ -103,7 +103,7 @@ describe("manage agent console", () => {
 
     // Wait for initial load then switch to Pricing tab
     await screen.findByRole("textbox", { name: /tagline/i });
-    await userEvent.click(screen.getByRole("button", { name: /pricing/i }));
+    await userEvent.click(screen.getByRole("tab", { name: /pricing/i }));
 
     // Price input shows current value (10)
     const priceInput = await screen.findByRole("spinbutton", { name: /price/i });
@@ -125,6 +125,8 @@ describe("manage agent console", () => {
     renderBuilder();
     await screen.findByRole("textbox", { name: /tagline/i }); // page loaded (agent is ACTIVE)
     await userEvent.click(screen.getByRole("button", { name: /^suspend$/i }));
-    expect(await screen.findByText("SUSPENDED")).toBeInTheDocument();
+    // it asks first
+    await userEvent.click(await screen.findByRole("button", { name: /suspend agent/i }));
+    expect(await screen.findByText("Suspended", { selector: "[data-status=SUSPENDED]" })).toBeInTheDocument();
   });
 });

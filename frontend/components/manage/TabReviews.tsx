@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import type { BuilderReviewDTO } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
+import { SkeletonRows } from "@/components/ui";
 
 interface Props {
   agentId: string;
@@ -14,7 +15,7 @@ type Filter = "all" | "unanswered";
 function Stars({ rating }: { rating: number }) {
   return (
     <span
-      className="font-mono text-sm tracking-tight"
+      className="text-sm tracking-tight"
       aria-label={`${rating} out of 5 stars`}
     >
       <span aria-hidden className="text-amber">{"★".repeat(rating)}</span>
@@ -40,13 +41,13 @@ function Summary({ reviews }: { reviews: BuilderReviewDTO[] }) {
     <section className="grid grid-cols-1 gap-6 rounded-xl border border-line bg-surface p-5 sm:grid-cols-[auto_1fr]">
       <div className="sm:w-40">
         <p className="eyebrow mb-2">Average</p>
-        <p className="tabular text-5xl font-extrabold leading-none text-fg">{avg.toFixed(1)}</p>
+        <p className="tabular text-5xl font-semibold leading-none text-fg">{avg.toFixed(1)}</p>
         {/* Decorative here: these are the *rounded* average, and the exact figure is announced
             by the number above them. */}
         <div className="mt-2" aria-hidden>
           <Stars rating={Math.round(avg)} />
         </div>
-        <p className="mt-2 font-mono text-[0.68rem] text-dim">
+        <p className="mt-2 text-xs text-dim">
           {total} review{total === 1 ? "" : "s"}
           {unanswered > 0 && <> · {unanswered} unanswered</>}
         </p>
@@ -55,14 +56,14 @@ function Summary({ reviews }: { reviews: BuilderReviewDTO[] }) {
       <div className="space-y-1.5 sm:border-l sm:border-line sm:pl-6">
         {buckets.map(({ star, count }) => (
           <div key={star} className="flex items-center gap-3">
-            <span className="w-6 shrink-0 font-mono text-[0.68rem] text-dim">{star}★</span>
+            <span className="w-6 shrink-0 text-xs text-dim">{star}★</span>
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
               <div
                 className={`h-full ${star >= 4 ? "bg-accent" : star === 3 ? "bg-amber" : "bg-red"}`}
                 style={{ width: `${(count / total) * 100}%` }}
               />
             </div>
-            <span className="tabular w-5 shrink-0 text-right font-mono text-[0.68rem] text-muted">
+            <span className="tabular w-5 shrink-0 text-right font-medium text-xs text-muted">
               {count}
             </span>
           </div>
@@ -115,12 +116,12 @@ function ReviewItem({
         <div className="flex items-center gap-3">
           <Stars rating={review.rating} />
           {!review.builderResponse && (
-            <span className="rounded border border-amber/40 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wider text-amber">
+            <span className="rounded border border-amber/40 px-1.5 py-0.5 text-xs text-amber">
               Needs reply
             </span>
           )}
         </div>
-        <span className="tabular shrink-0 font-mono text-[0.65rem] text-dim">
+        <span className="tabular shrink-0 font-medium text-xs text-dim">
           {new Date(review.createdAt).toLocaleDateString()}
         </span>
       </div>
@@ -128,7 +129,7 @@ function ReviewItem({
       {review.reviewText ? (
         <p className="text-sm leading-relaxed text-muted">{review.reviewText}</p>
       ) : (
-        <p className="font-mono text-xs text-dim">Rating only — no comment left.</p>
+        <p className="text-xs text-dim">Rating only — no comment left.</p>
       )}
 
       {/* Responding is a deliberate act, so it costs a click. An always-open editor per review
@@ -142,16 +143,16 @@ function ReviewItem({
             onChange={(e) => setResponse(e.target.value)}
             aria-label="Response"
             placeholder="Reply publicly — clients see this on your storefront."
-            className="block w-full rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm text-fg shadow-inner transition placeholder:text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-50"
+            className="block w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-fg transition placeholder:text-dim focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25 disabled:opacity-50"
           />
           {error && (
-            <p role="alert" className="font-mono text-xs text-red">
+            <p role="alert" className="text-xs text-red">
               {error}
             </p>
           )}
           <div className="flex gap-2">
             <Button type="button" onClick={handleRespond} disabled={saving || !response.trim()}>
-              {saving ? "Saving…" : "Publish reply ▸"}
+              {saving ? "Saving…" : "Publish reply"}
             </Button>
             <Button type="button" variant="secondary" onClick={cancel} disabled={saving}>
               Cancel
@@ -161,7 +162,7 @@ function ReviewItem({
       ) : review.builderResponse ? (
         <div className="border-l-2 border-accent/40 pl-3">
           <div className="flex items-center gap-2">
-            <p className="font-mono text-[0.6rem] uppercase tracking-wider text-accent">
+            <p className="text-xs text-accent">
               Your reply
             </p>
             {/* The domain has always allowed replacing a response; the UI used to hide it forever
@@ -169,7 +170,7 @@ function ReviewItem({
             <button
               type="button"
               onClick={() => setEditing(true)}
-              className="font-mono text-[0.6rem] uppercase tracking-wider text-dim transition hover:text-accent"
+              className="text-sm text-dim transition hover:text-fg"
             >
               Edit
             </button>
@@ -217,14 +218,14 @@ export function TabReviews({ agentId }: Props) {
 
   if (error) {
     return (
-      <p role="alert" className="font-mono text-xs text-red">
+      <p role="alert" className="text-xs text-red">
         {error}
       </p>
     );
   }
 
   if (!reviews) {
-    return <p className="font-mono text-sm text-dim">Loading…</p>;
+    return <SkeletonRows label="Loading…" rows={3} />;
   }
 
   if (reviews.length === 0) {
@@ -255,11 +256,11 @@ export function TabReviews({ agentId }: Props) {
               type="button"
               aria-pressed={activeFilter === f.id}
               onClick={() => setFilter(f.id)}
-              className={`rounded-md border px-3 py-1.5 font-mono text-[0.68rem] uppercase tracking-wider transition ${
-                activeFilter === f.id
-                  ? "border-accent/50 bg-accent/10 text-accent"
-                  : "border-line text-muted hover:text-fg"
-              }`}
+              className={`rounded-md border px-3 py-1.5 text-xs transition ${
+ activeFilter === f.id
+ ?"border-accent/50 bg-accent/10 text-accent"
+ :"border-line text-muted hover:text-fg"
+}`}
             >
               {f.label}
             </button>

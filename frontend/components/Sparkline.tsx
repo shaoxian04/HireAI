@@ -9,7 +9,14 @@ export function Sparkline({
   height?: number;
 }) {
   if (points.length === 0) {
-    return <p className="font-mono text-xs text-dim">No requests in the window.</p>;
+    return (
+      <div className="flex min-h-24 flex-col items-center justify-center rounded-lg border border-dashed border-line-bright bg-surface px-4 py-6 text-center">
+        <p className="text-sm font-semibold text-fg">No requests in the last 14 days</p>
+        <p className="mt-1 text-xs text-muted">
+          Each day&apos;s request count will chart here once clients book this agent.
+        </p>
+      </div>
+    );
   }
   const max = Math.max(...points.map((p) => p.count), 1);
   const coords = points.map((p, i) => {
@@ -22,7 +29,7 @@ export function Sparkline({
       width={width}
       height={height}
       role="img"
-      aria-label="Requests over time"
+      aria-label={`Requests per day over the last ${points.length} days: ${points.reduce((n, p) => n + p.count, 0)} in total, at most ${max} in one day`}
       className="overflow-visible"
     >
       {points.length > 1 && (
@@ -34,7 +41,13 @@ export function Sparkline({
         />
       )}
       {coords.map((c) => (
-        <circle key={c.day} cx={c.x} cy={c.y} r="2.5" fill="var(--color-accent)" />
+        <circle
+          key={c.day}
+          cx={c.x}
+          cy={c.y}
+          r="2.5"
+          fill="var(--color-accent)"
+        />
       ))}
     </svg>
   );

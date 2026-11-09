@@ -14,6 +14,7 @@ import { TabPricing } from "@/components/manage/TabPricing";
 import { TabStats } from "@/components/manage/TabStats";
 import { TabReviews } from "@/components/manage/TabReviews";
 import { TabReputation } from "@/components/manage/TabReputation";
+import { SkeletonRows, ConfirmDialog } from "@/components/ui";
 
 type Tab = "storefront" | "pricing" | "stats" | "reputation" | "reviews";
 
@@ -38,6 +39,7 @@ function ManageAgentPage() {
   const [reputationLoaded, setReputationLoaded] = useState(false);
   const [reviewsLoaded, setReviewsLoaded] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
+  const [confirming, setConfirming] = useState<"suspend" | "deactivate" | null>(null);
 
   async function transition(verb: "suspend" | "reactivate" | "deactivate") {
     setTransitioning(true);
@@ -45,6 +47,7 @@ function ManageAgentPage() {
     try {
       const updated = await api<AgentDTO>(`/agents/${id}/${verb}`, { method: "POST" });
       setAgent(updated);
+      setConfirming(null);
     } catch (e) {
       setLoadError(e instanceof ApiError ? e.message : "Action failed");
     } finally {
@@ -74,32 +77,32 @@ function ManageAgentPage() {
 
   if (loadError) {
     return (
-      <p role="alert" className="font-mono text-xs text-red">
+      <p role="alert" className="text-xs text-red">
         {loadError}
       </p>
     );
   }
 
   if (!agent || !profile) {
-    return <p className="font-mono text-sm text-dim">Loading…</p>;
+    return <SkeletonRows label="Loading…" rows={3} />;
   }
 
   return (
-    <div className="space-y-8">
+    <div className="mx-auto max-w-4xl space-y-8">
       {/* Header */}
       <header>
         <Link
           href="/builder"
-          className="font-mono text-xs text-dim transition hover:text-accent"
+          className="text-sm font-medium text-muted transition hover:text-accent"
         >
-          ← my agents
+          ← My agents
         </Link>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-extrabold tracking-tight">{agent.name}</h1>
-          <Badge status={agent.status}>{agent.status}</Badge>
+          <h1 className="display text-[2.6rem]">{agent.name}</h1>
+          <Badge status={agent.status} />
           <div className="ml-auto flex gap-2">
             {agent.status === "ACTIVE" && (
-              <Button variant="secondary" disabled={transitioning} onClick={() => transition("suspend")}>
+              <Button variant="secondary" disabled={transitioning} onClick={() => setConfirming("suspend")}>
                 Suspend
               </Button>
             )}
@@ -109,14 +112,14 @@ function ManageAgentPage() {
               </Button>
             )}
             {(agent.status === "ACTIVE" || agent.status === "SUSPENDED") && (
-              <Button variant="secondary" disabled={transitioning} onClick={() => transition("deactivate")}>
+              <Button variant="danger" disabled={transitioning} onClick={() => setConfirming("deactivate")}>
                 Deactivate
               </Button>
             )}
           </div>
         </div>
-        <p className="mt-1 font-mono text-[0.65rem] text-dim">
-          public page ▸{" "}
+        <p className="mt-1 font-mono text-xs text-dim">
+          public page{" "}
           <Link
             href={`/client/agents/${id}`}
             className="transition hover:text-accent"
@@ -129,18 +132,32 @@ function ManageAgentPage() {
       {/* Tab bar */}
       {/* Five tabs do not fit a phone; scroll the strip rather than the whole page sideways. */}
       <div
-        className="flex gap-1 overflow-x-auto border-b border-line"
+        role="tablist"
         aria-label="Agent management sections"
+        className="flex gap-1 overflow-x-auto border-b border-line"
+        onKeyDown={(e) => {
+          // Arrow keys move between tabs (and select), the standard tablist pattern.
+          if (e.key !== "ArrowRight" && e.key !== "ArrowLeft" && e.key !== "Home" && e.key !== "End") return;
+          e.preventDefault();
+          const i = TABS.findIndex((t) => t.id === activeTab);
+          const next =
+            e.key === "Home" ? 0 : e.key === "End" ? TABS.length - 1 : (i + (e.key === "ArrowRight" ? 1 : -1) + TABS.length) % TABS.length;
+          handleTabChange(TABS[next].id);
+          document.getElementById(`tab-${TABS[next].id}`)?.focus();
+        }}
       >
         {TABS.map((t) => (
           <button
             key={t.id}
-            aria-pressed={activeTab === t.id}
+            id={`tab-${t.id}`}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === t.id}
+            aria-controls="agent-tabpanel"
+            tabIndex={activeTab === t.id ? 0 : -1}
             onClick={() => handleTabChange(t.id)}
-            className={`shrink-0 px-4 pb-2 font-mono text-xs uppercase tracking-wider transition ${
-              activeTab === t.id
-                ? "border-b-2 border-accent text-accent"
-                : "text-muted hover:text-fg"
+            className={`shrink-0 px-4 pb-2 text-sm font-medium transition ${
+              activeTab === t.id ? "border-b-2 border-accent text-accent" : "text-muted hover:text-fg"
             }`}
           >
             {t.label}
@@ -148,8 +165,32 @@ function ManageAgentPage() {
         ))}
       </div>
 
+      <ConfirmDialog
+        open={confirming === "suspend"}
+        title={`Suspend ${agent.name}?`}
+        confirmLabel="Suspend agent"
+        busy={transitioning}
+        onConfirm={() => transition("suspend")}
+        onCancel={() => setConfirming(null)}
+      >
+        It stops receiving new work straight away. Tasks already running finish normally. You can
+        reactivate it at any time.
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirming === "deactivate"}
+        title={`Deactivate ${agent.name}?`}
+        confirmLabel="Deactivate agent"
+        danger
+        busy={transitioning}
+        onConfirm={() => transition("deactivate")}
+        onCancel={() => setConfirming(null)}
+      >
+        It comes off the marketplace for good and can&apos;t be reactivated. Its reviews and
+        earnings history stay on record.
+      </ConfirmDialog>
+
       {/* Tab panels */}
-      <div>
+      <div id="agent-tabpanel" role="tabpanel" aria-labelledby={`tab-${activeTab}`}>
         {activeTab === "storefront" && (
           <TabStorefront
             agentId={id}
