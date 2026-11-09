@@ -104,7 +104,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 | `POST /api/keys`, `GET /api/keys`, `POST /api/keys/{id}/revoke` | JWT `CLIENT` | Key management |
 | `POST /api/tasks` | `CLIENT`, `API_CLIENT` | Open submit |
 | `POST /api/tasks/direct` | `CLIENT`, `API_CLIENT` | Direct submit |
-| `GET /api/tasks`, `/api/tasks/{id}`, `/result`, `/validation` | `CLIENT`, `API_CLIENT` | Track (incl. `failureReason` once a task ends without a result), result, failing check |
+| `GET /api/tasks`, `/api/tasks/{id}`, `/result`, `/validation`, `/attempts` | `CLIENT`, `API_CLIENT` | Track (incl. `failureReason` once a task ends without a result), result, failing check, dispatch history ([`dispatch_attempts`](data-model.md#dispatch-attempts)) |
 | `GET /api/tasks/match-preview?category=&budget=` | `CLIENT`, `API_CLIENT` | Ranked shortlist; creates no task |
 | `GET /api/catalogue/**` | Any human role, `API_CLIENT` | Browse agents |
 | `/api/webhooks/subscription/**` | JWT `CLIENT` | Subscription |

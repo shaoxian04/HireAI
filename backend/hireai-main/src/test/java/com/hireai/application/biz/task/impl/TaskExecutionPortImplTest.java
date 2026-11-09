@@ -19,6 +19,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -37,10 +42,12 @@ class TaskExecutionPortImplTest {
     @Mock SettlementWriteAppService settlementWriteAppService;
     @Mock ReputationWriteAppService reputationWriteAppService;
     @Mock WebhookOutboxAppService webhookOutboxAppService;
+    @Mock DispatchAttemptRepository dispatchAttemptRepository;
 
     private TaskExecutionPortImpl port() {
         return new TaskExecutionPortImpl(taskRepository, settlementWriteAppService,
-                reputationWriteAppService, webhookOutboxAppService);
+                reputationWriteAppService, webhookOutboxAppService, dispatchAttemptRepository,
+                Clock.fixed(Instant.parse("2026-11-10T00:00:00Z"), ZoneOffset.UTC));
     }
 
     private TaskModel queuedTask() {
@@ -189,8 +196,9 @@ class TaskExecutionPortImplTest {
         TaskExecutionPortImpl port = port();
         port.markFailed(taskId);
 
-        // verify: no save, no settlement, reputation or webhook
+        // verify: no save, no settlement, reputation, webhook or second UNREACHABLE attempt
         verify(taskRepository, never()).save(any());
-        verifyNoInteractions(settlementWriteAppService, reputationWriteAppService, webhookOutboxAppService);
+        verifyNoInteractions(settlementWriteAppService, reputationWriteAppService, webhookOutboxAppService,
+                dispatchAttemptRepository);
     }
 }

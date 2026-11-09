@@ -17,6 +17,7 @@ import com.hireai.controller.biz.task.converter.TaskModel2DTOConverter;
 import com.hireai.controller.biz.task.converter.TaskResult2DTOConverter;
 import com.hireai.controller.biz.task.dto.CreateReviewRequest;
 import com.hireai.controller.biz.task.dto.DirectBookRequest;
+import com.hireai.controller.biz.task.dto.DispatchAttemptDTO;
 import com.hireai.controller.biz.task.dto.MatchPreviewDTO;
 import com.hireai.controller.biz.task.dto.RejectTaskRequest;
 import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
@@ -151,6 +152,15 @@ public class TaskController extends BaseController {
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
                         "No validation report for task: " + id));
         return ok(ValidationReport2DTOConverter.toDTO(report));
+    }
+
+    /** The task's dispatch history (#75), owner-only: another client gets 404, not the rows. */
+    @GetMapping("/{id}/attempts")
+    public WebResult<List<DispatchAttemptDTO>> getAttempts(@PathVariable("id") UUID id) {
+        UUID clientId = currentUser.currentUserId();
+        return ok(readAppService.listDispatchAttempts(id, clientId).stream()
+                .map(DispatchAttemptDTO::from)
+                .toList());
     }
 
     @GetMapping

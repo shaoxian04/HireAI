@@ -81,7 +81,7 @@ public class SecurityConfig {
                                 "/api/tasks", "/api/tasks/direct").hasAnyRole("CLIENT", "API_CLIENT")
                         .requestMatchers(org.springframework.http.HttpMethod.GET,
                                 "/api/tasks", "/api/tasks/*", "/api/tasks/*/result",
-                                "/api/tasks/*/validation").hasAnyRole("CLIENT", "API_CLIENT")
+                                "/api/tasks/*/validation", "/api/tasks/*/attempts").hasAnyRole("CLIENT", "API_CLIENT")
                         // Accept/reject are human-only: a client must review and decide, not a script.
                         // Equivalent to letting them fall through to anyRequest() below; kept explicit
                         // to document intent. An API_CLIENT key is denied (401 at the full app).

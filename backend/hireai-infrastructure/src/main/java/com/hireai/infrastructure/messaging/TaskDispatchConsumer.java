@@ -2,6 +2,7 @@ package com.hireai.infrastructure.messaging;
 
 import com.hireai.application.port.security.DispatchTokenService;
 import com.hireai.application.port.task.TaskExecutionPort;
+import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
 import com.hireai.domain.biz.task.routing.info.DispatchMessage;
 import com.hireai.infrastructure.client.AgentDispatchClient;
 import com.hireai.infrastructure.client.AgentSendFailedException;
@@ -33,7 +34,8 @@ import java.util.Optional;
  * {@link DispatchQueues#ATTEMPT_HEADER}, and acknowledged. When the TTL expires the message
  * returns to the dispatch queue. A failure on the last attempt rejects the message, so it
  * dead-letters to {@link DispatchQueues#DLQ}, where the DLQ listener fails the task (refund,
- * client webhook, {@code EXECUTION_FAILED}). A failure after a successful send is logged and
+ * client webhook, {@code EXECUTION_FAILED}, an {@code UNREACHABLE} dispatch attempt). A successful
+ * send records an {@code ACCEPTED} dispatch attempt. A failure after a successful send is logged and
  * acknowledged, so a WorkOrder that reached the Agent is never sent again. The listener holds no
  * transaction of its own: each port call is its own short transaction.
  */
@@ -90,7 +92,16 @@ public class TaskDispatchConsumer {
                     + "the message (the task stays QUEUED until its execution timeout)", message.taskId(), e);
             return;
         }
-        // 4. Mark EXECUTING. The WorkOrder has already reached the Agent, so a failure here is
+        // 4. Record the ACCEPTED attempt in the task's dispatch history (#75). Like step 5, a
+        //    failure here is logged and acknowledged: the WorkOrder has already been delivered.
+        try {
+            taskExecutionPort.recordDispatchAttempt(message.taskId(), message.agentVersionId(),
+                    DispatchOutcome.ACCEPTED);
+        } catch (RuntimeException e) {
+            log.error("Task {} WorkOrder was delivered but recording the ACCEPTED dispatch attempt "
+                    + "failed", message.taskId(), e);
+        }
+        // 5. Mark EXECUTING. The WorkOrder has already reached the Agent, so a failure here is
         //    logged and the message acknowledged, never redelivered (a redelivery would send the
         //    WorkOrder twice). The task may stay QUEUED, which is safe: the callback accepts a
         //    result from QUEUED, and the timeout sweeper covers an Agent that never answers.

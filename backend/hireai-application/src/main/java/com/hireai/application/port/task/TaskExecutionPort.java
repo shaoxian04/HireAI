@@ -1,5 +1,7 @@
 package com.hireai.application.port.task;
 
+import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
+
 import java.util.UUID;
 
 /**
@@ -20,6 +22,13 @@ public interface TaskExecutionPort {
      */
     boolean isAwaitingDispatch(UUID taskId, UUID agentVersionId);
 
+    /**
+     * Appends one row to the task's dispatch history (#75) under the task row lock, numbered after
+     * the attempts already recorded. The consumer records {@code ACCEPTED} after a successful send;
+     * {@link #markFailed} records {@code UNREACHABLE} itself.
+     */
+    void recordDispatchAttempt(UUID taskId, UUID agentVersionId, DispatchOutcome outcome);
+
     /** QUEUED → EXECUTING under a row lock; a no-op once the task has moved past QUEUED. */
     void markExecuting(UUID taskId);
 
@@ -27,8 +36,9 @@ public interface TaskExecutionPort {
 
     /**
      * The dispatch ran out of attempts (the DLQ listener): QUEUED/EXECUTING → FAILED under a row
-     * lock, with a refund, an {@code EXECUTION_FAILED} reputation event and a client
-     * {@code task.failed} webhook. A no-op once the task has already ended.
+     * lock, with a refund, an {@code EXECUTION_FAILED} reputation event, a client
+     * {@code task.failed} webhook and an {@code UNREACHABLE} dispatch attempt. A no-op once the
+     * task has already ended.
      */
     void markFailed(UUID taskId);
 }

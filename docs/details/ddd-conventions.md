@@ -44,7 +44,7 @@ Layer-local unit tests also live in `hireai-domain`, `hireai-application`, `hire
 
 **Grouping:** domain, application and repository code is grouped by subdomain: `identity`, `ledger`, `offering`, `task`, `reputation`, `adjudication`. `admin` is an extra read-side group in application and repository. Controllers are grouped by HTTP route, a different axis: `controller/biz/apikey` calls code under `identity`.
 
-**Nesting:** there is no single rule; follow the neighbours. `ledger` and `offering` nest each aggregate. `identity` keeps `UserModel` flat and nests `apikey` and `webhooksubscription` ([ADR 0002](../adr/0002-apikey-webhook-nest-under-identity-and-task.md)). `task` keeps `TaskModel` flat and nests `idempotency`, `webhookdelivery` and `routing`. `adjudication` and `reputation` are flat, with their two aggregates side by side.
+**Nesting:** there is no single rule; follow the neighbours. `ledger` and `offering` nest each aggregate. `identity` keeps `UserModel` flat and nests `apikey` and `webhooksubscription` ([ADR 0002](../adr/0002-apikey-webhook-nest-under-identity-and-task.md)). `task` keeps `TaskModel` flat and nests `idempotency`, `webhookdelivery`, `dispatchattempt` and `routing`. `adjudication` and `reputation` are flat, with their two aggregates side by side.
 
 ## Naming
 

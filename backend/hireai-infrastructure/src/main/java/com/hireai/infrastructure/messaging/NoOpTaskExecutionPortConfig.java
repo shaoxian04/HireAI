@@ -1,6 +1,7 @@
 package com.hireai.infrastructure.messaging;
 
 import com.hireai.application.port.task.TaskExecutionPort;
+import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
@@ -32,6 +33,11 @@ public class NoOpTaskExecutionPortConfig {
             @Override
             public boolean isAwaitingDispatch(UUID taskId, UUID agentVersionId) {
                 return true;
+            }
+
+            @Override
+            public void recordDispatchAttempt(UUID taskId, UUID agentVersionId, DispatchOutcome outcome) {
+                log.debug("No-op recordDispatchAttempt for task {}: {}", taskId, outcome);
             }
 
             @Override
