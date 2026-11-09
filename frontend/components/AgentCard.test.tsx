@@ -47,8 +47,8 @@ describe("AgentCard", () => {
 // ── CategoryBar ──────────────────────────────────────────────────────────────
 
 const cats: CategoryCountDTO[] = [
-  { category: "summarisation", agentCount: 5 },
-  { category: "coding", agentCount: 3 },
+  { category: "summarisation", label: "Summarisation", agentCount: 5 },
+  { category: "coding", label: "Coding", agentCount: 3 },
 ];
 
 describe("CategoryBar", () => {

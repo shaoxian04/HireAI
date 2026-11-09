@@ -118,7 +118,8 @@ public class TaskController extends BaseController {
         UUID taskId = submitOrchestrationAppService.submitDirect(
                 submitContext(clientId, idempotencyKey),
                 new DirectBookingInfo(clientId, request.title(), request.description(),
-                        Money.of(request.budget()), request.agentId()));
+                        Money.of(request.budget()), request.agentId(),
+                        request.category() == null || request.category().isBlank() ? null : request.category()));
         return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId)));
     }
 

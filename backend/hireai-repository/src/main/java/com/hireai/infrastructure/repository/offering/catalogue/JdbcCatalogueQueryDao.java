@@ -144,18 +144,20 @@ public class JdbcCatalogueQueryDao implements CatalogueQueryPort {
 
     @Override
     public List<CategoryCountRow> categoryCounts() {
+        // The list comes from the Flyway-owned categories table (#80); counts are joined on, so a
+        // bucket with no listed agent still appears with 0.
         String sql = """
-                SELECT cat AS category, COUNT(DISTINCT a.id) AS agent_count
-                FROM agents a
-                JOIN agent_profiles p ON p.agent_id = a.id
-                JOIN agent_versions v ON v.id = a.current_version_id
-                CROSS JOIN LATERAL unnest(v.capability_categories) AS cat
-                WHERE a.status = 'ACTIVE' AND p.is_listed
-                GROUP BY cat
-                ORDER BY agent_count DESC, cat ASC
+                SELECT c.slug AS category, c.label, COUNT(DISTINCT a.id) AS agent_count
+                FROM categories c
+                LEFT JOIN agent_versions v ON c.slug = ANY (v.capability_categories)
+                LEFT JOIN agents a ON a.current_version_id = v.id AND a.status = 'ACTIVE'
+                    AND EXISTS (SELECT 1 FROM agent_profiles p WHERE p.agent_id = a.id AND p.is_listed)
+                GROUP BY c.slug, c.label, c.sort_order
+                ORDER BY c.sort_order, c.slug
                 """;
         return jdbc.query(sql, Map.of(),
-                (rs, i) -> new CategoryCountRow(rs.getString("category"), rs.getInt("agent_count")));
+                (rs, i) -> new CategoryCountRow(rs.getString("category"), rs.getString("label"),
+                        rs.getInt("agent_count")));
     }
 
     @Override

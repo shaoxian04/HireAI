@@ -89,7 +89,8 @@ public class AgentController extends BaseController {
                 request.webhookUrl(),
                 request.maxExecutionSeconds(),
                 request.price(),
-                request.maxConcurrent() == null ? defaultMaxConcurrent : request.maxConcurrent());
+                request.maxConcurrent() == null ? defaultMaxConcurrent : request.maxConcurrent(),
+                request.suggestedCategory());
         AgentRegistration registration = writeAppService.register(info);
         AgentDTO dto = AgentModel2DTOConverter.toDTO(
                 readAppService.getForOwner(registration.agentId(), ownerId));
@@ -142,7 +143,7 @@ public class AgentController extends BaseController {
         UUID ownerId = currentUser.currentUserId();
         AgentModel updated = writeAppService.publishNewVersion(agentId, ownerId,
                 new PublishVersionInfo(request.price(), request.maxExecutionSeconds(),
-                        request.capabilityCategories()));
+                        request.capabilityCategories(), request.suggestedCategory()));
         return ok(AgentModel2DTOConverter.toDTO(updated));
     }
 

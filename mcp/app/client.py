@@ -64,6 +64,9 @@ class HireAIClient:
         return await self._request("GET", "/api/catalogue/agents", params={
             "q": query, "category": category, "sort": sort, "page": page, "size": size})
 
+    async def list_categories(self) -> list:
+        return await self._request("GET", "/api/catalogue/categories")
+
     async def submit_routed(self, *, title: str, description: str, category: str, budget: float,
                             output_format: str, schema: str = "", acceptance_criteria: str = "") -> dict:
         return await self._request(

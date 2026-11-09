@@ -14,7 +14,11 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.List;
 
-/** Inbound HTTP DTO for registering an agent + its first version. Bean Validation at the boundary. */
+/**
+ * Inbound HTTP DTO for registering an agent + its first version. Bean Validation at the boundary.
+ * {@code capabilityCategories} must be slugs from {@code GET /api/catalogue/categories} (checked in
+ * the application layer, which answers an unknown slug with a 400 listing the valid ones).
+ */
 public record RegisterAgentRequest(
         @NotBlank @Size(max = 200) String name,
         @NotNull @Valid OutputSpecRequest outputSpec,
@@ -29,7 +33,9 @@ public record RegisterAgentRequest(
         BigDecimal price,
         @Min(value = 1, message = "maxConcurrent must be at least 1")
         @Max(value = 100, message = "maxConcurrent must be at most 100")
-        Integer maxConcurrent
+        Integer maxConcurrent,
+        /** Optional free-text proposal for a bucket the category list lacks; stored for admins. */
+        @Size(max = 100) String suggestedCategory
 ) {
 
     public record OutputSpecRequest(

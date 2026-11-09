@@ -73,7 +73,7 @@ class SignedCallbackIntegrationTest extends WholeAppIntegrationTest {
     @Test
     void aWrongSecretOrAnotherAgentsSecretIsRejected() throws Exception {
         Dispatched d = dispatchToRegisteredAgent();
-        String otherAgentsSecret = registerAgent("x-" + UUID.randomUUID()).path("signingSecret").asText();
+        String otherAgentsSecret = registerAgent(uniqueCategory()).path("signingSecret").asText();
 
         assertRejected(d, callBack(d.order(), completed(d), sign("agsec_" + "f".repeat(64), Instant.now(), completed(d))));
         assertRejected(d, callBack(d.order(), completed(d), sign(otherAgentsSecret, Instant.now(), completed(d))));
@@ -145,7 +145,7 @@ class SignedCallbackIntegrationTest extends WholeAppIntegrationTest {
     @Test
     void aSignedResultForOneTaskCannotBeReplayedOntoAnotherTaskOfTheSameAgent() throws Exception {
         FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted());
-        String category = "x-" + UUID.randomUUID();
+        String category = uniqueCategory();
         JsonNode registered = registerAgent(category);
         UUID agentId = UUID.fromString(registered.path("id").asText());
         String secret = registered.path("signingSecret").asText();
@@ -191,7 +191,7 @@ class SignedCallbackIntegrationTest extends WholeAppIntegrationTest {
     /** Registers + activates an Agent over the API, routes a task to it, waits for EXECUTING. */
     private Dispatched dispatchToRegisteredAgent() throws Exception {
         FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted()); // calls back manually
-        String category = "x-" + UUID.randomUUID();
+        String category = uniqueCategory();
         JsonNode registered = registerAgent(category);
         UUID agentId = UUID.fromString(registered.path("id").asText());
         // Registration only accepts public HTTPS URLs; point the version at the local fake Agent.

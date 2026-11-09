@@ -208,8 +208,8 @@ override block). Follow these rules on every surface:
   `components/ResultView.tsx` renders an agent's result for reading, with the raw payload behind a toggle;
   `Modal` is an accessible overlay dialog (focus-trap incl.
   `summary`/`select`/`textarea`, Esc-to-close, body scroll-lock). `components/CategoryCombobox.tsx` (strict
-  searchable category picker), `components/CategoryTagsInput.tsx` (a builder's categories as tags, with
-  existing categories suggested), `components/ContractTerms.tsx` (an output contract as a labelled list),
+  searchable category picker), `components/CategoryPicker.tsx` (a builder's categories as checkboxes from the
+  platform-owned list, plus the optional "suggest a category" field), `components/ContractTerms.tsx` (an output contract as a labelled list),
   `components/InspectionReport.tsx` (the validation report above a delivered result: each automated check
   ticked or crossed, then the acceptance criteria left for the client to judge),
   `components/StartLink.tsx` (landing CTAs that route by sign-in state and role),

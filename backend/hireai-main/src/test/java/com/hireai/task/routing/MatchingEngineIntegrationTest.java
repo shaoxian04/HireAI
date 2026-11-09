@@ -138,6 +138,12 @@ class MatchingEngineIntegrationTest {
 
     private record AgentSeed(UUID agentId, UUID versionId) {}
 
+    /** Registration accepts only listed slugs (#80); adds this test's own category to the list. */
+    private void allowCategory(String slug) {
+        jdbc.update("INSERT INTO categories (slug, label, sort_order) VALUES (?, ?, 5000) ON CONFLICT DO NOTHING",
+                slug, slug);
+    }
+
     /**
      * One ACTIVE agent, registered + activated through the real app service (so its reputation
      * defaults to {@code AgentModel.DEFAULT_REPUTATION} = 50.00 rather than a hand-set value),
@@ -145,6 +151,7 @@ class MatchingEngineIntegrationTest {
      * https URL — it is never actually reachable, which is fine (see class javadoc).
      */
     private AgentSeed registerActiveAgent(String category, String price, int maxConcurrent, String webhookUrl) {
+        allowCategory(category);
         UUID owner = newBuilder();
         UUID agentId = agentWriteAppService.register(new AgentRegisterInfo(owner, "Matching Agent",
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
@@ -284,6 +291,7 @@ class MatchingEngineIntegrationTest {
     void registeredMaxConcurrentFlowsThroughToTheCandidateRead() {
         UUID owner = newBuilder();
         String category = "capacity-cat";
+        allowCategory(category);
         UUID agentId = agentWriteAppService.register(new AgentRegisterInfo(owner, "Capacity Agent",
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
                 List.of(category), "https://unused.example/hook-capacity", 60, new BigDecimal("10.00"), 8)).agentId();

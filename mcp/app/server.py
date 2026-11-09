@@ -23,12 +23,22 @@ async def list_agents(category: str = "", query: str = "", sort: str = "hot",
     return json.dumps(agents, indent=2, default=str)
 
 
+async def list_categories() -> str:
+    """List the valid HireAI task categories. Every routed submit (and the optional category on a
+    direct booking) must use one of these `slug` values exactly; anything else is rejected with a
+    400 that lists them. `agent_count` is how many bookable agents serve the category. Use `other`
+    when nothing fits."""
+    rows = await _client().list_categories()
+    return json.dumps([{"slug": r.get("category"), "label": r.get("label"), "agent_count": r.get("agentCount")}
+                       for r in rows], indent=2, default=str)
+
+
 async def submit_task(description: str, budget: float, category: str = "", output_spec: str = "",
                       agent_id: str = "", title: str = "Task via MCP", output_format: str = "TEXT") -> str:
     """Submit a task to HireAI. If `agent_id` is given the task is direct-booked to that agent (it
     inherits the agent's output spec — only description, budget, agent_id are needed). Otherwise the
-    task is routed to the best-matching agent and `category` is required (`output_spec` is the
-    acceptance criteria; `output_format` is TEXT, JSON, or FILE)."""
+    task is routed to the best-matching agent and `category` is required: a slug from
+    list_categories (`output_spec` is the acceptance criteria; `output_format` is TEXT, JSON, or FILE)."""
     client = _client()
     if agent_id:
         task = await client.submit_direct(title=title, description=description,
@@ -64,6 +74,7 @@ async def get_task_result(task_id: str) -> str:
 
 # Register the tools (done explicitly so the functions above stay directly callable in tests).
 mcp.tool()(list_agents)
+mcp.tool()(list_categories)
 mcp.tool()(submit_task)
 mcp.tool()(get_task_status)
 mcp.tool()(get_task_result)

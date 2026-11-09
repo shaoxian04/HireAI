@@ -25,6 +25,7 @@ import com.hireai.domain.biz.offering.agent.service.impl.AgentSuspendDomainServi
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.utility.exception.DomainException;
+import com.hireai.support.category.TestCategories;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationEventPublisher;
@@ -162,11 +163,14 @@ class AgentWriteAppServiceImplTest {
     private final FakeAgentRepository repository = new FakeAgentRepository();
     private final FakeStorefrontRepository profileRepository = new FakeStorefrontRepository();
     private final RecordingPublisher publisher = new RecordingPublisher();
+    private final TestCategories.InMemorySuggestions suggestions = new TestCategories.InMemorySuggestions();
+
     private final AgentWriteAppService service = new AgentWriteAppServiceImpl(
             repository, profileRepository, new AgentRegisterDomainServiceImpl(),
             new AgentActivateDomainServiceImpl(), new AgentSuspendDomainServiceImpl(),
             new AgentReactivateDomainServiceImpl(), new AgentDeactivateDomainServiceImpl(), publisher,
-            new AgentSigningSecretGenerator(), urlValidator);
+            new AgentSigningSecretGenerator(), urlValidator,
+            TestCategories.listOf("summarisation", "translation", "other"), suggestions);
 
     private AgentRegisterInfo info(UUID ownerId) {
         return new AgentRegisterInfo(ownerId, "Summariser Bot",
@@ -184,6 +188,47 @@ class AgentWriteAppServiceImplTest {
         assertThat(saved.ownerId()).isEqualTo(ownerId);
         assertThat(publisher.events).anyMatch(e -> e instanceof AgentRegisteredDomainEvent);
         assertThat(profileRepository.store).containsKey(agentId);
+    }
+
+    @Test
+    void registerRejectsAnUnknownCategoryAndSavesNothing() {
+        AgentRegisterInfo unknown = new AgentRegisterInfo(UUID.randomUUID(), "Poet",
+                new OutputSpec(OutputFormat.TEXT, null, "ok"), List.of("summarisation", "poetry"),
+                "https://agent.example.com/hook", 120, new BigDecimal("5.00"), 5);
+
+        assertThatThrownBy(() -> service.register(unknown))
+                .isInstanceOf(DomainException.class)
+                .hasMessage("Unknown category 'poetry'. Valid categories: summarisation, translation, other");
+        assertThat(repository.store).isEmpty();
+    }
+
+    @Test
+    void registerAndPublishStoreTheSuggestedCategoryForTheirVersion() {
+        UUID ownerId = UUID.randomUUID();
+        AgentRegisterInfo withSuggestion = new AgentRegisterInfo(ownerId, "Niche",
+                new OutputSpec(OutputFormat.TEXT, null, "ok"), List.of("other"),
+                "https://agent.example.com/hook", 120, new BigDecimal("5.00"), 5, " Legal review ");
+        UUID agentId = service.register(withSuggestion).agentId();
+        UUID firstVersion = repository.findById(agentId).orElseThrow().currentVersion().id();
+
+        AgentModel published = service.publishNewVersion(agentId, ownerId,
+                new PublishVersionInfo(new BigDecimal("6.00"), 120, List.of("other"), "Contract redlining"));
+
+        assertThat(suggestions.recorded).extracting(s -> s.agentVersionId() + "=" + s.text())
+                .containsExactly(firstVersion + "=Legal review",
+                        published.currentVersion().id() + "=Contract redlining");
+        assertThat(suggestions.recorded).allMatch(s -> s.ownerId().equals(ownerId) && s.agentId().equals(agentId));
+    }
+
+    @Test
+    void publishRejectsAnUnknownCategory() {
+        UUID ownerId = UUID.randomUUID();
+        UUID agentId = service.register(info(ownerId)).agentId();
+
+        assertThatThrownBy(() -> service.publishNewVersion(agentId, ownerId,
+                new PublishVersionInfo(new BigDecimal("6.00"), 120, List.of("summarization"))))
+                .isInstanceOf(DomainException.class)
+                .hasMessageStartingWith("Unknown category 'summarization'.");
     }
 
     @Test

@@ -17,6 +17,8 @@ public record DirectBookRequest(
         @DecimalMin(value = "0.01", message = "budget must be positive")
         @Digits(integer = 12, fraction = 2, message = "budget must have at most 2 decimal places")
         BigDecimal budget,
-        @NotNull UUID agentId
+        @NotNull UUID agentId,
+        /** Optional: a category slug the agent serves (default: the agent's first category). */
+        @Size(max = 100) String category
 ) {
 }

@@ -23,7 +23,7 @@ The web never calls `POST /api/tasks`, so every web task is a pinned direct book
 `rank` plus the 3 cheapest agents above budget (near-misses). The typed budget is only a ceiling for
 ranking. The client pays the chosen agent's price, even for a near-miss above that budget.
 
-**Eligibility differs by path.** Both need an `ACTIVE` agent whose current version covers the category.
+**Eligibility differs by path.** Both need an `ACTIVE` agent whose current version covers the category (a slug from the [category list](data-model.md#categories); an unknown one is rejected with a 400 before matching).
 `rank` also needs `price <= budget`. Match-preview additionally requires a listed storefront (`is_listed`);
 `route()` does not, so an unlisted agent can win a routed task.
 

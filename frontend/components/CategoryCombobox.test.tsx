@@ -9,8 +9,8 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 const CATS = [
-  { category: "summarisation", agentCount: 4 },
-  { category: "translation", agentCount: 2 },
+  { category: "summarisation", label: "Summarisation", agentCount: 4 },
+  { category: "translation", label: "Translation", agentCount: 2 },
 ];
 
 function useCats() {

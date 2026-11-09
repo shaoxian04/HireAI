@@ -19,6 +19,9 @@ import com.hireai.domain.biz.offering.agent.service.AgentReactivateDomainService
 import com.hireai.domain.biz.offering.agent.service.AgentSigningSecretGenerator;
 import com.hireai.domain.biz.offering.agent.service.AgentRegisterDomainService;
 import com.hireai.domain.biz.offering.agent.service.AgentSuspendDomainService;
+import com.hireai.domain.biz.offering.category.model.CategorySuggestion;
+import com.hireai.domain.biz.offering.category.repository.CategoryRepository;
+import com.hireai.domain.biz.offering.category.repository.CategorySuggestionRepository;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -45,17 +49,24 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
     private final ApplicationEventPublisher eventPublisher;
     private final AgentSigningSecretGenerator signingSecretGenerator;
     private final WebhookUrlValidatorPort urlValidator;
+    private final CategoryRepository categoryRepository;
+    private final CategorySuggestionRepository categorySuggestionRepository;
 
     @Override
     public AgentRegistration register(AgentRegisterInfo registerInfo) {
+        categoryRepository.load().requireAllKnown(registerInfo.capabilityCategories());
         AgentModel agent = registerDomainService.register(registerInfo);
         assertWebhookDeliverable(agent);
+        Instant now = Instant.now();
+        Optional<CategorySuggestion> suggestion = CategorySuggestion.of(registerInfo.suggestedCategory(),
+                agent.id(), agent.currentVersion().id(), agent.ownerId(), now);
         UUID agentId = agentRepository.save(agent).id();
+        suggestion.ifPresent(categorySuggestionRepository::record);
         String signingSecret = signingSecretGenerator.generate();
         agentRepository.updateSigningSecret(agentId, signingSecret);
         agentProfileRepository.save(StorefrontModel.createDefault(agentId));
         eventPublisher.publishEvent(new AgentRegisteredDomainEvent(
-                agentId, agent.ownerId(), agent.currentVersion().id(), Instant.now()));
+                agentId, agent.ownerId(), agent.currentVersion().id(), now));
         log.info("Agent {} registered by owner {} (PENDING_VERIFICATION)", agentId, agent.ownerId());
         return new AgentRegistration(agentId, signingSecret);
     }
@@ -86,10 +97,14 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
     @Override
     public AgentModel publishNewVersion(UUID agentId, UUID ownerId, PublishVersionInfo info) {
         AgentModel agent = loadOwned(agentId, ownerId);
+        categoryRepository.load().requireAllKnown(info.capabilityCategories());
         assertWebhookDeliverable(agent);
         AgentModel updated = agent.publishNewVersion(Pricing.of(info.price()),
                 info.maxExecutionSeconds(), info.capabilityCategories());
+        Optional<CategorySuggestion> suggestion = CategorySuggestion.of(info.suggestedCategory(),
+                agentId, updated.currentVersion().id(), ownerId, Instant.now());
         agentRepository.publishNewVersion(updated);
+        suggestion.ifPresent(categorySuggestionRepository::record);
         log.info("Agent {} published version {} by owner {} (price={}, maxExec={})",
                 agentId, updated.currentVersion().versionNumber(), ownerId,
                 info.price(), info.maxExecutionSeconds());

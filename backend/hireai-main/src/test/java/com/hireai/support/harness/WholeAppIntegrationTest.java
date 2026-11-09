@@ -12,6 +12,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -107,6 +108,17 @@ public abstract class WholeAppIntegrationTest {
         if (updated == 0) {
             throw new IllegalStateException("No seeded Agent has webhook " + agent.webhookUrl());
         }
+    }
+
+    /**
+     * A fresh category slug ({@code x-<uuid>}) added to this context's category list, for tests
+     * where matching must see only their own Agents. Submit, booking, preview and registration
+     * accept only listed slugs (#80); production changes the list only by migration.
+     */
+    protected String uniqueCategory() {
+        String slug = "x-" + UUID.randomUUID();
+        jdbc.update("INSERT INTO categories (slug, label, sort_order) VALUES (?, ?, 5000)", slug, "Test " + slug);
+        return slug;
     }
 
     /** Absolute URL of a path on the app under test, e.g. {@code platformUrl("/api/tasks")}. */

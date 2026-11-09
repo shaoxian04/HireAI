@@ -202,6 +202,9 @@ class CatalogueQueryDaoIntegrationTest {
         List<CategoryCountRow> counts = catalogueQueryPort.categoryCounts();
         assertThat(counts).anyMatch(c -> c.category().equals("summarisation") && c.agentCount() >= 1);
         assertThat(counts).anyMatch(c -> c.category().equals("translation") && c.agentCount() >= 1);
+        // The list is the categories table, so a bucket nobody serves is still there (#80).
+        assertThat(counts).anyMatch(c -> c.category().equals("other") && c.label().equals("Other"));
+        assertThat(counts.get(0).category()).isEqualTo("document-extraction");
     }
 
     // -----------------------------------------------------------------------

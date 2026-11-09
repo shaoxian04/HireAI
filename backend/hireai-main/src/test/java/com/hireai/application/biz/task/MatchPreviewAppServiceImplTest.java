@@ -17,18 +17,30 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import com.hireai.support.category.TestCategories;
+
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class MatchPreviewAppServiceImplTest {
 
+    @Test
+    void anUnknownCategoryIsRejectedBeforeAnyCandidateIsRead() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        service().preview("poetry", Money.of("20.00"), Set.of()))
+                .isInstanceOf(com.hireai.utility.exception.DomainException.class)
+                .hasMessageContaining("Valid categories: summarisation, other");
+        org.mockito.Mockito.verifyNoInteractions(queryPort);
+    }
+
+
     private final MatchPreviewQueryPort queryPort = mock(MatchPreviewQueryPort.class);
 
     private MatchPreviewAppService service() {
         var matcher = new RoutingMatchDomainServiceImpl(
                 new MatchingPolicy(0.40, 0.20, 0.20, 0.20, 0.0), new Random(1)); // epsilon 0 -> deterministic
-        return new MatchPreviewAppServiceImpl(queryPort, matcher);
+        return new MatchPreviewAppServiceImpl(queryPort, matcher, TestCategories.listOf("summarisation", "other"));
     }
 
     private ShortlistCandidateRow row(String name, String price, String rep, int maxConc, long inFlight, long samples) {

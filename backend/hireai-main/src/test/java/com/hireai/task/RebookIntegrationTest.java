@@ -53,7 +53,7 @@ class RebookIntegrationTest extends WholeAppIntegrationTest {
 
     @Test
     void rebookingAFailedTaskExcludesTheFailedAgentAndLeavesTheFailedTaskUntouched() throws Exception {
-        String category = "x-" + UUID.randomUUID();
+        String category = uniqueCategory();
         FakeAgent busy = fakeAgent().replyWith(FakeAgentReply.status(429));
         FakeAgent healthy = fakeAgent();
         SeededAgent failedAgent = seedListedAgent(category, busy.webhookUrl(), "10.00", "ACTIVE");
@@ -113,8 +113,8 @@ class RebookIntegrationTest extends WholeAppIntegrationTest {
     @Test
     void aRoutedTaskThatNeverFoundAnAgentNamesNone() throws Exception {
         JsonNode task = post("/api/tasks", """
-                {"title":"Digest","description":"Summarise","category":"x-%s","budget":10.00,
-                 "outputSpec":{"format":"JSON","acceptanceCriteria":"ok"}}""".formatted(UUID.randomUUID()));
+                {"title":"Digest","description":"Summarise","category":"%s","budget":10.00,
+                 "outputSpec":{"format":"JSON","acceptanceCriteria":"ok"}}""".formatted(uniqueCategory()));
 
         assertThat(get("/api/tasks/" + task.path("id").asText()).has("agentId")).isFalse();
     }

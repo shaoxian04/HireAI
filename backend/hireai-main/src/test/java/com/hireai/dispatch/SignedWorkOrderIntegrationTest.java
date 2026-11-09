@@ -54,7 +54,7 @@ class SignedWorkOrderIntegrationTest extends WholeAppIntegrationTest {
     @Test
     void theWorkOrderVerifiesWithTheSecretReturnedAtRegistration() throws Exception {
         FakeAgent agent = fakeAgent();
-        String category = "x-" + UUID.randomUUID();
+        String category = uniqueCategory();
         JsonNode registered = registerAndActivate(category, agent);
         String secret = registered.path("signingSecret").asText();
         assertThat(secret).startsWith("agsec_");
@@ -71,7 +71,7 @@ class SignedWorkOrderIntegrationTest extends WholeAppIntegrationTest {
     @Test
     void afterRotationWorkOrdersVerifyWithTheNewSecretAndNotTheOldOne() throws Exception {
         FakeAgent agent = fakeAgent();
-        String category = "x-" + UUID.randomUUID();
+        String category = uniqueCategory();
         JsonNode registered = registerAndActivate(category, agent);
         String oldSecret = registered.path("signingSecret").asText();
         String agentId = registered.path("id").asText();
@@ -90,7 +90,7 @@ class SignedWorkOrderIntegrationTest extends WholeAppIntegrationTest {
     @Test
     void anAgentWithoutASecretReceivesAnUnsignedWorkOrder() throws Exception {
         FakeAgent agent = fakeAgent();
-        String category = "x-" + UUID.randomUUID();
+        String category = uniqueCategory();
         seedAgentWithoutSecret(category, agent.webhookUrl());
 
         submitRouted(category);
