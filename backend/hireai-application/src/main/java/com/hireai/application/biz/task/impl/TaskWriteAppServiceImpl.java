@@ -106,11 +106,29 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
             log.info("Task {} is {} (not AWAITING_CAPACITY); skipping cancel", taskId, task.status());
             return;
         }
+        cancelWithRefund(task);
+        log.info("Task {} CANCELLED after re-match exhaustion; escrow fully refunded", taskId);
+    }
+
+    @Override
+    public void cancelSubmittedWithRefund(UUID taskId) {
+        // Locked like the timeout path (task row -> wallet row), so a concurrent routing write
+        // can't move the task to QUEUED between this status check and the refund.
+        TaskModel task = taskRepository.findByIdForUpdate(taskId)
+                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
+        if (task.status() != TaskStatus.SUBMITTED) {
+            log.info("Task {} is {} (not SUBMITTED); skipping cancel", taskId, task.status());
+            return;
+        }
+        cancelWithRefund(task);
+        log.info("Task {} CANCELLED after routing failed on every SUBMITTED sweep; escrow fully refunded", taskId);
+    }
+
+    private void cancelWithRefund(TaskModel task) {
         TaskModel cancelled = task.markCancelled();
         taskRepository.save(cancelled);
-        settlementWriteAppService.settleRejected(taskId, cancelled.clientId(), cancelled.budget());
+        settlementWriteAppService.settleRejected(task.id(), cancelled.clientId(), cancelled.budget());
         webhookOutboxAppService.enqueueFailed(cancelled, "CANCELLED");
-        log.info("Task {} CANCELLED after re-match exhaustion; escrow fully refunded", taskId);
     }
 
     private TaskModel load(UUID taskId) {

@@ -24,7 +24,7 @@ Topology and communication, as built. The SAD is authoritative for design (see t
 - **Arbitration**: RabbitMQ in, HTTP callback out with a shared secret.
 - **Client webhooks**: a transactional outbox plus `WebhookDeliverySweeper`, covering API tasks. See [`programmatic-channel.md`](programmatic-channel.md).
 - **Matching**: multi-factor score with ε-greedy selection in `RoutingMatchDomainService`; see [`matching.md`](matching.md).
-- **`@Scheduled` sweepers**: `CapacityRematchSweeper`, `ExecutionTimeoutSweeper`, `ArbitrationSweeper`, `RulingAcceptSweeper`, `WebhookDeliverySweeper`. They cover what messaging alone can't: stuck tasks, silent agents, stale disputes.
+- **`@Scheduled` sweepers**: `CapacityRematchSweeper`, `SubmittedTaskSweeper`, `ExecutionTimeoutSweeper`, `ArbitrationSweeper`, `RulingAcceptSweeper`, `WebhookDeliverySweeper`. They cover what messaging alone can't: tasks whose routing failed after submit, unmatched tasks, silent agents, stale disputes. All are off under the `test` profile and assume a single backend instance.
 - **Correlation IDs**: per flow, not global. Dispatch generates one and sends it as `X-Correlation-ID` to the agent; disputes carry their own in the message body; ledger writes record one. There is no inbound correlation filter.
 
 ## Why the LLM is isolated

@@ -79,6 +79,10 @@ hireai:
     # CANCELLED + full refund.
     rematch-interval: ${MATCHING_REMATCH_INTERVAL:PT10S}
     rematch-max-attempts: ${MATCHING_REMATCH_MAX_ATTEMPTS:3}
+    # SUBMITTED sweeper: re-runs routing for tasks still SUBMITTED after submitted-min-age (the
+    # after-submit routing step failed). Shares rematch-max-attempts, then CANCELLED + refund.
+    submitted-sweep-interval: ${MATCHING_SUBMITTED_SWEEP_INTERVAL:PT10S}
+    submitted-min-age: ${MATCHING_SUBMITTED_MIN_AGE:PT30S}
     # Applied when a registration omits maxConcurrent.
     default-max-concurrent: ${MATCHING_DEFAULT_MAX_CONCURRENT:5}
   execution:

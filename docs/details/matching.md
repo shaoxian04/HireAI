@@ -69,8 +69,14 @@ Task and escrow freeze commit together, then `TaskSubmittedDomainEvent` triggers
 On a match, `assignAndQueue` commits `QUEUED` and stamps `execution_deadline` (`now + maxExecutionSeconds +
 grace`) **before** publishing, so the consumer never races an uncommitted state.
 
+If routing throws after the submit commit, `RoutingEventListener` logs it and the submit still answers
+with the normal success response and status `SUBMITTED`. The task and escrow exist, so an error would only
+invite a second, paid submit.
+
 | Trigger | Outcome | Refund | Webhook | Reputation event |
 |---|---|---|---|---|
+| Routing throws after submit | Stays `SUBMITTED`, escrow held | No | No | No |
+| Still `SUBMITTED` after the routing attempts | `CANCELLED` | Yes | Yes | No |
 | No eligible agent | `AWAITING_CAPACITY`, escrow held | No | No | No |
 | Re-match attempts exhausted | `CANCELLED` | Yes | Yes | No |
 | Past `execution_deadline` | `TIMED_OUT` | Yes | Yes | `EXECUTION_TIMEOUT` |
@@ -81,9 +87,15 @@ grace`) **before** publishing, so the consumer never races an uncommitted state.
 - **Pinned tasks never substitute.** A direct booking retries only its exact version, because the client's
   spec and price are frozen to it (Invariant #4).
 - **The deadline is stamped at assignment**, so one query catches both a silent agent and a lost publish.
-- **Sweeper transactions.** `timeoutOne` runs in one row-locked transaction. `rematchOne` is deliberately
-  not transactional, because it publishes to RabbitMQ and owns its commit-before-publish ordering.
-- **Single-instance assumption.** The re-match path reads tasks unlocked, so overlapping sweepers on two
+- **SUBMITTED sweeper.** `SubmittedTaskSweeper` picks up tasks still `SUBMITTED` after
+  `hireai.matching.submitted-min-age` (by the injected `Clock`) and re-runs routing, or the pinned dispatch
+  for a direct booking. Each run counts against the same `match_attempts` counter and
+  `rematch-max-attempts` bound as the re-match sweeper, and a routing exception counts as a failed attempt.
+  A task routed to `AWAITING_CAPACITY` carries its used attempts over to the re-match sweeper.
+- **Sweeper transactions.** `timeoutOne` runs in one row-locked transaction. `rematchOne` and
+  `rerouteSubmittedOne` are deliberately not transactional, because they publish to RabbitMQ and own their
+  commit-before-publish ordering. The `SUBMITTED` cancel locks the task row before refunding.
+- **Single-instance assumption.** The re-match and SUBMITTED paths read tasks unlocked, so overlapping sweepers on two
   instances could race. Fix that before running more than one replica. Money stays safe either way, through
   `settlements.task_id` UNIQUE.
 

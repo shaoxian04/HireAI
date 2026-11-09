@@ -13,6 +13,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * committed escrow freeze). Because this fires AFTER_COMMIT, there is no surrounding
  * transaction, so RoutingAppService.route's call to assignAndQueue opens and commits its
  * own transaction before the dispatch message is published.
+ *
+ * <p>A routing failure here is logged and swallowed. The task and its escrow are already
+ * committed, so the Client must get the normal submit response (status SUBMITTED), not an
+ * error that invites a second, paid submit. The SUBMITTED sweeper retries the task later.
  */
 @Component
 @Slf4j
@@ -23,13 +27,17 @@ public class RoutingEventListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onTaskSubmitted(TaskSubmittedDomainEvent event) {
-        if (event.directAgentVersionId() != null) {
-            log.info("Task {} submit committed; dispatching directly to version {}",
-                    event.taskId(), event.directAgentVersionId());
-            routingAppService.dispatchDirect(event.taskId(), event.directAgentVersionId());
-            return;
-        }
-        log.info("Task {} submit committed; starting routing", event.taskId());
-        routingAppService.route(event.taskId());
+        try {
+            if (event.directAgentVersionId() != null) {
+                log.info("Task {} submit committed; dispatching directly to version {}",
+                        event.taskId(), event.directAgentVersionId());
+                routingAppService.dispatchDirect(event.taskId(), event.directAgentVersionId());
+                return;
+            }
+            log.info("Task {} submit committed; starting routing", event.taskId());
+            routingAppService.route(event.taskId());
+        } catch (RuntimeException e) {
+            log.error("Task {} routing failed after submit; left SUBMITTED for the SUBMITTED sweeper",
+                    event.taskId(), e);        }
     }
 }

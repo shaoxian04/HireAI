@@ -139,8 +139,15 @@ class TaskModelTransitionsTest {
     }
 
     @Test
+    void markCancelledFromSubmitted() {
+        TaskModel cancelled = submitted().markCancelled();
+
+        assertThat(cancelled.status()).isEqualTo(TaskStatus.CANCELLED);
+    }
+
+    @Test
     void markCancelledRejectsOtherStatuses() {
-        assertThatThrownBy(() -> submitted().markCancelled())
+        assertThatThrownBy(() -> submitted().assignAndQueue(UUID.randomUUID()).markCancelled())
                 .isInstanceOf(DomainException.class);
     }
 

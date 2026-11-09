@@ -25,6 +25,21 @@ public interface TaskReliabilityAppService {
      */
     void rematchOne(UUID taskId);
 
+    /**
+     * Ids still SUBMITTED longer than {@code hireai.matching.submitted-min-age} (by the injected
+     * Clock): their after-submit routing failed. For the SUBMITTED sweeper to drive one at a time.
+     */
+    List<UUID> strandedSubmittedTaskIds();
+
+    /**
+     * Retry routing for one stranded SUBMITTED task: increments the shared match-attempt counter,
+     * re-runs routing (the pinned version for a direct booking, otherwise full matching), and once
+     * the attempt bound is reached with the task still SUBMITTED cancels it with a full refund and a
+     * client webhook. A routing exception counts as a failed attempt. NOT transactional (drives
+     * {@code RoutingAppService}). Status-guarded no-op if the task already left SUBMITTED.
+     */
+    void rerouteSubmittedOne(UUID taskId);
+
     /** Ids past their execution deadline, for the timeout sweeper to drive one at a time. */
     List<UUID> executionExpiredTaskIds();
 

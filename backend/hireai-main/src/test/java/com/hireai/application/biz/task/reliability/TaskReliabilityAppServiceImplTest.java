@@ -18,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,7 +51,7 @@ class TaskReliabilityAppServiceImplTest {
     void setUp() {
         service = new TaskReliabilityAppServiceImpl(taskRepository, routingAppService,
                 taskWriteAppService, settlementWriteAppService, webhookOutboxAppService,
-                reputationWriteAppService, 3, Clock.systemUTC());
+                reputationWriteAppService, 3, Duration.ofSeconds(30), Clock.systemUTC());
     }
 
     private TaskModel taskWithStatus(TaskStatus status) {

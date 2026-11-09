@@ -16,13 +16,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Reliability orchestration behind the two sweepers (spec §6). rematchOne is deliberately NOT
- * transactional: it drives RoutingAppService, which publishes to RabbitMQ and manages its own
+ * Reliability orchestration behind the three sweepers (spec §6, #67). rematchOne and
+ * rerouteSubmittedOne are deliberately NOT transactional: it drives RoutingAppService, which publishes to RabbitMQ and manages its own
  * commit-before-publish ordering. timeoutOne and the id reads are transactional. Every write it
  * triggers is status-guarded, so overlapping sweeps and races resolve as no-ops.
  */
@@ -37,6 +38,8 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
     private final WebhookOutboxAppService webhookOutboxAppService;
     private final ReputationWriteAppService reputationWriteAppService;
     private final int rematchMaxAttempts;
+    /** How long a task may sit SUBMITTED before the SUBMITTED sweeper treats it as stranded. */
+    private final Duration submittedMinAge;
     /** The app's Clock bean (ClockConfig); tests pass their own to pick the moment a sweep runs at. */
     private final Clock clock;
 
@@ -47,6 +50,7 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
                                          WebhookOutboxAppService webhookOutboxAppService,
                                          ReputationWriteAppService reputationWriteAppService,
                                          @Value("${hireai.matching.rematch-max-attempts:3}") int rematchMaxAttempts,
+                                         @Value("${hireai.matching.submitted-min-age:PT30S}") Duration submittedMinAge,
                                          Clock clock) {
         if (rematchMaxAttempts < 1) {
             throw new IllegalStateException("rematch-max-attempts must be >= 1; got " + rematchMaxAttempts);
@@ -57,7 +61,11 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
         this.settlementWriteAppService = settlementWriteAppService;
         this.webhookOutboxAppService = webhookOutboxAppService;
         this.reputationWriteAppService = reputationWriteAppService;
+        if (submittedMinAge.isNegative()) {
+            throw new IllegalStateException("submitted-min-age must be >= 0; got " + submittedMinAge);
+        }
         this.rematchMaxAttempts = rematchMaxAttempts;
+        this.submittedMinAge = submittedMinAge;
         this.clock = clock;
     }
 
@@ -74,18 +82,50 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
             return; // matched or cancelled since the sweep listed it — nothing to do
         }
         int attempts = taskWriteAppService.registerMatchAttempt(taskId);
+        routeOrDispatchPinned(taskId);
+        boolean stillHeld = taskRepository.findById(taskId)
+                .map(t -> t.status() == TaskStatus.AWAITING_CAPACITY)
+                .orElse(false);
+        if (stillHeld && attempts >= rematchMaxAttempts) {
+            taskWriteAppService.cancelAwaitingCapacityWithRefund(taskId);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> strandedSubmittedTaskIds() {
+        return taskRepository.findIdsSubmittedBefore(clock.instant().minus(submittedMinAge));
+    }
+
+    @Override
+    public void rerouteSubmittedOne(UUID taskId) {
+        Optional<TaskModel> maybeTask = taskRepository.findById(taskId);
+        if (maybeTask.isEmpty() || maybeTask.get().status() != TaskStatus.SUBMITTED) {
+            return; // routed or cancelled since the sweep listed it
+        }
+        // Shares match_attempts with the re-match sweeper: a task that reaches AWAITING_CAPACITY
+        // from here carries the attempts it has already used.
+        int attempts = taskWriteAppService.registerMatchAttempt(taskId);
+        try {
+            routeOrDispatchPinned(taskId);
+        } catch (RuntimeException e) {
+            log.warn("SUBMITTED sweeper: routing failed again for task {} (attempt {})", taskId, attempts, e);
+        }
+        boolean stillSubmitted = taskRepository.findById(taskId)
+                .map(t -> t.status() == TaskStatus.SUBMITTED)
+                .orElse(false);
+        if (stillSubmitted && attempts >= rematchMaxAttempts) {
+            taskWriteAppService.cancelSubmittedWithRefund(taskId);
+        }
+    }
+
+    private void routeOrDispatchPinned(UUID taskId) {
         Optional<UUID> pinned = taskRepository.findPinnedAgentVersionId(taskId);
         if (pinned.isPresent()) {
             // Direct booking: retry ONLY the client's chosen version — never substitute (spec §6.1).
             routingAppService.dispatchDirect(taskId, pinned.get());
         } else {
             routingAppService.route(taskId);
-        }
-        boolean stillHeld = taskRepository.findById(taskId)
-                .map(t -> t.status() == TaskStatus.AWAITING_CAPACITY)
-                .orElse(false);
-        if (stillHeld && attempts >= rematchMaxAttempts) {
-            taskWriteAppService.cancelAwaitingCapacityWithRefund(taskId);
         }
     }
 

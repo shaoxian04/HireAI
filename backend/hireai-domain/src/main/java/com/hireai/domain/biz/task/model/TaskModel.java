@@ -141,9 +141,12 @@ public final class TaskModel {
         return copyWith(TaskStatus.AWAITING_CAPACITY, this.agentVersionId, this.result);
     }
 
-    /** AWAITING_CAPACITY → CANCELLED: re-match attempts exhausted; the caller refunds escrow. */
+    /**
+     * SUBMITTED|AWAITING_CAPACITY → CANCELLED: routing attempts exhausted before any Agent was
+     * assigned (the SUBMITTED sweeper or the re-match sweeper); the caller refunds escrow.
+     */
     public TaskModel markCancelled() {
-        requireStatus(TaskStatus.AWAITING_CAPACITY, "markCancelled");
+        requireStatusIn("markCancelled", TaskStatus.SUBMITTED, TaskStatus.AWAITING_CAPACITY);
         return copyWith(TaskStatus.CANCELLED, this.agentVersionId, this.result);
     }
 

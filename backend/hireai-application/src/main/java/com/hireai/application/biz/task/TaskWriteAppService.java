@@ -39,4 +39,10 @@ public interface TaskWriteAppService {
      * Hard Invariants #1/#2). Status-guarded no-op if the task already left AWAITING_CAPACITY.
      */
     void cancelAwaitingCapacityWithRefund(@NonNull UUID taskId);
+
+    /**
+     * SUBMITTED-sweeper exhaustion: SUBMITTED -> CANCELLED + FULL escrow refund + client webhook.
+     * Row-locked; status-guarded no-op if routing moved the task on in the meantime.
+     */
+    void cancelSubmittedWithRefund(@NonNull UUID taskId);
 }

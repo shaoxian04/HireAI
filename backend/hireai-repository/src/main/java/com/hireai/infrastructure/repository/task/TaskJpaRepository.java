@@ -33,6 +33,9 @@ public interface TaskJpaRepository extends JpaRepository<TaskDO, UUID> {
     @Query(value = "SELECT id FROM tasks WHERE status = 'AWAITING_CAPACITY'", nativeQuery = true)
     List<UUID> findIdsAwaitingCapacity();
 
+    @Query(value = "SELECT id FROM tasks WHERE status = 'SUBMITTED' AND gmt_create < :cutoff", nativeQuery = true)
+    List<UUID> findIdsSubmittedBefore(@Param("cutoff") Instant cutoff);
+
     @Query(value = """
             SELECT id FROM tasks
             WHERE status IN ('QUEUED','EXECUTING')
