@@ -10,7 +10,9 @@ browser calls **same-origin** `/api/...`; Next forwards to the backend and the `
 passes through — so there is **no CORS config** on the backend. Set `BACKEND_URL` per environment.
 
 For Google OAuth (backend-driven), the browser must reach the backend directly. Set
-`NEXT_PUBLIC_API_ORIGIN` (default `http://localhost:8080`). `GoogleSignInButton` stores a random nonce in
+`NEXT_PUBLIC_API_ORIGIN` (default `http://localhost:8080`). The sign-in page's one-click demo accounts show in development, and in a
+production build only with `NEXT_PUBLIC_DEMO_LOGINS=true` (`lib/demo.ts`), since they print the seeded
+password, admin included. `GoogleSignInButton` stores a random nonce in
 `sessionStorage`, then navigates to `${NEXT_PUBLIC_API_ORIGIN}/oauth2/authorization/google?cb_nonce=<nonce>`.
 
 ## The one HTTP chokepoint — `lib/api.ts`

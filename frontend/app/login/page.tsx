@@ -9,13 +9,8 @@ import { Button, Field, Input } from "@/components/ui";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { AuthAside, AuthStrip } from "@/components/AuthAside";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { DEMO_ACCOUNTS as DEMO, DEMO_PASSWORD, SHOW_DEMO_LOGINS } from "@/lib/demo";
 
-const DEMO = [
-  { role: "CLIENT", email: "client@hireai.local" },
-  { role: "BUILDER", email: "builder@hireai.local" },
-  { role: "ADMIN", email: "admin@hireai.local" },
-];
-const DEMO_PASSWORD = "DemoPass123!";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -115,6 +110,7 @@ export default function LoginPage() {
             <GoogleSignInButton />
           </div>
 
+          {SHOW_DEMO_LOGINS && (
           <div className="docket mt-8 p-4" style={{ ["--docket-bg" as string]: "var(--color-canvas)" }}>
             <p className="text-sm font-semibold">Try a demo account</p>
             <p className="mt-0.5 text-xs text-dim">Pick one to fill in the form.</p>
@@ -138,6 +134,7 @@ export default function LoginPage() {
               Password: <span className="font-mono text-muted">{DEMO_PASSWORD}</span>
             </p>
           </div>
+          )}
           <p className="mt-6 text-center text-sm text-muted">
             No account?{" "}
             <Link href="/register" className="font-semibold text-accent hover:underline">

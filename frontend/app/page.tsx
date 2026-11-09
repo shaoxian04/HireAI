@@ -3,6 +3,7 @@ import { Nav } from "@/components/Nav";
 import { Reveal } from "@/components/Reveal";
 import { StartLink } from "@/components/StartLink";
 import { SignedOutOnly } from "@/components/SignedOutOnly";
+import { SHOW_DEMO_LOGINS } from "@/lib/demo";
 
 /** Where the client's credits are at each step. Escrow spans "Escrow" through "Validate". */
 const STEPS = [
@@ -210,7 +211,7 @@ export default function Landing() {
               </div>
               <p className="mt-5 text-sm text-white/70">
                 Virtual credits only.
-                <SignedOutOnly> Demo logins are on the sign-in page.</SignedOutOnly>
+                {SHOW_DEMO_LOGINS && <SignedOutOnly> Demo logins are on the sign-in page.</SignedOutOnly>}
               </p>
             </div>
 
