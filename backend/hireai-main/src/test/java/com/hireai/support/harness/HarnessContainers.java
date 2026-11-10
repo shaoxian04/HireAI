@@ -46,7 +46,10 @@ public final class HarnessContainers {
 
     public static synchronized PostgreSQLContainer<?> postgres() {
         if (postgres == null) {
-            PostgreSQLContainer<?> container = new PostgreSQLContainer<>(POSTGRES_IMAGE);
+            // Every cached Spring context keeps its own connection pool open on this one server, so
+            // the default 100 connections run out once enough contexts share it.
+            PostgreSQLContainer<?> container = new PostgreSQLContainer<>(POSTGRES_IMAGE)
+                    .withCommand("postgres", "-c", "max_connections=400");
             container.start();
             postgres = container;
         }
