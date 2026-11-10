@@ -56,7 +56,7 @@ class RoutingAppServiceImplTest {
     private final RoutingAppServiceImpl service = new RoutingAppServiceImpl(
             taskReadAppService, taskWriteAppService, agentRepository,
             routingMatchDomainService, taskDispatchPublisher, dispatchAttemptRepository,
-            routedFailoverDomainService, taskText, clock);
+            routedFailoverDomainService, taskText, clock, new com.hireai.domain.biz.task.model.ExecutionGrace(60));
 
     // The task's adopted output spec snapshot (Invariant #4). In unit tests the view carries
     // this directly; candidates supply only webhookUrl/version identity.
@@ -97,7 +97,7 @@ class RoutingAppServiceImplTest {
 
     @Test
     void assignAndQueueReceivesDeadlineOfNowPlusMaxExecPlusGrace() {
-        // fixture candidate has maxExecutionSeconds 60; impl default grace is 60s
+        // fixture candidate has maxExecutionSeconds 60; the test passes a 60s grace
         // (arrange the existing happy-path mocks so route() reaches assignAndQueue)
         UUID taskId = UUID.randomUUID();
         UUID chosenVersionId = UUID.randomUUID();

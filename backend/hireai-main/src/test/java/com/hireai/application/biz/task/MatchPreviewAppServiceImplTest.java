@@ -45,7 +45,7 @@ class MatchPreviewAppServiceImplTest {
         var matcher = new RoutingMatchDomainServiceImpl(
                 MatchingPolicy.defaults().withEpsilon(0.0), new Random(1)); // epsilon 0 -> deterministic
         return new MatchPreviewAppServiceImpl(queryPort, matcher, TestCategories.listOf("summarisation", "other"),
-                taskText, java.time.Clock.systemUTC());
+                taskText, java.time.Clock.systemUTC(), new com.hireai.domain.biz.task.model.ExecutionGrace(60));
     }
 
     private ShortlistCandidateRow row(String name, String price, String rep, int maxConc, long inFlight, long samples) {

@@ -31,7 +31,7 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * The client deadline (#83), over the public HTTP API as the test-profile Client: an Agent is
- * eligible only if now + its max execution time + grace (60 s, the default) fits before the
+ * eligible only if now + its max execution time + grace (60 s, as the harness pins it) fits before the
  * deadline, at the shortlist, at initial routing and at every failover hop.
  *
  * <p>Exploration is off (epsilon 0) so the seeded reputation decides the pick order, and every slow

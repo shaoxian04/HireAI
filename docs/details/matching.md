@@ -320,8 +320,10 @@ or its host now resolves to an internal address (the send-time guard; nothing is
 non-2xx reply: the dispatch client (`AgentDispatchRestClientConfig`) never follows redirects and never
 resends a POST by itself, so the Agent gets exactly one WorkOrder per attempt. A 429/503 is a busy decline
 (`AgentBusyException`), never a failed attempt: see **Acknowledgement contract**.
-The work-order connect and read timeouts are 5s and 15s. The consumer never waits in place: it republishes
-the message to a retry queue and acknowledges it, so other dispatches keep flowing.
+The work-order connect and read timeouts are `hireai.dispatch.connect-timeout` and `read-timeout`
+(`AgentDispatchTimeouts`, one bean shared by the dispatch client and the budget check below). The consumer
+never waits in place: it republishes the message to a retry queue and acknowledges it, so other dispatches
+keep flowing.
 
 A platform-side failure (the row-locked task check, issuing the token, reading the signing secret, an
 invalid webhook URL, or ending a busy-declined task) never counts against the Agent: it never reaches the DLQ
@@ -333,9 +335,11 @@ WorkOrder, retry-queue republish) also retries a broker failure a few times itse
 (`RabbitDispatchConfig.dispatchRabbitTemplate`); if a retry-queue republish still fails, the message is
 requeued once as it is, and dropped if that redelivery fails too.
 
-- `hireai.dispatch.retry-delays` (default `5s,10s,15s`) are the waits between attempts, so three delays mean
-  four attempts in total. Startup fails if they add up to more than `hireai.execution.grace-seconds`, so
-  retrying never eats into the Agent's execution time. Tests use millisecond delays.
+- `hireai.dispatch.retry-delays` are the waits between attempts, so N delays mean N + 1 attempts in total.
+  Startup fails unless `hireai.execution.grace-seconds` covers the dispatch path's worst case: every attempt
+  running to its connect + read timeout, plus every delay, plus every platform re-schedule
+  (`DispatchRetrySchedule`). So retrying never eats into the Agent's execution time. Values live in
+  `application.yml`; the test harness uses millisecond delays and shorter timeouts.
 - Each delay has its own queue, `task.dispatch.retry.<millis>ms`. The message carries that delay as its
   per-message TTL, and expiry dead-letters it back to the dispatch exchange. The attempt number travels in
   the `x-hireai-dispatch-attempt` header.

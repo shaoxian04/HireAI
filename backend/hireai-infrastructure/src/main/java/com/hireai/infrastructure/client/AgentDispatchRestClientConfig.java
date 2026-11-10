@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.client;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -25,19 +26,23 @@ import java.time.Duration;
 @Configuration
 public class AgentDispatchRestClientConfig {
 
-    /** The Agent contract: connect within 5s, answer the WorkOrder with a 2xx within 15s. */
-    static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
-    static final Duration READ_TIMEOUT = Duration.ofSeconds(15);
+    /** The Agent contract: connect within the connect timeout, answer the WorkOrder with a 2xx within the read timeout. */
+    @Bean
+    public AgentDispatchTimeouts agentDispatchTimeouts(
+            @Value("${hireai.dispatch.connect-timeout}") Duration connect,
+            @Value("${hireai.dispatch.read-timeout}") Duration read) {
+        return new AgentDispatchTimeouts(connect, read);
+    }
 
     @Bean
-    public RestClient agentDispatchRestClient() {
+    public RestClient agentDispatchRestClient(AgentDispatchTimeouts timeouts) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .version(HttpClient.Version.HTTP_1_1)
-                .connectTimeout(CONNECT_TIMEOUT)
+                .connectTimeout(timeouts.connect())
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
-        factory.setReadTimeout(READ_TIMEOUT);
+        factory.setReadTimeout(timeouts.read());
         return RestClient.builder().requestFactory(factory).build();
     }
 }

@@ -65,7 +65,7 @@ class QueuedTimeoutIntegrationTest extends WholeAppIntegrationTest {
         subscribeToWebhooks(client, taskId);
         assertThat(status(taskId)).isEqualTo("QUEUED");
 
-        clock.set(start.plusSeconds(121)); // past max execution 60s + default grace 60s
+        clock.set(start.plusSeconds(121)); // past max execution 60s + harness grace 60s
         assertThat(taskReliabilityAppService.executionExpiredTaskIds()).contains(taskId);
         taskReliabilityAppService.timeoutOne(taskId);
 

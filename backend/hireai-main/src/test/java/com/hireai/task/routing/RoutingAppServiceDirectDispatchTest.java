@@ -46,7 +46,7 @@ class RoutingAppServiceDirectDispatchTest {
             mock(com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository.class),
             mock(com.hireai.domain.biz.task.routing.service.RoutedFailoverDomainService.class),
             mock(com.hireai.application.biz.offering.embedding.TaskTextEmbeddingAppService.class),
-            Clock.systemUTC());
+            Clock.systemUTC(), new com.hireai.domain.biz.task.model.ExecutionGrace(60));
 
     private static final String TASK_OUTPUT_SPEC = "{\"format\":\"JSON\",\"schema\":\"task-snap\"}";
     private static final String CANDIDATE_OUTPUT_SPEC = "{\"format\":\"TEXT\",\"schema\":\"agent-live\"}";

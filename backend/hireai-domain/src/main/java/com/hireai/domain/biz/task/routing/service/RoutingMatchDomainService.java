@@ -34,4 +34,11 @@ public interface RoutingMatchDomainService {
      * applies it already; the shortlist uses it for the above-budget near-misses it lists itself.
      */
     boolean passesRelevanceFloor(AgentCandidate candidate);
+
+    /**
+     * The shortlist's "no close match" state (#85): nothing ranks, yet an affordable candidate was
+     * left out only by the relevance floor. Tells the Client the task text matched no Agent closely
+     * enough, rather than that no Agent serves the category within budget.
+     */
+    boolean noCloseMatch(MatchCriteria criteria, List<AgentCandidate> candidates);
 }

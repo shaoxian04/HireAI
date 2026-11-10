@@ -1,6 +1,7 @@
 package com.hireai.infrastructure.messaging;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.hireai.domain.biz.task.model.ExecutionGrace;
+import com.hireai.infrastructure.client.AgentDispatchTimeouts;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -11,10 +12,11 @@ import java.util.Optional;
 /**
  * How often, and how long apart, a failed WorkOrder send is retried. The configured delays
  * ({@code hireai.dispatch.retry-delays}) are the waits between attempts, so N delays give N + 1
- * attempts in total. Startup fails if a delay is not positive, or if the delays add up to more
- * than the execution grace period ({@code hireai.execution.grace-seconds}): the grace is added
- * to every execution deadline, so retries can then never eat into the Agent's declared
- * execution time.
+ * attempts in total. Startup fails if a delay is not positive, or if the dispatch path's worst case
+ * does not fit in the execution grace period ({@link ExecutionGrace}): every attempt running to its
+ * connect + read timeout ({@link AgentDispatchTimeouts}), plus every delay, plus every platform-side
+ * re-schedule. The grace is added to every execution deadline, so retrying can then never eat into
+ * the Agent's declared execution time.
  */
 @Component
 public class DispatchRetrySchedule {
@@ -22,16 +24,11 @@ public class DispatchRetrySchedule {
     private final List<Duration> delays;
     private final int platformRetries;
 
-    /** Unit-test form: no platform-side re-schedules. */
-    public DispatchRetrySchedule(List<Duration> delays, long graceSeconds) {
-        this(delays, 0, graceSeconds);
-    }
-
-    @Autowired
     public DispatchRetrySchedule(
-            @Value("${hireai.dispatch.retry-delays:5s,10s,15s}") List<Duration> delays,
-            @Value("${hireai.dispatch.platform-retries:2}") int platformRetries,
-            @Value("${hireai.execution.grace-seconds:60}") long graceSeconds) {
+            @Value("${hireai.dispatch.retry-delays}") List<Duration> delays,
+            @Value("${hireai.dispatch.platform-retries}") int platformRetries,
+            AgentDispatchTimeouts timeouts,
+            ExecutionGrace grace) {
         if (platformRetries < 0) {
             throw new IllegalStateException("hireai.dispatch.platform-retries must be >= 0, got " + platformRetries);
         }
@@ -45,10 +42,17 @@ public class DispatchRetrySchedule {
             }
             total = total.plus(delay);
         }
-        Duration grace = Duration.ofSeconds(graceSeconds);
-        if (total.compareTo(grace) > 0) {
-            throw new IllegalStateException("hireai.dispatch.retry-delays add up to " + total
-                    + ", more than the execution grace period hireai.execution.grace-seconds (" + grace + ")");
+        Duration sends = timeouts.perAttempt().multipliedBy(maxAttempts());
+        Duration reschedules = delays.isEmpty() ? Duration.ZERO
+                : this.delays.stream().min(Duration::compareTo).orElseThrow().multipliedBy(platformRetries);
+        Duration worstCase = sends.plus(total).plus(reschedules);
+        Duration graceDuration = Duration.ofSeconds(grace.seconds());
+        if (worstCase.compareTo(graceDuration) > 0) {
+            throw new IllegalStateException("The dispatch path can take up to " + worstCase + " ("
+                    + maxAttempts() + " attempts x " + timeouts.perAttempt() + " connect+read timeout, "
+                    + total + " of hireai.dispatch.retry-delays, " + reschedules
+                    + " of platform re-schedules), more than the execution grace period "
+                    + "hireai.execution.grace-seconds (" + graceDuration + ")");
         }
     }
 

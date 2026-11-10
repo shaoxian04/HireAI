@@ -41,13 +41,26 @@ public record ClientDeadline(Instant at) {
      * Whole seconds, rounded down (a part second left over never admits an extra second); negative
      * once even an instant Agent would overrun.
      */
-    public long longestExecutionSeconds(Instant now, long graceSeconds) {
+    public long longestExecutionSeconds(Instant now, ExecutionGrace grace) {
         // Duration.getSeconds() floors, also for negative durations.
-        return Duration.between(now, at).getSeconds() - graceSeconds;
+        return Duration.between(now, at).getSeconds() - grace.seconds();
     }
 
     /** Whether an Agent declaring {@code maxExecutionSeconds} fits, selecting at {@code now}. */
-    public boolean admits(int maxExecutionSeconds, Instant now, long graceSeconds) {
-        return !now.plusSeconds(maxExecutionSeconds + graceSeconds).isAfter(at);
+    public boolean admits(int maxExecutionSeconds, Instant now, ExecutionGrace grace) {
+        return !grace.executionDeadline(now, maxExecutionSeconds).isAfter(at);
+    }
+
+    /**
+     * A booking never substitutes another Agent, so one that can't finish by this deadline (booked at
+     * {@code now}) is refused up front with a 400 naming why, before anything is frozen (#83).
+     */
+    public void requireAdmits(int maxExecutionSeconds, Instant now, ExecutionGrace grace) {
+        if (!admits(maxExecutionSeconds, now, grace)) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "This agent can take up to " + maxExecutionSeconds + "s (plus " + grace.seconds()
+                            + "s grace), so it can't finish within the " + Duration.between(now, at).getSeconds()
+                            + "s deadline");
+        }
     }
 }

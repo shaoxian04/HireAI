@@ -13,6 +13,7 @@ import com.hireai.domain.biz.task.routing.info.DispatchMessage;
 import com.hireai.domain.biz.task.routing.info.TaskDispatchPayload;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
+import com.hireai.domain.biz.task.model.ExecutionGrace;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView;
@@ -56,6 +57,8 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     private final TaskTextEmbeddingAppService taskTextEmbeddingAppService;
     /** The app's Clock bean (ClockConfig); tests pass a fixed one to pin the execution deadline. */
     private final Clock clock;
+    /** Added to the Agent's max execution time when stamping the execution deadline (ExecutionConfig). */
+    private final ExecutionGrace executionGrace;
 
     /**
      * Public base URL the Agent uses to call back. NON-final so @RequiredArgsConstructor takes only the
@@ -65,22 +68,6 @@ public class RoutingAppServiceImpl implements RoutingAppService {
      */
     @org.springframework.beans.factory.annotation.Value("${hireai.platform.public-base-url:http://localhost:8080}")
     private String publicBaseUrl = "http://localhost:8080";
-
-    /** Grace added to the agent's maxExecutionSeconds when stamping the execution deadline. */
-    @org.springframework.beans.factory.annotation.Value("${hireai.execution.grace-seconds:60}")
-    private long executionGraceSeconds = 60;
-
-    /**
-     * Bad config is a startup crash (spec §7): a negative grace would stamp execution deadlines in
-     * the past, so every dispatch would be mass-refunded by the timeout sweeper ~30s after routing.
-     */
-    @jakarta.annotation.PostConstruct
-    void validateConfig() {
-        if (executionGraceSeconds < 0) {
-            throw new IllegalStateException(
-                    "hireai.execution.grace-seconds must be >= 0; got " + executionGraceSeconds);
-        }
-    }
 
     @Override
     public void route(UUID taskId) {
@@ -192,12 +179,12 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     /** The candidate query's client-deadline bound at {@code now}; null when the task has no deadline. */
     private Long longestExecutionSeconds(TaskRoutingView view, Instant now) {
         return view.clientDeadline() == null ? null
-                : view.clientDeadline().longestExecutionSeconds(now, executionGraceSeconds);
+                : view.clientDeadline().longestExecutionSeconds(now, executionGrace);
     }
 
     /** Execution deadline for a dispatch to {@code target} starting at {@code now}. */
     private Instant deadlineFor(AgentCandidate target, Instant now) {
-        return now.plusSeconds(target.maxExecutionSeconds() + executionGraceSeconds);
+        return executionGrace.executionDeadline(now, target.maxExecutionSeconds());
     }
 
     /**

@@ -363,4 +363,19 @@ class RoutingMatchDomainServiceTest {
         assertThat(greedy().passesRelevanceFloor(relevant(UUID.randomUUID(), 0.30))).isTrue();
         assertThat(greedy().passesRelevanceFloor(relevant(UUID.randomUUID(), null))).isTrue();
     }
+
+    @Test
+    void noCloseMatchMeansNothingRanksAndAnAffordableAgentFellOnlyBelowTheFloor() {
+        TaskRoutingView task = task("summarisation", "30.00");
+
+        assertThat(greedy().noCloseMatch(task, List.of(relevant(UUID.randomUUID(), 0.10)))).isTrue();
+        // Something ranks: a shortlist exists, so it is not the no-close-match state.
+        assertThat(greedy().noCloseMatch(task, List.of(relevant(UUID.randomUUID(), 0.10),
+                relevant(UUID.randomUUID(), 0.40)))).isFalse();
+        // Nobody at all: an empty result, not a relevance miss.
+        assertThat(greedy().noCloseMatch(task, List.of())).isFalse();
+        // Off-topic but also over budget: the budget, not relevance, kept it out.
+        assertThat(greedy().noCloseMatch(task("summarisation", "5.00"),
+                List.of(relevant(UUID.randomUUID(), 0.10)))).isFalse();
+    }
 }

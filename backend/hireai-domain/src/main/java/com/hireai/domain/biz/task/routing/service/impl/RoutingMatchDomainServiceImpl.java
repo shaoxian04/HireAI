@@ -78,6 +78,12 @@ public class RoutingMatchDomainServiceImpl implements RoutingMatchDomainService 
         return policy.passesRelevanceFloor(similarityOf(candidate));
     }
 
+    @Override
+    public boolean noCloseMatch(MatchCriteria criteria, List<AgentCandidate> candidates) {
+        return rank(criteria, candidates).isEmpty() && candidates.stream()
+                .anyMatch(c -> withinBudget(c, criteria) && !passesRelevanceFloor(c));
+    }
+
     private double score(AgentCandidate c, MatchCriteria criteria, RelevanceRange range) {
         double reputation = c.reputationScore() == null
                 ? 0.0 : clamp(c.reputationScore().doubleValue() / 100.0);

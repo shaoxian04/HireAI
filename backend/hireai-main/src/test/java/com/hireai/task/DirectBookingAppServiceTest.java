@@ -45,7 +45,8 @@ class DirectBookingAppServiceTest {
     private final TaskWriteAppService taskWriteAppService = mock(TaskWriteAppService.class);
 
     private final DirectBookingAppServiceImpl service = new DirectBookingAppServiceImpl(
-            agentRepository, agentProfileRepository, taskWriteAppService, java.time.Clock.systemUTC());
+            agentRepository, agentProfileRepository, taskWriteAppService, java.time.Clock.systemUTC(),
+            new com.hireai.domain.biz.task.model.ExecutionGrace(60));
 
     // ---- helpers ----
 

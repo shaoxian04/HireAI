@@ -40,7 +40,7 @@ class CallbackTokenLifetimeIntegrationTest extends WholeAppIntegrationTest {
 
     /** Two hours: far beyond the old fixed 15-minute token lifetime. */
     private static final int MAX_EXECUTION_SECONDS = 7_200;
-    /** {@code hireai.execution.grace-seconds} default. */
+    /** {@code hireai.execution.grace-seconds} as the harness pins it. */
     private static final int GRACE_SECONDS = 60;
 
     private final HttpClient http = HttpClient.newHttpClient();

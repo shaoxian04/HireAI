@@ -32,7 +32,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * IDs, and distinct categories when matching must see only your Agents.
  *
  * <p>Dispatch retries use a short schedule ({@code hireai.dispatch.retry-delays} of three 500ms
- * delays); override it with your own {@code @DynamicPropertySource} if a test needs another.
+ * delays); override it with your own {@code @DynamicPropertySource} if a test needs another. The
+ * execution grace is pinned at 60s (tests compute deadlines from it), so the WorkOrder timeouts are
+ * shortened to 2s connect / 10s read to keep the dispatch retry budget inside that grace.
  *
  * <p>Skips the whole class when Docker is unavailable, like the other integration tests. Runs
  * under the {@code test} profile (permissive security, sweepers off).
@@ -79,6 +81,9 @@ public abstract class WholeAppIntegrationTest {
         // A short dispatch retry schedule (4 attempts in total) so failed sends dead-letter in
         // well under two seconds instead of the production 5s/10s/15s.
         registry.add("hireai.dispatch.retry-delays", () -> "500ms,500ms,500ms");
+        registry.add("hireai.execution.grace-seconds", () -> "60");
+        registry.add("hireai.dispatch.connect-timeout", () -> "2s");
+        registry.add("hireai.dispatch.read-timeout", () -> "10s");
     }
 
     @Autowired

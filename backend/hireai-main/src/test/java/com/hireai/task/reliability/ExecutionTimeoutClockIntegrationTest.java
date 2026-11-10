@@ -44,7 +44,7 @@ class ExecutionTimeoutClockIntegrationTest extends WholeAppIntegrationTest {
         clock.set(start);
         FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted()); // accepts, never calls back
         String category = "clock-" + UUID.randomUUID();
-        seedActiveAgent(category, agent.webhookUrl()); // max execution 60s; default grace 60s
+        seedActiveAgent(category, agent.webhookUrl()); // max execution 60s; harness grace 60s
         UUID client = newClientWithCredits();
 
         UUID taskId = taskWriteAppService.submit(new TaskSubmitInfo(client, "Summarise report",

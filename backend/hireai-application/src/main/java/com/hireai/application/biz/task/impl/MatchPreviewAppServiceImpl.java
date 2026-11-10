@@ -9,10 +9,10 @@ import com.hireai.domain.biz.offering.category.repository.CategoryRepository;
 import com.hireai.domain.biz.offering.embedding.info.TextVector;
 import com.hireai.domain.biz.task.info.PreviewCriteria;
 import com.hireai.domain.biz.task.model.ClientDeadline;
+import com.hireai.domain.biz.task.model.ExecutionGrace;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.shared.model.Money;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -39,14 +39,8 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
     private final TaskTextEmbeddingAppService taskTextEmbeddingAppService;
     /** The app's Clock bean: the preview's deadline is counted from the request. */
     private final Clock clock;
-
-    /**
-     * Grace added to an Agent's max execution time, as routing stamps it (same property). NON-final
-     * so {@code @RequiredArgsConstructor} skips it; the inline default applies in plain-{@code new}
-     * unit tests.
-     */
-    @Value("${hireai.execution.grace-seconds:60}")
-    private long executionGraceSeconds = 60;
+    /** Added to an Agent's max execution time, as routing stamps it (ExecutionConfig). */
+    private final ExecutionGrace executionGrace;
 
     /**
      * Not transactional: the task text's embedding (cache or provider, up to its timeout) is resolved
@@ -63,7 +57,7 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
         if (deadlineSeconds != null) {
             Instant now = clock.instant();
             longestExecution = ClientDeadline.after(now, deadlineSeconds)
-                    .longestExecutionSeconds(now, executionGraceSeconds);
+                    .longestExecutionSeconds(now, executionGrace);
         }
         TextVector taskVector = taskTextEmbeddingAppService.vectorFor(title, description).orElse(null);
         List<ShortlistCandidateRow> rows = queryPort.findBookableCandidates(normalized, longestExecution, taskVector)
@@ -76,8 +70,9 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
                         (a, b) -> a));
 
         List<AgentCandidate> candidates = rows.stream().map(this::toCandidate).toList();
+        PreviewCriteria criteria = new PreviewCriteria(normalized, budget.value());
         List<AgentOption> shortlist = matcher
-                .rank(new PreviewCriteria(normalized, budget.value()), candidates).stream()
+                .rank(criteria, candidates).stream()
                 .limit(SHORTLIST_LIMIT)
                 .map(sc -> toOption(byVersion.get(sc.candidate().agentVersionId())))
                 .toList();
@@ -93,9 +88,7 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
                 .map(this::toOption)
                 .toList();
 
-        boolean noCloseMatch = shortlist.isEmpty() && rows.stream()
-                .anyMatch(r -> r.price().compareTo(budgetValue) <= 0 && !matcher.passesRelevanceFloor(toCandidate(r)));
-        return new MatchPreview(shortlist, nearMisses, noCloseMatch);
+        return new MatchPreview(shortlist, nearMisses, matcher.noCloseMatch(criteria, candidates));
     }
 
     private AgentCandidate toCandidate(ShortlistCandidateRow r) {

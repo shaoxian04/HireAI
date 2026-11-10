@@ -94,9 +94,10 @@ hireai:
     default-max-concurrent: ${MATCHING_DEFAULT_MAX_CONCURRENT:5}
   execution:
     # Execution-timeout sweeper: QUEUED/EXECUTING past execution_deadline -> TIMED_OUT + refund.
-    # The deadline is stamped at assignment: now + max_execution_seconds + grace-seconds.
+    # The deadline is stamped at assignment: now + max_execution_seconds + grace-seconds. The grace
+    # must cover the dispatch path's worst case (see dispatch.retry-delays), or startup fails.
     sweep-interval: ${EXECUTION_SWEEP_INTERVAL:PT30S}
-    grace-seconds: ${EXECUTION_GRACE_SECONDS:60}
+    grace-seconds: ${EXECUTION_GRACE_SECONDS:120}
   dispatch:
     # HMAC secret for dispatch tokens. MUST be overridden in real deploys. A token expires at
     # the task's execution deadline + 5 minutes (DispatchTokenService.CALLBACK_MARGIN).
@@ -106,12 +107,16 @@ hireai:
     allow-insecure-localhost: ${DISPATCH_ALLOW_INSECURE_LOCALHOST:false}
     # Waits between WorkOrder send attempts (N delays = N + 1 attempts). A failed send waits on a
     # retry queue, not in the consumer; after the last attempt the task is FAILED with a refund.
-    # Startup fails if they add up to more than execution.grace-seconds.
+    # Startup fails unless execution.grace-seconds covers the worst case: every attempt running to
+    # connect-timeout + read-timeout, plus these delays, plus the platform re-schedules below.
     retry-delays: ${DISPATCH_RETRY_DELAYS:5s,10s,15s}
     # Re-schedules (on the shortest retry queue) after a platform-side failure before or around a
     # send. They never consume an Agent attempt; after the last one the task is left QUEUED for the
     # execution-timeout sweeper, which refunds it without blame.
     platform-retries: ${DISPATCH_PLATFORM_RETRIES:2}
+    # WorkOrder send timeouts. The read timeout is the Agent's acknowledgement window (2xx within it).
+    connect-timeout: ${DISPATCH_CONNECT_TIMEOUT:PT5S}
+    read-timeout: ${DISPATCH_READ_TIMEOUT:PT15S}
     # Concurrent dispatch consumers (prefetch 1 each), so one hanging Agent holds only one.
     consumers: ${DISPATCH_CONSUMERS:4}
   embedding:

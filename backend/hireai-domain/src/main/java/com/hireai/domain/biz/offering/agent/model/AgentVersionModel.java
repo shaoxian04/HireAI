@@ -124,6 +124,23 @@ public final class AgentVersionModel {
         }
     }
 
+    /**
+     * The category a direct booking of this version is filed under: the Client's choice when given,
+     * which this version must serve, else its first capability category.
+     */
+    public String taskCategoryFor(String requested) {
+        if (requested == null) {
+            // Safe: create guarantees >= 1 category.
+            return capabilityCategories.get(0);
+        }
+        if (!capabilityCategories.contains(requested)) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "This agent does not serve category '" + requested + "'. It serves: "
+                            + String.join(", ", capabilityCategories));
+        }
+        return requested;
+    }
+
     /** Pricing rule: a task budget must cover this version's price. */
     public void assertAffordable(Money budget) {
         if (budget.value().compareTo(pricing.price()) < 0) {
