@@ -175,7 +175,7 @@ class AgentWriteAppServiceImplTest {
             repository, profileRepository, new AgentRegisterDomainServiceImpl(),
             new AgentActivateDomainServiceImpl(), new AgentSuspendDomainServiceImpl(),
             new AgentReactivateDomainServiceImpl(), new AgentDeactivateDomainServiceImpl(), publisher,
-            new AgentSigningSecretGenerator(), urlValidator,
+            new com.hireai.domain.biz.offering.agent.service.impl.AgentSigningSecretGeneratorImpl(), urlValidator,
             TestCategories.listOf("summarisation", "translation", "other"), suggestions);
 
     private AgentRegisterInfo info(UUID ownerId) {

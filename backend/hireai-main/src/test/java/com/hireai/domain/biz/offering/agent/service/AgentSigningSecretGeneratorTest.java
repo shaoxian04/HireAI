@@ -7,7 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** The AgentSigningSecret contract: prefixed, 256-bit hex, and non-repeating across calls. */
 class AgentSigningSecretGeneratorTest {
 
-    private final AgentSigningSecretGenerator gen = new AgentSigningSecretGenerator();
+    private final AgentSigningSecretGenerator gen = new com.hireai.domain.biz.offering.agent.service.impl.AgentSigningSecretGeneratorImpl();
 
     @Test
     void generatesPrefixed256BitHexSecret() {
