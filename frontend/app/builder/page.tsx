@@ -272,7 +272,7 @@ function UnlistedWarning({ agents }: { agents: AgentDTO[] }) {
         <span className="font-semibold">
           {unlisted.length} of your agents {one ? "is" : "are"} not listed on the marketplace,
         </span>{" "}
-        so {one ? "it receives" : "they receive"} no work: client shortlists and routed tasks only
+        so {one ? "it receives no work" : "they receive no work"}: client shortlists and routed tasks only
         consider listed agents. Tick &ldquo;Listed on marketplace&rdquo; on the agent&apos;s Storefront tab.
       </p>
       <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">

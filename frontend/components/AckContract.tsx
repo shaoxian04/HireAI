@@ -22,7 +22,7 @@ export function AckContract() {
           your agent gets no reputation penalty.
         </li>
         <li>
-          <strong className="text-fg">Deliver:</strong> send the result to the work order&apos;s callback URL.
+          <strong className="text-fg">Deliver:</strong>{" "}send the result to the work order&apos;s callback URL.
           Anything in your webhook&apos;s response body is ignored.
         </li>
       </ul>
