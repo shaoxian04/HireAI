@@ -14,13 +14,18 @@ import java.util.UUID;
 public interface TaskExecutionPort {
 
     /**
-     * Row-locked pre-send check for the dispatch consumer: {@code true} only when the task is
-     * still QUEUED and assigned to {@code agentVersionId}. A message for a task that already
-     * ended (refunded, timed out, failed) or that already has a result is dropped, so the Agent
-     * never receives a WorkOrder for work it will not be paid for. A missing task is
-     * {@code false}.
+     * Row-locked pre-send step for the dispatch consumer, run before every send attempt:
+     * {@code true} (send now) only when the task is still QUEUED for {@code agentVersionId} AND
+     * that Agent is still available (ACTIVE, and the version still current). A message for a task
+     * that already ended or already has a result is dropped ({@code false}), so the Agent never
+     * receives a WorkOrder for work it will not be paid for. A missing task is {@code false}.
+     *
+     * <p>When the Agent is unavailable at dispatch (#58) it handles that before returning
+     * {@code false}: it records an {@code UNAVAILABLE} dispatch attempt and fails a routed task over
+     * to another Agent, or ends a pinned one CANCELLED with {@code AGENT_UNAVAILABLE}, a refund and a
+     * client webhook. No reputation event either way: maintenance never counts against a Builder.
      */
-    boolean isAwaitingDispatch(UUID taskId, UUID agentVersionId);
+    boolean prepareDispatch(UUID taskId, UUID agentVersionId);
 
     /**
      * Appends one row to the task's dispatch history (#75) under the task row lock, numbered after

@@ -24,7 +24,7 @@ public class StubTaskExecutionPort implements TaskExecutionPort {
 
     /** The round-trip test's message names no real task, so every message is dispatchable. */
     @Override
-    public boolean isAwaitingDispatch(UUID taskId, UUID agentVersionId) {
+    public boolean prepareDispatch(UUID taskId, UUID agentVersionId) {
         return true;
     }
 

@@ -224,4 +224,50 @@ class TaskModelTransitionsTest {
         assertThat(again.status()).isEqualTo(TaskStatus.AWAITING_AGENT);
         assertThat(again).isNotSameAs(awaiting);
     }
+
+    // --- Dispatch-side rules (#58) ---
+
+    @Test
+    void aQueuedTaskWhoseAgentBecameUnavailableIsCancelledWithAgentUnavailable() {
+        TaskModel cancelled = submitted().assignAndQueue(UUID.randomUUID()).cancelAsUnavailable();
+
+        assertThat(cancelled.status()).isEqualTo(TaskStatus.CANCELLED);
+        assertThat(cancelled.failureReason()).isEqualTo(FailureReason.AGENT_UNAVAILABLE);
+    }
+
+    @Test
+    void aTaskTheAgentAlreadyStartedCannotBeCancelledAsUnavailable() {
+        TaskModel executing = submitted().assignAndQueue(UUID.randomUUID()).markExecuting();
+
+        assertThatThrownBy(executing::cancelAsUnavailable).isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void onlyTheAssignedVersionOfAQueuedTaskIsAwaitingDispatch() {
+        UUID version = UUID.randomUUID();
+        TaskModel queued = submitted().assignAndQueue(version);
+
+        assertThat(queued.isAwaitingDispatchTo(version)).isTrue();
+        assertThat(queued.isAwaitingDispatchTo(UUID.randomUUID())).isFalse();
+        assertThat(queued.markExecuting().isAwaitingDispatchTo(version)).isFalse();
+    }
+
+    @Test
+    void aDispatchOutcomeAppliesOnlyWhileInFlightOnThatVersion() {
+        UUID version = UUID.randomUUID();
+        TaskModel executing = submitted().assignAndQueue(version).markExecuting();
+
+        assertThat(executing.isInFlightOn(version)).isTrue();
+        assertThat(executing.isInFlightOn(UUID.randomUUID())).isFalse();
+        assertThat(executing.markTimedOut().isInFlightOn(version)).isFalse();
+    }
+
+    @Test
+    void onlyAQueuedRoutedTaskFailsOver() {
+        TaskModel queued = submitted().assignAndQueue(UUID.randomUUID());
+
+        assertThat(queued.failsOverOnDispatchFailure(false)).isTrue();
+        assertThat(queued.failsOverOnDispatchFailure(true)).isFalse();
+        assertThat(queued.markExecuting().failsOverOnDispatchFailure(false)).isFalse();
+    }
 }

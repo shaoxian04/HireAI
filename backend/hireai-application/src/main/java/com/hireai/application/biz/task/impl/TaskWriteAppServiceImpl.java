@@ -130,8 +130,7 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     public void cancelSubmittedWithRefund(UUID taskId) {
         // Locked like the timeout path (task row -> wallet row), so a concurrent routing write
         // can't move the task to QUEUED between this status check and the refund.
-        TaskModel task = taskRepository.findByIdForUpdate(taskId)
-                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
+        TaskModel task = loadForUpdate(taskId);
         if (task.status() != TaskStatus.SUBMITTED) {
             log.info("Task {} is {} (not SUBMITTED); skipping cancel", taskId, task.status());
             return;
@@ -145,18 +144,25 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void cancelPinnedAsUnavailable(UUID taskId, UUID agentVersionId) {
         // Same lock order as the other refund paths: task row, then wallet row in settleRejected.
-        TaskModel task = taskRepository.findByIdForUpdate(taskId)
-                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
+        TaskModel task = loadForUpdate(taskId);
         if (task.status() != TaskStatus.SUBMITTED && task.status() != TaskStatus.AWAITING_AGENT) {
             log.info("Task {} is {}; skipping pinned fail-fast cancel", taskId, task.status());
             return;
         }
-        cancelWithRefund(task, FailureReason.AGENT_UNAVAILABLE);
-        int next = dispatchAttemptRepository.countByTaskId(taskId) + 1;
-        dispatchAttemptRepository.append(DispatchAttemptModel.record(
-                taskId, agentVersionId, next, DispatchOutcome.UNAVAILABLE, clock.instant()));
+        cancelAsUnavailable(task, agentVersionId);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void cancelUnavailableAtDispatch(UUID taskId, UUID agentVersionId) {
+        cancelAsUnavailable(loadForUpdate(taskId), agentVersionId);
+    }
+
+    private void cancelAsUnavailable(TaskModel task, UUID agentVersionId) {
+        endWithRefund(task.cancelAsUnavailable());
+        appendAttempt(task.id(), agentVersionId, DispatchOutcome.UNAVAILABLE);
         log.info("Task {} CANCELLED (AGENT_UNAVAILABLE): pinned version {} is no longer available; "
-                + "escrow fully refunded", taskId, agentVersionId);
+                + "escrow fully refunded", task.id(), agentVersionId);
     }
 
     @Override
@@ -173,12 +179,40 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void failWithNoAlternative(UUID taskId) {
-        TaskModel failed = loadForUpdate(taskId).markFailed(FailureReason.NO_ALTERNATIVE_AGENT);
-        taskRepository.save(failed);
-        settlementWriteAppService.settleRejected(taskId, failed.clientId(), failed.budget());
-        webhookOutboxAppService.enqueueFailed(failed, "FAILED");
-        log.info("Task {} FAILED (NO_ALTERNATIVE_AGENT): no untried eligible Agent left; escrow fully refunded",
-                taskId);
+        failWithRefund(taskId, FailureReason.NO_ALTERNATIVE_AGENT);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void failWithRefund(UUID taskId, FailureReason reason) {
+        endWithRefund(loadForUpdate(taskId).markFailed(reason));
+        log.info("Task {} FAILED ({}); escrow fully refunded", taskId, reason);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void appendDispatchAttempt(UUID taskId, UUID agentVersionId, DispatchOutcome outcome) {
+        appendAttempt(taskId, agentVersionId, outcome);
+    }
+
+    /** The one place a dispatch attempt is numbered and appended; the caller holds the task row lock. */
+    private void appendAttempt(UUID taskId, UUID agentVersionId, DispatchOutcome outcome) {
+        DispatchAttemptModel attempt = DispatchAttemptModel.next(taskId, agentVersionId,
+                dispatchAttemptRepository.countByTaskId(taskId), outcome, clock.instant());
+        dispatchAttemptRepository.append(attempt);
+        log.info("Task {} dispatch attempt {} to version {}: {}", taskId, attempt.attemptNumber(),
+                agentVersionId, outcome);
+    }
+
+    /**
+     * The one place a task that ended without a result settles: save the ended copy, refund the
+     * full escrow (a recorded settlement, Hard Invariants #1/#2) and queue the client's
+     * {@code task.failed} webhook, whose reason is the terminal status.
+     */
+    private void endWithRefund(TaskModel ended) {
+        taskRepository.save(ended);
+        settlementWriteAppService.settleRejected(ended.id(), ended.clientId(), ended.budget());
+        webhookOutboxAppService.enqueueFailed(ended, ended.status().name());
     }
 
     private TaskModel loadForUpdate(UUID taskId) {
@@ -187,10 +221,7 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     }
 
     private void cancelWithRefund(TaskModel task, FailureReason reason) {
-        TaskModel cancelled = task.markCancelled(reason);
-        taskRepository.save(cancelled);
-        settlementWriteAppService.settleRejected(task.id(), cancelled.clientId(), cancelled.budget());
-        webhookOutboxAppService.enqueueFailed(cancelled, "CANCELLED");
+        endWithRefund(task.markCancelled(reason));
     }
 
     private TaskModel load(UUID taskId) {

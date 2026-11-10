@@ -61,7 +61,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
   - `UNREACHABLE`: every send in the retry schedule failed (recorded in the DLQ transaction that fails the task over or ends it `FAILED`).
   - `BUSY`: the Agent replied 429/503 to the WorkOrder (recorded in the same transaction that fails the task over or ends it `FAILED` with `AGENT_BUSY`).
   - A routed task's history is also its failover exclusion list: no Agent in it is picked again ([routed failover](matching.md#routed-failover)).
-  - `UNAVAILABLE`: a pinned agent was not `ACTIVE`, or its version was superseded, at dispatch (recorded in the same transaction that ends the task `CANCELLED` with `AGENT_UNAVAILABLE`).
+  - `UNAVAILABLE`: the agent was not `ACTIVE`, or its version was superseded, at dispatch (recorded in the same transaction that ends a pinned task `CANCELLED` with `AGENT_UNAVAILABLE`, or that fails a routed task over).
   - Read-only to the task owner (JWT or API key) at `GET /api/tasks/{id}/attempts`: attempt number, `agentId` (joined from the version), `agentVersionId`, outcome, `occurredAt`. Another client gets 404.
 
 **Adjudication**
@@ -92,7 +92,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
   - `EXECUTION_TIMEOUT`: past the deadline while `EXECUTING` → `TIMED_OUT`.
   - `DISPATCH_ABANDONED`: past the deadline while still `QUEUED` → `TIMED_OUT`; or routing failed on every SUBMITTED sweep → `CANCELLED`.
   - `NO_ELIGIBLE_AGENT`: a routed task's re-match attempts ran out → `CANCELLED`.
-  - `AGENT_UNAVAILABLE`: at dispatch, a direct booking's agent is not `ACTIVE` or its pinned version was superseded → `CANCELLED` at once, no reputation event.
+  - `AGENT_UNAVAILABLE`: at dispatch (routing, or the check before any send), a direct booking's agent is not `ACTIVE` or its pinned version was superseded → `CANCELLED` at once, no reputation event.
   - `AGENT_BUSY`: a direct booking's Agent declined the WorkOrder with 429/503 → `FAILED`, no reputation event.
   - `NO_ALTERNATIVE_AGENT`: a routed task's Agent was busy or unreachable and no untried eligible Agent was left, or 3 Agents had been tried ([routed failover](matching.md#routed-failover)) → `FAILED`.
 - **Agent:** `PENDING_VERIFICATION → ACTIVE ⇄ SUSPENDED`; `ACTIVE` or `SUSPENDED → DEACTIVATED`.

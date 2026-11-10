@@ -53,6 +53,15 @@ public final class DispatchAttemptModel {
                 outcome, occurredAt);
     }
 
+    /**
+     * The attempt that follows the {@code attemptsSoFar} already recorded for the task: attempts are
+     * numbered from 1 in the order they ended.
+     */
+    public static DispatchAttemptModel next(UUID taskId, UUID agentVersionId, int attemptsSoFar,
+                                            DispatchOutcome outcome, Instant occurredAt) {
+        return record(taskId, agentVersionId, attemptsSoFar + 1, outcome, occurredAt);
+    }
+
     public UUID id() { return id; }
     public UUID taskId() { return taskId; }
     public UUID agentVersionId() { return agentVersionId; }

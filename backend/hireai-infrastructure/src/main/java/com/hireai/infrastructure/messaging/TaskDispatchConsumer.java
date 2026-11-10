@@ -20,8 +20,9 @@ import java.time.Duration;
 import java.util.Optional;
 
 /**
- * Consumes dispatch messages: checks under a row lock that the task is still QUEUED (otherwise
- * drops the message), issues a signed token that lives until the task's execution deadline
+ * Consumes dispatch messages: checks under a row lock that the task is still QUEUED for the
+ * version and that the Agent is still available (otherwise drops the message, after failing an
+ * unavailable Agent's task over or cancelling it: {@link TaskExecutionPort#prepareDispatch}), issues a signed token that lives until the task's execution deadline
  * plus {@link DispatchTokenService#CALLBACK_MARGIN}, reads the Agent's current signing secret,
  * POSTs the WorkOrder (signed when the Agent has a secret) via
  * {@link AgentDispatchClient}, then flips the task to EXECUTING through the
@@ -78,12 +79,13 @@ public class TaskDispatchConsumer {
                            @Header(name = DispatchQueues.ATTEMPT_HEADER, required = false) Integer attemptHeader) {
         int attempt = attemptHeader == null ? 1 : attemptHeader;
         try {
-            // 1. Row-locked status check: drop the message unless the task is still QUEUED for
+            // 1. Row-locked pre-send step: drop the message unless the task is still QUEUED for
             //    this version (a stale message for a refunded or timed-out task, or a retry after
-            //    the Agent already called back). It runs again on every attempt.
-            if (!taskExecutionPort.isAwaitingDispatch(message.taskId(), message.agentVersionId())) {
-                log.info("Task {} is no longer awaiting dispatch to version {}; dropping message",
-                        message.taskId(), message.agentVersionId());
+            //    the Agent already called back) and the Agent is still available; an unavailable
+            //    Agent's task is failed over or cancelled there. It runs again on every attempt.
+            if (!taskExecutionPort.prepareDispatch(message.taskId(), message.agentVersionId())) {
+                log.info("Task {} is not to be sent to version {} (moved on, or Agent unavailable); "
+                        + "dropping message", message.taskId(), message.agentVersionId());
                 return;
             }
             // 2-3. Issue the token (valid until the execution deadline stamped at assignment plus

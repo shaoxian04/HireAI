@@ -4,6 +4,9 @@ import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
 
+import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
+import com.hireai.domain.biz.task.enums.FailureReason;
+
 import java.time.Instant;
 import java.util.UUID;
 
@@ -68,4 +71,26 @@ public interface TaskWriteAppService {
      * row-locked transaction (MANDATORY).
      */
     void failWithNoAlternative(@NonNull UUID taskId);
+
+    /**
+     * A dispatch failure before the Agent started ended the task (#58): QUEUED/EXECUTING -> FAILED
+     * with {@code reason}, a FULL escrow refund and a client webhook. Joins the caller's row-locked
+     * transaction (MANDATORY); the caller has already checked the task is still in flight on the
+     * failing version.
+     */
+    void failWithRefund(@NonNull UUID taskId, @NonNull FailureReason reason);
+
+    /**
+     * A pinned task found unavailable just before a send (#58): the same fail-fast end as
+     * {@link #cancelPinnedAsUnavailable}, from QUEUED, inside the dispatch path's row-locked
+     * transaction (MANDATORY).
+     */
+    void cancelUnavailableAtDispatch(@NonNull UUID taskId, @NonNull UUID agentVersionId);
+
+    /**
+     * Appends one row to the task's dispatch history (#75), numbered after the attempts already
+     * recorded. Joins the caller's transaction (MANDATORY), which must hold the task row lock: that
+     * lock serialises every writer of the history, so the numbering cannot race.
+     */
+    void appendDispatchAttempt(@NonNull UUID taskId, @NonNull UUID agentVersionId, @NonNull DispatchOutcome outcome);
 }

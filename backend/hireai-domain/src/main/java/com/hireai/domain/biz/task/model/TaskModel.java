@@ -186,6 +186,47 @@ public final class TaskModel {
     }
 
     /**
+     * SUBMITTED|AWAITING_AGENT|QUEUED → CANCELLED with {@code AGENT_UNAVAILABLE}: the pinned Agent is
+     * no longer ACTIVE, or its booked version is no longer current, so a direct booking fails fast
+     * (#77) instead of waiting for a version that will not come back. QUEUED qualifies because
+     * availability is re-checked before every send (#58): the WorkOrder never went out.
+     */
+    public TaskModel cancelAsUnavailable() {
+        requireStatusIn("cancelAsUnavailable", TaskStatus.SUBMITTED, TaskStatus.AWAITING_AGENT, TaskStatus.QUEUED);
+        return endWithoutResult(TaskStatus.CANCELLED, FailureReason.AGENT_UNAVAILABLE);
+    }
+
+    // --- Dispatch-side predicates (the rules the dispatch path's guards apply) ---
+
+    /** QUEUED for {@code agentVersionId}: its WorkOrder may still be sent (or re-sent on a retry). */
+    public boolean isAwaitingDispatchTo(UUID agentVersionId) {
+        return this.status == TaskStatus.QUEUED && agentVersionId != null
+                && agentVersionId.equals(this.agentVersionId);
+    }
+
+    /** QUEUED or EXECUTING: assigned to an Agent and not yet ended or resulted. */
+    public boolean isInFlight() {
+        return this.status == TaskStatus.QUEUED || this.status == TaskStatus.EXECUTING;
+    }
+
+    /**
+     * In flight with {@code agentVersionId}: a dispatch outcome for that version (a dead letter, a
+     * busy reply) still applies. False once the task ended or failed over to another version.
+     */
+    public boolean isInFlightOn(UUID agentVersionId) {
+        return isInFlight() && agentVersionId != null && agentVersionId.equals(this.agentVersionId);
+    }
+
+    /**
+     * Whether a dispatch failure before the Agent started is routed failover (#78) rather than the
+     * end of the task: only while QUEUED (the Agent never started) and only when the platform picked
+     * the Agent. A direct booking ({@code pinned}) is never substituted.
+     */
+    public boolean failsOverOnDispatchFailure(boolean pinned) {
+        return this.status == TaskStatus.QUEUED && !pinned;
+    }
+
+    /**
      * QUEUED/EXECUTING → TIMED_OUT: no result before the execution deadline. The reason follows
      * {@link #timeoutIsAgentFault()}: EXECUTION_TIMEOUT once the Agent had the work, otherwise
      * DISPATCH_ABANDONED (the WorkOrder never got through).

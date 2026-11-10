@@ -141,7 +141,8 @@ invite a second, paid submit.
 | Routing throws after submit | Stays `SUBMITTED`, escrow held | No | No | No |
 | Still `SUBMITTED` after the routing attempts | `CANCELLED` | Yes | Yes | No |
 | No eligible agent | `AWAITING_AGENT`, escrow held | No | No | No |
-| Pinned agent not `ACTIVE`, or pinned version superseded, at dispatch | `CANCELLED` at once | Yes | Yes | No |
+| Pinned agent not `ACTIVE`, or pinned version superseded, at dispatch (routing or any send) | `CANCELLED` at once | Yes | Yes | No |
+| Routed task: the Agent is no longer `ACTIVE`, or its version was superseded, before a send | Stays `QUEUED`, reassigned (see **Routed failover**), or `FAILED` (`NO_ALTERNATIVE_AGENT`) | Only if it fails | Only if it fails | No |
 | Re-match attempts exhausted | `CANCELLED` | Yes | Yes | No |
 | Past `execution_deadline` while `EXECUTING` | `TIMED_OUT` | Yes | Yes | `EXECUTION_TIMEOUT` |
 | Past `execution_deadline` while still `QUEUED` | `TIMED_OUT` | Yes | Yes | No |
@@ -158,18 +159,21 @@ invite a second, paid submit.
   because the client's spec and price are frozen to it (Invariant #4). If at dispatch the agent is not
   `ACTIVE` or the pinned version is no longer its current one, `dispatchDirect` cancels the task at once
   (`TaskWriteAppService.cancelPinnedAsUnavailable`, row-locked): `AGENT_UNAVAILABLE`, a full refund, a
-  `task.failed` webhook and an `UNAVAILABLE` row in the dispatch history. Deactivating or publishing a new
+  `task.failed` webhook and an `UNAVAILABLE` row in the dispatch history. The same check runs again before
+  every send (step 1 of the consumer order below), so an Agent deactivated or re-versioned while the task
+  waited `QUEUED` ends it the same way, inside the consumer's row-locked check. Deactivating or publishing a new
   version never counts against the Builder, so no reputation event is written. The re-match sweeper never
   retries a pinned task: one it finds `AWAITING_AGENT` (parked there before this rule) is cancelled the
   same way on its first sweep, so its escrow is never stranded.
 - <a id="routed-failover"></a>**Routed failover.** When the platform picked the Agent (no pinned version)
   and that Agent can't take the task before starting, the task stays `QUEUED` and goes to another Agent.
-  The triggers are a busy decline (429/503) and an unreachable Agent (the DLQ, after the whole retry
-  schedule). A failure after the Agent started (`EXECUTING`: a reported failure, a timeout, a spec
+  The triggers are a busy decline (429/503), an unreachable Agent (the DLQ, after the whole retry
+  schedule) and an Agent unavailable at dispatch (no longer `ACTIVE`, or its version superseded, found by
+  the check before every send). A failure after the Agent started (`EXECUTING`: a reported failure, a timeout, a spec
   violation) is never failed over. In one transaction under the task row lock
-  (`TaskExecutionPortImpl.declineAsBusy` / `markFailed`, then `RoutingAppService.failOver`):
-  - the failed attempt is recorded in the [dispatch history](data-model.md#dispatch-attempts) (`BUSY`, or
-    `UNREACHABLE` plus `EXECUTION_FAILED` against that Agent);
+  (`TaskExecutionPortImpl.declineAsBusy` / `markFailed` / `prepareDispatch`, then `RoutingAppService.failOver`):
+  - the failed attempt is recorded in the [dispatch history](data-model.md#dispatch-attempts) (`BUSY`,
+    `UNAVAILABLE`, or `UNREACHABLE` plus `EXECUTION_FAILED` against that Agent);
   - the next candidate is picked from the same candidate query and matcher as initial routing (same budget
     and eligibility, the Client's deadline measured from this hop), excluding every Agent already in the task's history, under any version
     (`RoutedFailoverDomainService`);
@@ -286,8 +290,11 @@ TTL setting.
 
 The consumer keeps repeats to the minimum, in this order:
 
-1. It loads the task under a row lock and drops the message unless the task is still `QUEUED` for that
-   version, so a WorkOrder for a refunded, timed-out or already-answered task never goes out.
+1. It loads the task under a row lock (`TaskExecutionPort.prepareDispatch`) and drops the message unless
+   the task is still `QUEUED` for that version, so a WorkOrder for a refunded, timed-out or
+   already-answered task never goes out. In the same transaction it checks the Agent is still `ACTIVE` and
+   the version still current; if not, it records `UNAVAILABLE` and fails a routed task over, or cancels a
+   pinned one, and nothing is sent. Maintenance never counts against the Builder.
 2. It issues the token and sends. A failed send is retried (see the schedule below), so an Agent may see one
    WorkOrder per send the platform considered failed (for example a 5xx or a read timeout after the Agent had
    already received it).
