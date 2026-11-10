@@ -47,7 +47,7 @@ eligible when:
   a booked task's pinned dispatch is not re-checked.
 - <a id="relevance-floor"></a>its profile is not clearly irrelevant: the **raw** cosine similarity between
   the task text's vector and the Agent's profile vector is at least τ (`hireai.matching.relevance-floor`,
-  provisionally 0.25; checked in `rank`). See [relevance](#relevance) for the vectors and the fallbacks.
+  provisional; checked in `rank`). See [relevance](#relevance) for the vectors and the fallbacks.
 
 ## Relevance
 
@@ -91,7 +91,7 @@ score = w_rep       * reputation / 100
       + w_explore   * 1 / (1 + sampleCount)
 ```
 
-Defaults: reputation 0.30, relevance 0.25, value 0.15, load 0.15, exploration 0.15. The weights must sum
+The weights are the `hireai.matching.weight-*` properties (values in `application.yml`). They must sum
 to 1.0, and startup fails otherwise.
 
 - `relevance` is the raw similarity min-max normalised over the eligible Agents (those that passed the
@@ -116,8 +116,8 @@ The score's exploration term alone isn't enough, because the score is determinis
 every match:
 
 - **Starvation.** The bonus decays fast, so a newer agent can lose to the same veteran every time. At the
-  default weights, a 5-for-5 agent (reputation 67.5, no ratings) still trails a 200-job, 90-reputation
-  veteran by about 0.02 (with equal relevance), which is enough to lose on every match.
+  shipped weights, a 5-for-5 agent (reputation 67.5, no ratings) still trails a 200-job, 90-reputation
+  veteran by a small margin (with equal relevance), which is enough to lose on every match.
 - **Tie-break monopoly.** Identical newcomers tie, and the deterministic tie-break always picks the same one.
 
 So the term gives newcomers their first jobs and shortlist visibility, and ε gives sustained exploration on
@@ -227,7 +227,8 @@ Nothing else is sent: no Client identity and no budget.
 **Acknowledgement contract.** The Builder-facing rules for answering a WorkOrder (also shown on the
 registration form, `frontend/components/AckContract.tsx`):
 
-- **Accept:** reply any 2xx (202 recommended) within the 15s read timeout, then do the work asynchronously.
+- **Accept:** reply any 2xx (202 recommended) within the read timeout (`hireai.dispatch.read-timeout`), then
+  do the work asynchronously.
   A slower reply, a refused connection or any other non-2xx is a failed send and is retried (see
   **Send retries**); after the last attempt `EXECUTION_FAILED` is recorded against the Agent and the task
   fails over (routed) or fails (pinned).
@@ -314,7 +315,7 @@ internal address with the client-webhook error (400 `VALIDATION_ERROR`). The dev
 `http://localhost` is `hireai.dispatch.allow-insecure-localhost`.
 
 **Send retries.** Only a failure the Agent is accountable for counts as a failed attempt: its endpoint
-refused or was unreachable, did not answer within the read timeout (the contract is a 2xx within 15s),
+refused or was unreachable, did not answer within the read timeout (the contract is a 2xx within it),
 replied with a non-2xx status other than 429/503 (`AgentSendFailedException`, which carries the status),
 or its host now resolves to an internal address (the send-time guard; nothing is sent). A 3xx counts as a
 non-2xx reply: the dispatch client (`AgentDispatchRestClientConfig`) never follows redirects and never
@@ -348,6 +349,6 @@ requeued once as it is, and dropped if that redelivery fails too.
   either fails the task over ([routed failover](#routed-failover)) or, for a pinned task, fails it
   (`FAILED`, refund, `task.failed` webhook), all in one transaction. A dead letter for a version the task
   no longer names (it already failed over) is ignored.
-- `hireai.dispatch.consumers` (default 4) consumers each take one message at a time, so a hanging Agent
+- `hireai.dispatch.consumers` consumers each take one message at a time, so a hanging Agent
   holds only the consumer that is waiting on it.
 - Every attempt re-runs step 1, so a task that ended while its message waited is dropped, not sent.
