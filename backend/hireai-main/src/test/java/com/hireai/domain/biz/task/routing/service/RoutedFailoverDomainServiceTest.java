@@ -3,6 +3,7 @@ package com.hireai.domain.biz.task.routing.service;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
 import com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView;
+import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.task.info.PreviewCriteria;
 import com.hireai.domain.biz.task.routing.service.impl.RoutedFailoverDomainServiceImpl;
 import com.hireai.domain.biz.task.routing.service.impl.RoutingMatchDomainServiceImpl;
@@ -108,5 +109,41 @@ class RoutedFailoverDomainServiceTest {
 
         assertThat(service.selectNext(CRITERIA, List.of(tried(first, 1, DispatchOutcome.BUSY)),
                 List.of(first, overBudget))).isEmpty();
+    }
+
+    @Test
+    void anUntriedAgentRuledOutOnlyByTheDeadlineIsNoEligibleAgent() {
+        AgentCandidate first = candidate(UUID.randomUUID(), "10.00");
+        AgentCandidate tooSlow = candidate(UUID.randomUUID(), "20.00");
+
+        assertThat(service.exhaustionReason(List.of(tried(first, 1, DispatchOutcome.BUSY)), List.of(first, tooSlow)))
+                .isEqualTo(FailureReason.NO_ELIGIBLE_AGENT);
+    }
+
+    @Test
+    void nobodyUntriedLeftIsNoAlternativeAgentEvenWithADeadline() {
+        AgentCandidate only = candidate(UUID.randomUUID(), "10.00");
+
+        assertThat(service.exhaustionReason(List.of(tried(only, 1, DispatchOutcome.BUSY)), List.of(only)))
+                .isEqualTo(FailureReason.NO_ALTERNATIVE_AGENT);
+    }
+
+    @Test
+    void withoutADeadlineTheReasonIsNoAlternativeAgent() {
+        AgentCandidate only = candidate(UUID.randomUUID(), "10.00");
+
+        assertThat(service.exhaustionReason(List.of(tried(only, 1, DispatchOutcome.BUSY)), null))
+                .isEqualTo(FailureReason.NO_ALTERNATIVE_AGENT);
+    }
+
+    @Test
+    void theAgentLimitIsNoAlternativeAgentEvenIfASlowAgentIsLeft() {
+        List<DispatchAttemptView> history = new ArrayList<>();
+        for (int i = 1; i <= RoutedFailoverDomainService.MAX_DISTINCT_AGENTS; i++) {
+            history.add(tried(candidate(UUID.randomUUID(), "10.00"), i, DispatchOutcome.UNREACHABLE));
+        }
+
+        assertThat(service.exhaustionReason(history, List.of(candidate(UUID.randomUUID(), "20.00"))))
+                .isEqualTo(FailureReason.NO_ALTERNATIVE_AGENT);
     }
 }

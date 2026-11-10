@@ -91,7 +91,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
   - `SPEC_VIOLATION`: the result failed validation → `SPEC_VIOLATION`.
   - `EXECUTION_TIMEOUT`: past the deadline while `EXECUTING` → `TIMED_OUT`.
   - `DISPATCH_ABANDONED`: past the deadline while still `QUEUED` → `TIMED_OUT`; or routing failed on every SUBMITTED sweep → `CANCELLED`.
-  - `NO_ELIGIBLE_AGENT`: a routed task's re-match attempts ran out → `CANCELLED`.
+  - `NO_ELIGIBLE_AGENT`: a routed task's re-match attempts ran out → `CANCELLED`; or a failover hop found untried Agents but the client deadline ruled them all out → `FAILED`.
   - `AGENT_UNAVAILABLE`: at dispatch (routing, or the check before any send), a direct booking's agent is not `ACTIVE` or its pinned version was superseded → `CANCELLED` at once, no reputation event.
   - `AGENT_BUSY`: a direct booking's Agent declined the WorkOrder with 429/503 → `FAILED`, no reputation event.
   - `NO_ALTERNATIVE_AGENT`: a routed task's Agent was busy or unreachable and no untried eligible Agent was left, or 3 Agents had been tried ([routed failover](matching.md#routed-failover)) → `FAILED`.

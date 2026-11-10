@@ -6,6 +6,7 @@ import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.port.messaging.TaskDispatchPublisher;
 import com.hireai.utility.result.ResultCode;
+import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.offering.embedding.info.TextVector;
@@ -134,13 +135,18 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                 .orElse(null);
         // The deadline is re-applied at this hop's own moment: time spent on the failed Agent counts.
         Instant now = selectionInstant();
+        Long deadlineBound = longestExecutionSeconds(view, now);
         List<AgentCandidate> candidates = agentRepository.findActiveCandidates(
-                view.category(), view.budget(), longestExecutionSeconds(view, now), taskVector);
+                view.category(), view.budget(), deadlineBound, taskVector);
         Optional<AgentCandidate> next = routedFailoverDomainService.selectNext(view, history, candidates);
         if (next.isEmpty()) {
-            log.info("Task {}: no untried eligible Agent left after {} attempt(s); failing with "
-                    + "NO_ALTERNATIVE_AGENT", taskId, history.size());
-            taskWriteAppService.failWithNoAlternative(taskId);
+            // Tell "only the client deadline rules the rest out" apart from "nobody untried is left".
+            List<AgentCandidate> ignoringDeadline = deadlineBound == null ? null
+                    : agentRepository.findActiveCandidates(view.category(), view.budget(), null, taskVector);
+            FailureReason reason = routedFailoverDomainService.exhaustionReason(history, ignoringDeadline);
+            log.info("Task {}: no untried eligible Agent left after {} attempt(s); failing with {}",
+                    taskId, history.size(), reason);
+            taskWriteAppService.failWithRefund(taskId, reason);
             return;
         }
         AgentCandidate target = next.get();

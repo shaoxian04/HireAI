@@ -147,7 +147,7 @@ invite a second, paid submit.
 | Past `execution_deadline` while `EXECUTING` | `TIMED_OUT` | Yes | Yes | `EXECUTION_TIMEOUT` |
 | Past `execution_deadline` while still `QUEUED` | `TIMED_OUT` | Yes | Yes | No |
 | Routed task: the Agent is busy, or every dispatch attempt failed, and an untried eligible Agent is left | Stays `QUEUED`, reassigned (see **Routed failover**) | No | No | `EXECUTION_FAILED` if unreachable, none if busy |
-| Routed task: same, but no untried eligible Agent is left (or 3 Agents tried) | `FAILED` (`NO_ALTERNATIVE_AGENT`) | Yes | Yes | As above, for the last Agent |
+| Routed task: same, but no untried eligible Agent is left (or 3 Agents tried) | `FAILED` (`NO_ALTERNATIVE_AGENT`; `NO_ELIGIBLE_AGENT` when only the client deadline rules the untried ones out) | Yes | Yes | As above, for the last Agent |
 | Pinned task: every dispatch attempt failed (Agent unreachable, timed out or non-2xx) | `FAILED` (`AGENT_UNREACHABLE`) | Yes | Yes | `EXECUTION_FAILED` |
 | Pinned task: the Agent declined as busy (429/503) | `FAILED` (`AGENT_BUSY`) | Yes | Yes | No |
 
@@ -183,7 +183,8 @@ invite a second, paid submit.
   The new WorkOrder is published only after that transaction commits. At most **3 distinct Agents**
   (`RoutedFailoverDomainService.MAX_DISTINCT_AGENTS`) are tried per task. With no untried eligible Agent
   left, or 3 tried, the task ends `FAILED` with `NO_ALTERNATIVE_AGENT`, a full refund and a `task.failed`
-  webhook. A late callback from a replaced Agent gets 401: its token names the old version, which is no
+  webhook. If untried Agents exist but the [client deadline](#client-deadline) rules every one out at
+  that hop, the reason is `NO_ELIGIBLE_AGENT` instead. A late callback from a replaced Agent gets 401: its token names the old version, which is no
   longer the task's assigned one. A dead letter or busy reply for a replaced version is ignored. If the
   publish still fails after the commit (the dispatch template retries it first), the task stays `QUEUED` and
   its execution timeout refunds it without blame.

@@ -8,6 +8,7 @@ import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.routing.info.DispatchMessage;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
+import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.task.routing.service.RoutedFailoverDomainService;
 import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -222,6 +223,8 @@ class RoutingAppServiceImplTest {
         UUID taskId = UUID.randomUUID();
         stubFailoverInputs(taskId, List.of());
         when(routedFailoverDomainService.selectNext(any(), any(), any())).thenReturn(Optional.empty());
+        when(routedFailoverDomainService.exhaustionReason(any(), any()))
+                .thenReturn(FailureReason.NO_ALTERNATIVE_AGENT);
 
         TransactionSynchronizationManager.initSynchronization();
         try {
@@ -230,7 +233,7 @@ class RoutingAppServiceImplTest {
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
-        verify(taskWriteAppService).failWithNoAlternative(taskId);
+        verify(taskWriteAppService).failWithRefund(taskId, FailureReason.NO_ALTERNATIVE_AGENT);
         verify(taskWriteAppService, never()).reassign(any(), any(), any());
         verify(taskDispatchPublisher, never()).publish(any());
     }

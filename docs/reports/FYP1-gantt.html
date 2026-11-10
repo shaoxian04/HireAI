@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; background: #ffffff; font-family: Arial, Helvetica, sans-serif; }
+  .wrap { width: 1680px; padding: 24px 28px 16px; box-sizing: border-box; }
+  .legend {
+    display: flex; gap: 28px; align-items: center; justify-content: center;
+    font-size: 15px; color: #333; padding: 2px 0 10px;
+  }
+  .legend .item { display: flex; align-items: center; gap: 8px; }
+  .swatch { width: 26px; height: 14px; border-radius: 2px; display: inline-block; border: 1px solid rgba(0,0,0,.25); }
+  .sw-crit { background: #d9534f; }
+  .sw-done { background: #c5c5c5; }
+  .sw-plan { background: #7da7d8; }
+  .sw-milestone { width: 14px; height: 14px; background: #6a6fc5; transform: rotate(45deg); border-radius: 2px; }
+  #status { position: absolute; left: -9999px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <pre class="mermaid">
+gantt
+    title HireAI — FYP1 Project Schedule (14 weeks, one column = one week)
+    dateFormat  YYYY-MM-DD
+    axisFormat  %e
+    tickInterval 1day
+    todayMarker off
+
+    section P1 Inception
+    Literature review + system comparison    :done, p1a, 2025-01-01, 3d
+    Requirements + 38 use cases              :done, p1b, 2025-01-03, 2d
+    Architecture + 3NF schema                :done, p1c, 2025-01-04, 3d
+
+    section P2 Core construction
+    M1 Task submission + escrow freeze       :crit, done, p2a, 2025-01-07, 2d
+    M2 Agent registration + webhook verify   :crit, done, p2b, 2025-01-09, 2d
+    M3 Routing + execution (RabbitMQ)        :crit, done, p2c, 2025-01-11, 2d
+    JWT auth + ownership checks              :done, p2d, 2025-01-12, 1d
+    End-to-end task-flow demo                :milestone, 2025-01-13, 0d
+
+    section Reporting + viva
+    FYP1 report writing                      :p3a, 2025-01-12, 2d
+    Demo polish + documentation              :p3b, 2025-01-14, 1d
+    FYP1 report + proposal defense           :milestone, 2025-01-14, 0d
+    FYP1 viva session                        :milestone, 2025-01-15, 0d
+  </pre>
+  <div class="legend">
+    <span class="item"><span class="swatch sw-crit"></span> critical path</span>
+    <span class="item"><span class="swatch sw-done"></span> completed</span>
+    <span class="item"><span class="swatch sw-plan"></span> planned</span>
+    <span class="item"><span class="sw-milestone"></span> milestone / supervisor checkpoint</span>
+  </div>
+</div>
+<div id="status">LOADING</div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"
+        integrity="sha384-rbtjAdnIQE/aQJGEgXrVUlMibdfTSa4PQju4HDhN3sR2PmaKFzhEafuePsl9H/9I"
+        crossorigin="anonymous"></script>
+<script>
+  (async () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'neutral',
+      themeVariables: {
+        fontFamily: 'Arial, Helvetica, sans-serif',
+        taskBkgColor: '#7da7d8',
+        taskBorderColor: '#4a6da7'
+      },
+      gantt: {
+        barHeight: 24, barGap: 7, topPadding: 64, leftPadding: 130,
+        fontSize: 14, sectionFontSize: 14, titleTopMargin: 28
+      }
+    });
+    await mermaid.run({ querySelector: '.mermaid' });
+    document.getElementById('status').textContent = 'RENDER_DONE';
+  })();
+</script>
+</body>
+</html>

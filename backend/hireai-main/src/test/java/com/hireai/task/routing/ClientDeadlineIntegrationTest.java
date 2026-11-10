@@ -142,6 +142,29 @@ class ClientDeadlineIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
+    void aFailoverHopWhereOnlyTooSlowAgentsAreLeftEndsWithNoEligibleAgent() throws Exception {
+        String category = uniqueCategory();
+        FakeAgent first = fakeAgent().replyWith(FakeAgentReply.status(429).afterDelay(Duration.ofSeconds(2)));
+        // The only untried Agent: 600 + grace fits a 1000 s deadline at submit, but not 400 s later.
+        FakeAgent tooSlowLater = fakeAgent();
+        seedAgent(category, first, "95.00", "5.00", 60);
+        seedAgent(category, tooSlowLater, "90.00", "5.00", 600);
+
+        UUID taskId = submitRouted(category, 1_000L);
+        first.awaitWorkOrders(1, Duration.ofSeconds(20));
+        clock.advance(Duration.ofSeconds(400));
+
+        // An untried Agent exists, so nothing else is wrong: only the deadline rules it out (#59).
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                assertThat(status(taskId)).isEqualTo("FAILED"));
+        assertThat(get("/api/tasks/" + taskId).path("failureReason").asText()).isEqualTo("NO_ELIGIBLE_AGENT");
+        // The shared test wallet also sees other tests' async refunds, so check this task's own settlement.
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM settlements WHERE task_id = ?",
+                Integer.class, taskId)).isEqualTo(1);
+        assertThat(tooSlowLater.workOrders()).isEmpty();
+    }
+
+    @Test
     void aRoutedTaskNoAgentCanFinishInTimeEndsWithNoEligibleAgentAndARefund() throws Exception {
         String category = uniqueCategory();
         FakeAgent slow = fakeAgent();

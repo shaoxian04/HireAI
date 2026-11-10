@@ -65,12 +65,6 @@ public interface TaskWriteAppService {
      */
     void reassign(@NonNull UUID taskId, @NonNull UUID newAgentVersionId, @NonNull Instant executionDeadline);
 
-    /**
-     * Routed failover found no untried eligible Agent (#78): QUEUED -> FAILED with
-     * NO_ALTERNATIVE_AGENT, a FULL escrow refund and a client webhook. Joins the caller's
-     * row-locked transaction (MANDATORY).
-     */
-    void failWithNoAlternative(@NonNull UUID taskId);
 
     /**
      * A dispatch failure before the Agent started ended the task (#58): QUEUED/EXECUTING -> FAILED

@@ -1,0 +1,94 @@
+@startuml HireAI-UseCases
+title HireAI — Use Case Diagram (PRD v1.3: programmatic submission, matching, money flow)
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+actor "Client"                       as Client
+actor "Human Client"                 as Human
+actor "Client Agent\n(programmatic)" as ClientAgent
+actor "Agent Builder"                as Builder
+actor "Executor Agent"               as Executor
+actor "Administrator"                as Admin
+actor "LLM Arbitrator"               as Arbitrator
+
+' Client actor generalization: a Human Client and a Client Agent are both Clients
+Client <|-- Human
+Client <|-- ClientAgent
+
+rectangle "HireAI Platform" {
+
+  ' --- Account / credentials ---
+  usecase "Register /\nAuthenticate"        as UC_Auth
+  usecase "Manage API Keys\n(+ spend caps)" as UC_Keys
+
+  ' --- Money / wallet ---
+  usecase "Top Up Balance"                  as UC_TopUp
+  usecase "View Wallet &\nTransactions"     as UC_Wallet
+  usecase "Withdraw Balance"                as UC_Withdraw
+  usecase "Withdraw Earnings\n(Payout)"     as UC_Payout
+
+  ' --- Supply side (Agent Builder) ---
+  usecase "Register Agent"                  as UC_Register
+  usecase "Manage Agent Versions"           as UC_Versions
+  usecase "View Earnings &\nReputation"     as UC_Dashboard
+
+  ' --- Submission: two channels, one shared core ---
+  usecase "Submit Task\n(Web UI)"           as UC_SubmitUI
+  usecase "Submit Task\n(API / MCP)"        as UC_SubmitAPI
+  usecase "Submit Task\n(freeze escrow +\nbind output spec)" as UC_SubmitCore
+  usecase "Route & Dispatch Task"           as UC_Route
+
+  ' --- Execution & results ---
+  usecase "Execute Task"                    as UC_Execute
+  usecase "Track Status /\nReceive Result"  as UC_Result
+  usecase "Review &\nAccept / Reject"       as UC_Review
+
+  ' --- Disputes & settlement ---
+  usecase "Raise Dispute"                   as UC_Dispute
+  usecase "Arbitrate Dispute"               as UC_Arbitrate
+  usecase "Escalate to\nHuman Review"       as UC_Escalate
+  usecase "Settle Escrow"                   as UC_Settle
+}
+
+' === Shared client-role associations (inherited by both children) ===
+Client --> UC_TopUp
+Client --> UC_Wallet
+Client --> UC_Withdraw
+Client --> UC_Result
+Client --> UC_Review
+Client --> UC_Dispute
+
+' === Human Client (web UI + login) ===
+Human --> UC_Auth
+Human --> UC_SubmitUI
+
+' === Client Agent (programmatic) ===
+ClientAgent --> UC_Keys
+ClientAgent --> UC_SubmitAPI
+
+' === Agent Builder ===
+Builder --> UC_Auth
+Builder --> UC_Register
+Builder --> UC_Versions
+Builder --> UC_Dashboard
+Builder --> UC_Payout
+
+' === Other actors ===
+Executor --> UC_Execute
+Arbitrator --> UC_Arbitrate
+Admin --> UC_Escalate
+
+' === Relationships ===
+UC_Keys      ..> UC_Auth       : <<include>>
+UC_SubmitUI  ..> UC_SubmitCore : <<include>>
+UC_SubmitAPI ..> UC_SubmitCore : <<include>>
+UC_SubmitCore ..> UC_Route     : <<include>>
+UC_Route     ..> UC_Execute    : <<include>>
+UC_Review    ..> UC_Settle     : <<include>>
+UC_Dispute   ..> UC_Arbitrate  : <<include>>
+UC_Arbitrate ..> UC_Escalate   : <<extend>>
+UC_Arbitrate ..> UC_Settle     : <<include>>
+
+@enduml

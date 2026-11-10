@@ -176,11 +176,6 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
                 taskId, previous, newAgentVersionId, executionDeadline);
     }
 
-    @Override
-    @Transactional(propagation = Propagation.MANDATORY)
-    public void failWithNoAlternative(UUID taskId) {
-        failWithRefund(taskId, FailureReason.NO_ALTERNATIVE_AGENT);
-    }
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
