@@ -10,6 +10,7 @@ import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,6 +36,11 @@ import java.util.List;
  */
 @Configuration
 public class RabbitDispatchConfig {
+
+    /** Publish tries (the first included) for every message sent through the dispatch template. */
+    static final int PUBLISH_ATTEMPTS = 3;
+    private static final long PUBLISH_FIRST_BACKOFF_MS = 200;
+    private static final long PUBLISH_MAX_BACKOFF_MS = 1_000;
 
     @Bean
     public DirectExchange dispatchExchange() {
@@ -110,10 +116,19 @@ public class RabbitDispatchConfig {
         return new Jackson2JsonMessageConverter(objectMapper);
     }
 
+    /**
+     * Every dispatch publish (the first WorkOrder, a failover's after-commit WorkOrder, a retry-queue
+     * republish) retries a broker failure a few times before giving up, so a brief broker blip does
+     * not strand a QUEUED task until its execution timeout.
+     */
     @Bean
     public RabbitTemplate dispatchRabbitTemplate(ConnectionFactory connectionFactory,
                                                  MessageConverter dispatchMessageConverter) {
         RabbitTemplate template = new RabbitTemplate(connectionFactory);
+        template.setRetryTemplate(RetryTemplate.builder()
+                .maxAttempts(PUBLISH_ATTEMPTS)
+                .exponentialBackoff(PUBLISH_FIRST_BACKOFF_MS, 2.0, PUBLISH_MAX_BACKOFF_MS)
+                .build());
         template.setMessageConverter(dispatchMessageConverter);
         template.setExchange(DispatchQueues.EXCHANGE);
         template.setRoutingKey(DispatchQueues.ROUTING_KEY);

@@ -168,8 +168,9 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                     log.info("Task {} failed over to agentVersion {} and dispatch published (correlationId={})",
                             taskId, target.agentVersionId(), message.correlationId());
                 } catch (RuntimeException e) {
-                    // The reassignment committed: the task stays QUEUED for the new Agent, and the
-                    // execution-timeout sweeper refunds it without blaming anyone.
+                    // The dispatch template already retried the publish. The reassignment committed:
+                    // the task stays QUEUED for the new Agent, and the execution-timeout sweeper
+                    // refunds it without blaming anyone.
                     log.error("Task {} was reassigned to agentVersion {} but publishing its WorkOrder "
                             + "failed (the task stays QUEUED until its execution timeout)",
                             taskId, target.agentVersionId(), e);

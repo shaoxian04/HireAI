@@ -2,6 +2,7 @@ package com.hireai.dispatch;
 
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.port.security.DispatchTokenService;
+import com.hireai.application.port.task.TaskExecutionPort;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -27,6 +28,7 @@ import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
@@ -40,9 +42,12 @@ import static org.mockito.Mockito.verify;
 class DispatchRetryIntegrationTest extends WholeAppIntegrationTest {
 
     private static final int TOTAL_ATTEMPTS = 4;
+    /** {@code hireai.dispatch.platform-retries} default: re-schedules after a platform-side failure. */
+    private static final int PLATFORM_RETRIES = 2;
 
     @Autowired TaskWriteAppService taskWriteAppService;
     @SpyBean DispatchTokenService dispatchTokenService;
+    @SpyBean TaskExecutionPort taskExecutionPort;
 
     @Test
     void anAgentThatKeepsFailingGetsEveryAttemptThenTheTaskFailsWithARefundWebhookAndReputationEvent() {
@@ -135,6 +140,49 @@ class DispatchRetryIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
+    void aTransientPlatformSideFailureBeforeTheSendIsRescheduledWithoutUsingAnAgentAttempt() {
+        FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted());
+        String category = "x-" + UUID.randomUUID();
+        UUID versionId = seedActiveAgent(category, agent.webhookUrl());
+        doThrow(new IllegalStateException("token signing briefly unavailable"))
+                .doCallRealMethod()
+                .when(dispatchTokenService).issue(any(), eq(versionId), any());
+
+        UUID taskId = submit(newClientWithCredits(), category);
+
+        // Re-scheduled instead of dropped: the task does not sit QUEUED until its execution timeout.
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                assertThat(status(taskId)).isEqualTo("EXECUTING"));
+        assertThat(agent.workOrders()).hasSize(1);
+        // The platform's failure used no Agent attempt and is not in the Agent's history.
+        assertThat(jdbc.queryForList("SELECT attempt_number || ':' || outcome FROM dispatch_attempts "
+                + "WHERE task_id = ?", String.class, taskId)).containsExactly("1:ACCEPTED");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM reputation_events WHERE task_id = ?",
+                Integer.class, taskId)).isZero();
+    }
+
+    @Test
+    void aFailureEndingABusyDeclinedTaskIsRescheduledInsteadOfStrandingIt() {
+        FakeAgent busy = fakeAgent().replyWith(FakeAgentReply.status(429));
+        String category = "x-" + UUID.randomUUID();
+        UUID versionId = seedActiveAgent(category, busy.webhookUrl());
+        doThrow(new IllegalStateException("database briefly unavailable"))
+                .doCallRealMethod()
+                .when(taskExecutionPort).declineAsBusy(any(), eq(versionId));
+
+        UUID taskId = submit(newClientWithCredits(), category);
+
+        // Offered again after the platform retry delay; the second decline ends the task (no other Agent).
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                assertThat(status(taskId)).isEqualTo("FAILED"));
+        assertThat(busy.workOrders()).hasSize(2);
+        assertThat(jdbc.queryForList("SELECT outcome FROM dispatch_attempts WHERE task_id = ?",
+                String.class, taskId)).containsExactly("BUSY");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM reputation_events WHERE task_id = ?",
+                Integer.class, taskId)).isZero();
+    }
+
+    @Test
     void aPlatformSideFailureBeforeTheSendIsNeverBlamedOnTheAgent() {
         FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted());
         String category = "x-" + UUID.randomUUID();
@@ -154,6 +202,10 @@ class DispatchRetryIntegrationTest extends WholeAppIntegrationTest {
             assertThat(jdbc.queryForObject("SELECT count(*) FROM reputation_events WHERE task_id = ?",
                     Integer.class, taskId)).isZero();
         });
+        // Re-scheduled a bounded number of times, then given up (the first try plus the re-schedules).
+        verify(dispatchTokenService, times(1 + PLATFORM_RETRIES)).issue(any(), eq(versionId), any());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM dispatch_attempts WHERE task_id = ?",
+                Integer.class, taskId)).isZero();
         assertThat(agent.workOrders()).isEmpty();
         // The escrow stays frozen until the execution-timeout sweeper refunds the QUEUED task
         // without blame (#66).

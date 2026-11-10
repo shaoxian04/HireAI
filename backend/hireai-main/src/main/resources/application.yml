@@ -108,6 +108,10 @@ hireai:
     # retry queue, not in the consumer; after the last attempt the task is FAILED with a refund.
     # Startup fails if they add up to more than execution.grace-seconds.
     retry-delays: ${DISPATCH_RETRY_DELAYS:5s,10s,15s}
+    # Re-schedules (on the shortest retry queue) after a platform-side failure before or around a
+    # send. They never consume an Agent attempt; after the last one the task is left QUEUED for the
+    # execution-timeout sweeper, which refunds it without blame.
+    platform-retries: ${DISPATCH_PLATFORM_RETRIES:2}
     # Concurrent dispatch consumers (prefetch 1 each), so one hanging Agent holds only one.
     consumers: ${DISPATCH_CONSUMERS:4}
   embedding:

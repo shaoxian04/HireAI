@@ -14,6 +14,16 @@ class DispatchRetryScheduleTest {
             List.of(Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(15));
 
     @Test
+    void aPlatformFailureIsRescheduledOnTheShortestRetryQueueUpToItsBound() {
+        DispatchRetrySchedule schedule = new DispatchRetrySchedule(PRODUCTION, 2, 60);
+
+        assertThat(schedule.delayAfterPlatformFailure(0)).contains(Duration.ofSeconds(5));
+        assertThat(schedule.delayAfterPlatformFailure(1)).contains(Duration.ofSeconds(5));
+        assertThat(schedule.delayAfterPlatformFailure(2)).isEmpty();
+        assertThat(new DispatchRetrySchedule(List.of(), 2, 60).delayAfterPlatformFailure(0)).isEmpty();
+    }
+
+    @Test
     void threeDelaysMeanFourAttemptsInTotal() {
         DispatchRetrySchedule schedule = new DispatchRetrySchedule(PRODUCTION, 60);
 

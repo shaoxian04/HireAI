@@ -20,6 +20,11 @@ public final class DispatchQueues {
     public static final String RETRY_QUEUE_PREFIX = "task.dispatch.retry.";
     /** 1-based number of the send attempt a message is for; absent on the first attempt. */
     public static final String ATTEMPT_HEADER = "x-hireai-dispatch-attempt";
+    /**
+     * How many times this send attempt was re-scheduled after a platform-side failure (absent = 0).
+     * Separate from {@link #ATTEMPT_HEADER}: a platform failure never consumes an Agent attempt.
+     */
+    public static final String PLATFORM_RETRY_HEADER = "x-hireai-dispatch-platform-retry";
 
     private DispatchQueues() {
     }

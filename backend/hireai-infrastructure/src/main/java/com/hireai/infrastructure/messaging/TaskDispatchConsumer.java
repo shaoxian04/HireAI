@@ -10,8 +10,10 @@ import com.hireai.infrastructure.client.AgentDispatchClient;
 import com.hireai.infrastructure.client.AgentSendFailedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
+import org.springframework.amqp.ImmediateRequeueAmqpException;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
@@ -22,11 +24,11 @@ import java.util.Optional;
 /**
  * Consumes dispatch messages: checks under a row lock that the task is still QUEUED for the
  * version and that the Agent is still available (otherwise drops the message, after failing an
- * unavailable Agent's task over or cancelling it: {@link TaskExecutionPort#prepareDispatch}), issues a signed token that lives until the task's execution deadline
- * plus {@link DispatchTokenService#CALLBACK_MARGIN}, reads the Agent's current signing secret,
- * POSTs the WorkOrder (signed when the Agent has a secret) via
- * {@link AgentDispatchClient}, then flips the task to EXECUTING through the
- * {@link TaskExecutionPort} port.
+ * unavailable Agent's task over or cancelling it: {@link TaskExecutionPort#prepareDispatch}),
+ * issues a signed token that lives until the task's execution deadline plus
+ * {@link DispatchTokenService#CALLBACK_MARGIN}, reads the Agent's current signing secret, POSTs the
+ * WorkOrder (signed when the Agent has a secret) via {@link AgentDispatchClient}, then flips the
+ * task to EXECUTING through the {@link TaskExecutionPort} port.
  *
  * <p>A busy reply ({@link AgentBusyException}: 429/503) consumes no attempt and is never retried:
  * it goes to {@link TaskExecutionPort#declineAsBusy}, which records a {@code BUSY} dispatch attempt
@@ -34,9 +36,13 @@ import java.util.Optional;
  * with {@code AGENT_BUSY} and a refund.
  *
  * <p>Only an Agent-attributable send failure ({@link AgentSendFailedException}: unreachable,
- * read timeout, any other non-2xx) consumes an attempt. A platform-side failure before or around the send
- * (task lookup, token issue, scheduling the retry) is logged and the message acknowledged; the
- * task stays QUEUED and the execution-timeout sweeper refunds it without blaming the Agent.
+ * read timeout, any other non-2xx) consumes an attempt. A platform-side failure before or around
+ * the send (task lookup, token issue, secret lookup, ending a busy-declined task) never does: the
+ * message is re-scheduled on the shortest retry queue with the same attempt number and the next
+ * {@link DispatchQueues#PLATFORM_RETRY_HEADER}, at most
+ * {@link DispatchRetrySchedule#delayAfterPlatformFailure bounded} times. Only after that bound is
+ * the message dropped; the task then stays QUEUED and the execution-timeout sweeper refunds it
+ * without blaming the Agent.
  *
  * <p>A failed send never blocks the consumer: the message is republished to the retry queue for
  * the next delay of the {@link DispatchRetrySchedule}, with the next attempt number in
@@ -44,10 +50,12 @@ import java.util.Optional;
  * returns to the dispatch queue. A failure on the last attempt rejects the message, so it
  * dead-letters to {@link DispatchQueues#DLQ}, where the DLQ listener records an {@code UNREACHABLE}
  * dispatch attempt and {@code EXECUTION_FAILED}, then fails a routed task over to another Agent or
- * ends a pinned one FAILED (refund, client webhook). A successful
- * send records an {@code ACCEPTED} dispatch attempt. A failure after a successful send is logged and
- * acknowledged, so a WorkOrder that reached the Agent is never sent again. The listener holds no
- * transaction of its own: each port call is its own short transaction.
+ * ends a pinned one FAILED (refund, client webhook). If republishing to a retry queue fails (after
+ * the dispatch template's own publish retries), the message is requeued once as it is; a second
+ * failure on the redelivery drops it. A successful send records an {@code ACCEPTED} dispatch
+ * attempt. A failure after a successful send is logged and acknowledged, so a WorkOrder that
+ * reached the Agent is never sent again. The listener holds no transaction of its own: each port
+ * call is its own short transaction.
  */
 @Component
 @Slf4j
@@ -74,10 +82,17 @@ public class TaskDispatchConsumer {
         this.agentReadAppService = agentReadAppService;
     }
 
+    /** Where a message is in its retry budgets, read from its headers. */
+    private record Delivery(int attempt, int platformRetries, boolean redelivered) {}
+
     @RabbitListener(queues = DispatchQueues.QUEUE, containerFactory = "dispatchListenerContainerFactory")
     public void onDispatch(DispatchMessage message,
-                           @Header(name = DispatchQueues.ATTEMPT_HEADER, required = false) Integer attemptHeader) {
-        int attempt = attemptHeader == null ? 1 : attemptHeader;
+                           @Header(name = DispatchQueues.ATTEMPT_HEADER, required = false) Integer attemptHeader,
+                           @Header(name = DispatchQueues.PLATFORM_RETRY_HEADER, required = false)
+                           Integer platformRetryHeader,
+                           @Header(name = AmqpHeaders.REDELIVERED, required = false) Boolean redelivered) {
+        Delivery delivery = new Delivery(attemptHeader == null ? 1 : attemptHeader,
+                platformRetryHeader == null ? 0 : platformRetryHeader, Boolean.TRUE.equals(redelivered));
         try {
             // 1. Row-locked pre-send step: drop the message unless the task is still QUEUED for
             //    this version (a stale message for a refunded or timed-out task, or a retry after
@@ -98,18 +113,16 @@ public class TaskDispatchConsumer {
                     .findSigningSecretForVersion(message.agentVersionId()).orElse(null);
             agentDispatchClient.dispatch(message, token, signingSecret);
         } catch (AgentBusyException e) {
-            declineAsBusy(message, attempt, e);
+            declineAsBusy(message, delivery, e);
             return;
         } catch (AgentSendFailedException e) {
-            retryOrDeadLetter(message, attempt, e);
+            retryOrDeadLetter(message, delivery, e);
             return;
         } catch (RuntimeException e) {
-            // A platform-side failure (task lookup, token issue, an invalid URL) is never blamed
-            // on the Agent: it neither consumes an attempt nor dead-letters (which would record
-            // EXECUTION_FAILED). The message is acknowledged and the task stays QUEUED; the
-            // execution-timeout sweeper then refunds it without a reputation event.
-            log.error("Dispatch of task {} failed on the platform side before the send; dropping "
-                    + "the message (the task stays QUEUED until its execution timeout)", message.taskId(), e);
+            // A platform-side failure (task lookup, token issue, an invalid URL) is never blamed on
+            // the Agent: it neither consumes an attempt nor dead-letters (which would record
+            // EXECUTION_FAILED). The message is re-scheduled instead.
+            reschedulePlatformFailure(message, delivery, "before the send", e);
             return;
         }
         // 4. Record the ACCEPTED attempt in the task's dispatch history (#75). Like step 5, a
@@ -144,45 +157,80 @@ public class TaskDispatchConsumer {
     /**
      * A busy reply (429/503) is final for this Agent: it is never retried (retrying would force
      * work on an Agent at capacity) and never dead-lettered (that would blame it). The task fails
-     * over or ends through {@link TaskExecutionPort#declineAsBusy}. A failure there is platform-side: logged and
-     * acknowledged, and the execution-timeout sweeper refunds the still-QUEUED task without blame.
+     * over or ends through {@link TaskExecutionPort#declineAsBusy}. A failure there is
+     * platform-side: the message is re-scheduled like any other platform failure, so the WorkOrder
+     * is offered again after the delay (the Agent may decline again; nothing counts against it).
      */
-    private void declineAsBusy(DispatchMessage message, int attempt, AgentBusyException cause) {
+    private void declineAsBusy(DispatchMessage message, Delivery delivery, AgentBusyException cause) {
         log.info("Dispatch attempt {} for task {}: the Agent declined as busy ({}); not retrying",
-                attempt, message.taskId(), cause.statusCode().orElse(null));
+                delivery.attempt(), message.taskId(), cause.statusCode().orElse(null));
         try {
             taskExecutionPort.declineAsBusy(message.taskId(), message.agentVersionId());
         } catch (RuntimeException e) {
-            log.error("Task {} was declined as busy but ending it failed; acknowledging (the task stays "
-                    + "QUEUED until its execution timeout)", message.taskId(), e);
+            reschedulePlatformFailure(message, delivery, "ending the busy-declined task", e);
         }
     }
 
-    private void retryOrDeadLetter(DispatchMessage message, int attempt, AgentSendFailedException cause) {
-        Optional<Duration> delay = retrySchedule.delayAfterFailedAttempt(attempt);
+    private void retryOrDeadLetter(DispatchMessage message, Delivery delivery, AgentSendFailedException cause) {
+        Optional<Duration> delay = retrySchedule.delayAfterFailedAttempt(delivery.attempt());
         if (delay.isEmpty()) {
-            log.warn("Dispatch attempt {}/{} for task {} failed; dead-lettering: {}", attempt,
+            log.warn("Dispatch attempt {}/{} for task {} failed; dead-lettering: {}", delivery.attempt(),
                     retrySchedule.maxAttempts(), message.taskId(), cause.toString());
             throw new AmqpRejectAndDontRequeueException(
                     "Dispatch for task " + message.taskId() + " failed on its last attempt", cause);
         }
-        int next = attempt + 1;
-        long delayMillis = delay.get().toMillis();
+        // A new send attempt starts with a fresh platform-retry budget.
+        republish(message, delivery, delay.get(), delivery.attempt() + 1, 0);
+        log.warn("Dispatch attempt {}/{} for task {} failed; retrying in {}ms: {}", delivery.attempt(),
+                retrySchedule.maxAttempts(), message.taskId(), delay.get().toMillis(), cause.toString());
+    }
+
+    /**
+     * Re-schedules the same send attempt after a platform-side failure, without consuming an Agent
+     * attempt, until {@code hireai.dispatch.platform-retries} is used up; then gives up and the
+     * task waits QUEUED for the execution-timeout sweeper, which refunds it without blame.
+     */
+    private void reschedulePlatformFailure(DispatchMessage message, Delivery delivery, String where,
+                                           RuntimeException cause) {
+        Optional<Duration> delay = retrySchedule.delayAfterPlatformFailure(delivery.platformRetries());
+        if (delay.isEmpty()) {
+            log.error("Dispatch of task {} failed on the platform side {} and its re-schedules are used "
+                    + "up; dropping the message (the task stays QUEUED until its execution timeout)",
+                    message.taskId(), where, cause);
+            return;
+        }
+        log.warn("Dispatch of task {} failed on the platform side {}; re-scheduling attempt {} in {}ms "
+                + "(platform retry {})", message.taskId(), where, delivery.attempt(), delay.get().toMillis(),
+                delivery.platformRetries() + 1, cause);
+        republish(message, delivery, delay.get(), delivery.attempt(), delivery.platformRetries() + 1);
+    }
+
+    /**
+     * Publishes the message to the retry queue for {@code delay} with the given headers. If that
+     * fails (after the dispatch template's own publish retries) the original delivery is requeued
+     * once, unchanged, rather than dropped; a redelivered message that fails again is dropped, so a
+     * broken broker cannot spin the consumer. Never dead-letters: that would blame the Agent.
+     */
+    private void republish(DispatchMessage message, Delivery delivery, Duration delay, int attempt,
+                           int platformRetries) {
+        long delayMillis = delay.toMillis();
         try {
             // Published to the default exchange, which routes by queue name.
-            rabbitTemplate.convertAndSend("", DispatchQueues.retryQueue(delay.get()), message, retry -> {
+            rabbitTemplate.convertAndSend("", DispatchQueues.retryQueue(delay), message, retry -> {
                 retry.getMessageProperties().setExpiration(Long.toString(delayMillis));
-                retry.getMessageProperties().setHeader(DispatchQueues.ATTEMPT_HEADER, next);
+                retry.getMessageProperties().setHeader(DispatchQueues.ATTEMPT_HEADER, attempt);
+                retry.getMessageProperties().setHeader(DispatchQueues.PLATFORM_RETRY_HEADER, platformRetries);
                 return retry;
             });
         } catch (RuntimeException publishFailure) {
-            // Platform-side: never dead-letter (that would blame the Agent). The task stays
-            // QUEUED and the execution-timeout sweeper refunds it without a reputation event.
-            log.error("Could not schedule dispatch retry for task {}; dropping the message (the task "
-                    + "stays QUEUED until its execution timeout)", message.taskId(), publishFailure);
-            return;
+            if (!delivery.redelivered()) {
+                log.error("Could not schedule dispatch retry for task {}; requeueing the message once",
+                        message.taskId(), publishFailure);
+                throw new ImmediateRequeueAmqpException(
+                        "Could not schedule the dispatch retry for task " + message.taskId(), publishFailure);
+            }
+            log.error("Could not schedule dispatch retry for task {} on a redelivery either; dropping the "
+                    + "message (the task stays QUEUED until its execution timeout)", message.taskId(), publishFailure);
         }
-        log.warn("Dispatch attempt {}/{} for task {} failed; retrying in {}ms: {}", attempt,
-                retrySchedule.maxAttempts(), message.taskId(), delayMillis, cause.toString());
     }
 }

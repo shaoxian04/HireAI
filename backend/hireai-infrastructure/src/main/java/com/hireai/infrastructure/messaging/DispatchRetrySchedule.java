@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.messaging;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -19,10 +20,22 @@ import java.util.Optional;
 public class DispatchRetrySchedule {
 
     private final List<Duration> delays;
+    private final int platformRetries;
 
+    /** Unit-test form: no platform-side re-schedules. */
+    public DispatchRetrySchedule(List<Duration> delays, long graceSeconds) {
+        this(delays, 0, graceSeconds);
+    }
+
+    @Autowired
     public DispatchRetrySchedule(
             @Value("${hireai.dispatch.retry-delays:5s,10s,15s}") List<Duration> delays,
+            @Value("${hireai.dispatch.platform-retries:2}") int platformRetries,
             @Value("${hireai.execution.grace-seconds:60}") long graceSeconds) {
+        if (platformRetries < 0) {
+            throw new IllegalStateException("hireai.dispatch.platform-retries must be >= 0, got " + platformRetries);
+        }
+        this.platformRetries = platformRetries;
         this.delays = List.copyOf(delays);
         Duration total = Duration.ZERO;
         for (Duration delay : this.delays) {
@@ -53,6 +66,19 @@ public class DispatchRetrySchedule {
             return Optional.empty();
         }
         return Optional.of(delays.get(attempt - 1));
+    }
+
+    /**
+     * The wait before re-scheduling a send after the {@code retriesSoFar}-th platform-side failure
+     * (task lookup, token issue, secret lookup, ...), or empty once the bound
+     * ({@code hireai.dispatch.platform-retries}) is used up or there is no retry queue to wait on.
+     * It reuses the shortest retry queue; the Agent's attempt number is unchanged.
+     */
+    public Optional<Duration> delayAfterPlatformFailure(int retriesSoFar) {
+        if (retriesSoFar >= platformRetries || delays.isEmpty()) {
+            return Optional.empty();
+        }
+        return delays.stream().min(Duration::compareTo);
     }
 
     /** The distinct delays, one retry queue each. */

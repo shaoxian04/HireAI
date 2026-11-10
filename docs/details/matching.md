@@ -185,7 +185,8 @@ invite a second, paid submit.
   left, or 3 tried, the task ends `FAILED` with `NO_ALTERNATIVE_AGENT`, a full refund and a `task.failed`
   webhook. A late callback from a replaced Agent gets 401: its token names the old version, which is no
   longer the task's assigned one. A dead letter or busy reply for a replaced version is ignored. If the
-  publish fails after the commit, the task stays `QUEUED` and its execution timeout refunds it without blame.
+  publish still fails after the commit (the dispatch template retries it first), the task stays `QUEUED` and
+  its execution timeout refunds it without blame.
 - **The deadline is stamped at assignment**, so one query catches both a silent agent and a lost publish.
   Only a silent agent is blamed: a task still `QUEUED` normally never reached the agent, so its timeout
   refunds without a reputation event (`TaskModel.timeoutIsAgentFault`). The rare task left `QUEUED` after a
@@ -322,10 +323,15 @@ resends a POST by itself, so the Agent gets exactly one WorkOrder per attempt. A
 The work-order connect and read timeouts are 5s and 15s. The consumer never waits in place: it republishes
 the message to a retry queue and acknowledges it, so other dispatches keep flowing.
 
-A platform-side failure (the row-locked task check, issuing the token, an invalid webhook URL, or scheduling
-the retry) never counts against the Agent. The consumer logs it and acknowledges the message, so it never
-reaches the DLQ or `EXECUTION_FAILED`. The task stays `QUEUED` and its execution timeout refunds it without a
-reputation event.
+A platform-side failure (the row-locked task check, issuing the token, reading the signing secret, an
+invalid webhook URL, or ending a busy-declined task) never counts against the Agent: it never reaches the DLQ
+or `EXECUTION_FAILED`. The consumer re-schedules the same send on the shortest retry queue, keeping the
+attempt number and counting the re-schedule in its own `x-hireai-dispatch-platform-retry` header, up to
+`hireai.dispatch.platform-retries` times. Only after that does it give up: the task stays `QUEUED` and its
+execution timeout refunds it without a reputation event. Every dispatch publish (first WorkOrder, failover
+WorkOrder, retry-queue republish) also retries a broker failure a few times itself
+(`RabbitDispatchConfig.dispatchRabbitTemplate`); if a retry-queue republish still fails, the message is
+requeued once as it is, and dropped if that redelivery fails too.
 
 - `hireai.dispatch.retry-delays` (default `5s,10s,15s`) are the waits between attempts, so three delays mean
   four attempts in total. Startup fails if they add up to more than `hireai.execution.grace-seconds`, so
