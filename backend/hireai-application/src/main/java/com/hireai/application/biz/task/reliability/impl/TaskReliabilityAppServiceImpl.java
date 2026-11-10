@@ -173,7 +173,7 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
             reputationWriteAppService.recordOutcome(taskId, timedOut.agentVersionId(),
                     timedOut.clientId(), ReputationEventType.EXECUTION_TIMEOUT);
         }
-        webhookOutboxAppService.enqueueFailed(timedOut, "TIMED_OUT");
+        webhookOutboxAppService.enqueueFailed(timedOut, timedOut.status().name());
         log.info("Task {} TIMED_OUT from {} past execution deadline; escrow fully refunded", taskId, task.status());
     }
 }

@@ -16,7 +16,6 @@ import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
-import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.webhookdelivery.WebhookSignature;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
@@ -84,7 +83,7 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
         // before the dispatch consumer marks the task EXECUTING. Any later status means the first
         // callback was already processed (or the task ended): first result wins, no-op. There is
         // no second insert into task_results, so its UNIQUE constraint is never triggered.
-        if (task.status() != TaskStatus.QUEUED && task.status() != TaskStatus.EXECUTING) {
+        if (!task.isInFlight()) {
             log.info("Task {} is already in status {}; treating callback as a no-op — first result wins",
                      taskId, task.status());
             return;
@@ -98,7 +97,7 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
             // The agent itself reported it could not deliver — a zero-quality sample.
             reputationWriteAppService.recordOutcome(taskId, failed.agentVersionId(),
                     failed.clientId(), ReputationEventType.EXECUTION_FAILED);
-            webhookOutboxAppService.enqueueFailed(failed, "FAILED");
+            webhookOutboxAppService.enqueueFailed(failed, failed.status().name());
             log.info("Task {} agent reported {} -> FAILED (refunded)", taskId, result.agentStatus());
             return;
         }
