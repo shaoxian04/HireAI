@@ -21,9 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.DockerClientFactory;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -36,7 +34,6 @@ import static org.mockito.Mockito.when;
  * mocked so the callback's 401-on-bad-token path is deterministic without a real signed token.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers
 @EnabledIf("dockerAvailable")
 class AuthIntegrationTest {
 
@@ -48,16 +45,28 @@ class AuthIntegrationTest {
         }
     }
 
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
+    /**
+     * A database of its own in the shared harness Postgres, which outlives every Spring context. A
+     * class-scoped container was stopped while this (secured-profile, sweepers-on) context stayed
+     * cached, so at JVM exit a sweep blocked on the pool's 30s connection timeout and the fork outlived
+     * surefire's exit timeout.
+     */
+    private static String jdbcUrl;
+
+    private static synchronized String jdbcUrl() {
+        if (jdbcUrl == null) {
+            jdbcUrl = HarnessContainers.newDatabase("auth_it_" + UUID.randomUUID().toString().replace("-", ""));
+        }
+        return jdbcUrl;
+    }
     // Intentionally no RabbitMQ container: @Profile("!test") arbitration beans (RabbitArbitrationClient,
     // ArbitrationDlqListener) are active but safe here because no test opens a dispute, so nothing publishes.
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("spring.datasource.url", () -> jdbcUrl());
+        registry.add("spring.datasource.username", () -> HarnessContainers.postgres().getUsername());
+        registry.add("spring.datasource.password", () -> HarnessContainers.postgres().getPassword());
     }
 
     @LocalServerPort int port;

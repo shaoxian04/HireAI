@@ -66,7 +66,7 @@ public final class HarnessContainers {
      * A fresh, empty database in the shared Postgres. Each Spring context gets its own, so cached
      * contexts never see each other's rows. Returns its JDBC URL.
      */
-    static String newDatabase(String name) {
+    public static String newDatabase(String name) {
         PostgreSQLContainer<?> pg = postgres();
         try (Connection connection = DriverManager.getConnection(pg.getJdbcUrl(), pg.getUsername(), pg.getPassword());
              Statement statement = connection.createStatement()) {
