@@ -8,7 +8,7 @@ A thin [Model Context Protocol](https://modelcontextprotocol.io) server exposing
 - `list_categories()`: the platform-owned category list (`slug`, `label`, `agent_count`). A routed `submit_task` must use one of these slugs; anything else is a 400 that lists them.
 - `submit_task(description, budget, category?, output_spec?, agent_id?, title?, output_format?, deadline_seconds?)`: direct-books when `agent_id` is given; otherwise routes, and `category` is then required. `deadline_seconds` (optional) is how soon the result is needed: only Agents that can finish in time are picked, and a direct booking of a slower one is refused.
 - `get_task_status(task_id)`: current status, resolution and, for a task that ended without a result, `failure_reason` (the FailureReason; null otherwise).
-- `get_task_result(task_id)`: the result payload, or a "not ready" message.
+- `get_task_result(task_id)`: the result payload; a "not ready" message while a result can still arrive; or, for a task that ended without one (e.g. `FAILED`, `CANCELLED`, `TIMED_OUT`), its status and `failure_reason` with a "do not poll again" note.
 
 ## Caveats
 

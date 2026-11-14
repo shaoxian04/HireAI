@@ -85,13 +85,39 @@ async def test_get_task_status_shows_why_a_task_failed(monkeypatch, fake):
                                "failure_reason": "AGENT_UNREACHABLE"}
 
 
-async def test_get_task_result_not_ready(monkeypatch, fake):
+def _no_result_yet(monkeypatch, fake, status, failure_reason=None):
     async def boom(task_id):
         raise ResultNotReady()
 
+    async def task(task_id):
+        fake.calls.append(("get_task", task_id))
+        return {"id": task_id, "status": status, "resolution": None, "failureReason": failure_reason}
+
     monkeypatch.setattr(fake, "get_task_result", boom)
+    monkeypatch.setattr(fake, "get_task", task)
+
+
+async def test_get_task_result_not_ready(monkeypatch, fake):
+    _no_result_yet(monkeypatch, fake, "EXECUTING")
     out = await server.get_task_result("t1")
     assert "not ready" in out.lower()
+
+
+@pytest.mark.parametrize("status", ["SUBMITTED", "QUEUED", "EXECUTING", "RESULT_RECEIVED", "AWAITING_AGENT"])
+async def test_get_task_result_keeps_polling_while_a_result_can_still_arrive(monkeypatch, fake, status):
+    _no_result_yet(monkeypatch, fake, status)
+    assert "poll again" in (await server.get_task_result("t1")).lower()
+
+
+@pytest.mark.parametrize("status,reason", [("FAILED", "AGENT_BUSY"), ("CANCELLED", "NO_ELIGIBLE_AGENT"),
+                                           ("TIMED_OUT", "EXECUTION_TIMEOUT")])
+async def test_get_task_result_for_a_task_that_ended_without_one_says_so(monkeypatch, fake, status, reason):
+    _no_result_yet(monkeypatch, fake, status, reason)
+    out = await server.get_task_result("t1")
+    assert "poll again shortly" not in out.lower()
+    assert json.loads(out) == {"task_id": "t1", "result": None, "status": status, "failure_reason": reason,
+                               "message": f"This task ended {status} without a result, so there is none to "
+                                          f"fetch. Do not poll again."}
 
 
 async def test_list_categories_returns_the_platform_list(fake):

@@ -67,13 +67,26 @@ async def get_task_status(task_id: str) -> str:
                        "failure_reason": task.get("failureReason")}, default=str)
 
 
+# Statuses in which an Agent's result can still arrive; any other status with no result is final.
+_RESULT_STILL_POSSIBLE = {"SUBMITTED", "QUEUED", "EXECUTING", "RESULT_RECEIVED", "AWAITING_AGENT"}
+
+
 async def get_task_result(task_id: str) -> str:
-    """Fetch the result payload a HireAI agent produced for a task. If there is no result yet, returns
-    a 'not ready' message — poll again shortly."""
+    """Fetch the result payload a HireAI agent produced for a task. If the task is still in progress,
+    returns a 'not ready' message — poll again shortly. If it ended without a result (e.g. FAILED,
+    CANCELLED, TIMED_OUT), says so with its failure_reason — do not poll again."""
+    client = _client()
     try:
-        result = await _client().get_task_result(task_id)
+        result = await client.get_task_result(task_id)
     except ResultNotReady:
-        return "Result not ready yet — the task is still executing or being validated. Poll again shortly."
+        task = await client.get_task(task_id)
+        status = task.get("status")
+        if status in _RESULT_STILL_POSSIBLE:
+            return "Result not ready yet — the task is still executing or being validated. Poll again shortly."
+        return json.dumps({"task_id": task_id, "result": None, "status": status,
+                           "failure_reason": task.get("failureReason"),
+                           "message": f"This task ended {status} without a result, so there is none to "
+                                      f"fetch. Do not poll again."}, default=str)
     return json.dumps(result, indent=2, default=str)
 
 
