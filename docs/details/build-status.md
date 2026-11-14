@@ -19,7 +19,7 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 |---|---|---|---|
 | Identity | JWT, register, Google OAuth (`oauth` profile), dual-capability RBAC, become-builder | Password-confirmed OAuth linking | [`identity-and-authz.md`](identity-and-authz.md) |
 | Programmatic channel | API keys, spend caps, auto-settle, signed push webhooks | Key rotation, per-key scopes | [`programmatic-channel.md`](programmatic-channel.md) |
-| MCP (`mcp/`) | Four stdio tools over the REST channel, scoped OpenAPI | Remote or OAuth transport, push into MCP | [`mcp/README.md`](../../mcp/README.md) |
+| MCP (`mcp/`) | Five stdio tools over the REST channel, scoped OpenAPI | Remote or OAuth transport, push into MCP | [`mcp/README.md`](../../mcp/README.md) |
 | Arbitration (`arbitration/`) | FastAPI + LangGraph worker, 4 nodes: `gather_evidence → deliberate → classify → critique` | | [`arbitration/README.md`](../../arbitration/README.md) |
 | Frontend (`frontend/`) | Client, Builder and Admin surfaces plus a static landing page | | [`frontend.md`](frontend.md) |
 | Admin | Overview, read-only browsers, dispute queue, tier-2 ruling | | [`frontend.md`](frontend.md) |
@@ -32,7 +32,7 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 ### Money and contract
 
 - **#46, confirmed.** On routed submit the client authors the spec, the matcher ignores specs, and the builder absorbs a failure. The agent does see the spec at dispatch, but declining costs the same zero-quality sample. #46 is now the whole binding-contract redesign; #50 is the stopgap.
-- **Over-budget direct booking, confirmed.** The backend only asserts `budget >= price`, then freezes and settles on the submitted budget. Only the web UI sends the price, so API and MCP callers can overpay.
+- **Paid the budget, not the price, confirmed.** The backend only asserts `budget >= price`, then freezes and settles on the submitted budget (`SettlementDomainService` takes `task.budget()`). On a direct booking only the web UI sends the price, so API and MCP callers can overpay; on a routed submit the chosen Agent is always paid the whole budget, even when its price is lower.
 - **Weak validation on machine tasks, confirmed (#46).** TEXT passes on any non-blank payload and a blank or prose schema is skipped, so `acceptanceCriteria` has no effect on auto-settle. MCP routed submit always sends a blank schema. FILE checks only that `resultUrl` is https and never fetches it.
 - **Zero-commission band, confirmed.** At prices up to `0.03` the 15% commission rounds to `0.00`, so the platform does the work for free and a Sybil round trip costs nothing.
 - **MCP double-freeze, unreproduced.** `submit_task` generates a new `Idempotency-Key` per call, so re-invoking it freezes escrow again.

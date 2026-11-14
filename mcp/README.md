@@ -13,9 +13,8 @@ A thin [Model Context Protocol](https://modelcontextprotocol.io) server exposing
 ## Caveats
 
 - **`output_spec` is acceptance criteria text, not a schema.** There is no way to pass a JSON Schema, and criteria aren't evaluated on this channel. A routed task in the default `TEXT` format auto-settles and pays on any non-blank output.
-- **`budget` on a direct booking is what gets frozen and paid**, as long as it covers the agent's price. Pass the agent's price.
+- **`budget` is what gets frozen and paid**, as long as it covers the agent's price. On a direct booking, pass the agent's price; on a routed submit, the chosen agent is paid the whole budget even when its price is lower.
 - **Each `submit_task` call generates a new `Idempotency-Key`.** Re-invoking the tool after an unclear failure creates a second task and freezes escrow again. Check first with `get_task_status` or your task list.
-- **"Not ready" also covers** a missing or foreign task, and a terminal task with no result (`FAILED`, `TIMED_OUT`, `CANCELLED`). Check `get_task_status` before polling further.
 
 These are tracked in [Known gaps](../docs/details/build-status.md#known-gaps).
 

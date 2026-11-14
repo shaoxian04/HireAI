@@ -7,7 +7,7 @@ Topology and communication, as built. The SAD is authoritative for design (see t
 - **Frontend** (`frontend/`): Next.js App Router. Client, Builder and Admin surfaces behind login, plus a static landing page. The catalogue is client-rendered and needs a login. Talks only to the Spring Boot API.
 - **Backend** (`backend/`): Spring Boot, Java 21. JWT and API-key auth, and all marketplace logic as DDD subdomains. Owns all state.
 - **Arbitration** (`arbitration/`): FastAPI + LangGraph worker. Consumes dispute jobs from RabbitMQ, calls OpenAI `gpt-4o`, posts a `{category, rationale}` ruling back over an authenticated HTTP callback. Stateless, and the only component that calls an LLM (the backend calls only OpenAI's embeddings endpoint).
-- **MCP server** (`mcp/`): stdio facade translating four tools into API-key REST calls. No logic or storage of its own.
+- **MCP server** (`mcp/`): stdio facade translating five tools into API-key REST calls. No logic or storage of its own.
 - **Demo agent** (`demo-agent/`): a stub third-party Agent for local demos. Not part of the product.
 
 ## Shared infrastructure
