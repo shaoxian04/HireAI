@@ -43,7 +43,7 @@ These are needed on every task and are too important to risk being unread. Enfor
 3. **Deterministic money path.** The LLM may produce a dispute *ruling* but never moves credits. All settlement is computed deterministically in the domain layer from the ruling category.
 4. **The task's frozen output spec is the binding contract.** The `output_spec` stored on the task at submit is the single contract used by both automated validation and arbitration: the Agent's own spec on direct bookings, the client's on routed tasks (see #46). Validation runs before any client sees a result.
 5. **Server-side identity from JWT.** Derive the user ID from the JWT principal; path/body IDs require an explicit ownership check. Builders act only on Agents they own; clients only on their own tasks/wallet.
-6. **Signed, HTTPS-only Agent I/O.** Webhook URLs must be HTTPS; dispatch carries a short-lived signed token; result callbacks are rejected (401) unless the token is valid and unexpired. Extended to **outbound** client webhooks: SSRF-guarded target + HMAC signature (see `docs/details/programmatic-channel.md`).
+6. **Signed, HTTPS-only Agent I/O.** Webhook URLs must be HTTPS and pass the SSRF guard (at registration, publish and every send; redirects never followed); dispatch carries a short-lived signed token, and every WorkOrder is HMAC-signed with the Agent's signing secret; result callbacks are rejected (401) unless the token is valid and unexpired **and** the raw body carries a valid, fresh (±5 min) HMAC signature made with the assigned Agent's current secret, verified before the body is parsed, and the signed body names that task. Extended to **outbound** client webhooks: SSRF-guarded target + HMAC signature (see `docs/details/programmatic-channel.md`).
 
 ## Doc rules
 
@@ -90,8 +90,8 @@ Read the relevant file on demand — don't preload everything.
 
 - **`docs/details/build-status.md`** — what's built in each module, and the single list of known gaps.
   **Read before starting any feature — to see what already exists.**
-- **`docs/details/matching.md`** — how agents are ranked, shortlisted and routed, and the re-match and timeout sweepers.
-  **Read before touching matching, routing, or the submit flow.**
+- **`docs/details/matching.md`** — how agents are ranked, shortlisted and routed, the re-match and timeout sweepers, and the WorkOrder an Agent receives.
+  **Read before touching matching, routing, dispatch, or the submit flow.**
 - **`docs/details/architecture.md`** — services, polyglot topology, tech stack, communication patterns.
   **Read before any cross-service or infrastructure change.**
 - **`docs/details/ddd-conventions.md`** — layering (`controller → application → domain ← infrastructure`), aggregate boundaries, naming suffixes, the five rules.
@@ -106,7 +106,7 @@ Read the relevant file on demand — don't preload everything.
   **Read before running a live end-to-end demo.**
 - **`docs/details/frontend.md`** — Next.js app structure + conventions (the `/api/*` proxy, the `api()` client, the auth context + localStorage scheme, the UI kit, the route map).
   **Read before changing anything in `frontend/`.**
-- **`docs/details/identity-and-authz.md`** — JWT auth, the two profile-scoped security chains, the `CurrentUserProvider` seam + owner checks, and the callback's dispatch-token auth (not JWT).
+- **`docs/details/identity-and-authz.md`** — JWT auth, the two profile-scoped security chains, the `CurrentUserProvider` seam + owner checks, and the callback's dispatch-token + signature auth (not JWT).
   **Read before touching auth, security config, or anything that derives the current user.**
 
 ## Source-of-truth & conflict resolution

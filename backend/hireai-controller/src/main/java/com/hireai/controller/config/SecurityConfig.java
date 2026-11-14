@@ -20,7 +20,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  *
  * <p><b>Default / prod / dev</b> ({@code @Profile("!test")}): the stateless, CSRF-off,
  * JWT-authenticated {@code securedFilterChain} ({@code @Order(2)}). Only login, register, the agent
- * result callback (dispatch-token authenticated — Hard Invariant #6), and the health probe are
+ * result callback (dispatch token + Agent signature — Hard Invariant #6), and the health probe are
  * public; everything else requires a valid JWT. The {@link JwtAuthenticationFilter} runs before the
  * username/password filter; an unauthenticated request to a protected route gets a 401 (no redirect).
  * When OAuth is enabled ({@code hireai.auth.oauth2.enabled=true}, the {@code oauth} profile), a
@@ -77,11 +77,14 @@ public class SecurityConfig {
                         // Public API documentation (springdoc / Swagger UI) — the programmatic OpenAPI group.
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         // Submit / track / settle: reachable by a human CLIENT or an API_CLIENT key.
+                        // match-preview is a POST (task text in the body), so it needs its own matcher:
+                        // no GET wildcard covers it.
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
-                                "/api/tasks", "/api/tasks/direct").hasAnyRole("CLIENT", "API_CLIENT")
+                                "/api/tasks", "/api/tasks/direct", "/api/tasks/match-preview")
+                                .hasAnyRole("CLIENT", "API_CLIENT")
                         .requestMatchers(org.springframework.http.HttpMethod.GET,
                                 "/api/tasks", "/api/tasks/*", "/api/tasks/*/result",
-                                "/api/tasks/*/validation").hasAnyRole("CLIENT", "API_CLIENT")
+                                "/api/tasks/*/validation", "/api/tasks/*/attempts").hasAnyRole("CLIENT", "API_CLIENT")
                         // Accept/reject are human-only: a client must review and decide, not a script.
                         // Equivalent to letting them fall through to anyRequest() below; kept explicit
                         // to document intent. An API_CLIENT key is denied (401 at the full app).
@@ -98,6 +101,10 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
                                 "/api/webhooks/deliveries/*/redeliver").hasAnyRole("CLIENT", "API_CLIENT")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // Agent signing-secret rotation: the owning BUILDER only, JWT-only (a leaked API
+                        // key cannot mint an agent secret). Ownership is then checked by the app service.
+                        .requestMatchers(org.springframework.http.HttpMethod.POST,
+                                "/api/agents/*/rotate-secret").hasRole("BUILDER")
                         // Public catalogue browse: reachable by any human role or an API_CLIENT key
                         // (powers the MCP list_agents tool). GET only; owner-private fields are already
                         // stripped from the catalogue DTOs (Hard Invariant #5).

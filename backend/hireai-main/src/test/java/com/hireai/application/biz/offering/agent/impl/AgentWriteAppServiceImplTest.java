@@ -1,6 +1,7 @@
 package com.hireai.application.biz.offering.agent.impl;
 
 import com.hireai.application.biz.offering.agent.AgentWriteAppService;
+import com.hireai.application.port.webhook.WebhookUrlValidatorPort;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.enums.AgentStatus;
 import com.hireai.domain.biz.offering.agent.event.AgentActivatedDomainEvent;
@@ -14,6 +15,8 @@ import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
 import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
+import com.hireai.domain.biz.offering.agent.info.AgentRegistration;
+import com.hireai.domain.biz.offering.agent.service.AgentSigningSecretGenerator;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentActivateDomainServiceImpl;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentDeactivateDomainServiceImpl;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentReactivateDomainServiceImpl;
@@ -22,6 +25,7 @@ import com.hireai.domain.biz.offering.agent.service.impl.AgentSuspendDomainServi
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.utility.exception.DomainException;
+import com.hireai.support.category.TestCategories;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationEventPublisher;
@@ -44,6 +48,17 @@ class AgentWriteAppServiceImplTest {
         final Map<UUID, AgentModel> store = new HashMap<>();
         /** version-id -> persisted version snapshot (mirrors what the JPA impl does). */
         final Map<UUID, AgentVersionModel> versionStore = new HashMap<>();
+        /** agent-id -> signing secret (the column the JPA impl writes with a targeted UPDATE). */
+        final Map<UUID, String> secrets = new HashMap<>();
+
+        @Override public void updateSigningSecret(UUID agentId, String signingSecret) {
+            secrets.put(agentId, signingSecret);
+        }
+
+        @Override public Optional<String> findSigningSecretByVersionId(UUID agentVersionId) {
+            AgentVersionModel version = versionStore.get(agentVersionId);
+            return version == null ? Optional.empty() : Optional.ofNullable(secrets.get(version.agentId()));
+        }
 
         @Override public AgentModel save(AgentModel agent) {
             store.put(agent.id(), agent);
@@ -64,7 +79,9 @@ class AgentWriteAppServiceImplTest {
         @Override public List<AgentModel> findByOwnerId(UUID ownerId, AgentQuery query) {
             return store.values().stream().filter(a -> a.ownerId().equals(ownerId)).toList();
         }
-        @Override public List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice) {
+        @Override public List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice,
+                                                                Long longestExecutionSeconds,
+                                                                com.hireai.domain.biz.offering.embedding.info.TextVector taskVector) {
             return List.of();
         }
         @Override public java.util.Optional<AgentCandidate> findCandidateByVersionId(UUID agentVersionId) {
@@ -124,6 +141,10 @@ class AgentWriteAppServiceImplTest {
         @Override public Optional<StorefrontModel> findByAgentId(UUID agentId) {
             return Optional.ofNullable(store.get(agentId));
         }
+        @Override public java.util.Set<UUID> findListedAgentIds(java.util.Collection<UUID> agentIds) {
+            return agentIds.stream().filter(id -> store.containsKey(id) && store.get(id).listed())
+                    .collect(java.util.stream.Collectors.toSet());
+        }
     }
 
     /** Recording event publisher. */
@@ -133,13 +154,29 @@ class AgentWriteAppServiceImplTest {
         @Override public void publishEvent(ApplicationEvent event) { events.add(event); }
     }
 
+    /** SSRF guard stand-in: rejects any URL in {@code blocked}, like the real one does for internal hosts. */
+    static class FakeUrlValidator implements WebhookUrlValidatorPort {
+        final java.util.Set<String> blocked = new java.util.HashSet<>();
+        @Override public void assertDeliverable(String url) { assertAgentWebhookDeliverable(url); }
+        @Override public void assertAgentWebhookDeliverable(String url) {
+            if (blocked.contains(url)) {
+                throw new DomainException(ResultCode.VALIDATION_ERROR, "Callback URL resolves to a private/blocked address");
+            }
+        }
+    }
+
+    private final FakeUrlValidator urlValidator = new FakeUrlValidator();
     private final FakeAgentRepository repository = new FakeAgentRepository();
     private final FakeStorefrontRepository profileRepository = new FakeStorefrontRepository();
     private final RecordingPublisher publisher = new RecordingPublisher();
+    private final TestCategories.InMemorySuggestions suggestions = new TestCategories.InMemorySuggestions();
+
     private final AgentWriteAppService service = new AgentWriteAppServiceImpl(
             repository, profileRepository, new AgentRegisterDomainServiceImpl(),
             new AgentActivateDomainServiceImpl(), new AgentSuspendDomainServiceImpl(),
-            new AgentReactivateDomainServiceImpl(), new AgentDeactivateDomainServiceImpl(), publisher);
+            new AgentReactivateDomainServiceImpl(), new AgentDeactivateDomainServiceImpl(), publisher,
+            new com.hireai.domain.biz.offering.agent.service.impl.AgentSigningSecretGeneratorImpl(), urlValidator,
+            TestCategories.listOf("summarisation", "translation", "other"), suggestions);
 
     private AgentRegisterInfo info(UUID ownerId) {
         return new AgentRegisterInfo(ownerId, "Summariser Bot",
@@ -150,7 +187,7 @@ class AgentWriteAppServiceImplTest {
     @Test
     void registerPersistsPendingAgentAndPublishesEvent() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
 
         AgentModel saved = repository.findById(agentId).orElseThrow();
         assertThat(saved.status()).isEqualTo(AgentStatus.PENDING_VERIFICATION);
@@ -160,9 +197,80 @@ class AgentWriteAppServiceImplTest {
     }
 
     @Test
+    void registerRejectsAnUnknownCategoryAndSavesNothing() {
+        AgentRegisterInfo unknown = new AgentRegisterInfo(UUID.randomUUID(), "Poet",
+                new OutputSpec(OutputFormat.TEXT, null, "ok"), List.of("summarisation", "poetry"),
+                "https://agent.example.com/hook", 120, new BigDecimal("5.00"), 5);
+
+        assertThatThrownBy(() -> service.register(unknown))
+                .isInstanceOf(DomainException.class)
+                .hasMessage("Unknown category 'poetry'. Valid categories: summarisation, translation, other");
+        assertThat(repository.store).isEmpty();
+    }
+
+    @Test
+    void registerAndPublishStoreTheSuggestedCategoryForTheirVersion() {
+        UUID ownerId = UUID.randomUUID();
+        AgentRegisterInfo withSuggestion = new AgentRegisterInfo(ownerId, "Niche",
+                new OutputSpec(OutputFormat.TEXT, null, "ok"), List.of("other"),
+                "https://agent.example.com/hook", 120, new BigDecimal("5.00"), 5, " Legal review ");
+        UUID agentId = service.register(withSuggestion).agentId();
+        UUID firstVersion = repository.findById(agentId).orElseThrow().currentVersion().id();
+
+        AgentModel published = service.publishNewVersion(agentId, ownerId,
+                new PublishVersionInfo(new BigDecimal("6.00"), 120, List.of("other"), "Contract redlining"));
+
+        assertThat(suggestions.recorded).extracting(s -> s.agentVersionId() + "=" + s.text())
+                .containsExactly(firstVersion + "=Legal review",
+                        published.currentVersion().id() + "=Contract redlining");
+        assertThat(suggestions.recorded).allMatch(s -> s.ownerId().equals(ownerId) && s.agentId().equals(agentId));
+    }
+
+    @Test
+    void publishRejectsAnUnknownCategory() {
+        UUID ownerId = UUID.randomUUID();
+        UUID agentId = service.register(info(ownerId)).agentId();
+
+        assertThatThrownBy(() -> service.publishNewVersion(agentId, ownerId,
+                new PublishVersionInfo(new BigDecimal("6.00"), 120, List.of("summarization"))))
+                .isInstanceOf(DomainException.class)
+                .hasMessageStartingWith("Unknown category 'summarization'.");
+    }
+
+    @Test
+    void registerIssuesASigningSecretAndReturnsItOnce() {
+        AgentRegistration registration = service.register(info(UUID.randomUUID()));
+
+        assertThat(registration.signingSecret()).startsWith("agsec_");
+        assertThat(repository.secrets).containsEntry(registration.agentId(), registration.signingSecret());
+    }
+
+    @Test
+    void rotateReplacesTheSecretForTheOwner() {
+        UUID ownerId = UUID.randomUUID();
+        AgentRegistration registration = service.register(info(ownerId));
+
+        String rotated = service.rotateSigningSecret(registration.agentId(), ownerId);
+
+        assertThat(rotated).startsWith("agsec_").isNotEqualTo(registration.signingSecret());
+        assertThat(repository.secrets).containsEntry(registration.agentId(), rotated);
+    }
+
+    @Test
+    void rotateRejectsANonOwnerAsNotFoundAndKeepsTheSecret() {
+        AgentRegistration registration = service.register(info(UUID.randomUUID()));
+
+        assertThatThrownBy(() -> service.rotateSigningSecret(registration.agentId(), UUID.randomUUID()))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).resultCode())
+                .isEqualTo(ResultCode.NOT_FOUND);
+        assertThat(repository.secrets).containsEntry(registration.agentId(), registration.signingSecret());
+    }
+
+    @Test
     void activateTransitionsToActiveAndPublishesEvent() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
 
         service.activate(agentId, ownerId);
 
@@ -175,7 +283,7 @@ class AgentWriteAppServiceImplTest {
     @Test
     void activateRejectsNonOwner() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
 
         assertThatThrownBy(() -> service.activate(agentId, UUID.randomUUID()))
                 .isInstanceOf(DomainException.class);
@@ -192,7 +300,7 @@ class AgentWriteAppServiceImplTest {
     @Test
     void publishNewVersionCreatesIncrementedActiveVersionAndReturnsRefreshedModel() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
         UUID v1Id = repository.findById(agentId).orElseThrow().currentVersion().id();
 
         AgentModel result = service.publishNewVersion(agentId, ownerId,
@@ -210,7 +318,7 @@ class AgentWriteAppServiceImplTest {
     @Test
     void publishNewVersionRejectsForeignOwner() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
         assertThatThrownBy(() -> service.publishNewVersion(agentId, UUID.randomUUID(),
                 new PublishVersionInfo(new BigDecimal("10.00"), 60, List.of("summarisation"))))
                 .isInstanceOf(DomainException.class);
@@ -228,7 +336,7 @@ class AgentWriteAppServiceImplTest {
     @Test
     void suspendReactivateDeactivateTransitionOwnedAgent() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
         service.activate(agentId, ownerId);
 
         service.suspend(agentId, ownerId);
@@ -247,9 +355,33 @@ class AgentWriteAppServiceImplTest {
     @Test
     void suspendRejectsForeignOwner() {
         UUID ownerId = UUID.randomUUID();
-        UUID agentId = service.register(info(ownerId));
+        UUID agentId = service.register(info(ownerId)).agentId();
         service.activate(agentId, ownerId);
         assertThatThrownBy(() -> service.suspend(agentId, UUID.randomUUID()))
                 .isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void registeringAnAgentWhoseWebhookFailsTheSsrfGuardIsRejectedAndNothingIsSaved() {
+        urlValidator.blocked.add("https://agent.example.com/hook");
+
+        assertThatThrownBy(() -> service.register(info(UUID.randomUUID())))
+                .isInstanceOf(DomainException.class)
+                .hasMessage("Callback URL resolves to a private/blocked address");
+        assertThat(publisher.events).isEmpty();
+        assertThat(profileRepository.store).isEmpty();
+    }
+
+    @Test
+    void publishingAVersionRechecksTheCarriedOverWebhook() {
+        UUID ownerId = UUID.randomUUID();
+        UUID agentId = service.register(info(ownerId)).agentId();
+        urlValidator.blocked.add("https://agent.example.com/hook");
+
+        assertThatThrownBy(() -> service.publishNewVersion(agentId, ownerId,
+                new PublishVersionInfo(new BigDecimal("6.00"), 120, List.of("summarisation"))))
+                .isInstanceOf(DomainException.class)
+                .hasMessage("Callback URL resolves to a private/blocked address");
+        assertThat(repository.findById(agentId).orElseThrow().currentVersion().versionNumber()).isEqualTo(1);
     }
 }

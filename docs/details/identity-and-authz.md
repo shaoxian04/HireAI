@@ -26,17 +26,18 @@ Stored in the `user_roles` join table; a user may hold several of `CLIENT`, `BUI
 
 | Route | Allowed |
 |---|---|
-| `POST /api/tasks`, `/api/tasks/direct`; `GET /api/tasks`, `/api/tasks/*`, `/api/tasks/*/result`, `/api/tasks/*/validation` | `CLIENT`, `API_CLIENT` |
+| `POST /api/tasks`, `/api/tasks/direct`, `/api/tasks/match-preview`; `GET /api/tasks`, `/api/tasks/*`, `/api/tasks/*/result`, `/api/tasks/*/validation`, `/api/tasks/*/attempts` | `CLIENT`, `API_CLIENT` |
 | `GET /api/webhooks/deliveries`, `POST /api/webhooks/deliveries/*/redeliver` | `CLIENT`, `API_CLIENT` |
 | `POST /api/tasks/*/accept`, `/reject` | `CLIENT`, `BUILDER`, `ADMIN` (human-only) |
 | `/api/keys/**`, `/api/webhooks/subscription/**` | `CLIENT` (JWT-only: a leaked key cannot mint keys or repoint a callback) |
 | `/api/admin/**` | `ADMIN` |
+| `POST /api/agents/*/rotate-secret` | `BUILDER` (JWT-only; the app service then requires ownership, a foreign agent is `NOT_FOUND`) |
 | `GET /api/catalogue/**` | `CLIENT`, `BUILDER`, `ADMIN`, `API_CLIENT` |
 | Anything else | `CLIENT`, `BUILDER`, `ADMIN` |
 
 Consequences worth knowing:
 - The catalogue needs a role; "public" in these docs means "any signed-in role", not anonymous.
-- The `GET /api/tasks/*` wildcard also matches `GET /api/tasks/match-preview`, so API keys can reach it, while a BUILDER-only or ADMIN-only JWT cannot.
+- `POST /api/tasks/match-preview` needs its own matcher: no `/api/tasks/*` GET wildcard covers a POST, so without it an API key would fall to the final rule (401). A BUILDER-only or ADMIN-only JWT cannot reach it.
 - The final rule only *adds* the API-key lockout; every human already holds one of those roles. So most builder routes are not gated to `BUILDER`: a CLIENT passes the chain and only ownership applies. See [Known gaps](build-status.md#known-gaps).
 
 ### Denied means 401 in the full app
@@ -84,7 +85,7 @@ Keep these distinct from the user JWT:
 
 | Credential | Secures | Check |
 |---|---|---|
-| **Signed dispatch token** (Inv #6) | `POST /api/agent-callbacks/{taskId}/result`, called by the Agent | `taskId` and `agentVersionId` must match the assignment; invalid, expired or mismatched is 401 |
+| **Signed dispatch token + callback signature** (Inv #6) | `POST /api/agent-callbacks/{taskId}/result`, called by the Agent | Both are required. The token's `taskId` and `agentVersionId` must match the assignment. The raw body must carry `X-HireAI-Signature` made with that Agent's current signing secret, timestamp within ±5 minutes ([how to sign](matching.md#the-workorder), **Result callback**). The body is taken as raw bytes and verified before it is parsed (`AgentCallbackController` → `AgentCallbackAppService.authenticate`). The signed body must name the path's `taskId`, so a signed result can't be replayed onto another task. An invalid, expired (see [token lifetime](matching.md#the-workorder)) or mismatched token, a missing, wrong, stale or foreign signature, and a body for another task all get 401 through the same handler. An Agent with no secret can't post results until its owner rotates one |
 | **Shared bearer secret** (`ARBITRATION_CALLBACK_SECRET`) | `POST /api/arbitration-callbacks/{disputeId}/ruling`, called by the arbitrator | Constant-time compare in `ArbitrationCallbackController`; mismatch is 401 |
 | **HMAC signature** (outbound) | Push webhooks to a client's callback; the platform authenticates itself to the client | See [`programmatic-channel.md` §6](programmatic-channel.md#6-push-webhooks) |
 

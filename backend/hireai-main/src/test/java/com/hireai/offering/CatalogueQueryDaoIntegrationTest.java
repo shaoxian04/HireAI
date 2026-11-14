@@ -1,5 +1,6 @@
 package com.hireai.offering;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.port.query.CatalogueQueryPort;
 import com.hireai.application.port.query.CatalogueQueryPort.AgentCardRow;
 import com.hireai.application.port.query.CatalogueQueryPort.AgentProfileRow;
@@ -45,7 +46,7 @@ class CatalogueQueryDaoIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
@@ -201,6 +202,9 @@ class CatalogueQueryDaoIntegrationTest {
         List<CategoryCountRow> counts = catalogueQueryPort.categoryCounts();
         assertThat(counts).anyMatch(c -> c.category().equals("summarisation") && c.agentCount() >= 1);
         assertThat(counts).anyMatch(c -> c.category().equals("translation") && c.agentCount() >= 1);
+        // The list is the categories table, so a bucket nobody serves is still there (#80).
+        assertThat(counts).anyMatch(c -> c.category().equals("other") && c.label().equals("Other"));
+        assertThat(counts.get(0).category()).isEqualTo("document-extraction");
     }
 
     // -----------------------------------------------------------------------

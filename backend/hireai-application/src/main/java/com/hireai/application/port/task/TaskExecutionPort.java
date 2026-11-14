@@ -1,5 +1,7 @@
 package com.hireai.application.port.task;
 
+import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
+
 import java.util.UUID;
 
 /**
@@ -11,9 +13,50 @@ import java.util.UUID;
  */
 public interface TaskExecutionPort {
 
+    /**
+     * Row-locked pre-send step for the dispatch consumer, run before every send attempt:
+     * {@code true} (send now) only when the task is still QUEUED for {@code agentVersionId} AND
+     * that Agent is still available (ACTIVE, and the version still current). A message for a task
+     * that already ended or already has a result is dropped ({@code false}), so the Agent never
+     * receives a WorkOrder for work it will not be paid for. A missing task is {@code false}.
+     *
+     * <p>When the Agent is unavailable at dispatch (#58) it handles that before returning
+     * {@code false}: it records an {@code UNAVAILABLE} dispatch attempt and fails a routed task over
+     * to another Agent, or ends a pinned one CANCELLED with {@code AGENT_UNAVAILABLE}, a refund and a
+     * client webhook. No reputation event either way: maintenance never counts against a Builder.
+     */
+    boolean prepareDispatch(UUID taskId, UUID agentVersionId);
+
+    /**
+     * Appends one row to the task's dispatch history (#75) under the task row lock, numbered after
+     * the attempts already recorded. The consumer records {@code ACCEPTED} after a successful send;
+     * {@link #markFailed} records {@code UNREACHABLE} itself.
+     */
+    void recordDispatchAttempt(UUID taskId, UUID agentVersionId, DispatchOutcome outcome);
+
+    /** QUEUED → EXECUTING under a row lock; a no-op once the task has moved past QUEUED. */
     void markExecuting(UUID taskId);
 
     void markTimedOut(UUID taskId);
 
-    void markFailed(UUID taskId);
+    /**
+     * The dispatch to {@code agentVersionId} ran out of attempts (the DLQ listener). Under a row
+     * lock it records an {@code UNREACHABLE} dispatch attempt and an {@code EXECUTION_FAILED}
+     * reputation event against that Agent. Then a routed task still QUEUED fails over to another
+     * Agent ({@code RoutingAppService#failOver}); a pinned task (or one already EXECUTING) ends
+     * FAILED with {@code AGENT_UNREACHABLE}, a refund and a client {@code task.failed} webhook.
+     * A no-op once the task has ended or is assigned to another version (a stale message for an
+     * Agent the task has already moved away from).
+     */
+    void markFailed(UUID taskId, UUID agentVersionId);
+
+    /**
+     * The Agent declined the WorkOrder as busy (429/503): under a row lock, a task still QUEUED for
+     * {@code agentVersionId} records a {@code BUSY} dispatch attempt. A routed task then fails over
+     * to another Agent; a pinned task ends FAILED with {@code AGENT_BUSY}, a refund and a client
+     * {@code task.failed} webhook. No reputation event either way: declining at capacity is never a
+     * fault. A no-op when the task has moved on (another outcome committed first, or it is assigned
+     * to another version).
+     */
+    void declineAsBusy(UUID taskId, UUID agentVersionId);
 }

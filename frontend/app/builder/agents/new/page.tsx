@@ -16,16 +16,20 @@ const AGENT_FIELDS = {
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { setFlash } from "@/lib/flash";
-import { CategoryTagsInput } from "@/components/CategoryTagsInput";
+import { CategoryPicker } from "@/components/CategoryPicker";
 import { EMPTY_OUTPUT_SPEC, OutputSpecFields } from "@/lib/outputSpecFields";
-import type { AgentDTO, CreateAgentRequest, OutputSpecDTO } from "@/lib/types";
+import type { CreateAgentRequest, OutputSpecDTO, RegisteredAgentDTO } from "@/lib/types";
 import { Button, Field, Input } from "@/components/ui";
 import { PageHeader } from "@/components/PageHeader";
+import { MAX_EXECUTION_HINT, MAX_EXECUTION_SECONDS } from "@/lib/agentLimits";
+import { SecretReveal } from "@/components/SecretReveal";
+import { AckContract } from "@/components/AckContract";
 
 function RegisterAgent() {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [categoriesCsv, setCategoriesCsv] = useState("");
+  const [categories, setCategories] = useState<string[]>([]);
+  const [suggestedCategory, setSuggestedCategory] = useState("");
   const [webhookUrl, setWebhookUrl] = useState("");
   const [maxExecutionSeconds, setMaxExecutionSeconds] = useState("60");
   const [price, setPrice] = useState("10");
@@ -36,6 +40,8 @@ function RegisterAgent() {
   // A field error clears the moment that field (or any other) is edited, so it never goes stale.
   const clearFieldError = () => setError((er) => (er?.field ? null : er));
   const [submitting, setSubmitting] = useState(false);
+  // The signing secret comes back once, in the registration response; show it before leaving.
+  const [registered, setRegistered] = useState<RegisteredAgentDTO | null>(null);
   useFocusOnFieldError(error, { maxExecutionSeconds: "maxExec", capabilityCategories: "categories" });
 
   async function onSubmit(e: FormEvent) {
@@ -44,6 +50,10 @@ function RegisterAgent() {
     const invalid = validateForm(e.currentTarget as HTMLFormElement, { maxExec: "maxExecutionSeconds", categories: "capabilityCategories" });
     if (invalid) {
       setError(invalid);
+      return;
+    }
+    if (categories.length === 0) {
+      setError({ field: "capabilityCategories", message: "Pick at least one category" });
       return;
     }
     if (!/^https:\/\//i.test(webhookUrl.trim())) {
@@ -71,10 +81,8 @@ function RegisterAgent() {
     setSubmitting(true);
     const body: CreateAgentRequest = {
       name,
-      capabilityCategories: categoriesCsv
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
+      capabilityCategories: categories,
+      ...(suggestedCategory.trim() ? { suggestedCategory: suggestedCategory.trim() } : {}),
       webhookUrl,
       maxExecutionSeconds: maxExecutionSecondsNum,
       price: priceNum,
@@ -82,17 +90,39 @@ function RegisterAgent() {
       outputSpec,
     };
     try {
-      await api<AgentDTO>("/agents", {
+      const res = await api<RegisteredAgentDTO>("/agents", {
         method: "POST",
         body: JSON.stringify(body),
       });
-      setFlash(`${name.trim()} is registered. It starts receiving work once you activate it from the list below.`);
-      router.push("/builder");
+      setRegistered(res);
     } catch (err) {
       setError(toFormError(err, AGENT_FIELDS, "Registration failed. Check your connection and try again."));
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function finish() {
+    setFlash(`${name.trim()} is registered. It starts receiving work once you activate it from the list below.`);
+    router.push("/builder");
+  }
+
+  if (registered) {
+    return (
+      <div className="mx-auto max-w-xl space-y-6">
+        <PageHeader
+          back={{ href: "/builder", label: "My agents" }}
+          title={`${registered.name} is registered`}
+          description="Here is its signing secret. You can rotate it later from the agent's page, but this value is never shown again."
+        />
+        <div className="docket space-y-5 p-6">
+          <SecretReveal secret={registered.signingSecret} />
+          <Button type="button" className="w-full" onClick={finish}>
+            I&apos;ve stored it — go to my agents
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -114,9 +144,14 @@ function RegisterAgent() {
                 required
               />
             </Field>
-            <Field label="Capability categories" htmlFor="categories" error={errorFor(error, "capabilityCategories")}>
-              <CategoryTagsInput id="categories" value={categoriesCsv} onChange={(v) => { setCategoriesCsv(v); clearFieldError(); }} required />
-            </Field>
+            <CategoryPicker
+              id="categories"
+              value={categories}
+              onChange={(v) => { setCategories(v); clearFieldError(); }}
+              suggestion={suggestedCategory}
+              onSuggestionChange={(v) => { setSuggestedCategory(v); clearFieldError(); }}
+              error={errorFor(error, "capabilityCategories")}
+            />
             <Field label="Webhook URL" htmlFor="webhookUrl" error={errorFor(error, "webhookUrl")}>
               <Input
                 id="webhookUrl"
@@ -127,12 +162,19 @@ function RegisterAgent() {
                 required
               />
             </Field>
+            <AckContract />
             <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="Max execution seconds" htmlFor="maxExec" error={errorFor(error, "maxExecutionSeconds")}>
+              <Field
+                label="Max execution seconds"
+                htmlFor="maxExec"
+                error={errorFor(error, "maxExecutionSeconds")}
+                hint={MAX_EXECUTION_HINT}
+              >
                 <Input
                   id="maxExec"
                   type="number"
                   min={1}
+                  max={MAX_EXECUTION_SECONDS}
                   value={maxExecutionSeconds}
                   onChange={(e) => { setMaxExecutionSeconds(e.target.value); clearFieldError(); }}
                   placeholder="60"

@@ -15,6 +15,7 @@ import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.shared.model.Money;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
+import com.hireai.support.category.TestCategories;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -44,7 +45,8 @@ class SubmitOrchestrationAppServiceImplTest {
     private final Instant fixed = Instant.parse("2026-07-15T10:00:00Z");
 
     private final SubmitOrchestrationAppService svc = new SubmitOrchestrationAppServiceImpl(
-            write, direct, idem, attribution, spendRead, Clock.fixed(fixed, ZoneOffset.UTC));
+            write, direct, idem, attribution, spendRead, TestCategories.listOf("cat", "other"),
+            Clock.fixed(fixed, ZoneOffset.UTC));
 
     private TaskSubmitInfo info(UUID owner, String budget) {
         return new TaskSubmitInfo(owner, "T", "desc", Money.of(budget),

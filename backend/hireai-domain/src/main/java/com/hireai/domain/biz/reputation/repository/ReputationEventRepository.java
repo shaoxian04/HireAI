@@ -26,6 +26,10 @@ public interface ReputationEventRepository {
      */
     ReputationAggregates replayAggregates(UUID agentId);
 
-    /** True when this task already produced an event of this type — emission is exactly-once. */
-    boolean existsByTaskIdAndEventType(UUID taskId, ReputationEventType eventType);
+    /**
+     * True when this task already produced an event of this type for this Agent — emission is
+     * exactly-once per (task, Agent, type). Per Agent because routed failover (#78) can hand one
+     * task to several Agents, each of which may earn its own EXECUTION_FAILED.
+     */
+    boolean existsByTaskIdAndAgentIdAndEventType(UUID taskId, UUID agentId, ReputationEventType eventType);
 }

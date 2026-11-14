@@ -1,0 +1,154 @@
+<mxfile host="app.diagrams.net" agent="HireAI" version="24.0.0">
+  <diagram name="HireAI Use Cases" id="hireai-usecases">
+    <mxGraphModel dx="1200" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="1450" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===== System boundary ===== -->
+        <mxCell id="boundary" value="HireAI Platform" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fontSize=14;fillColor=none;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="300" y="40" width="580" height="1340" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Client actor family (generalization) ===== -->
+        <mxCell id="clientRole" value="Client" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=none;verticalAlign=top;html=1;outlineConnect=0;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="380" width="40" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="client" value="Human Client" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=none;verticalAlign=top;html=1;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="170" y="260" width="40" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="clientAgent" value="Client Agent&#10;(programmatic)" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=none;verticalAlign=top;html=1;outlineConnect=0;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="170" y="480" width="40" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Actors (left, other) ===== -->
+        <mxCell id="builder" value="Agent Builder" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=none;verticalAlign=top;html=1;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="90" y="1090" width="40" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Actors (right) ===== -->
+        <mxCell id="executor" value="Executor Agent" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=none;verticalAlign=top;html=1;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="930" y="560" width="40" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="arbitrator" value="LLM Arbitrator" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=none;verticalAlign=top;html=1;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="930" y="810" width="40" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="admin" value="Administrator" style="shape=umlActor;verticalLabelPosition=bottom;labelBackgroundColor=none;verticalAlign=top;html=1;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="930" y="910" width="40" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Use cases (left column) ===== -->
+        <mxCell id="uc_auth" value="Register /&#10;Authenticate" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="80" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_keys" value="Manage API Keys&#10;(+ spend caps)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="340" y="170" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_submitui" value="Submit Task&#10;(Web UI)" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="320" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_submitapi" value="Submit Task&#10;(API / MCP)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="340" y="420" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_result" value="Track Status /&#10;Receive Result" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="560" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_review" value="Review &amp;&#10;Accept / Reject" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="660" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_dispute" value="Raise Dispute" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="800" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_register" value="Register Agent" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="980" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_versions" value="Manage Agent&#10;Versions" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="1080" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_dashboard" value="View Earnings &amp;&#10;Reputation" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="1180" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Use cases (right column) ===== -->
+        <mxCell id="uc_submitcore" value="Submit Task&#10;(freeze escrow +&#10;bind output spec)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="620" y="350" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_route" value="Route &amp;&#10;Dispatch Task" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="620" y="470" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_execute" value="Execute Task" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="620" y="570" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_settle" value="Settle Escrow" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="620" y="680" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_arbitrate" value="Arbitrate Dispute" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="620" y="800" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_escalate" value="Escalate to&#10;Human Review" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="620" y="900" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Generalization (children -> Client parent) ===== -->
+        <mxCell id="e_gen_human" style="endArrow=block;endFill=0;html=1;rounded=0;" edge="1" parent="1" source="client" target="clientRole"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_gen_agent" style="endArrow=block;endFill=0;html=1;rounded=0;strokeColor=#82b366;" edge="1" parent="1" source="clientAgent" target="clientRole"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ===== Shared associations (from Client parent) ===== -->
+        <mxCell id="e_role_result" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="clientRole" target="uc_result"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_role_review" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="clientRole" target="uc_review"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_role_dispute" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="clientRole" target="uc_dispute"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ===== Child-specific associations (Human Client) ===== -->
+        <mxCell id="e_client_auth" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="client" target="uc_auth"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_client_submitui" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="client" target="uc_submitui"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ===== Child-specific associations (Client Agent) ===== -->
+        <mxCell id="e_ca_keys" style="endArrow=none;html=1;rounded=0;strokeColor=#82b366;" edge="1" parent="1" source="clientAgent" target="uc_keys"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_ca_submitapi" style="endArrow=none;html=1;rounded=0;strokeColor=#82b366;" edge="1" parent="1" source="clientAgent" target="uc_submitapi"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ===== Associations (Agent Builder) ===== -->
+        <mxCell id="e_builder_auth" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="builder" target="uc_auth"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_builder_register" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="builder" target="uc_register"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_builder_versions" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="builder" target="uc_versions"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_builder_dashboard" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="builder" target="uc_dashboard"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ===== Associations (right-side actors) ===== -->
+        <mxCell id="e_exec_execute" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="executor" target="uc_execute"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_arb_arbitrate" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="arbitrator" target="uc_arbitrate"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_admin_escalate" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="admin" target="uc_escalate"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ===== Include / extend relationships ===== -->
+        <mxCell id="e_keys_auth" value="«include»" style="endArrow=open;dashed=1;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="uc_keys" target="uc_auth"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_submitui_core" value="«include»" style="endArrow=open;dashed=1;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="uc_submitui" target="uc_submitcore"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_submitapi_core" value="«include»" style="endArrow=open;dashed=1;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="uc_submitapi" target="uc_submitcore"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_core_route" value="«include»" style="endArrow=open;dashed=1;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="uc_submitcore" target="uc_route"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_route_execute" value="«include»" style="endArrow=open;dashed=1;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="uc_route" target="uc_execute"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_review_settle" value="«include»" style="endArrow=open;dashed=1;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="uc_review" target="uc_settle"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_dispute_arbitrate" value="«include»" style="endArrow=open;dashed=1;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="uc_dispute" target="uc_arbitrate"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_arbitrate_escalate" value="«extend»" style="endArrow=open;dashed=1;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="uc_arbitrate" target="uc_escalate"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_arbitrate_settle" value="«include»" style="endArrow=open;dashed=1;html=1;rounded=0;fontSize=10;" edge="1" parent="1" source="uc_arbitrate" target="uc_settle"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ===== Money / wallet use cases ===== -->
+        <mxCell id="uc_topup" value="Top Up Balance" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="340" y="240" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_wallet" value="View Wallet &amp;&#10;Transactions" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="340" y="490" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_withdraw" value="Withdraw Balance" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="340" y="890" width="180" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uc_payout" value="Withdraw Earnings&#10;(Payout)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="340" y="1280" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Money associations ===== -->
+        <mxCell id="e_role_topup" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="clientRole" target="uc_topup"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_role_wallet" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="clientRole" target="uc_wallet"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_role_withdraw" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="clientRole" target="uc_withdraw"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_builder_payout" style="endArrow=none;html=1;rounded=0;" edge="1" parent="1" source="builder" target="uc_payout"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

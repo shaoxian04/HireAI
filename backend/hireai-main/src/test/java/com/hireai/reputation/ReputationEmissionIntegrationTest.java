@@ -1,5 +1,6 @@
 package com.hireai.reputation;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.biz.adjudication.validation.ValidationAppService;
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
@@ -41,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>Those two silences are the reason emission cannot be collapsed to a single choke point. A
  * changed-mind rejection settles exactly like an acceptance (85/15 to the builder) and writes
- * {@code TaskResolution.REJECTED}; a capacity cancellation settles like a refund. Any rule derived
+ * {@code TaskResolution.REJECTED}; an awaiting-agent cancellation settles like a refund. Any rule derived
  * from how money moved, or from the task's resolution field, gets both backwards.
  */
 @SpringBootTest
@@ -59,7 +60,7 @@ class ReputationEmissionIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
@@ -93,6 +94,7 @@ class ReputationEmissionIntegrationTest {
         jdbc.update("""
                 INSERT INTO agents (id, owner_id, name, status, current_version_id)
                 VALUES (?, ?, 'Emission IT Agent', 'ACTIVE', ?)""", agentId, builderId, versionId);
+                jdbc.update("INSERT INTO agent_profiles (agent_id, is_listed) VALUES (?, true)", agentId);
         jdbc.update("""
                 INSERT INTO agent_versions (id, agent_id, version_number, output_spec,
                                             capability_categories, webhook_url,
@@ -161,22 +163,22 @@ class ReputationEmissionIntegrationTest {
     }
 
     /**
-     * Cancelled from AWAITING_CAPACITY: no agent had headroom, so no agent ever received the work.
-     * Being busy is not a failure, and there is nobody to attribute one to.
+     * Cancelled from AWAITING_AGENT: no eligible agent matched, so no agent ever received the work.
+     * Nobody failed, and there is nobody to attribute a failure to.
      */
     @Test
-    void aCapacityCancellationRecordsNoEventDespiteSettlingLikeARefund() {
+    void anAwaitingAgentCancellationRecordsNoEventDespiteSettlingLikeARefund() {
         UUID client = newUser("CLIENT");
         UUID[] agent = newAgent(newUser("BUILDER"));
 
-        TaskModel task = TaskModel.submit(client, "no capacity", "desc", Money.of("20.00"),
+        TaskModel task = TaskModel.submit(client, "no agent", "desc", Money.of("20.00"),
                 new OutputSpec(OutputFormat.TEXT, null, null), "summarisation");
         taskRepository.save(task);
         walletWrite.topUp(client, Money.of("100.00"), "topup-" + task.id());
         walletWrite.freeze(client, Money.of("20.00"), task.id(), "freeze-" + task.id());
-        taskWriteAppService.markAwaitingCapacity(task.id());
+        taskWriteAppService.markAwaitingAgent(task.id());
 
-        taskWriteAppService.cancelAwaitingCapacityWithRefund(task.id());
+        taskWriteAppService.cancelAwaitingAgentWithRefund(task.id());
 
         assertThat(eventsFor(agent[0])).isEmpty();
         assertThat(scoreOf(agent[0])).isEqualByComparingTo("50.00");

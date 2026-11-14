@@ -30,7 +30,7 @@ class TaskReadAppServiceGetRoutingViewTest {
     private final OutputSpecJsonMapper outputSpecJsonMapper = new OutputSpecJsonMapper(new ObjectMapper());
 
     private TaskReadAppServiceImpl service() {
-        return new TaskReadAppServiceImpl(taskRepository, outputSpecJsonMapper);
+        return new TaskReadAppServiceImpl(taskRepository, outputSpecJsonMapper, null, null);
     }
 
     @Test
@@ -43,6 +43,8 @@ class TaskReadAppServiceGetRoutingViewTest {
         TaskRoutingView view = service().getRoutingView(task.id());
 
         assertThat(view.taskId()).isEqualTo(task.id());
+        assertThat(view.title()).isEqualTo("title");
+        assertThat(view.description()).isEqualTo("desc");
         assertThat(view.category()).isEqualTo("translation");
         assertThat(view.budget()).isEqualByComparingTo(new BigDecimal("42.50"));
         assertThat(view.status()).isEqualTo("SUBMITTED");

@@ -1,6 +1,7 @@
 package com.hireai.domain.biz.task.model;
 
 import com.hireai.utility.result.ResultCode;
+import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.enums.TaskStatus;
@@ -33,16 +34,17 @@ public final class TaskModel {
     private final Instant resolvedAt;          // nullable until RESOLVED
     private final String rejectionReason;      // nullable; only set on REJECTED
     private final RejectReason rejectReasonCategory; // nullable; A/B/C/D once reviewed via reject
+    private final FailureReason failureReason; // nullable; set once when the task ends without a delivered result
 
     // Must stay in sync with the V9 rejection_reason DB CHECK and RejectTaskRequest's @Size(max).
     private static final int MAX_REASON_LENGTH = 500;
 
-    /** Canonical 15-arg constructor: used by the rehydration path and all transition helpers. */
+    /** Canonical 16-arg constructor: used by the rehydration path and all transition helpers. */
     public TaskModel(UUID id, UUID clientId, String title, String description,
                      Money budget, OutputSpec outputSpec, String category, TaskStatus status,
                      UUID agentVersionId, TaskResultModel result, Instant createdAt,
                      TaskResolution resolution, Instant resolvedAt, String rejectionReason,
-                     RejectReason rejectReasonCategory) {
+                     RejectReason rejectReasonCategory, FailureReason failureReason) {
         this.id = id;
         this.clientId = clientId;
         this.title = title;
@@ -58,6 +60,7 @@ public final class TaskModel {
         this.resolvedAt = resolvedAt;
         this.rejectionReason = rejectionReason;
         this.rejectReasonCategory = rejectReasonCategory;
+        this.failureReason = failureReason;
     }
 
     /** Pre-review rehydration overload (11-arg): delegates to the canonical constructor. */
@@ -65,7 +68,7 @@ public final class TaskModel {
                      Money budget, OutputSpec outputSpec, String category, TaskStatus status,
                      UUID agentVersionId, TaskResultModel result, Instant createdAt) {
         this(id, clientId, title, description, budget, outputSpec, category, status,
-                agentVersionId, result, createdAt, null, null, null, null);
+                agentVersionId, result, createdAt, null, null, null, null, null);
     }
 
     /** Factory for the SUBMIT transition: enforces invariants and creates a SUBMITTED task. */
@@ -103,22 +106,53 @@ public final class TaskModel {
 
     // --- Routing & execution transitions (immutable: each returns a NEW TaskModel) ---
 
-    /** SUBMITTED/AWAITING_CAPACITY → QUEUED: a matching agent version was selected (re-match included). */
+    /** SUBMITTED/AWAITING_AGENT → QUEUED: a matching agent version was selected (re-match included). */
     public TaskModel assignAndQueue(UUID agentVersionId) {
-        requireStatusIn("assignAndQueue", TaskStatus.SUBMITTED, TaskStatus.AWAITING_CAPACITY);
+        requireStatusIn("assignAndQueue", TaskStatus.SUBMITTED, TaskStatus.AWAITING_AGENT);
         requirePresent(agentVersionId, "agent version id");
         return copyWith(TaskStatus.QUEUED, agentVersionId, this.result);
     }
 
-    /** QUEUED → EXECUTING: the task was dispatched to the agent. */
+    /**
+     * QUEUED → QUEUED with another Agent: routed failover (#78). The platform picked the Agent, and
+     * it could not take the task before starting (unreachable after the retry schedule, or busy),
+     * so the platform hands the task to another version. Only a task still QUEUED qualifies: once
+     * the Agent started (EXECUTING) or the task ended, it is never swapped. The new version must
+     * differ from the current one; an Agent already tried is excluded before this is called.
+     */
+    public TaskModel reassign(UUID newAgentVersionId) {
+        requireStatus(TaskStatus.QUEUED, "reassign");
+        requirePresent(newAgentVersionId, "agent version id");
+        if (newAgentVersionId.equals(this.agentVersionId)) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Cannot reassign task " + id + " to the version it is already assigned to");
+        }
+        return copyWith(TaskStatus.QUEUED, newAgentVersionId, this.result);
+    }
+
+    /**
+     * QUEUED → EXECUTING: the WorkOrder reached the agent. Idempotent: from any state past
+     * QUEUED (the agent already called back, or the task timed out / failed meanwhile) it is a
+     * no-op that returns {@code this}. Only the pre-assignment states (SUBMITTED,
+     * AWAITING_AGENT) are illegal sources.
+     */
     public TaskModel markExecuting() {
-        requireStatus(TaskStatus.QUEUED, "markExecuting");
+        if (this.status == TaskStatus.SUBMITTED || this.status == TaskStatus.AWAITING_AGENT) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Illegal transition markExecuting from " + this.status);
+        }
+        if (this.status != TaskStatus.QUEUED) {
+            return this;
+        }
         return copyWith(TaskStatus.EXECUTING, this.agentVersionId, this.result);
     }
 
-    /** EXECUTING → RESULT_RECEIVED: the agent posted a result back. */
+    /**
+     * QUEUED/EXECUTING → RESULT_RECEIVED: the agent posted a result back. QUEUED is allowed
+     * because a fast agent may call back before the dispatch consumer marks the task EXECUTING.
+     */
     public TaskModel recordResult(TaskResultModel result) {
-        requireStatus(TaskStatus.EXECUTING, "recordResult");
+        requireStatusIn("recordResult", TaskStatus.QUEUED, TaskStatus.EXECUTING);
         requirePresent(result, "result");
         return copyWith(TaskStatus.RESULT_RECEIVED, this.agentVersionId, result);
     }
@@ -132,31 +166,90 @@ public final class TaskModel {
     /** RESULT_RECEIVED → SPEC_VIOLATION: automated validation failed; result is rejected by the gate. */
     public TaskModel failValidation() {
         requireStatus(TaskStatus.RESULT_RECEIVED, "failValidation");
-        return copyWith(TaskStatus.SPEC_VIOLATION, this.agentVersionId, this.result);
+        return endWithoutResult(TaskStatus.SPEC_VIOLATION, FailureReason.SPEC_VIOLATION);
     }
 
-    /** SUBMITTED → AWAITING_CAPACITY (idempotent from AWAITING_CAPACITY for re-match no-match passes). */
-    public TaskModel markAwaitingCapacity() {
-        requireStatusIn("markAwaitingCapacity", TaskStatus.SUBMITTED, TaskStatus.AWAITING_CAPACITY);
-        return copyWith(TaskStatus.AWAITING_CAPACITY, this.agentVersionId, this.result);
+    /** SUBMITTED → AWAITING_AGENT (idempotent from AWAITING_AGENT for re-match no-match passes). */
+    public TaskModel markAwaitingAgent() {
+        requireStatusIn("markAwaitingAgent", TaskStatus.SUBMITTED, TaskStatus.AWAITING_AGENT);
+        return copyWith(TaskStatus.AWAITING_AGENT, this.agentVersionId, this.result);
     }
 
-    /** AWAITING_CAPACITY → CANCELLED: re-match attempts exhausted; the caller refunds escrow. */
-    public TaskModel markCancelled() {
-        requireStatus(TaskStatus.AWAITING_CAPACITY, "markCancelled");
-        return copyWith(TaskStatus.CANCELLED, this.agentVersionId, this.result);
+    /**
+     * SUBMITTED|AWAITING_AGENT → CANCELLED: routing attempts exhausted before any Agent was
+     * assigned (the SUBMITTED sweeper or the re-match sweeper); the caller refunds escrow and
+     * names why no Agent was reached.
+     */
+    public TaskModel markCancelled(FailureReason reason) {
+        requireStatusIn("markCancelled", TaskStatus.SUBMITTED, TaskStatus.AWAITING_AGENT);
+        return endWithoutResult(TaskStatus.CANCELLED, reason);
     }
 
-    /** QUEUED/EXECUTING → TIMED_OUT: the agent did not respond in time. */
+    /**
+     * SUBMITTED|AWAITING_AGENT|QUEUED → CANCELLED with {@code AGENT_UNAVAILABLE}: the pinned Agent is
+     * no longer ACTIVE, or its booked version is no longer current, so a direct booking fails fast
+     * (#77) instead of waiting for a version that will not come back. QUEUED qualifies because
+     * availability is re-checked before every send (#58): the WorkOrder never went out.
+     */
+    public TaskModel cancelAsUnavailable() {
+        requireStatusIn("cancelAsUnavailable", TaskStatus.SUBMITTED, TaskStatus.AWAITING_AGENT, TaskStatus.QUEUED);
+        return endWithoutResult(TaskStatus.CANCELLED, FailureReason.AGENT_UNAVAILABLE);
+    }
+
+    // --- Dispatch-side predicates (the rules the dispatch path's guards apply) ---
+
+    /** QUEUED for {@code agentVersionId}: its WorkOrder may still be sent (or re-sent on a retry). */
+    public boolean isAwaitingDispatchTo(UUID agentVersionId) {
+        return this.status == TaskStatus.QUEUED && agentVersionId != null
+                && agentVersionId.equals(this.agentVersionId);
+    }
+
+    /** QUEUED or EXECUTING: assigned to an Agent and not yet ended or resulted. */
+    public boolean isInFlight() {
+        return this.status == TaskStatus.QUEUED || this.status == TaskStatus.EXECUTING;
+    }
+
+    /**
+     * In flight with {@code agentVersionId}: a dispatch outcome for that version (a dead letter, a
+     * busy reply) still applies. False once the task ended or failed over to another version.
+     */
+    public boolean isInFlightOn(UUID agentVersionId) {
+        return isInFlight() && agentVersionId != null && agentVersionId.equals(this.agentVersionId);
+    }
+
+    /**
+     * Whether a dispatch failure before the Agent started is routed failover (#78) rather than the
+     * end of the task: only while QUEUED (the Agent never started) and only when the platform picked
+     * the Agent. A direct booking ({@code pinned}) is never substituted.
+     */
+    public boolean failsOverOnDispatchFailure(boolean pinned) {
+        return this.status == TaskStatus.QUEUED && !pinned;
+    }
+
+    /**
+     * QUEUED/EXECUTING → TIMED_OUT: no result before the execution deadline. The reason follows
+     * {@link #timeoutIsAgentFault()}: EXECUTION_TIMEOUT once the Agent had the work, otherwise
+     * DISPATCH_ABANDONED (the WorkOrder never got through).
+     */
     public TaskModel markTimedOut() {
         requireStatusIn("markTimedOut", TaskStatus.QUEUED, TaskStatus.EXECUTING);
-        return copyWith(TaskStatus.TIMED_OUT, this.agentVersionId, this.result);
+        return endWithoutResult(TaskStatus.TIMED_OUT,
+                timeoutIsAgentFault() ? FailureReason.EXECUTION_TIMEOUT : FailureReason.DISPATCH_ABANDONED);
     }
 
-    /** QUEUED/EXECUTING → FAILED: dispatch/execution failed terminally. */
-    public TaskModel markFailed() {
+    /**
+     * Whether a timeout now is the Agent's fault: only once the Agent accepted the WorkOrder
+     * (EXECUTING). A task still QUEUED never reached it (lost or undelivered message), so a
+     * timeout from there refunds the client without penalising the Agent (#66).
+     */
+    public boolean timeoutIsAgentFault() {
+        return this.status == TaskStatus.EXECUTING;
+    }
+
+    /** QUEUED/EXECUTING → FAILED: dispatch/execution failed terminally, for the given reason. */
+    public TaskModel markFailed(FailureReason reason) {
         requireStatusIn("markFailed", TaskStatus.QUEUED, TaskStatus.EXECUTING);
-        return copyWith(TaskStatus.FAILED, this.agentVersionId, this.result);
+        return endWithoutResult(TaskStatus.FAILED, reason);
     }
 
     /** PENDING_REVIEW → RESOLVED (ACCEPTED): the client accepted the result. */
@@ -181,7 +274,7 @@ public final class TaskModel {
         }
         return new TaskModel(id, clientId, title, description, budget, outputSpec, category,
                 TaskStatus.DISPUTED, agentVersionId, result, createdAt,
-                this.resolution, this.resolvedAt, trimReason(reason), reasonCategory);
+                this.resolution, this.resolvedAt, trimReason(reason), reasonCategory, this.failureReason);
     }
 
     /** DISPUTED → RESOLVED: the arbitration ruling (or fallback) has been settled. */
@@ -190,7 +283,7 @@ public final class TaskModel {
         requirePresent(resolution, "resolution");
         return new TaskModel(id, clientId, title, description, budget, outputSpec, category,
                 TaskStatus.RESOLVED, agentVersionId, result, createdAt,
-                resolution, Instant.now(), this.rejectionReason, this.rejectReasonCategory);
+                resolution, Instant.now(), this.rejectionReason, this.rejectReasonCategory, this.failureReason);
     }
 
     /** PENDING_REVIEW → RESOLVED (REJECTED): client changed their mind (D); charged in full, no dispute. */
@@ -198,7 +291,8 @@ public final class TaskModel {
         requireStatus(TaskStatus.PENDING_REVIEW, "chargeChangedMind");
         return new TaskModel(id, clientId, title, description, budget, outputSpec, category,
                 TaskStatus.RESOLVED, agentVersionId, result, createdAt,
-                TaskResolution.REJECTED, Instant.now(), trimReason(reason), RejectReason.D_CHANGED_MIND);
+                TaskResolution.REJECTED, Instant.now(), trimReason(reason), RejectReason.D_CHANGED_MIND,
+                this.failureReason);
     }
 
     private static String trimReason(String reason) {
@@ -213,13 +307,28 @@ public final class TaskModel {
     private TaskModel resolved(TaskResolution resolution, String rejectionReason) {
         return new TaskModel(this.id, this.clientId, this.title, this.description, this.budget,
                 this.outputSpec, this.category, TaskStatus.RESOLVED, this.agentVersionId, this.result,
-                this.createdAt, resolution, Instant.now(), rejectionReason, this.rejectReasonCategory);
+                this.createdAt, resolution, Instant.now(), rejectionReason, this.rejectReasonCategory,
+                this.failureReason);
     }
 
     private TaskModel copyWith(TaskStatus newStatus, UUID newAgentVersionId, TaskResultModel newResult) {
         return new TaskModel(this.id, this.clientId, this.title, this.description, this.budget,
                 this.outputSpec, this.category, newStatus, newAgentVersionId, newResult, this.createdAt,
-                this.resolution, this.resolvedAt, this.rejectionReason, this.rejectReasonCategory);
+                this.resolution, this.resolvedAt, this.rejectionReason, this.rejectReasonCategory,
+                this.failureReason);
+    }
+
+    /** Terminal transition without a delivered result: records the FailureReason, exactly once. */
+    private TaskModel endWithoutResult(TaskStatus terminalStatus, FailureReason reason) {
+        requirePresent(reason, "failure reason");
+        if (this.failureReason != null) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Failure reason already set to " + this.failureReason + "; cannot record " + reason);
+        }
+        return new TaskModel(this.id, this.clientId, this.title, this.description, this.budget,
+                this.outputSpec, this.category, terminalStatus, this.agentVersionId, this.result,
+                this.createdAt, this.resolution, this.resolvedAt, this.rejectionReason,
+                this.rejectReasonCategory, reason);
     }
 
     private void requireStatus(TaskStatus expected, String transition) {
@@ -254,4 +363,5 @@ public final class TaskModel {
     public Instant resolvedAt() { return resolvedAt; }
     public String rejectionReason() { return rejectionReason; }
     public RejectReason rejectReasonCategory() { return rejectReasonCategory; }
+    public FailureReason failureReason() { return failureReason; }
 }

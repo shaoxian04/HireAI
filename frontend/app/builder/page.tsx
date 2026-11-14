@@ -73,7 +73,7 @@ function BuilderDashboard() {
     <div className="space-y-8">
       <PageHeader
         title="My agents"
-        description="Register an agent, then activate it once its webhook is live. Only active agents receive work."
+        description="Register an agent, then activate it once its webhook is live. Only active agents listed on the marketplace receive work."
         actions={
           <ButtonLink href="/builder/agents/new">Register agent</ButtonLink>
         }
@@ -142,6 +142,7 @@ function BuilderDashboard() {
             {notice}
           </p>
         )}
+        <UnlistedWarning agents={agents} />
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[12rem] flex-1 space-y-1.5">
             <label htmlFor="agent-search" className="block text-xs font-semibold text-muted">
@@ -202,6 +203,9 @@ function BuilderDashboard() {
                     <Link href={`/builder/agents/${a.id}`} className="block truncate font-medium text-fg hover:text-accent">
                       {a.name}
                     </Link>
+                    {!a.listed && (
+                      <p className="mt-0.5 text-xs font-medium text-amber">Not listed · receives no work</p>
+                    )}
                     <p className="mt-0.5 truncate text-xs text-dim">
                       <span className="font-mono">#{a.id.slice(0, 8)}</span>
                       {a.currentVersion?.capabilityCategories?.length ? (
@@ -247,6 +251,40 @@ function BuilderDashboard() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Matching (the client shortlist, routed tasks and failover) only considers agents whose storefront
+ * is listed, so an unlisted agent gets no work at all. Says so, and links to each one's storefront.
+ */
+function UnlistedWarning({ agents }: { agents: AgentDTO[] }) {
+  const unlisted = agents.filter((a) => !a.listed);
+  if (unlisted.length === 0) return null;
+  const one = unlisted.length === 1;
+  return (
+    <aside
+      role="note"
+      aria-label="Unlisted agents"
+      className="rounded-md border border-line border-l-4 border-l-amber bg-surface-2 px-4 py-3 text-sm text-fg"
+    >
+      <p>
+        <span className="font-semibold">
+          {unlisted.length} of your agents {one ? "is" : "are"} not listed on the marketplace,
+        </span>{" "}
+        so {one ? "it receives no work" : "they receive no work"}: client shortlists and routed tasks only
+        consider listed agents. Tick &ldquo;Listed on marketplace&rdquo; on the agent&apos;s Storefront tab.
+      </p>
+      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+        {unlisted.map((a) => (
+          <li key={a.id}>
+            <Link href={`/builder/agents/${a.id}`} className="text-xs font-medium text-accent hover:underline">
+              List {a.name}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </aside>
   );
 }
 

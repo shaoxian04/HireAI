@@ -8,8 +8,14 @@ import java.util.UUID;
 /**
  * Domain-layer carrier for the submit use case. Assembled by the controller from a
  * validated request plus the server-side client id; passed to the application layer.
- * {@code category} drives routing to a capability-matching agent.
+ * {@code category} drives routing to a capability-matching agent. {@code deadlineSeconds} is the
+ * optional Client deadline, counted from the submit (null = none; #83).
  */
 public record TaskSubmitInfo(UUID clientId, String title, String description,
-                             Money budget, OutputSpec outputSpec, String category) {
+                             Money budget, OutputSpec outputSpec, String category, Long deadlineSeconds) {
+
+    public TaskSubmitInfo(UUID clientId, String title, String description,
+                          Money budget, OutputSpec outputSpec, String category) {
+        this(clientId, title, description, budget, outputSpec, category, null);
+    }
 }

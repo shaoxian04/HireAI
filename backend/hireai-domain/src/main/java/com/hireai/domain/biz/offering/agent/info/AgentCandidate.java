@@ -17,9 +17,23 @@ import java.util.UUID;
  * <p>{@code maxConcurrent}/{@code inFlight}/{@code sampleCount} feed the multi-factor scorer
  * (loadHeadroom + exploration terms); counts are per-AGENT across all its versions, derived
  * fresh by the candidate query.
+ *
+ * <p>{@code similarity} is the RAW cosine similarity between the task text and the Agent's profile
+ * (#85), computed by the candidate query from vectors of the same model. Null when the Agent has no
+ * vector of that model, or when the task text couldn't be embedded; the matcher then treats the Agent
+ * as neutral (it passes the floor and scores 0.5 on relevance).
  */
 public record AgentCandidate(UUID agentId, UUID agentVersionId, List<String> capabilityCategories,
                              BigDecimal price, String webhookUrl, int maxExecutionSeconds,
                              BigDecimal reputationScore, String outputSpecJson,
-                             int maxConcurrent, long inFlight, long sampleCount) {
+                             int maxConcurrent, long inFlight, long sampleCount, Double similarity) {
+
+    /** A candidate without a relevance signal (no task or Agent vector). */
+    public AgentCandidate(UUID agentId, UUID agentVersionId, List<String> capabilityCategories,
+                          BigDecimal price, String webhookUrl, int maxExecutionSeconds,
+                          BigDecimal reputationScore, String outputSpecJson,
+                          int maxConcurrent, long inFlight, long sampleCount) {
+        this(agentId, agentVersionId, capabilityCategories, price, webhookUrl, maxExecutionSeconds,
+                reputationScore, outputSpecJson, maxConcurrent, inFlight, sampleCount, null);
+    }
 }

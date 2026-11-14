@@ -17,7 +17,9 @@ import com.hireai.controller.biz.task.converter.TaskModel2DTOConverter;
 import com.hireai.controller.biz.task.converter.TaskResult2DTOConverter;
 import com.hireai.controller.biz.task.dto.CreateReviewRequest;
 import com.hireai.controller.biz.task.dto.DirectBookRequest;
+import com.hireai.controller.biz.task.dto.DispatchAttemptDTO;
 import com.hireai.controller.biz.task.dto.MatchPreviewDTO;
+import com.hireai.controller.biz.task.dto.MatchPreviewRequest;
 import com.hireai.controller.biz.task.dto.RejectTaskRequest;
 import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
 import com.hireai.controller.biz.task.dto.TaskDTO;
@@ -29,6 +31,7 @@ import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
+import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskQuery;
 import com.hireai.domain.shared.model.Money;
 import com.hireai.utility.exception.DomainException;
@@ -43,9 +46,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -62,6 +65,9 @@ public class TaskController extends BaseController {
     private final CurrentUserProvider currentUser;
     private final CurrentApiKeyProvider currentApiKey;
     private final TaskReviewAppService reviewAppService;
+    /** At most this many Agents can be excluded from one match preview. */
+    static final int MAX_EXCLUDED_AGENTS = 20;
+
     private final MatchPreviewAppService matchPreviewAppService;
     private final ValidationReadAppService validationReadAppService;
     /** The client's star rating — distinct from reviewAppService, which is accept/reject. */
@@ -97,7 +103,8 @@ public class TaskController extends BaseController {
                 request.description(),
                 Money.of(request.budget()),
                 new OutputSpec(specRequest.format(), specRequest.schema(), specRequest.acceptanceCriteria()),
-                request.category());
+                request.category(),
+                request.deadlineSeconds());
         UUID taskId = submitOrchestrationAppService.submitRouted(
                 submitContext(clientId, idempotencyKey), info);
         TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId));
@@ -112,7 +119,9 @@ public class TaskController extends BaseController {
         UUID taskId = submitOrchestrationAppService.submitDirect(
                 submitContext(clientId, idempotencyKey),
                 new DirectBookingInfo(clientId, request.title(), request.description(),
-                        Money.of(request.budget()), request.agentId()));
+                        Money.of(request.budget()), request.agentId(),
+                        request.category() == null || request.category().isBlank() ? null : request.category(),
+                        request.deadlineSeconds()));
         return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId)));
     }
 
@@ -132,8 +141,9 @@ public class TaskController extends BaseController {
     @GetMapping("/{id}")
     public WebResult<TaskDTO> getById(@PathVariable("id") UUID id) {
         UUID clientId = currentUser.currentUserId();
-        TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId));
-        return ok(dto);
+        TaskModel task = readAppService.getForClient(id, clientId);
+        UUID agentId = readAppService.findBookedAgentId(task).orElse(null);
+        return ok(TaskModel2DTOConverter.toDTO(task, agentId));
     }
 
     @GetMapping("/{taskId}/result")
@@ -151,6 +161,15 @@ public class TaskController extends BaseController {
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
                         "No validation report for task: " + id));
         return ok(ValidationReport2DTOConverter.toDTO(report));
+    }
+
+    /** The task's dispatch history (#75), owner-only: another client gets 404, not the rows. */
+    @GetMapping("/{id}/attempts")
+    public WebResult<List<DispatchAttemptDTO>> getAttempts(@PathVariable("id") UUID id) {
+        UUID clientId = currentUser.currentUserId();
+        return ok(readAppService.listDispatchAttempts(id, clientId).stream()
+                .map(DispatchAttemptDTO::from)
+                .toList());
     }
 
     @GetMapping
@@ -193,15 +212,27 @@ public class TaskController extends BaseController {
                 ratingAppService.review(id, clientId, request.rating(), request.reviewText())));
     }
 
-    @GetMapping("/match-preview")
-    public WebResult<MatchPreviewDTO> matchPreview(@RequestParam("category") String category,
-                                                   @RequestParam("budget") BigDecimal budget) {
-        if (category == null || category.isBlank()) {
-            throw new DomainException(ResultCode.VALIDATION_ERROR, "category is required");
+    /**
+     * A POST so the task text stays out of URLs. {@code exclude} names Agents to leave out of both
+     * lists: the web rebook passes the Agent that just failed the task (#79). {@code deadlineSeconds}
+     * leaves out Agents that can't finish in time, counted from this request (#83). {@code title} and
+     * {@code description} are the task text the relevance floor and ranking compare profiles with (#85).
+     */
+    @PostMapping("/match-preview")
+    public WebResult<MatchPreviewDTO> matchPreview(@Valid @RequestBody MatchPreviewRequest request) {
+        return ok(MatchPreview2DTOConverter.toDTO(matchPreviewAppService.preview(
+                request.title(), request.description(), request.category(), Money.of(request.budget()), excludedAgents(request.exclude()),
+                request.deadlineSeconds())));
+    }
+
+    private static Set<UUID> excludedAgents(List<UUID> exclude) {
+        if (exclude == null) {
+            return Set.of();
         }
-        if (budget == null || budget.signum() <= 0) {
-            throw new DomainException(ResultCode.VALIDATION_ERROR, "budget must be positive");
+        if (exclude.size() > MAX_EXCLUDED_AGENTS) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "exclude: at most " + MAX_EXCLUDED_AGENTS + " agents");
         }
-        return ok(MatchPreview2DTOConverter.toDTO(matchPreviewAppService.preview(category, Money.of(budget))));
+        return Set.copyOf(exclude);
     }
 }

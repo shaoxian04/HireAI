@@ -14,7 +14,7 @@ export type TaskStatus =
   | "RESULT_RECEIVED"
   | "PENDING_REVIEW"
   | "RESOLVED"
-  | "AWAITING_CAPACITY"
+  | "AWAITING_AGENT"
   | "TIMED_OUT"
   | "SPEC_VIOLATION"
   | "FAILED"
@@ -98,6 +98,21 @@ export interface AgentDTO {
   reputationScore: number;
   currentVersion: AgentVersionDTO;
   createdAt: string;
+  /** Whether an AgentSigningSecret is set. The secret itself is never on a read. */
+  hasSigningSecret: boolean;
+  /** Whether the storefront is listed. An unlisted agent is never matched, so it receives no work. */
+  listed: boolean;
+}
+
+/** `POST /agents` response: the agent plus its signing secret, shown this once. */
+export interface RegisteredAgentDTO extends AgentDTO {
+  signingSecret: string;
+}
+
+/** `POST /agents/{id}/rotate-secret` response: the new signing secret, shown this once. */
+export interface SigningSecretDTO {
+  agentId: string;
+  signingSecret: string;
 }
 
 export interface CreateAgentRequest {
@@ -108,6 +123,8 @@ export interface CreateAgentRequest {
   maxExecutionSeconds: number;
   price: number;
   maxConcurrent: number;
+  /** Optional "suggest a category" text, stored for admins; never used for matching. */
+  suggestedCategory?: string;
 }
 
 // ── Tasks ──
@@ -127,7 +144,25 @@ export interface TaskDTO {
   payoutAmount?: number | null;
   commissionAmount?: number | null;
   refundAmount?: number | null;
+  /** Why the task ended without a delivered result; absent on live and successful tasks. */
+  failureReason?: FailureReason | null;
+  /** The capability category the task was matched on. */
+  category?: string;
+  /** The Agent the task was booked with (`GET /tasks/{id}` only; absent when none was). */
+  agentId?: string | null;
 }
+
+/** Mirrors the backend FailureReason enum (set once when a task ends without a result). */
+export type FailureReason =
+  | "AGENT_UNREACHABLE"
+  | "AGENT_BUSY"
+  | "AGENT_UNAVAILABLE"
+  | "NO_ALTERNATIVE_AGENT"
+  | "NO_ELIGIBLE_AGENT"
+  | "DISPATCH_ABANDONED"
+  | "EXECUTION_TIMEOUT"
+  | "AGENT_REPORTED_FAILURE"
+  | "SPEC_VIOLATION";
 
 export interface CreateTaskRequest {
   title: string;
@@ -194,8 +229,10 @@ export interface AgentProfileDTO {
   reviews: CatalogueReviewDTO[];
 }
 
+/** One bucket of the platform-owned category list; `category` is the slug every category field takes. */
 export interface CategoryCountDTO {
   category: string;
+  label: string;
   agentCount: number;
 }
 
@@ -206,6 +243,10 @@ export interface DirectBookRequest {
   description: string;
   budget: number;
   agentId: string;
+  /** Optional slug the agent serves; defaults to the agent's first category. */
+  category?: string;
+  /** Optional: seconds from booking the result is needed by; a slower agent is refused. */
+  deadlineSeconds?: number;
 }
 
 export type CatalogueSort = "hot" | "rating" | "price_asc" | "price_desc" | "newest";
@@ -427,9 +468,26 @@ export interface AgentOptionDTO {
   capabilityCategories: string[];
 }
 
+/**
+ * Body of `POST /tasks/match-preview`. The task text travels in the body, never in a URL.
+ * `deadlineSeconds` is accepted by the backend but does not filter the shortlist yet (#83).
+ */
+export interface MatchPreviewRequest {
+  title: string;
+  description: string;
+  category: string;
+  budget: number;
+  /** Optional: seconds from now the result is needed by; slower agents are left out. */
+  deadlineSeconds?: number;
+  /** Agents to leave out of both lists (the Agent that failed a rebooked task). */
+  exclude?: string[];
+}
+
 export interface MatchPreviewDTO {
   shortlist: AgentOptionDTO[];
   nearMisses: AgentOptionDTO[];
+  /** True when the shortlist is empty only because no in-budget agent's profile fits the task text. */
+  noCloseMatch?: boolean;
 }
 
 // ── Validation report (spec-violation reason) ───────────────────────────────

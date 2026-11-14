@@ -1,5 +1,6 @@
 package com.hireai.admin;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.admin.AdminReadAppService;
 import com.hireai.application.biz.admin.view.AdminViews;
@@ -64,7 +65,7 @@ class AdminDisputeFlowIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
@@ -99,6 +100,7 @@ class AdminDisputeFlowIntegrationTest {
         jdbc.update("""
                 INSERT INTO agents (id, owner_id, name, status, current_version_id)
                 VALUES (?, ?, 'Admin IT Agent', 'ACTIVE', ?)""", agentId, builderId, versionId);
+                jdbc.update("INSERT INTO agent_profiles (agent_id, is_listed) VALUES (?, true)", agentId);
         jdbc.update("""
                 INSERT INTO agent_versions (id, agent_id, version_number, output_spec,
                                             capability_categories, webhook_url, max_execution_seconds, price)

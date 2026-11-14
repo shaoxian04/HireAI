@@ -6,6 +6,7 @@ import com.hireai.application.biz.task.SubmitFingerprint;
 import com.hireai.application.biz.task.SubmitOrchestrationAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.port.query.SpendReadPort;
+import com.hireai.domain.biz.offering.category.repository.CategoryRepository;
 import com.hireai.domain.biz.task.idempotency.model.IdempotencyRecord;
 import com.hireai.domain.biz.identity.apikey.model.SpendCaps;
 import com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository;
@@ -54,6 +55,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
     private final IdempotencyRepository idempotencyRepository;
     private final ApiKeyTaskRepository apiKeyTaskRepository;
     private final SpendReadPort spendReadPort;
+    private final CategoryRepository categoryRepository;
     private final Clock clock;
 
     /** The Spring proxy of THIS bean (so the {@code @Transactional} {@code *Tx}/re-read methods are
@@ -67,12 +69,14 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
                                              IdempotencyRepository idempotencyRepository,
                                              ApiKeyTaskRepository apiKeyTaskRepository,
                                              SpendReadPort spendReadPort,
+                                             CategoryRepository categoryRepository,
                                              Clock clock) {
         this.taskWriteAppService = taskWriteAppService;
         this.directBookingAppService = directBookingAppService;
         this.idempotencyRepository = idempotencyRepository;
         this.apiKeyTaskRepository = apiKeyTaskRepository;
         this.spendReadPort = spendReadPort;
+        this.categoryRepository = categoryRepository;
         this.clock = clock;
     }
 
@@ -82,7 +86,12 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
     }
 
     @Override
-    public UUID submitRouted(SubmitContext ctx, TaskSubmitInfo info) {
+    public UUID submitRouted(SubmitContext ctx, TaskSubmitInfo submitted) {
+        // An unknown slug is a 400 naming the valid ones, before anything is frozen (#80).
+        String category = categoryRepository.load().requireKnown(submitted.category());
+        TaskSubmitInfo info = new TaskSubmitInfo(submitted.clientId(), submitted.title(),
+                submitted.description(), submitted.budget(), submitted.outputSpec(), category,
+                submitted.deadlineSeconds());
         try {
             return self().submitRoutedTx(ctx, info);
         } catch (IdempotencyRaceException e) {
@@ -91,7 +100,12 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
     }
 
     @Override
-    public UUID submitDirect(SubmitContext ctx, DirectBookingInfo info) {
+    public UUID submitDirect(SubmitContext ctx, DirectBookingInfo booked) {
+        // The category is optional on a booking; when given it must be a listed slug (#80).
+        DirectBookingInfo info = booked.category() == null ? booked
+                : new DirectBookingInfo(booked.clientId(), booked.title(), booked.description(),
+                        booked.budget(), booked.agentId(),
+                        categoryRepository.load().requireKnown(booked.category()), booked.deadlineSeconds());
         try {
             return self().submitDirectTx(ctx, info);
         } catch (IdempotencyRaceException e) {
@@ -169,13 +183,20 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
 
     private String fingerprint(TaskSubmitInfo info) {
         return SubmitFingerprint.of(info.title(), info.description(), info.category(),
-                info.budget().value(), specJson(info.outputSpec()));
+                info.budget().value(), specJson(info.outputSpec()) + deadlinePart(info.deadlineSeconds()));
     }
 
     private String fingerprintDirect(DirectBookingInfo info) {
         // Direct booking adopts the agent's spec later; fingerprint the client-supplied fields + agent id.
+        // A chosen category joins the fingerprint; without one it stays as before.
+        String kind = info.category() == null ? "direct" : "direct|" + info.category();
         return SubmitFingerprint.of(info.title(), info.description(),
-                info.agentId().toString(), info.budget().value(), "direct");
+                info.agentId().toString(), info.budget().value(), kind + deadlinePart(info.deadlineSeconds()));
+    }
+
+    /** A deadline joins the fingerprint (as relative seconds, so a retry matches); without one it stays as before. */
+    private static String deadlinePart(Long deadlineSeconds) {
+        return deadlineSeconds == null ? "" : "|deadline=" + deadlineSeconds;
     }
 
     /** Stable canonical rendering of the spec for the fingerprint (must match the test helper). */

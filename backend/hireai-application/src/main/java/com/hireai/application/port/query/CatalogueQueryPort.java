@@ -19,6 +19,10 @@ public interface CatalogueQueryPort {
 
     Optional<AgentProfileRow> findProfile(UUID agentId);
 
+    /**
+     * The whole platform-owned category list in display order, each with the number of ACTIVE +
+     * listed agents whose current version serves it (zero included).
+     */
     List<CategoryCountRow> categoryCounts();
 
     List<ReviewRow> reviewsForAgent(UUID agentId, int limit);
@@ -42,7 +46,7 @@ public interface CatalogueQueryPort {
                            int completedCount, Double avgTurnaroundSeconds) {
     }
 
-    record CategoryCountRow(String category, int agentCount) {
+    record CategoryCountRow(String category, String label, int agentCount) {
     }
 
     record ReviewRow(UUID id, int rating, String reviewText, String builderResponse,

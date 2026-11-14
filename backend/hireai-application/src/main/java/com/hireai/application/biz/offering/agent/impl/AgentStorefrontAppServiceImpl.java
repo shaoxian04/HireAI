@@ -5,6 +5,7 @@ import com.hireai.application.biz.offering.agent.AgentStorefrontAppService;
 import com.hireai.application.port.query.BuilderStatsQueryPort;
 import com.hireai.application.port.storage.MediaStoragePort;
 import com.hireai.utility.result.ResultCode;
+import com.hireai.domain.biz.offering.storefront.event.AgentProfileUpdatedDomainEvent;
 import com.hireai.domain.biz.offering.storefront.info.ProfileUpdateInfo;
 import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
 import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
@@ -13,9 +14,11 @@ import com.hireai.domain.biz.reputation.repository.ReviewRepository;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -37,6 +40,8 @@ public class AgentStorefrontAppServiceImpl implements AgentStorefrontAppService 
     private final MediaStoragePort mediaStoragePort;
     private final ReviewRepository reviewRepository;
     private final BuilderStatsQueryPort builderStatsQueryPort;
+    private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     @Override
     @Transactional(readOnly = true)
@@ -50,7 +55,10 @@ public class AgentStorefrontAppServiceImpl implements AgentStorefrontAppService 
         agentReadAppService.getForOwner(agentId, ownerId);
         StorefrontModel updated = loadProfile(agentId)
                 .updateContent(info.tagline(), info.description(), info.sampleOutput(), info.listed());
-        return profileRepository.save(updated);
+        StorefrontModel saved = profileRepository.save(updated);
+        // The profile text feeds the Agent's embedding; refreshed after commit (never blocks the save).
+        eventPublisher.publishEvent(new AgentProfileUpdatedDomainEvent(agentId, clock.instant()));
+        return saved;
     }
 
     @Override

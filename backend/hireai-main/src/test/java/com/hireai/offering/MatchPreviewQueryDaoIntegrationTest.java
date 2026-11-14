@@ -1,5 +1,6 @@
 package com.hireai.offering;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.port.query.MatchPreviewQueryPort;
 import com.hireai.application.port.query.MatchPreviewQueryPort.ShortlistCandidateRow;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,7 +39,7 @@ class MatchPreviewQueryDaoIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void props(DynamicPropertyRegistry registry) {

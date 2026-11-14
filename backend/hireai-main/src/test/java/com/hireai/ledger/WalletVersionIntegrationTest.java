@@ -1,5 +1,6 @@
 package com.hireai.ledger;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.domain.biz.ledger.wallet.model.WalletModel;
 import com.hireai.domain.biz.ledger.wallet.repository.WalletRepository;
 import com.hireai.domain.shared.model.Money;
@@ -44,7 +45,7 @@ class WalletVersionIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -41,13 +42,18 @@ class RoutingAppServiceDirectDispatchTest {
 
     private final RoutingAppServiceImpl service = new RoutingAppServiceImpl(
             taskReadAppService, taskWriteAppService, agentRepository,
-            routingMatchDomainService, taskDispatchPublisher);
+            routingMatchDomainService, taskDispatchPublisher,
+            mock(com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository.class),
+            mock(com.hireai.domain.biz.task.routing.service.RoutedFailoverDomainService.class),
+            mock(com.hireai.application.biz.offering.embedding.TaskTextEmbeddingAppService.class),
+            Clock.systemUTC(), new com.hireai.domain.biz.task.model.ExecutionGrace(60));
 
     private static final String TASK_OUTPUT_SPEC = "{\"format\":\"JSON\",\"schema\":\"task-snap\"}";
     private static final String CANDIDATE_OUTPUT_SPEC = "{\"format\":\"TEXT\",\"schema\":\"agent-live\"}";
 
     private TaskRoutingView view(UUID taskId) {
-        return new TaskRoutingView(taskId, "summarisation", new BigDecimal("30.00"), "SUBMITTED",
+        return new TaskRoutingView(taskId, "Summarise report", "Summarise the attached report",
+                "summarisation", new BigDecimal("30.00"), "SUBMITTED",
                 TASK_OUTPUT_SPEC);
     }
 
@@ -75,7 +81,7 @@ class RoutingAppServiceDirectDispatchTest {
         InOrder inOrder = inOrder(taskWriteAppService, taskDispatchPublisher);
         inOrder.verify(taskWriteAppService).assignAndQueue(eq(taskId), eq(versionId), any(Instant.class));
         inOrder.verify(taskDispatchPublisher).publish(any(DispatchMessage.class));
-        verify(taskWriteAppService, never()).markAwaitingCapacity(any());
+        verify(taskWriteAppService, never()).markAwaitingAgent(any());
     }
 
     /**
@@ -104,20 +110,21 @@ class RoutingAppServiceDirectDispatchTest {
     }
 
     /**
-     * Deactivation race: findCandidateByVersionId returns empty (agent was deactivated/suspended
-     * between booking and dispatch). Must mark AWAITING_CAPACITY, NEVER publish, and NOT throw.
+     * Pinned fail-fast (#77): findCandidateByVersionId returns empty (the agent is no longer ACTIVE
+     * or the pinned version was superseded). The task is cancelled as unavailable at once, never
+     * parked AWAITING_AGENT and never published, and dispatchDirect does not throw.
      */
     @Test
-    void deactivationRaceMarksAwaitingCapacityNeverPublishes() {
+    void unavailablePinnedVersionCancelsAtOnceNeverPublishes() {
         UUID taskId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
         when(taskReadAppService.getRoutingView(taskId)).thenReturn(view(taskId));
         when(agentRepository.findCandidateByVersionId(versionId)).thenReturn(Optional.empty());
 
-        // Must not throw.
         service.dispatchDirect(taskId, versionId);
 
-        verify(taskWriteAppService).markAwaitingCapacity(taskId);
+        verify(taskWriteAppService).cancelPinnedAsUnavailable(taskId, versionId);
+        verify(taskWriteAppService, never()).markAwaitingAgent(any());
         verify(taskDispatchPublisher, never()).publish(any());
         verify(taskWriteAppService, never()).assignAndQueue(any(), any(), any());
     }

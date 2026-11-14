@@ -3,6 +3,8 @@ package com.hireai.infrastructure.repository.offering.agent;
 import com.hireai.domain.biz.offering.agent.enums.AgentStatus;
 import com.hireai.domain.biz.offering.agent.enums.AgentVersionStatus;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
+import com.hireai.domain.biz.offering.embedding.info.TextVector;
+import com.hireai.infrastructure.repository.offering.embedding.PgVectors;
 import com.hireai.domain.biz.offering.agent.info.AgentReputationTarget;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.reputation.info.ReputationAggregates;
@@ -79,6 +81,18 @@ public class AgentRepositoryImpl implements AgentRepository {
     }
 
     @Override
+    public void updateSigningSecret(UUID agentId, String signingSecret) {
+        if (agentJpa.updateSigningSecret(agentId, signingSecret) != 1) {
+            throw new DomainException(ResultCode.NOT_FOUND, "Agent not found: " + agentId);
+        }
+    }
+
+    @Override
+    public Optional<String> findSigningSecretByVersionId(UUID agentVersionId) {
+        return agentJpa.findSigningSecretByVersionId(agentVersionId);
+    }
+
+    @Override
     public Optional<AgentModel> findById(UUID agentId) {
         return agentJpa.findById(agentId).map(this::toModel);
     }
@@ -93,9 +107,12 @@ public class AgentRepositoryImpl implements AgentRepository {
     }
 
     @Override
-    public List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice) {
+    public List<AgentCandidate> findActiveCandidates(String category, BigDecimal maxPrice,
+                                                     Long longestExecutionSeconds, TextVector taskVector) {
         String normalisedCategory = category == null ? "" : category.trim().toLowerCase();
-        return versionJpa.findActiveCandidates(normalisedCategory, maxPrice).stream()
+        return versionJpa.findActiveCandidates(normalisedCategory, maxPrice, longestExecutionSeconds,
+                        taskVector == null ? MatchCandidateSql.NO_VECTOR : PgVectors.toLiteral(taskVector.vector()),
+                        taskVector == null ? MatchCandidateSql.NO_VECTOR : taskVector.model()).stream()
                 .map(this::rowToCandidate)
                 .toList();
     }
@@ -151,7 +168,8 @@ public class AgentRepositoryImpl implements AgentRepository {
                 row.getOutputSpec(),
                 row.getMaxConcurrent() == null ? 5 : row.getMaxConcurrent(),
                 row.getInFlight() == null ? 0L : row.getInFlight(),
-                row.getSampleCount() == null ? 0L : row.getSampleCount());
+                row.getSampleCount() == null ? 0L : row.getSampleCount(),
+                row.getSimilarity());
     }
 
     private AgentModel toModel(AgentDO entity) {
@@ -163,7 +181,7 @@ public class AgentRepositoryImpl implements AgentRepository {
         return new AgentModel(
                 entity.getId(), entity.getOwnerId(), entity.getName(),
                 AgentStatus.valueOf(entity.getStatus()), entity.getCurrentVersionId(),
-                entity.getReputationScore(), version, entity.getGmtCreate());
+                entity.getReputationScore(), version, entity.getGmtCreate(), entity.hasSigningSecret());
     }
 
     private AgentVersionModel toVersionModel(AgentVersionDO entity) {

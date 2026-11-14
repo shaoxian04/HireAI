@@ -79,7 +79,7 @@ public class ValidationAppServiceImpl implements ValidationAppService {
         // sample against Reliability.
         reputationWriteAppService.recordOutcome(task.id(), task.agentVersionId(),
                 task.clientId(), ReputationEventType.SPEC_VIOLATION);
-        webhookOutboxAppService.enqueueFailed(gated, "SPEC_VIOLATION");
+        webhookOutboxAppService.enqueueFailed(gated, gated.status().name());
         log.info("Task {} failed validation -> SPEC_VIOLATION (refunded)", task.id());
         return gated;
     }

@@ -1,5 +1,7 @@
 package com.hireai.webhook;
 
+import com.hireai.domain.biz.task.enums.FailureReason;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hireai.domain.biz.task.webhookdelivery.WebhookPayloads;
@@ -25,16 +27,22 @@ class WebhookPayloadsTest {
             "{\"event_id\":\"" + ev + "\",\"type\":\"task.completed\",\"task_id\":\"" + task
             + "\",\"occurred_at\":\"2026-07-19T09:12:00Z\"}");
     }
-    @Test void failedCarriesReasonAndRefund() {
-        assertThat(WebhookPayloads.failed(ev, task, "SPEC_VIOLATION", new BigDecimal("120.00"), at)).isEqualTo(
+    @Test void failedCarriesReasonFailureReasonAndRefund() {
+        assertThat(WebhookPayloads.failed(ev, task, "FAILED", FailureReason.AGENT_UNREACHABLE,
+                new BigDecimal("120.00"), at)).isEqualTo(
             "{\"event_id\":\"" + ev + "\",\"type\":\"task.failed\",\"task_id\":\"" + task
-            + "\",\"reason\":\"SPEC_VIOLATION\",\"refunded\":120.00,\"occurred_at\":\"2026-07-19T09:12:00Z\"}");
+            + "\",\"reason\":\"FAILED\",\"failure_reason\":\"AGENT_UNREACHABLE\""
+            + ",\"refunded\":120.00,\"occurred_at\":\"2026-07-19T09:12:00Z\"}");
+    }
+    @Test void failedRendersAMissingFailureReasonAsJsonNull() throws Exception {
+        JsonNode node = mapper.readTree(WebhookPayloads.failed(ev, task, "CANCELLED", null, new BigDecimal("1.00"), at));
+        assertThat(node.get("failure_reason").isNull()).isTrue();
     }
     @Test void failedEscapesReasonSoJsonStaysWellFormed() throws Exception {
         // A reason carrying a double-quote, backslash and control char must be escaped, not injected raw —
         // otherwise a malformed body ships under a valid signature. Parse it back to prove well-formedness.
         String tricky = "bad\"reason\\with\ncontrol";
-        String json = WebhookPayloads.failed(ev, task, tricky, new BigDecimal("5.00"), at);
+        String json = WebhookPayloads.failed(ev, task, tricky, FailureReason.SPEC_VIOLATION, new BigDecimal("5.00"), at);
         JsonNode node = mapper.readTree(json); // throws if the escaping produced malformed JSON
         assertThat(node.get("reason").asText()).isEqualTo(tricky); // round-trips the exact reason
         assertThat(node.get("refunded").decimalValue()).isEqualByComparingTo(new BigDecimal("5.00"));

@@ -1,5 +1,7 @@
 package com.hireai.domain.biz.task.model;
 
+import com.hireai.domain.biz.task.enums.FailureReason;
+
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.utility.exception.DomainException;
@@ -74,6 +76,52 @@ class TaskModelTransitionsTest {
     }
 
     @Test
+    void recordResultAcceptsQueuedSourceForAnEarlyCallback() {
+        // #63: an Agent may call back before the platform has marked the task EXECUTING.
+        TaskModel queued = submitted().assignAndQueue(UUID.randomUUID());
+        TaskResultModel result = TaskResultModel.record(queued.id(), "COMPLETED", "{}", null);
+
+        TaskModel received = queued.recordResult(result);
+
+        assertThat(received.status()).isEqualTo(TaskStatus.RESULT_RECEIVED);
+        assertThat(received.result()).isSameAs(result);
+    }
+
+    @Test
+    void recordResultRejectsAwaitingAgentAndTerminalSources() {
+        TaskResultModel result = TaskResultModel.record(UUID.randomUUID(), "COMPLETED", "{}", null);
+        TaskModel awaiting = submitted().markAwaitingAgent();
+        TaskModel failed = submitted().assignAndQueue(UUID.randomUUID()).markFailed(FailureReason.AGENT_UNREACHABLE);
+        TaskModel timedOut = submitted().assignAndQueue(UUID.randomUUID()).markTimedOut();
+
+        assertThatThrownBy(() -> awaiting.recordResult(result)).isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> failed.recordResult(result)).isInstanceOf(DomainException.class);
+        assertThatThrownBy(() -> timedOut.recordResult(result)).isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void markExecutingIsANoOpFromAnyLaterState() {
+        TaskModel executing = submitted().assignAndQueue(UUID.randomUUID()).markExecuting();
+        TaskModel received = submitted().assignAndQueue(UUID.randomUUID())
+                .recordResult(TaskResultModel.record(UUID.randomUUID(), "COMPLETED", "{}", null));
+        TaskModel failed = submitted().assignAndQueue(UUID.randomUUID()).markFailed(FailureReason.AGENT_UNREACHABLE);
+        TaskModel timedOut = submitted().assignAndQueue(UUID.randomUUID()).markTimedOut();
+        TaskModel pendingReview = received.passValidation();
+
+        assertThat(executing.markExecuting().status()).isEqualTo(TaskStatus.EXECUTING);
+        assertThat(received.markExecuting().status()).isEqualTo(TaskStatus.RESULT_RECEIVED);
+        assertThat(failed.markExecuting().status()).isEqualTo(TaskStatus.FAILED);
+        assertThat(timedOut.markExecuting().status()).isEqualTo(TaskStatus.TIMED_OUT);
+        assertThat(pendingReview.markExecuting().status()).isEqualTo(TaskStatus.PENDING_REVIEW);
+    }
+
+    @Test
+    void markExecutingRejectsAwaitingAgentSource() {
+        TaskModel awaiting = submitted().markAwaitingAgent();
+        assertThatThrownBy(awaiting::markExecuting).isInstanceOf(DomainException.class);
+    }
+
+    @Test
     void recordResultRejectsNonExecutingSource() {
         TaskResultModel result = TaskResultModel.record(UUID.randomUUID(), "COMPLETED", "{}", null);
         assertThatThrownBy(() -> submitted().recordResult(result))
@@ -88,15 +136,15 @@ class TaskModelTransitionsTest {
     }
 
     @Test
-    void markAwaitingCapacityMovesSubmittedToAwaitingCapacity() {
-        TaskModel awaiting = submitted().markAwaitingCapacity();
-        assertThat(awaiting.status()).isEqualTo(TaskStatus.AWAITING_CAPACITY);
+    void markAwaitingAgentMovesSubmittedToAwaitingAgent() {
+        TaskModel awaiting = submitted().markAwaitingAgent();
+        assertThat(awaiting.status()).isEqualTo(TaskStatus.AWAITING_AGENT);
     }
 
     @Test
-    void markAwaitingCapacityRejectsNonSubmittedSource() {
+    void markAwaitingAgentRejectsNonSubmittedSource() {
         TaskModel executing = submitted().assignAndQueue(UUID.randomUUID()).markExecuting();
-        assertThatThrownBy(executing::markAwaitingCapacity)
+        assertThatThrownBy(executing::markAwaitingAgent)
                 .isInstanceOf(DomainException.class);
     }
 
@@ -116,38 +164,52 @@ class TaskModelTransitionsTest {
     }
 
     @Test
+    void aTimeoutIsTheAgentsFaultOnlyOnceItIsExecuting() {
+        TaskModel queued = submitted().assignAndQueue(UUID.randomUUID());
+        assertThat(queued.timeoutIsAgentFault()).isFalse();
+        assertThat(queued.markExecuting().timeoutIsAgentFault()).isTrue();
+    }
+
+    @Test
     void markFailedFromQueuedOrExecuting() {
-        TaskModel fromQueued = submitted().assignAndQueue(UUID.randomUUID()).markFailed();
+        TaskModel fromQueued = submitted().assignAndQueue(UUID.randomUUID()).markFailed(FailureReason.AGENT_UNREACHABLE);
         assertThat(fromQueued.status()).isEqualTo(TaskStatus.FAILED);
 
-        TaskModel fromExecuting = submitted().assignAndQueue(UUID.randomUUID()).markExecuting().markFailed();
+        TaskModel fromExecuting = submitted().assignAndQueue(UUID.randomUUID()).markExecuting().markFailed(FailureReason.AGENT_UNREACHABLE);
         assertThat(fromExecuting.status()).isEqualTo(TaskStatus.FAILED);
     }
 
     @Test
     void markFailedRejectsSubmittedSource() {
-        assertThatThrownBy(() -> submitted().markFailed())
+        assertThatThrownBy(() -> submitted().markFailed(FailureReason.AGENT_UNREACHABLE))
                 .isInstanceOf(DomainException.class);
     }
 
     @Test
-    void markCancelledFromAwaitingCapacity() {
-        TaskModel awaiting = submitted().markAwaitingCapacity();
-        TaskModel cancelled = awaiting.markCancelled();
+    void markCancelledFromAwaitingAgent() {
+        TaskModel awaiting = submitted().markAwaitingAgent();
+        TaskModel cancelled = awaiting.markCancelled(FailureReason.NO_ELIGIBLE_AGENT);
+
+        assertThat(cancelled.status()).isEqualTo(TaskStatus.CANCELLED);
+    }
+
+    @Test
+    void markCancelledFromSubmitted() {
+        TaskModel cancelled = submitted().markCancelled(FailureReason.NO_ELIGIBLE_AGENT);
 
         assertThat(cancelled.status()).isEqualTo(TaskStatus.CANCELLED);
     }
 
     @Test
     void markCancelledRejectsOtherStatuses() {
-        assertThatThrownBy(() -> submitted().markCancelled())
+        assertThatThrownBy(() -> submitted().assignAndQueue(UUID.randomUUID()).markCancelled(FailureReason.NO_ELIGIBLE_AGENT))
                 .isInstanceOf(DomainException.class);
     }
 
     @Test
-    void assignAndQueueAcceptsAwaitingCapacity() {
+    void assignAndQueueAcceptsAwaitingAgent() {
         UUID agentVersionId = UUID.randomUUID();
-        TaskModel awaiting = submitted().markAwaitingCapacity();
+        TaskModel awaiting = submitted().markAwaitingAgent();
         TaskModel queued = awaiting.assignAndQueue(agentVersionId);
 
         assertThat(queued.status()).isEqualTo(TaskStatus.QUEUED);
@@ -155,11 +217,57 @@ class TaskModelTransitionsTest {
     }
 
     @Test
-    void markAwaitingCapacityIsIdempotentFromAwaitingCapacity() {
-        TaskModel awaiting = submitted().markAwaitingCapacity();
-        TaskModel again = awaiting.markAwaitingCapacity();
+    void markAwaitingAgentIsIdempotentFromAwaitingAgent() {
+        TaskModel awaiting = submitted().markAwaitingAgent();
+        TaskModel again = awaiting.markAwaitingAgent();
 
-        assertThat(again.status()).isEqualTo(TaskStatus.AWAITING_CAPACITY);
+        assertThat(again.status()).isEqualTo(TaskStatus.AWAITING_AGENT);
         assertThat(again).isNotSameAs(awaiting);
+    }
+
+    // --- Dispatch-side rules (#58) ---
+
+    @Test
+    void aQueuedTaskWhoseAgentBecameUnavailableIsCancelledWithAgentUnavailable() {
+        TaskModel cancelled = submitted().assignAndQueue(UUID.randomUUID()).cancelAsUnavailable();
+
+        assertThat(cancelled.status()).isEqualTo(TaskStatus.CANCELLED);
+        assertThat(cancelled.failureReason()).isEqualTo(FailureReason.AGENT_UNAVAILABLE);
+    }
+
+    @Test
+    void aTaskTheAgentAlreadyStartedCannotBeCancelledAsUnavailable() {
+        TaskModel executing = submitted().assignAndQueue(UUID.randomUUID()).markExecuting();
+
+        assertThatThrownBy(executing::cancelAsUnavailable).isInstanceOf(DomainException.class);
+    }
+
+    @Test
+    void onlyTheAssignedVersionOfAQueuedTaskIsAwaitingDispatch() {
+        UUID version = UUID.randomUUID();
+        TaskModel queued = submitted().assignAndQueue(version);
+
+        assertThat(queued.isAwaitingDispatchTo(version)).isTrue();
+        assertThat(queued.isAwaitingDispatchTo(UUID.randomUUID())).isFalse();
+        assertThat(queued.markExecuting().isAwaitingDispatchTo(version)).isFalse();
+    }
+
+    @Test
+    void aDispatchOutcomeAppliesOnlyWhileInFlightOnThatVersion() {
+        UUID version = UUID.randomUUID();
+        TaskModel executing = submitted().assignAndQueue(version).markExecuting();
+
+        assertThat(executing.isInFlightOn(version)).isTrue();
+        assertThat(executing.isInFlightOn(UUID.randomUUID())).isFalse();
+        assertThat(executing.markTimedOut().isInFlightOn(version)).isFalse();
+    }
+
+    @Test
+    void onlyAQueuedRoutedTaskFailsOver() {
+        TaskModel queued = submitted().assignAndQueue(UUID.randomUUID());
+
+        assertThat(queued.failsOverOnDispatchFailure(false)).isTrue();
+        assertThat(queued.failsOverOnDispatchFailure(true)).isFalse();
+        assertThat(queued.markExecuting().failsOverOnDispatchFailure(false)).isFalse();
     }
 }

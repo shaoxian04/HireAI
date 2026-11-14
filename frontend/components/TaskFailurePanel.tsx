@@ -1,10 +1,14 @@
 "use client";
 
-import Link from "next/link";
-import type { TaskStatus, ValidationReportDTO } from "@/lib/types";
+import { ButtonLink } from "@/components/ui";
+import { rebookHref } from "@/lib/rebook";
+import type { FailureReason, TaskStatus, ValidationReportDTO } from "@/lib/types";
 
 interface Props {
+  taskId: string;
   status: TaskStatus;
+  /** Why the task ended (absent on tasks that ended before reasons were recorded). */
+  failureReason?: FailureReason | null;
   budget: number;
   detail?: ValidationReportDTO | null;
 }
@@ -14,7 +18,6 @@ interface Copy {
   tone: Tone;
   headline: string;
   why: string;
-  action: { label: string; href: string };
 }
 
 const COPY: Partial<Record<TaskStatus, Copy>> = {
@@ -22,25 +25,64 @@ const COPY: Partial<Record<TaskStatus, Copy>> = {
     tone: "red",
     headline: "The result didn't meet the spec",
     why: "The agent returned something, but it failed the automated output check for this task — so you were never charged for it.",
-    action: { label: "Submit a new task", href: "/client/tasks/new" },
   },
   TIMED_OUT: {
     tone: "amber",
     headline: "The agent ran out of time",
     why: "This agent accepted your task but didn't return a result within its deadline. That's on the agent, not you.",
-    action: { label: "Try another agent", href: "/client/tasks/new" },
   },
   FAILED: {
     tone: "red",
     headline: "We couldn't reach the agent",
     why: "We tried to hand your task to the agent but its service didn't respond. No work started, so there's nothing to review.",
-    action: { label: "Try another agent", href: "/client/tasks/new" },
   },
   CANCELLED: {
     tone: "dim",
     headline: "No agent was available",
     why: "We kept looking for a free agent in this category but none opened up in time, so we released your task rather than hold your credits.",
-    action: { label: "Browse the marketplace", href: "/client" },
+  },
+};
+
+/**
+ * Plain-words explanation per FailureReason. The status still decides the tone; the reason, when
+ * present, decides what we say happened. Every failed end state offers the same rebook action.
+ */
+const REASON_COPY: Record<FailureReason, { headline: string; why: string }> = {
+  AGENT_UNREACHABLE: {
+    headline: "We couldn't reach the agent",
+    why: "We tried several times to hand your task to the agent, but its service didn't respond. No work started, so there's nothing to review.",
+  },
+  AGENT_BUSY: {
+    headline: "The agent was busy",
+    why: "The agent turned the task down because it was at capacity. Nothing was started and it doesn't count against anyone.",
+  },
+  AGENT_UNAVAILABLE: {
+    headline: "The agent you chose isn't available",
+    why: "The agent was paused, removed, or replaced by a newer version before it could start, so it couldn't take your booking.",
+  },
+  NO_ALTERNATIVE_AGENT: {
+    headline: "No other agent could take it",
+    why: "The first agent couldn't start, and we found no other suitable agent within your budget to try instead.",
+  },
+  NO_ELIGIBLE_AGENT: {
+    headline: "No agent was available",
+    why: "We kept looking for an agent that takes this category within your budget, but none turned up in time, so we released your task rather than hold your credits.",
+  },
+  DISPATCH_ABANDONED: {
+    headline: "We couldn't hand your task to an agent",
+    why: "Something went wrong on our side before any agent received the task. No work started, and the agent isn't blamed.",
+  },
+  EXECUTION_TIMEOUT: {
+    headline: "The agent ran out of time",
+    why: "This agent accepted your task but didn't return a result within its deadline. That's on the agent, not you.",
+  },
+  AGENT_REPORTED_FAILURE: {
+    headline: "The agent couldn't complete the task",
+    why: "The agent started work but reported back that it couldn't finish it, so there's no result to review.",
+  },
+  SPEC_VIOLATION: {
+    headline: "The result didn't meet the spec",
+    why: "The agent returned something, but it failed the automated output check for this task — so you were never charged for it.",
   },
 };
 
@@ -56,9 +98,10 @@ const HEAD_CLS: Record<Tone, string> = {
   dim: "text-fg",
 };
 
-export function TaskFailurePanel({ status, budget, detail }: Props) {
-  const copy = COPY[status];
-  if (!copy) return null;
+export function TaskFailurePanel({ taskId, status, failureReason, budget, detail }: Props) {
+  const statusCopy = COPY[status];
+  if (!statusCopy) return null;
+  const copy = { ...statusCopy, ...(failureReason ? REASON_COPY[failureReason] : {}) };
   const failedChecks = detail?.checks.filter((c) => !c.passed) ?? [];
 
   return (
@@ -95,12 +138,10 @@ export function TaskFailurePanel({ status, budget, detail }: Props) {
         </details>
       )}
 
-      <Link
-        href={copy.action.href}
-        className="inline-flex h-10 items-center rounded-md bg-accent px-4 text-sm font-semibold text-ink transition hover:bg-accent-2"
-      >
-        {copy.action.label}
-      </Link>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <ButtonLink href={rebookHref(taskId)}>Choose another agent</ButtonLink>
+        <p className="text-xs text-dim">Your task, filled in again, with this agent left off the shortlist.</p>
+      </div>
     </section>
   );
 }

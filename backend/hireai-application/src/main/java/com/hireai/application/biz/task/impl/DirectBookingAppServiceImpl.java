@@ -9,11 +9,15 @@ import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
+import com.hireai.domain.biz.task.model.ClientDeadline;
+import com.hireai.domain.biz.task.model.ExecutionGrace;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -32,6 +36,10 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
     private final AgentRepository agentRepository;
     private final StorefrontRepository agentProfileRepository;
     private final TaskWriteAppService taskWriteAppService;
+    /** The app's Clock bean: a booking's deadline is counted from the booking. */
+    private final Clock clock;
+    /** Added to the Agent's max execution time, as routing stamps it (ExecutionConfig). */
+    private final ExecutionGrace executionGrace;
 
     @Override
     public UUID book(DirectBookingInfo info) {
@@ -48,14 +56,20 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
 
         // Pricing rule (budget >= price) is owned by the agent version.
         agent.currentVersion().assertAffordable(info.budget());
+        if (info.deadlineSeconds() != null) {
+            // A booking never substitutes another Agent: one that can't finish in time is a 400 now.
+            Instant now = clock.instant();
+            ClientDeadline.after(now, info.deadlineSeconds())
+                    .requireAdmits(agent.currentVersion().maxExecutionSeconds(), now, executionGrace);
+        }
 
-        // Adopt the agent's declared output_spec as the task's binding contract (Invariant #4)
-        // and its first capability category as the task category (stats/labels).
+        // Adopt the agent's declared output_spec as the task's binding contract (Invariant #4).
+        // The task category (stats/labels, rebook) is the client's choice when given, which the
+        // agent must serve; otherwise the agent's first capability category.
         TaskSubmitInfo submitInfo = new TaskSubmitInfo(
                 info.clientId(), info.title(), info.description(), info.budget(),
-                agent.currentVersion().outputSpec(),
-                // Safe: AgentVersionModel.create guarantees >= 1 category.
-                agent.currentVersion().capabilityCategories().get(0));
+                agent.currentVersion().outputSpec(), agent.currentVersion().taskCategoryFor(info.category()),
+                info.deadlineSeconds());
 
         UUID taskId = taskWriteAppService.submitDirectlyBooked(submitInfo, agent.currentVersionId());
         log.info("Task {} direct-booked to agent {} (version {})",

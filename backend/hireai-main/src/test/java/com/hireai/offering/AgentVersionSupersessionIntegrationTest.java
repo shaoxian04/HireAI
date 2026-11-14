@@ -1,5 +1,6 @@
 package com.hireai.offering;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.biz.offering.agent.AgentReadAppService;
 import com.hireai.application.biz.offering.agent.AgentWriteAppService;
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
@@ -51,7 +52,7 @@ class AgentVersionSupersessionIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
@@ -80,7 +81,7 @@ class AgentVersionSupersessionIntegrationTest {
     @Test
     void publishNewVersionSupersedesPriorActiveAndKeepsHistory() {
         UUID owner = newOwner();
-        UUID agentId = agentWriteAppService.register(info(owner, "summarisation", "5.00"));
+        UUID agentId = agentWriteAppService.register(info(owner, "summarisation", "5.00")).agentId();
         agentWriteAppService.activate(agentId, owner);
 
         AgentModel v1 = agentReadAppService.getForOwner(agentId, owner);

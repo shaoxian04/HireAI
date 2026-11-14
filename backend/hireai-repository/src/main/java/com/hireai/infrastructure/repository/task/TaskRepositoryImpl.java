@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.repository.task;
 
+import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.enums.TaskStatus;
@@ -45,7 +46,8 @@ public class TaskRepositoryImpl implements TaskRepository {
                 task.category(), task.status().name(), task.agentVersionId(), task.createdAt(),
                 task.resolution() == null ? null : task.resolution().name(),
                 task.resolvedAt(), task.rejectionReason(),
-                task.rejectReasonCategory() == null ? null : task.rejectReasonCategory().name()));
+                task.rejectReasonCategory() == null ? null : task.rejectReasonCategory().name(),
+                task.failureReason() == null ? null : task.failureReason().name()));
 
         TaskResultModel result = task.result();
         if (result != null && taskResultJpa.findByTaskId(result.taskId()).isEmpty()) {
@@ -81,13 +83,28 @@ public class TaskRepositoryImpl implements TaskRepository {
     }
 
     @Override
+    public void stampClientDeadline(UUID taskId, Instant clientDeadline) {
+        taskJpa.stampClientDeadline(taskId, clientDeadline);
+    }
+
+    @Override
+    public Optional<Instant> findClientDeadline(UUID taskId) {
+        return taskJpa.findClientDeadline(taskId);
+    }
+
+    @Override
     public void pinAgentVersion(UUID taskId, UUID agentVersionId) {
         taskJpa.pinAgentVersion(taskId, agentVersionId);
     }
 
     @Override
-    public List<UUID> findIdsAwaitingCapacity() {
-        return taskJpa.findIdsAwaitingCapacity();
+    public List<UUID> findIdsAwaitingAgent() {
+        return taskJpa.findIdsAwaitingAgent();
+    }
+
+    @Override
+    public List<UUID> findIdsSubmittedBefore(Instant cutoff) {
+        return taskJpa.findIdsSubmittedBefore(cutoff);
     }
 
     @Override
@@ -121,7 +138,8 @@ public class TaskRepositoryImpl implements TaskRepository {
                 entity.getAgentVersionId(), result, entity.getGmtCreate(),
                 entity.getResolution() == null ? null : TaskResolution.valueOf(entity.getResolution()),
                 entity.getResolvedAt(), entity.getRejectionReason(),
-                entity.getRejectReasonCategory() == null ? null : RejectReason.valueOf(entity.getRejectReasonCategory()));
+                entity.getRejectReasonCategory() == null ? null : RejectReason.valueOf(entity.getRejectReasonCategory()),
+                entity.getFailureReason() == null ? null : FailureReason.valueOf(entity.getFailureReason()));
     }
 
     private TaskResultModel toResultModel(TaskResultDO entity) {

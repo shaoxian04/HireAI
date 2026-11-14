@@ -39,11 +39,13 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -323,44 +325,165 @@ class TaskControllerTest {
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
-    // ---- GET /api/tasks/match-preview ----
+    // ---- POST /api/tasks/match-preview ----
+
+    private static String previewBody(String extraFields) {
+        return "{\"title\":\"Summarise\",\"description\":\"Private contract text\","
+                + "\"category\":\"summarisation\",\"budget\":30" + extraFields + "}";
+    }
 
     @Test
     void matchPreviewReturns200WithBothLists() throws Exception {
         UUID agentId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
-        when(matchPreviewAppService.preview(eq("summarisation"), any()))
+        when(matchPreviewAppService.preview(eq("Summarise"), eq("Private contract text"), eq("summarisation"),
+                eq(Money.of(new BigDecimal("30"))), eq(Set.of()), isNull()))
                 .thenReturn(new MatchPreview(
                         List.of(new AgentOption(agentId, versionId, "Alpha", "tag", "logo",
                                 new BigDecimal("12.00"), new BigDecimal("80.00"), true, "JSON",
                                 List.of("summarisation"), new BigDecimal("9.000"), 10L)),
                         List.of(new AgentOption(UUID.randomUUID(), UUID.randomUUID(), "Pricey", null, null,
                                 new BigDecimal("40.00"), new BigDecimal("90.00"), false, "JSON",
-                                List.of("summarisation"), new BigDecimal("0.000"), 0L))));
+                                List.of("summarisation"), new BigDecimal("0.000"), 0L)), false));
 
-        mockMvc.perform(get("/api/tasks/match-preview")
-                        .param("category", "summarisation").param("budget", "30"))
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON).content(previewBody("")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.shortlist[0].agentName").value("Alpha"))
                 .andExpect(jsonPath("$.data.shortlist[0].price").value(12.00))
                 .andExpect(jsonPath("$.data.shortlist[0].availability").value("AVAILABLE"))
                 .andExpect(jsonPath("$.data.nearMisses[0].agentName").value("Pricey"))
-                .andExpect(jsonPath("$.data.nearMisses[0].availability").value("BUSY"));
+                .andExpect(jsonPath("$.data.nearMisses[0].availability").value("BUSY"))
+                .andExpect(jsonPath("$.data.noCloseMatch").value(false));
+    }
+
+    @Test
+    void matchPreviewSaysWhenNoAgentMatchesTheTaskClosely() throws Exception {
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), isNull()))
+                .thenReturn(new MatchPreview(List.of(), List.of(), true));
+
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON).content(previewBody("")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.shortlist").isEmpty())
+                .andExpect(jsonPath("$.data.noCloseMatch").value(true));
+    }
+
+    @Test
+    void matchPreviewNoLongerAnswersAGetWithTheTaskInTheQueryString() throws Exception {
+        mockMvc.perform(get("/api/tasks/match-preview")
+                        .param("category", "summarisation").param("budget", "30"))
+                .andExpect(status().isBadRequest());
+        org.mockito.Mockito.verifyNoInteractions(matchPreviewAppService);
+    }
+
+    @Test
+    void matchPreviewPassesEveryExcludedAgentToTheService() throws Exception {
+        UUID failed = UUID.randomUUID();
+        UUID other = UUID.randomUUID();
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of(failed, other)), isNull()))
+                .thenReturn(new MatchPreview(List.of(), List.of(), false));
+
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(previewBody(",\"exclude\":[\"" + failed + "\",\"" + other + "\"]")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.shortlist").isEmpty());
+    }
+
+    @Test
+    void matchPreviewPassesTheOptionalDeadlineOn() throws Exception {
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), eq(3600L)))
+                .thenReturn(new MatchPreview(List.of(), List.of(), false));
+
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON).content(previewBody(",\"deadlineSeconds\":3600")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void matchPreviewWithANonPositiveDeadlineReturns400() throws Exception {
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON).content(previewBody(",\"deadlineSeconds\":0")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void matchPreviewWithTooManyExclusionsReturns400() throws Exception {
+        String ids = java.util.stream.Stream.generate(() -> "\"" + UUID.randomUUID() + "\"")
+                .limit(21).collect(java.util.stream.Collectors.joining(","));
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON).content(previewBody(",\"exclude\":[" + ids + "]")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void matchPreviewWithMalformedExclusionReturns400() throws Exception {
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON).content(previewBody(",\"exclude\":[\"nope\"]")))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void matchPreviewWithoutTheTaskTextReturns400() throws Exception {
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"category\":\"summarisation\",\"budget\":30}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     @Test
     void matchPreviewBlankCategoryReturns400() throws Exception {
-        mockMvc.perform(get("/api/tasks/match-preview").param("category", "").param("budget", "30"))
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"t\",\"description\":\"d\",\"category\":\"\",\"budget\":30}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     @Test
     void matchPreviewNonPositiveBudgetReturns400() throws Exception {
-        mockMvc.perform(get("/api/tasks/match-preview").param("category", "summarisation").param("budget", "0"))
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"t\",\"description\":\"d\",\"category\":\"summarisation\",\"budget\":0}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    // ---- GET /api/tasks/{id} ----
+
+    @Test
+    void getByIdCarriesTheCategoryAndTheAgentTheTaskWasBookedWith() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        UUID agentId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(clientId);
+        TaskModel task = submittedTask(taskId, clientId);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(task);
+        when(taskReadAppService.findBookedAgentId(task)).thenReturn(Optional.of(agentId));
+
+        mockMvc.perform(get("/api/tasks/{id}", taskId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.category").value("summarisation"))
+                .andExpect(jsonPath("$.data.agentId").value(agentId.toString()));
+    }
+
+    @Test
+    void getByIdOmitsTheAgentWhenNoneWasBooked() throws Exception {
+        UUID clientId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        when(currentUserProvider.currentUserId()).thenReturn(clientId);
+        TaskModel task = submittedTask(taskId, clientId);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(task);
+        when(taskReadAppService.findBookedAgentId(task)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/tasks/{id}", taskId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.agentId").doesNotExist());
     }
 
     // ---- GET /api/tasks/{id}/validation ----

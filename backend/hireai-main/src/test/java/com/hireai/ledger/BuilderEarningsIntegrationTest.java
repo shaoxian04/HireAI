@@ -1,5 +1,6 @@
 package com.hireai.ledger;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.application.biz.ledger.wallet.BuilderEarningsReadAppService;
 import com.hireai.application.biz.ledger.wallet.BuilderEarningsReadAppService.Earnings;
@@ -50,7 +51,7 @@ class BuilderEarningsIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
@@ -80,6 +81,7 @@ class BuilderEarningsIntegrationTest {
         jdbc.update("""
                 INSERT INTO agents (id, owner_id, name, status, current_version_id)
                 VALUES (?, ?, ?, 'ACTIVE', ?)""", agentId, builderId, name, versionId);
+                jdbc.update("INSERT INTO agent_profiles (agent_id, is_listed) VALUES (?, true)", agentId);
         jdbc.update("""
                 INSERT INTO agent_versions (id, agent_id, version_number, output_spec,
                                             capability_categories, webhook_url, max_execution_seconds, price)

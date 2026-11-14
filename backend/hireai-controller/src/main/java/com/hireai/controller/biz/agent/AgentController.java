@@ -14,12 +14,15 @@ import com.hireai.controller.biz.agent.dto.AgentReputationDTO;
 import com.hireai.controller.biz.agent.dto.AgentStatsDTO;
 import com.hireai.controller.biz.agent.dto.PublishVersionRequest;
 import com.hireai.controller.biz.agent.dto.RegisterAgentRequest;
+import com.hireai.controller.biz.agent.dto.RegisteredAgentDTO;
+import com.hireai.controller.biz.agent.dto.SigningSecretDTO;
 import com.hireai.controller.biz.agent.dto.RespondReviewRequest;
 import com.hireai.controller.biz.agent.dto.ReviewDTO;
 import com.hireai.controller.biz.agent.dto.UpdateProfileRequest;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.info.AgentRegisterInfo;
+import com.hireai.domain.biz.offering.agent.info.AgentRegistration;
 import com.hireai.domain.biz.offering.agent.info.PublishVersionInfo;
 import com.hireai.domain.biz.offering.storefront.info.ProfileUpdateInfo;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
@@ -42,6 +45,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -75,7 +79,7 @@ public class AgentController extends BaseController {
     }
 
     @PostMapping
-    public WebResult<AgentDTO> register(@Valid @RequestBody RegisterAgentRequest request) {
+    public WebResult<RegisteredAgentDTO> register(@Valid @RequestBody RegisterAgentRequest request) {
         UUID ownerId = currentUser.currentUserId();
         RegisterAgentRequest.OutputSpecRequest specRequest = request.outputSpec();
         AgentRegisterInfo info = new AgentRegisterInfo(
@@ -86,17 +90,29 @@ public class AgentController extends BaseController {
                 request.webhookUrl(),
                 request.maxExecutionSeconds(),
                 request.price(),
-                request.maxConcurrent() == null ? defaultMaxConcurrent : request.maxConcurrent());
-        UUID agentId = writeAppService.register(info);
-        AgentDTO dto = AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId));
-        return ok(dto);
+                request.maxConcurrent() == null ? defaultMaxConcurrent : request.maxConcurrent(),
+                request.suggestedCategory());
+        AgentRegistration registration = writeAppService.register(info);
+        AgentDTO dto = toDTO(readAppService.getForOwner(registration.agentId(), ownerId));
+        return ok(new RegisteredAgentDTO(dto, registration.signingSecret()));
+    }
+
+    /**
+     * Owner-only: replaces the agent's AgentSigningSecret and returns the new value, once. Also how
+     * an agent registered before secrets existed gets its first one. BUILDER-only in SecurityConfig
+     * (JWT-only: an API key cannot mint agent secrets); a foreign agent is NOT_FOUND.
+     */
+    @PostMapping("/{agentId}/rotate-secret")
+    public WebResult<SigningSecretDTO> rotateSigningSecret(@PathVariable("agentId") UUID agentId) {
+        String secret = writeAppService.rotateSigningSecret(agentId, currentUser.currentUserId());
+        return ok(new SigningSecretDTO(agentId, secret));
     }
 
     @PostMapping("/{agentId}/activate")
     public WebResult<AgentDTO> activate(@PathVariable("agentId") UUID agentId) {
         UUID ownerId = currentUser.currentUserId();
         writeAppService.activate(agentId, ownerId);
-        AgentDTO dto = AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId));
+        AgentDTO dto = toDTO(readAppService.getForOwner(agentId, ownerId));
         return ok(dto);
     }
 
@@ -104,21 +120,21 @@ public class AgentController extends BaseController {
     public WebResult<AgentDTO> suspend(@PathVariable("agentId") UUID agentId) {
         UUID ownerId = currentUser.currentUserId();
         writeAppService.suspend(agentId, ownerId);
-        return ok(AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId)));
+        return ok(toDTO(readAppService.getForOwner(agentId, ownerId)));
     }
 
     @PostMapping("/{agentId}/reactivate")
     public WebResult<AgentDTO> reactivate(@PathVariable("agentId") UUID agentId) {
         UUID ownerId = currentUser.currentUserId();
         writeAppService.reactivate(agentId, ownerId);
-        return ok(AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId)));
+        return ok(toDTO(readAppService.getForOwner(agentId, ownerId)));
     }
 
     @PostMapping("/{agentId}/deactivate")
     public WebResult<AgentDTO> deactivate(@PathVariable("agentId") UUID agentId) {
         UUID ownerId = currentUser.currentUserId();
         writeAppService.deactivate(agentId, ownerId);
-        return ok(AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId)));
+        return ok(toDTO(readAppService.getForOwner(agentId, ownerId)));
     }
 
     @PostMapping("/{agentId}/versions")
@@ -127,14 +143,14 @@ public class AgentController extends BaseController {
         UUID ownerId = currentUser.currentUserId();
         AgentModel updated = writeAppService.publishNewVersion(agentId, ownerId,
                 new PublishVersionInfo(request.price(), request.maxExecutionSeconds(),
-                        request.capabilityCategories()));
-        return ok(AgentModel2DTOConverter.toDTO(updated));
+                        request.capabilityCategories(), request.suggestedCategory()));
+        return ok(toDTO(updated));
     }
 
     @GetMapping("/{agentId}")
     public WebResult<AgentDTO> getById(@PathVariable("agentId") UUID agentId) {
         UUID ownerId = currentUser.currentUserId();
-        AgentDTO dto = AgentModel2DTOConverter.toDTO(readAppService.getForOwner(agentId, ownerId));
+        AgentDTO dto = toDTO(readAppService.getForOwner(agentId, ownerId));
         return ok(dto);
     }
 
@@ -143,11 +159,17 @@ public class AgentController extends BaseController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         UUID ownerId = currentUser.currentUserId();
-        List<AgentDTO> agents = readAppService.listForOwner(ownerId, new AgentQuery(page, size))
-                .stream()
-                .map(AgentModel2DTOConverter::toDTO)
+        List<AgentModel> mine = readAppService.listForOwner(ownerId, new AgentQuery(page, size));
+        Set<UUID> listed = readAppService.findListedAgentIds(mine.stream().map(AgentModel::id).toList());
+        List<AgentDTO> agents = mine.stream()
+                .map(a -> AgentModel2DTOConverter.toDTO(a, listed.contains(a.id())))
                 .toList();
         return ok(agents);
+    }
+
+    private AgentDTO toDTO(AgentModel agent) {
+        boolean listed = readAppService.findListedAgentIds(List.of(agent.id())).contains(agent.id());
+        return AgentModel2DTOConverter.toDTO(agent, listed);
     }
 
     // ---- Storefront management (builder-only, owner-gated) ----

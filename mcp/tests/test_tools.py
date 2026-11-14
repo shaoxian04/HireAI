@@ -22,6 +22,11 @@ class FakeClient:
         self.calls.append(("submit_routed", kwargs))
         return {"id": "t-routed", "status": "SUBMITTED"}
 
+    async def list_categories(self):
+        self.calls.append(("list_categories", None))
+        return [{"category": "document-extraction", "label": "Document extraction", "agentCount": 3},
+                {"category": "other", "label": "Other", "agentCount": 0}]
+
     async def get_task(self, task_id):
         self.calls.append(("get_task", task_id))
         return {"id": task_id, "status": "WORKING", "resolution": None}
@@ -39,8 +44,8 @@ def fake(monkeypatch):
 
 
 async def test_list_agents_passes_filters(fake):
-    out = await server.list_agents(category="summarization", query="pdf")
-    assert fake.calls[0] == ("list_agents", {"category": "summarization", "query": "pdf",
+    out = await server.list_agents(category="summarisation", query="pdf")
+    assert fake.calls[0] == ("list_agents", {"category": "summarisation", "query": "pdf",
                                              "sort": "hot", "page": 0, "size": 20})
     assert "Summarizer" in out
 
@@ -52,7 +57,7 @@ async def test_submit_task_direct_when_agent_id_given(fake):
 
 
 async def test_submit_task_routed_without_agent_id(fake):
-    out = await server.submit_task(description="do x", budget=50, category="summarization")
+    out = await server.submit_task(description="do x", budget=50, category="summarisation")
     assert fake.calls[0][0] == "submit_routed"
     assert json.loads(out)["task_id"] == "t-routed"
 
@@ -65,18 +70,75 @@ async def test_submit_task_routed_requires_category(fake):
 
 async def test_get_task_status_shapes_output(fake):
     out = await server.get_task_status("t9")
-    assert json.loads(out) == {"task_id": "t9", "status": "WORKING", "resolution": None}
+    assert json.loads(out) == {"task_id": "t9", "status": "WORKING", "resolution": None,
+                               "failure_reason": None}
 
 
-async def test_get_task_result_not_ready(monkeypatch, fake):
+async def test_get_task_status_shows_why_a_task_failed(monkeypatch, fake):
+    async def failed_task(task_id):
+        # The backend omits failureReason on live tasks and sets it once a task ends without a result.
+        return {"id": task_id, "status": "FAILED", "failureReason": "AGENT_UNREACHABLE"}
+
+    monkeypatch.setattr(fake, "get_task", failed_task)
+    out = await server.get_task_status("t9")
+    assert json.loads(out) == {"task_id": "t9", "status": "FAILED", "resolution": None,
+                               "failure_reason": "AGENT_UNREACHABLE"}
+
+
+def _no_result_yet(monkeypatch, fake, status, failure_reason=None):
     async def boom(task_id):
         raise ResultNotReady()
 
+    async def task(task_id):
+        fake.calls.append(("get_task", task_id))
+        return {"id": task_id, "status": status, "resolution": None, "failureReason": failure_reason}
+
     monkeypatch.setattr(fake, "get_task_result", boom)
+    monkeypatch.setattr(fake, "get_task", task)
+
+
+async def test_get_task_result_not_ready(monkeypatch, fake):
+    _no_result_yet(monkeypatch, fake, "EXECUTING")
     out = await server.get_task_result("t1")
     assert "not ready" in out.lower()
 
 
-async def test_all_four_tools_registered():
+@pytest.mark.parametrize("status", ["SUBMITTED", "QUEUED", "EXECUTING", "RESULT_RECEIVED", "AWAITING_AGENT"])
+async def test_get_task_result_keeps_polling_while_a_result_can_still_arrive(monkeypatch, fake, status):
+    _no_result_yet(monkeypatch, fake, status)
+    assert "poll again" in (await server.get_task_result("t1")).lower()
+
+
+@pytest.mark.parametrize("status,reason", [("FAILED", "AGENT_BUSY"), ("CANCELLED", "NO_ELIGIBLE_AGENT"),
+                                           ("TIMED_OUT", "EXECUTION_TIMEOUT")])
+async def test_get_task_result_for_a_task_that_ended_without_one_says_so(monkeypatch, fake, status, reason):
+    _no_result_yet(monkeypatch, fake, status, reason)
+    out = await server.get_task_result("t1")
+    assert "poll again shortly" not in out.lower()
+    assert json.loads(out) == {"task_id": "t1", "result": None, "status": status, "failure_reason": reason,
+                               "message": f"This task ended {status} without a result, so there is none to "
+                                          f"fetch. Do not poll again."}
+
+
+async def test_list_categories_returns_the_platform_list(fake):
+    out = await server.list_categories()
+    assert fake.calls == [("list_categories", None)]
+    assert json.loads(out) == [
+        {"slug": "document-extraction", "label": "Document extraction", "agent_count": 3},
+        {"slug": "other", "label": "Other", "agent_count": 0},
+    ]
+
+
+async def test_all_tools_registered():
     tools = await server.mcp.list_tools()
-    assert {t.name for t in tools} == {"list_agents", "submit_task", "get_task_status", "get_task_result"}
+    assert {t.name for t in tools} == {"list_agents", "list_categories", "submit_task", "get_task_status",
+                                       "get_task_result"}
+
+
+async def test_submit_task_passes_the_deadline_on(fake):
+    await server.submit_task(description="do x", budget=50, category="summarisation", deadline_seconds=600)
+    await server.submit_task(description="do x", budget=50, agent_id="a1", deadline_seconds=900)
+    await server.submit_task(description="do x", budget=50, category="summarisation")
+    assert fake.calls[0][1]["deadline_seconds"] == 600
+    assert fake.calls[1][1]["deadline_seconds"] == 900
+    assert fake.calls[2][1]["deadline_seconds"] is None

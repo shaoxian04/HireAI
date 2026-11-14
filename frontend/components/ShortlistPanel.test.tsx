@@ -50,6 +50,22 @@ describe("ShortlistPanel", () => {
     expect(screen.getByText(/no agents match/i)).toBeTruthy();
   });
 
+  it("says no agent matches the task closely when the relevance floor removed every agent", () => {
+    render(<ShortlistPanel open budget={30} shortlist={[]} nearMisses={[]} noCloseMatch
+      onSelect={noop} onClose={noop} />);
+    expect(screen.getByRole("status")).toHaveTextContent(/no agent matches this task closely/i);
+    expect(screen.queryByText(/no agents match this category/i)).toBeNull();
+  });
+
+  it("keeps the near-miss suggestions under the no-close-match message", () => {
+    const onSelect = vi.fn();
+    render(<ShortlistPanel open budget={20} shortlist={[]} noCloseMatch onSelect={onSelect} onClose={noop}
+      nearMisses={[opt({ agentVersionId: "v9", agentName: "Pricey", price: 25 })]} />);
+    expect(screen.getByRole("status")).toHaveTextContent(/no agent matches this task closely/i);
+    fireEvent.click(screen.getByRole("button", { name: /pays 25 cr/i }));
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ agentVersionId: "v9" }));
+  });
+
   it("fires onClose from the close button", () => {
     const onClose = vi.fn();
     render(<ShortlistPanel open budget={30} shortlist={[opt({})]} nearMisses={[]} onSelect={noop} onClose={onClose} />);

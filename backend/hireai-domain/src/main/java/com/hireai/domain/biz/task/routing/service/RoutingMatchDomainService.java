@@ -12,7 +12,8 @@ import java.util.UUID;
  * The ONE ranking engine for task->agent matching (spec §4). Framework-free; wired in
  * DomainServiceConfig with a MatchingPolicy and an injected RandomGenerator.
  *
- * rank      — deterministic: hard-filter (category + price<=budget), multi-factor score,
+ * rank      — deterministic: hard-filter (category + price<=budget + relevance floor τ on the raw
+ *             cosine similarity), multi-factor score,
  *             sort best-first, total tie-break (price asc, then agentVersionId asc).
  *             Also the Phase 2 shortlist's top-N source.
  * selectOne — epsilon-greedy over rank: probability 1-epsilon take the top; probability epsilon
@@ -27,4 +28,17 @@ public interface RoutingMatchDomainService {
     List<ScoredCandidate> rank(MatchCriteria criteria, List<AgentCandidate> candidates);
 
     Optional<UUID> selectOne(MatchCriteria criteria, List<AgentCandidate> candidates);
+
+    /**
+     * Whether the candidate's raw cosine similarity reaches τ (a candidate without one passes). rank
+     * applies it already; the shortlist uses it for the above-budget near-misses it lists itself.
+     */
+    boolean passesRelevanceFloor(AgentCandidate candidate);
+
+    /**
+     * The shortlist's "no close match" state (#85): nothing ranks, yet an affordable candidate was
+     * left out only by the relevance floor. Tells the Client the task text matched no Agent closely
+     * enough, rather than that no Agent serves the category within budget.
+     */
+    boolean noCloseMatch(MatchCriteria criteria, List<AgentCandidate> candidates);
 }

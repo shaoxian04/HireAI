@@ -13,9 +13,11 @@ The current schema and domain model, from the code. `backend/hireai-main/src/mai
 | ledger | `SettlementModel` | | `SettlementRepository` | One per task; records the decision. Money moves through the ledger. |
 | offering | `AgentModel` | `AgentVersionModel`, `Pricing` | `AgentRepository` | One active version; only ACTIVE agents receive tasks. |
 | offering | `StorefrontModel` | `Media` | `StorefrontRepository` | Listing is separate from agent status; bookable = ACTIVE and listed. |
+| offering | `AgentEmbeddingModel` | `AgentProfileText` | `AgentEmbeddingRepository` | At most one vector per Agent, always 1536-dimensional and tagged with its model and text hash; replaced, never compared across models. |
 | task | `TaskModel` | `TaskResultModel`, `OutputSpec` | `TaskRepository` | Legal transitions only; a result exists only after dispatch. |
 | task | `IdempotencyRecord` | | `IdempotencyRepository` | `UNIQUE (owner, key)` in the same transaction as the freeze, so a race rolls the freeze back. |
 | task | `WebhookDeliveryModel` | | `WebhookDeliveryRepository` | One row per terminal event, written in the settling transaction and retried until delivered or dead. |
+| task | `DispatchAttemptModel` | | `DispatchAttemptRepository` | Append-only; attempts numbered 1, 2, … per task under the task row lock. |
 | adjudication | `DisputeModel` | `Ruling` | `DisputeRepository` | One dispute per task; settles exactly once. |
 | adjudication | `ValidationReportModel` | `CheckResult` | `ValidationReportRepository` | PASS only if every check passes; runs before any client sees a result. |
 | reputation | `ReputationEventModel` | | `ReputationEventRepository` | Append-only. There is no reputation aggregate: the score is a fold over this stream. |
@@ -40,16 +42,27 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 - `settlements`: `task_id` UNIQUE, `type`, `net`, `commission`. This UNIQUE is the backstop against double settlement.
 
 **Offering**
-- `agents`: `owner_id`, `name`, `status`, `current_version_id`, `reputation_score`, plus the cache columns `reliability_sum/count` and `satisfaction_sum/count`.
-- `agent_versions`: `output_spec` (jsonb), `capability_categories` (`text[]`, stored lowercased), `webhook_url`, `max_execution_seconds`, `price`, `max_concurrent`, `status` (one ACTIVE per agent, by partial unique index).
+- `agents`: `owner_id`, `name`, `status`, `current_version_id`, `reputation_score`, plus the cache columns `reliability_sum/count` and `satisfaction_sum/count`, and `signing_secret` (the AgentSigningSecret, stored recoverably like the client webhook secret; NULL for agents registered before it existed).
+- `agent_versions`: `output_spec` (jsonb), `capability_categories` (`text[]` of [category](#categories) slugs), `webhook_url`, `max_execution_seconds` (CHECK `> 0`, and CHECK `agent_versions_max_execution_seconds_cap` `<= 86400`, the 24-hour cap also enforced by `AgentVersionModel` and request validation), `price`, `max_concurrent`, `status` (one ACTIVE per agent, by partial unique index).
+- <a id="categories"></a>`categories`: the platform-owned category list ([ADR 0006](../adr/0006-matching-category-filter-relevance-floor.md)): `slug` (PK, lowercase-hyphenated), `label`, `sort_order`. Seeded and changed **only by Flyway**; there is no write path in the app. It includes the launch vertical `document-extraction` ([ADR 0004](../adr/0004-launch-vertical-document-grounded-extraction.md)) and `other`. Every entry point that takes a category (registration, version publish, routed submit, a direct booking's optional category, match-preview) validates against it in the application layer (`CategoryList.requireKnown`); the database does not constrain `capability_categories` or `tasks.category`. `V35` mapped earlier free-text tags and task categories onto slugs (known spellings to their bucket, everything else to `other`).
+- `category_suggestions`: a Builder's optional `suggestedCategory` free text from registration or publish, kept for admins: soft `agent_id`, `agent_version_id`, `owner_id`, `suggested_category` (1–100 chars), `gmt_create`. Never used for matching.
 - `agent_profiles`: 1:1 with agents; storefront text, media URLs, `is_listed`, `is_featured`.
+- <a id="text-embeddings"></a>`text_embeddings` (`V38`): cache of task-text vectors for [relevance matching](matching.md#relevance), PK (`text_hash`, `model`), `embedding vector(1536)`, `gmt_create`. The text is the task's title and description, trimmed, blanks dropped, joined by newlines (`TaskText`); only its SHA-256 hex is stored, never the text. Inserted once (`ON CONFLICT DO NOTHING`), never updated; a new model gets its own row.
+- <a id="agent-embeddings"></a>`agent_embeddings`: the Agent's profile vector, needing the **`vector` extension (pgvector)**, which `V36` enables. `agent_id` (PK, FK to `agents`, cascade delete), `model`, `text_hash`, `embedding vector(1536)`, `updated_at`. The embedded text is the name, tagline and description, trimmed, blanks dropped, joined by newlines (`AgentProfileText`); `text_hash` is its SHA-256 hex. A row is stale when its hash no longer matches the current profile text or its model isn't the configured one (`hireai.embedding.model`); the re-embed sweeper replaces it. Mutable (upserted), not an audit trail. No ANN index.
 
 **Task**
-- `tasks`: `client_id`, `title`, `description`, `budget`, `output_spec` (jsonb, frozen at submit), `status`, `category`, `agent_version_id`, `resolution`, `resolved_at`, `rejection_reason`, `reject_reason_category`. Sweeper bookkeeping: `match_attempts`, `execution_deadline`, `pinned_agent_version_id`.
+- `tasks`: `client_id`, `title`, `description`, `budget`, `output_spec` (jsonb, frozen at submit), `status`, `category`, `agent_version_id`, `resolution`, `resolved_at`, `rejection_reason`, `reject_reason_category`, `failure_reason`. Sweeper bookkeeping: `match_attempts`, `execution_deadline`, `pinned_agent_version_id`. `client_deadline` (nullable): the Client's deadline, fixed at submit from `deadlineSeconds` and applied at every selection ([eligibility](matching.md#client-deadline)).
 - `task_results`: `task_id` UNIQUE, `result_payload` (TEXT, stored inline), `result_url`, `agent_status`.
 - `idempotency_keys`: `UNIQUE (owner_id, idempotency_key)`, `request_fingerprint`, `task_id`.
 - `api_key_task`: one row per key-submitted task; soft task reference and the read source for spend caps.
 - `webhook_deliveries`: the outbox. `id` is also the client-facing event id; `payload` is TEXT because the signed body is sent byte for byte; `attempts`, `next_attempt_at`, `status`.
+- <a id="dispatch-attempts"></a>`dispatch_attempts`: the task's dispatch history, one row per Agent version the platform tried to hand the task to. Soft `task_id` and `agent_version_id` (no FK), `attempt_number` (1-based, `UNIQUE (task_id, attempt_number)`, numbered under the task row lock), `outcome`, `occurred_at` (when the outcome was known), `gmt_create`. **Append-only by trigger.** Outcomes (`DispatchOutcome`, CHECK since `V33`):
+  - `ACCEPTED`: the Agent replied 2xx to the WorkOrder (recorded by the dispatch consumer after the send).
+  - `UNREACHABLE`: every send in the retry schedule failed (recorded in the DLQ transaction that fails the task over or ends it `FAILED`).
+  - `BUSY`: the Agent replied 429/503 to the WorkOrder (recorded in the same transaction that fails the task over or ends it `FAILED` with `AGENT_BUSY`).
+  - A routed task's history is also its failover exclusion list: no Agent in it is picked again ([routed failover](matching.md#routed-failover)).
+  - `UNAVAILABLE`: the agent was not `ACTIVE`, or its version was superseded, at dispatch (recorded in the same transaction that ends a pinned task `CANCELLED` with `AGENT_UNAVAILABLE`, or that fails a routed task over).
+  - Read-only to the task owner (JWT or API key) at `GET /api/tasks/{id}/attempts`: attempt number, `agentId` (joined from the version), `agentVersionId`, outcome, `occurredAt`. Another client gets 404.
 
 **Adjudication**
 - `validation_reports`: soft task reference, `attempt_no`, `verdict`, `checks`.
@@ -57,18 +70,31 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 - `dispute_rulings`: `tier`, `decided_by` (`ARBITRATOR`, `ADMINISTRATOR`, `FALLBACK`), `category`, `rationale`. **Append-only by trigger.**
 
 **Reputation**
-- `reputation_events`: `agent_id`, soft `task_id`, `event_type`, `quality`, `weight`, `occurred_at`. **Append-only by trigger.** Partial UNIQUE `(task_id, event_type)` makes each outcome exactly-once while allowing a later `RATING`.
+- `reputation_events`: `agent_id`, soft `task_id`, `event_type`, `quality`, `weight`, `occurred_at`. **Append-only by trigger.** Partial UNIQUE `(task_id, agent_id, event_type)` (since `V34`) makes each outcome exactly-once per Agent while allowing a later `RATING`; per Agent because routed failover can give one task several unreachable Agents, each with its own `EXECUTION_FAILED`.
 - `reviews`: `task_id` NOT NULL UNIQUE, `client_id`, `agent_id`, `rating`, `review_text`, `builder_response`, `is_published`.
 
-**Columns kept off the JPA entities on purpose:** the `tasks` sweeper columns and the `agents` sum/count columns are unmapped and written only by targeted native `UPDATE`s, so a full-row save can't overwrite them. `reputation_score` is mapped (see Known gaps).
+**Columns kept off the JPA entities on purpose:** the `tasks` sweeper columns, the `agents` sum/count columns and `agents.signing_secret` are unmapped and written only by targeted native `UPDATE`s, so a full-row save can't overwrite them. `AgentDO` sees only a read-only `@Formula` presence flag for the secret, so the secret never loads with an agent. `reputation_score` is mapped (see Known gaps).
 
 ## Status enums
 
-- **Task:** `SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED → PENDING_REVIEW → RESOLVED`, with `DISPUTED` between review and resolved. Off-path: `AWAITING_CAPACITY`, `TIMED_OUT`, `SPEC_VIOLATION`, `FAILED`, `CANCELLED`.
-  - `AWAITING_CAPACITY`: no eligible agent, or a pinned agent went inactive. Retried by a sweeper, then `CANCELLED` with a refund.
+- **Task:** `SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED → PENDING_REVIEW → RESOLVED`, with `DISPUTED` between review and resolved. Off-path: `AWAITING_AGENT`, `TIMED_OUT`, `SPEC_VIOLATION`, `FAILED`, `CANCELLED`.
+  - `AWAITING_AGENT`: no eligible agent for a routed task. Retried by a sweeper, then `CANCELLED` with a refund. Named `AWAITING_CAPACITY` before `V29`, which rewrote existing rows and the status CHECK.
+  - `QUEUED → RESULT_RECEIVED`: a result is accepted from `QUEUED` as well as `EXECUTING`, because a fast agent can call back before the dispatch consumer marks the task `EXECUTING`.
+  - Marking `EXECUTING` is idempotent: `QUEUED → EXECUTING`, and a no-op from any later state. It is illegal only from `SUBMITTED` or `AWAITING_AGENT`.
+  - `SUBMITTED → CANCELLED`: routing kept failing after submit. The SUBMITTED sweeper retries it, then cancels with a refund.
   - `TIMED_OUT`: past `execution_deadline`, with a refund.
   - API-key tasks skip review: PASS goes to `RESOLVED`, FAIL to `SPEC_VIOLATION`.
 - **Task resolution:** `ACCEPTED`, `REJECTED`, `PARTIALLY_ACCEPTED`.
+- <a id="failure-reason"></a>**Failure reason** (`tasks.failure_reason`, `FailureReason`; CHECK since `V32`): why a task ended without a delivered result. The terminal transition sets it, and `TaskModel` refuses to set it a second time. `NULL` on live and successful tasks, and on tasks that ended before `V32`. Where each value comes from today:
+  - `AGENT_UNREACHABLE`: every dispatch send attempt to a direct booking's Agent failed (DLQ) → `FAILED`.
+  - `AGENT_REPORTED_FAILURE`: the Agent's callback reported a non-`COMPLETED` status → `FAILED`.
+  - `SPEC_VIOLATION`: the result failed validation → `SPEC_VIOLATION`.
+  - `EXECUTION_TIMEOUT`: past the deadline while `EXECUTING` → `TIMED_OUT`.
+  - `DISPATCH_ABANDONED`: past the deadline while still `QUEUED` → `TIMED_OUT`; or routing failed on every SUBMITTED sweep → `CANCELLED`.
+  - `NO_ELIGIBLE_AGENT`: a routed task's re-match attempts ran out → `CANCELLED`; or a failover hop found untried Agents but the client deadline ruled them all out → `FAILED`.
+  - `AGENT_UNAVAILABLE`: at dispatch (routing, or the check before any send), a direct booking's agent is not `ACTIVE` or its pinned version was superseded → `CANCELLED` at once, no reputation event.
+  - `AGENT_BUSY`: a direct booking's Agent declined the WorkOrder with 429/503 → `FAILED`, no reputation event.
+  - `NO_ALTERNATIVE_AGENT`: a routed task's Agent was busy or unreachable and no untried eligible Agent was left, or 3 Agents had been tried ([routed failover](matching.md#routed-failover)) → `FAILED`.
 - **Agent:** `PENDING_VERIFICATION → ACTIVE ⇄ SUSPENDED`; `ACTIVE` or `SUSPENDED → DEACTIVATED`.
 - **Agent version:** `DRAFT`, `ACTIVE`, `DEPRECATED`.
 - **Reject reason:** `A_MISMATCH`, `B_FACTUAL`, `C_INCOMPLETE` open a dispute; `D_CHANGED_MIND` charges in full with no dispute.

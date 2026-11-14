@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { server } from "./msw/handlers";
+import { http } from "msw";
+import { server, ok } from "./msw/handlers";
 import { AuthProvider } from "@/lib/auth";
 import BuilderPage from "@/app/builder/page";
 
@@ -74,5 +75,47 @@ describe("builder agent list", () => {
     expect(screen.getByText(/no agents match/i)).toBeInTheDocument();
     await userEvent.clear(screen.getByLabelText(/find an agent/i));
     expect(screen.getByText("Summariser")).toBeInTheDocument();
+  });
+});
+
+describe("builder unlisted warning", () => {
+  it("warns that an unlisted agent receives no work and points to its storefront", async () => {
+    renderBuilder();
+    expect(await screen.findByText("Summariser")).toBeInTheDocument();
+    const warning = screen.getByRole("note", { name: /unlisted agents/i });
+    expect(warning).toHaveTextContent(/1 of your agents is not listed/i);
+    expect(warning).toHaveTextContent(/receives no work/i);
+    expect(screen.getByRole("link", { name: /list summariser/i })).toHaveAttribute("href", "/builder/agents/a-1");
+  });
+
+  it("shows no warning when every agent is listed", async () => {
+    server.use(
+      http.get("*/api/agents", () =>
+        ok([
+          {
+            id: "a-2",
+            ownerId: "u-1",
+            name: "Listed one",
+            status: "ACTIVE",
+            currentVersionId: "v-2",
+            reputationScore: 50,
+            currentVersion: {
+              capabilityCategories: ["summarisation"],
+              price: 10,
+              webhookUrl: "https://agent.example.com/run",
+              maxExecutionSeconds: 60,
+              outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
+            },
+            createdAt: "2026-06-06T10:00:00Z",
+            hasSigningSecret: true,
+            listed: true,
+          },
+        ]),
+      ),
+    );
+    renderBuilder();
+    expect(await screen.findByText("Listed one")).toBeInTheDocument();
+    expect(screen.queryByRole("note", { name: /unlisted agents/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/not listed/i)).not.toBeInTheDocument();
   });
 });

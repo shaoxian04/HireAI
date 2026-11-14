@@ -5,17 +5,18 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.util.UUID;
 
 /**
- * JSON body POSTed to an Agent's webhook (CONTRACTS wire contract B). {@code expectedDeliverable}
- * and {@code outputSpec} are embedded as raw JSON (not re-quoted strings), so they are typed as
- * {@link JsonNode}; {@link AgentDispatchClient} parses them from the {@code DispatchMessage} payload's
- * JSON strings before sending.
+ * The WorkOrder: the JSON body POSTed to an Agent's webhook. Exactly these fields and nothing
+ * else (no client identity, no budget). {@code outputSpec} is embedded as raw JSON (not a
+ * re-quoted string), so it is typed as {@link JsonNode}; {@code executionDeadline} is an
+ * ISO-8601 instant string. The Builder-facing contract lives in {@code docs/details/matching.md}.
  */
 public record WebhookDispatchBody(
         UUID taskId,
-        String category,
+        UUID agentVersionId,
         String title,
         String description,
-        JsonNode expectedDeliverable,
+        String category,
         JsonNode outputSpec,
+        String executionDeadline,
         String callbackUrl) {
 }

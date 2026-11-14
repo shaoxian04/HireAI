@@ -66,4 +66,28 @@ describe("task detail — failure panel", () => {
     expect(await screen.findByText(/ran out of time/i)).toBeInTheDocument();
     expect(screen.queryByText(/show what failed/i)).toBeNull();
   });
+
+  it("explains a failed task by the failureReason the API returns", async () => {
+    server.use(
+      http.get("*/api/tasks/t-fail", () =>
+        ok({ ...specViolationTask(), status: "FAILED", failureReason: "AGENT_BUSY" }),
+      ),
+    );
+    render(<AuthProvider><TaskDetailPage /></AuthProvider>);
+    expect(await screen.findByText(/the agent was busy/i)).toBeInTheDocument();
+    expect(screen.queryByText(/couldn't reach the agent/i)).toBeNull();
+  });
+
+  it("explains an AWAITING_AGENT task as waiting for an eligible agent, not for capacity", async () => {
+    server.use(
+      http.get("*/api/tasks/t-fail", () =>
+        ok({ ...specViolationTask(), status: "AWAITING_AGENT" }),
+      ),
+    );
+    render(<AuthProvider><TaskDetailPage /></AuthProvider>);
+    expect(await screen.findByText("Awaiting an agent")).toBeInTheDocument();
+    expect(screen.getByText(/no agent takes this category within your budget/i)).toBeInTheDocument();
+    expect(screen.getByText(/credits are refunded/i)).toBeInTheDocument();
+    expect(screen.queryByText(/capacity/i)).toBeNull();
+  });
 });

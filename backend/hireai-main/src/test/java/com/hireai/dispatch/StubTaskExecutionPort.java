@@ -1,6 +1,7 @@
 package com.hireai.dispatch;
 
 import com.hireai.application.port.task.TaskExecutionPort;
+import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
 import org.springframework.boot.test.context.TestComponent;
 import org.springframework.context.annotation.Primary;
 
@@ -19,6 +20,18 @@ public class StubTaskExecutionPort implements TaskExecutionPort {
     public final CopyOnWriteArrayList<UUID> executing = new CopyOnWriteArrayList<>();
     public final CopyOnWriteArrayList<UUID> timedOut = new CopyOnWriteArrayList<>();
     public final CopyOnWriteArrayList<UUID> failed = new CopyOnWriteArrayList<>();
+    public final CopyOnWriteArrayList<DispatchOutcome> attempts = new CopyOnWriteArrayList<>();
+
+    /** The round-trip test's message names no real task, so every message is dispatchable. */
+    @Override
+    public boolean prepareDispatch(UUID taskId, UUID agentVersionId) {
+        return true;
+    }
+
+    @Override
+    public void recordDispatchAttempt(UUID taskId, UUID agentVersionId, DispatchOutcome outcome) {
+        attempts.add(outcome);
+    }
 
     @Override
     public void markExecuting(UUID taskId) {
@@ -31,7 +44,13 @@ public class StubTaskExecutionPort implements TaskExecutionPort {
     }
 
     @Override
-    public void markFailed(UUID taskId) {
+    public void markFailed(UUID taskId, UUID agentVersionId) {
+        failed.add(taskId);
+    }
+
+    @Override
+    public void declineAsBusy(UUID taskId, UUID agentVersionId) {
+        attempts.add(DispatchOutcome.BUSY);
         failed.add(taskId);
     }
 }

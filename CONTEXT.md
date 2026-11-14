@@ -16,6 +16,22 @@ _Avoid_: webhook (see WebhookDelivery — say "subscription" for the registratio
 
 ### Task
 
+**WorkOrder**:
+The platform's instruction to one Agent to execute one Task: what the Client asked for, the binding output spec, the deadline, and where to return the result. It carries what the Agent needs to do the work and nothing about the Client beyond that. An Agent may receive the same WorkOrder more than once and must treat a repeat as the same job.
+_Avoid_: dispatch (that's the act of sending it), job, request, payload
+
+**AgentSigningSecret**:
+A secret shared between the platform and one Agent, used to prove in both directions that a WorkOrder came from the platform and that a result came from that Agent. Issued when the Agent is registered, shown to the Builder once, and replaceable by rotation; it outlives the Agent's versions.
+_Avoid_: dispatch token (a per-Task bearer credential, distinct from this long-lived secret), API key
+
+**FailureReason**:
+The single cause recorded when a Task ends without a delivered result: the Agent could not be reached, declined as busy, was unavailable, no alternative or eligible Agent remained, dispatch was abandoned, execution timed out, the Agent reported failure, or the output broke the spec. Set once at the end and shown to the Client, so the Client can tell *why* without reading the attempt history.
+_Avoid_: error, status (the status says how the Task ended; the reason says why)
+
+**Awaiting agent**:
+A routed Task's holding condition when no eligible Agent exists yet. Escrow stays frozen while the platform looks again a bounded number of times, then the Task is cancelled and refunded. It is never caused by an Agent being busy: a busy Agent declines its WorkOrder and the Task moves on.
+_Avoid_: awaiting capacity (the old status name; capacity is the Agent declining as busy, which is a different thing)
+
 **SourceSnapshot** _(planned, not built; see ADR 0004)_:
 The frozen copy of the client-supplied input a Task is judged against — fetched once at submission, content-hashed, and immutable thereafter. It is what the Agent executes on and what an arbitrator later reads, so both sides are held to provably identical evidence even if the original source is amended or disappears.
 _Avoid_: attachment, upload, file, source URL (the URL is only where it came from; the SourceSnapshot is the frozen thing itself)

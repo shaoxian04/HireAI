@@ -6,7 +6,7 @@ import java.math.BigDecimal;
  * The terminal outcomes that move an agent's reputation, and what each one asserts (design §6).
  *
  * <p>Each constant carries the quality its sample asserts and which component it feeds. Note what
- * is <strong>absent</strong>: a changed-mind rejection and a capacity cancellation have no constant
+ * is <strong>absent</strong>: a changed-mind rejection and an awaiting-agent cancellation have no constant
  * here at all, because they must emit nothing. Emission is explicit at each transition site and is
  * never derived from how money moved or from {@code task.resolution} — {@code chargeChangedMind}
  * writes {@code REJECTED} while paying the builder the full 85/15, so a rule keyed off either

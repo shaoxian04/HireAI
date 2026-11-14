@@ -42,10 +42,12 @@ class TaskWriteAppServiceImplTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock SettlementWriteAppService settlementWriteAppService;
     @Mock WebhookOutboxAppService webhookOutboxAppService;
+    @Mock com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository dispatchAttemptRepository;
 
     private TaskWriteAppServiceImpl service() {
         return new TaskWriteAppServiceImpl(taskRepository, taskSubmitDomainService,
-                walletWriteAppService, eventPublisher, settlementWriteAppService, webhookOutboxAppService);
+                walletWriteAppService, eventPublisher, settlementWriteAppService, webhookOutboxAppService,
+                dispatchAttemptRepository, java.time.Clock.systemUTC());
     }
 
     private TaskModel submittedTask() {
@@ -71,16 +73,16 @@ class TaskWriteAppServiceImplTest {
     }
 
     @Test
-    void markAwaitingCapacityTransitionsAndSaves() {
+    void markAwaitingAgentTransitionsAndSaves() {
         TaskModel task = submittedTask();
         when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        service().markAwaitingCapacity(task.id());
+        service().markAwaitingAgent(task.id());
 
         ArgumentCaptor<TaskModel> captor = ArgumentCaptor.forClass(TaskModel.class);
         verify(taskRepository).save(captor.capture());
-        assertThat(captor.getValue().status()).isEqualTo(TaskStatus.AWAITING_CAPACITY);
+        assertThat(captor.getValue().status()).isEqualTo(TaskStatus.AWAITING_AGENT);
     }
 
     @Test
@@ -138,11 +140,11 @@ class TaskWriteAppServiceImplTest {
         TaskModel task = TaskModel.submit(clientId, "title", "desc", budget,
                 new OutputSpec(OutputFormat.TEXT, null, "summary"), "general");
         UUID taskId = task.id();
-        task = task.markAwaitingCapacity();
+        task = task.markAwaitingAgent();
         when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        service().cancelAwaitingCapacityWithRefund(taskId);
+        service().cancelAwaitingAgentWithRefund(taskId);
 
         verify(taskRepository).save(argThat(t -> t.status() == TaskStatus.CANCELLED));
         verify(settlementWriteAppService).settleRejected(taskId, clientId, budget);
@@ -150,14 +152,25 @@ class TaskWriteAppServiceImplTest {
     }
 
     @Test
-    void cancelIsANoOpWhenTaskAlreadyLeftAwaitingCapacity() {
+    void cancelIsANoOpWhenTaskAlreadyLeftAwaitingAgent() {
         UUID taskId = UUID.randomUUID();
         TaskModel task = submittedTask();
         when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
 
-        service().cancelAwaitingCapacityWithRefund(taskId);
+        service().cancelAwaitingAgentWithRefund(taskId);
 
         verify(taskRepository, never()).save(any());
         verifyNoInteractions(settlementWriteAppService);
+    }
+
+    @Test
+    void pinnedFailFastIsANoOpOnceTheTaskHasMovedOn() {
+        TaskModel queued = submittedTask().assignAndQueue(UUID.randomUUID());
+        when(taskRepository.findByIdForUpdate(queued.id())).thenReturn(Optional.of(queued));
+
+        service().cancelPinnedAsUnavailable(queued.id(), UUID.randomUUID());
+
+        verify(taskRepository, never()).save(any());
+        verifyNoInteractions(settlementWriteAppService, webhookOutboxAppService, dispatchAttemptRepository);
     }
 }

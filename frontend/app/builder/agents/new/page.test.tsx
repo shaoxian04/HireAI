@@ -44,7 +44,7 @@ describe("agent registration — max parallel tasks", () => {
     );
     renderPage();
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Bot" } });
-    fireEvent.change(screen.getByLabelText(/categories/i), { target: { value: "summarisation" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Summarisation" }));
     fireEvent.change(screen.getByLabelText(/webhook/i), { target: { value: "https://a.example/run" } });
     fireEvent.click(screen.getByRole("button", { name: /register agent/i }));
     await waitFor(() => expect(captured).not.toBeNull());
@@ -61,7 +61,7 @@ describe("agent registration — max parallel tasks", () => {
     );
     renderPage();
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Bot" } });
-    fireEvent.change(screen.getByLabelText(/categories/i), { target: { value: "summarisation" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Summarisation" }));
     fireEvent.change(screen.getByLabelText(/webhook/i), { target: { value: "https://a.example/run" } });
     const priceInput = screen.getByLabelText(/price/i) as HTMLInputElement;
     expect(priceInput.value).toBe("10");
@@ -77,7 +77,7 @@ describe("agent registration — max parallel tasks", () => {
   it("blocks registration with a validation error when price is cleared and left empty", async () => {
     renderPage();
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Bot" } });
-    fireEvent.change(screen.getByLabelText(/categories/i), { target: { value: "summarisation" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Summarisation" }));
     fireEvent.change(screen.getByLabelText(/webhook/i), { target: { value: "https://a.example/run" } });
     await userEvent.clear(screen.getByLabelText(/price/i));
     fireEvent.click(screen.getByRole("button", { name: /register agent/i }));
@@ -94,6 +94,29 @@ describe("agent registration — max parallel tasks", () => {
     expect(input.value).toBe("120");
   });
 
+  it("shows the 24-hour execution limit", () => {
+    renderPage();
+    expect(screen.getByText(/86,400 seconds \(24 hours\)/)).toBeInTheDocument();
+  });
+
+  it("stops a max execution time above 24 hours before it is sent", async () => {
+    let posted = false;
+    server.use(
+      http.post("*/api/agents", () => {
+        posted = true;
+        return ok({ id: "a-1" });
+      }),
+    );
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Bot" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Summarisation" }));
+    fireEvent.change(screen.getByLabelText(/webhook/i), { target: { value: "https://a.example/run" } });
+    fireEvent.change(screen.getByLabelText(/max execution seconds/i), { target: { value: "86401" } });
+    fireEvent.click(screen.getByRole("button", { name: /register agent/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/at most 86400/i);
+    expect(posted).toBe(false);
+  });
+
   it("clears and retypes max parallel tasks without a stray leading zero, submitting the typed value", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(
@@ -104,7 +127,7 @@ describe("agent registration — max parallel tasks", () => {
     );
     renderPage();
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Bot" } });
-    fireEvent.change(screen.getByLabelText(/categories/i), { target: { value: "summarisation" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Summarisation" }));
     fireEvent.change(screen.getByLabelText(/webhook/i), { target: { value: "https://a.example/run" } });
     const input = screen.getByLabelText(/max parallel tasks/i) as HTMLInputElement;
     expect(input.value).toBe("5");
@@ -115,5 +138,84 @@ describe("agent registration — max parallel tasks", () => {
     fireEvent.click(screen.getByRole("button", { name: /register agent/i }));
     await waitFor(() => expect(captured).not.toBeNull());
     expect(captured!.maxConcurrent).toBe(8);
+  });
+});
+
+describe("agent registration — category list", () => {
+  it("offers only the platform's categories and sends the picked slugs with an optional suggestion", async () => {
+    let captured: Record<string, unknown> | null = null;
+    server.use(
+      http.post("*/api/agents", async ({ request }) => {
+        captured = (await request.json()) as Record<string, unknown>;
+        return ok({ id: "a-1" });
+      }),
+    );
+    renderPage();
+    const group = await screen.findByRole("group", { name: /capability categories/i });
+    expect(screen.getAllByRole("checkbox").map((c) => c.closest("label")?.textContent)).toEqual([
+      "Summarisation",
+      "Translation",
+      "Other",
+    ]);
+    expect(group).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Bot" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Other" }));
+    fireEvent.change(screen.getByLabelText(/suggest a category/i), { target: { value: " Legal review " } });
+    fireEvent.change(screen.getByLabelText(/webhook/i), { target: { value: "https://a.example/run" } });
+    fireEvent.click(screen.getByRole("button", { name: /register agent/i }));
+    await waitFor(() => expect(captured).not.toBeNull());
+    expect(captured!.capabilityCategories).toEqual(["other"]);
+    expect(captured!.suggestedCategory).toBe("Legal review");
+  });
+
+  it("asks for a category before registering when none is picked", async () => {
+    let posted = false;
+    server.use(
+      http.post("*/api/agents", () => {
+        posted = true;
+        return ok({ id: "a-1" });
+      }),
+    );
+    renderPage();
+    await screen.findByRole("checkbox", { name: "Summarisation" });
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Bot" } });
+    fireEvent.change(screen.getByLabelText(/webhook/i), { target: { value: "https://a.example/run" } });
+    fireEvent.click(screen.getByRole("button", { name: /register agent/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/pick at least one category/i);
+    expect(posted).toBe(false);
+  });
+});
+
+describe("agent registration — signing secret", () => {
+  it("reveals the signing secret once, with a copy action, before leaving the page", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    server.use(
+      http.post("*/api/agents", () => ok({ id: "a-1", name: "Bot", signingSecret: "agsec_abc123" })),
+    );
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Bot" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Summarisation" }));
+    fireEvent.change(screen.getByLabelText(/webhook/i), { target: { value: "https://a.example/run" } });
+    fireEvent.click(screen.getByRole("button", { name: /register agent/i }));
+
+    expect(await screen.findByText("agsec_abc123")).toBeInTheDocument();
+    expect(screen.getByText(/won.t see it again/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("agsec_abc123"));
+    expect(await screen.findByRole("button", { name: /copied/i })).toBeInTheDocument();
+  });
+});
+
+describe("agent registration — acknowledgement contract", () => {
+  it("tells the Builder how to accept, decline as busy, and deliver the result", () => {
+    renderPage();
+    const contract = screen.getByRole("region", { name: /how your agent answers a work order/i });
+    expect(contract).toHaveTextContent(/2xx/);
+    expect(contract).toHaveTextContent(/15 seconds/i);
+    expect(contract).toHaveTextContent(/429 or 503/);
+    expect(contract).toHaveTextContent(/no reputation penalty/i);
+    expect(contract).toHaveTextContent(/callback/i);
+    expect(contract).toHaveTextContent(/response body is ignored/i);
   });
 });

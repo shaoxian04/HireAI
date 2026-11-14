@@ -66,8 +66,8 @@ public class ReputationWriteAppServiceImpl implements ReputationWriteAppService 
      *
      * <p>Two silences live here. A task whose client owns the agent emits nothing — the L1
      * anti-gaming rule, and the cheapest attack on the marketplace. And an outcome already
-     * recorded for this task emits nothing again, so a retried settlement cannot double-count;
-     * the unique index on (task_id, event_type) is the backstop, but tripping it would roll back
+     * recorded for this task and agent emits nothing again, so a retried settlement cannot
+     * double-count; the unique index on (task_id, agent_id, event_type) is the backstop, but tripping it would roll back
      * the settlement transaction that called us, which is far worse than a no-op.
      */
     private Optional<AgentReputationTarget> resolveEmittableAgent(UUID taskId, UUID agentVersionId,
@@ -78,7 +78,7 @@ public class ReputationWriteAppServiceImpl implements ReputationWriteAppService 
                 : agentRepository.findReputationTargetByVersionId(agentVersionId);
 
         // No resolvable agent means there is nobody to attribute the outcome to — the same
-        // situation as a capacity cancellation. Deliberately NOT an exception: emission is a
+        // situation as an awaiting-agent cancellation. Deliberately NOT an exception: emission is a
         // side-effect of a settlement, and reputation bookkeeping must never abort the money path
         // that triggered it (a client's auto-refund is not contingent on us finding an agent row).
         if (resolved.isEmpty()) {
@@ -93,8 +93,9 @@ public class ReputationWriteAppServiceImpl implements ReputationWriteAppService 
                     taskId, clientId, target.agentId());
             return Optional.empty();
         }
-        if (reputationEventRepository.existsByTaskIdAndEventType(taskId, type)) {
-            log.debug("Reputation: task {} already has a {} event; emitting nothing", taskId, type);
+        if (reputationEventRepository.existsByTaskIdAndAgentIdAndEventType(taskId, target.agentId(), type)) {
+            log.debug("Reputation: task {} already has a {} event for agent {}; emitting nothing",
+                    taskId, type, target.agentId());
             return Optional.empty();
         }
         return Optional.of(target);

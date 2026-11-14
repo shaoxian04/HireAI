@@ -6,7 +6,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -27,7 +27,7 @@ public class TestDispatchTokenServiceConfig {
     public DispatchTokenService testDispatchTokenService() {
         return new DispatchTokenService() {
             @Override
-            public String issue(UUID taskId, UUID agentVersionId, Duration ttl) {
+            public String issue(UUID taskId, UUID agentVersionId, Instant executionDeadline) {
                 throw new UnsupportedOperationException(
                         "No dispatch-token implementation in this worktree (Track B owns it)");
             }

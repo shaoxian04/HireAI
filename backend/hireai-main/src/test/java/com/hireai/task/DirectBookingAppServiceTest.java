@@ -45,7 +45,8 @@ class DirectBookingAppServiceTest {
     private final TaskWriteAppService taskWriteAppService = mock(TaskWriteAppService.class);
 
     private final DirectBookingAppServiceImpl service = new DirectBookingAppServiceImpl(
-            agentRepository, agentProfileRepository, taskWriteAppService);
+            agentRepository, agentProfileRepository, taskWriteAppService, java.time.Clock.systemUTC(),
+            new com.hireai.domain.biz.task.model.ExecutionGrace(60));
 
     // ---- helpers ----
 
@@ -66,7 +67,7 @@ class DirectBookingAppServiceTest {
         UUID agentId = UUID.randomUUID();
         AgentVersionModel ver = version(agentId);
         return new AgentModel(agentId, UUID.randomUUID(), "Test Agent", AgentStatus.ACTIVE,
-                ver.id(), new BigDecimal("50.00"), ver, Instant.now());
+                ver.id(), new BigDecimal("50.00"), ver, Instant.now(), true);
     }
 
     /** Builds a PENDING_VERIFICATION agent. */
@@ -74,7 +75,7 @@ class DirectBookingAppServiceTest {
         UUID agentId = UUID.randomUUID();
         AgentVersionModel ver = version(agentId);
         return new AgentModel(agentId, UUID.randomUUID(), "Pending Agent",
-                AgentStatus.PENDING_VERIFICATION, null, new BigDecimal("50.00"), ver, Instant.now());
+                AgentStatus.PENDING_VERIFICATION, null, new BigDecimal("50.00"), ver, Instant.now(), true);
     }
 
     private StorefrontModel listedProfile(UUID agentId) {

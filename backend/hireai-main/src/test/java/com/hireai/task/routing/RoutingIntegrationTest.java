@@ -1,5 +1,6 @@
 package com.hireai.task.routing;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
@@ -30,9 +31,9 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * End-to-end marketplace spine: submit a task, let routing match it to a seeded ACTIVE
- * agent, dispatch over RabbitMQ to an in-JVM stub agent, and observe the token-authenticated
+ * agent, dispatch over RabbitMQ to an in-JVM stub agent, and observe the token- and signature-authenticated
  * callback + validation gate drive the task to PENDING_REVIEW with a persisted task_results row.
- * Also asserts the no-match path lands on AWAITING_CAPACITY. Boots a real Postgres (Flyway V1-V16) and a
+ * Also asserts the no-match path lands on AWAITING_AGENT. Boots a real Postgres (Flyway V1-V16) and a
  * real RabbitMQ; auto-skips without Docker. Runs under the 'dev' profile so the localhost
  * stub webhook is allowed (spec invariant #6 local-demo exception); the signed dispatch
  * token is still enforced.
@@ -52,8 +53,11 @@ class RoutingIntegrationTest {
         }
     }
 
+    /** The seeded stub Agents' signing secret: the stub signs its callbacks with it (#72). */
+    static final String STUB_SECRET = "agsec_routing-stub-secret";
+
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @Container
     static RabbitMQContainer rabbit = new RabbitMQContainer("rabbitmq:3.13-management-alpine");
@@ -86,6 +90,7 @@ class RoutingIntegrationTest {
      */
     @BeforeEach
     void clearRoutableAgents() {
+        jdbc.update("DELETE FROM agent_profiles");
         jdbc.update("DELETE FROM agent_versions");
         jdbc.update("DELETE FROM agents");
     }
@@ -135,22 +140,23 @@ class RoutingIntegrationTest {
             String callbackPath = "http://127.0.0.1:" + serverPort + "/api/agent-callbacks/" + taskId + "/result";
             // Return 200 to the dispatch client now; deliver the result out-of-band so the
             // consumer's markExecuting (QUEUED -> EXECUTING) runs before recordResult.
-            executor.submit(() -> postCallbackWithRetry(callbackPath, authorization));
+            executor.submit(() -> postCallbackWithRetry(callbackPath, authorization, taskId));
         }
 
-        private void postCallbackWithRetry(String callbackPath, String authorization) {
+        private void postCallbackWithRetry(String callbackPath, String authorization, String taskId) {
             RuntimeException last = null;
             for (int attempt = 0; attempt < 20; attempt++) {
                 try {
+                    byte[] body = com.hireai.support.agent.AgentCallback.completedBody(taskId)
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8);
                     http.post()
                             .uri(callbackPath)
                             .header("Authorization", authorization)
+                            .header(com.hireai.support.agent.AgentCallback.SIGNATURE_HEADER,
+                                    com.hireai.support.agent.AgentCallback.signature(
+                                            STUB_SECRET, java.time.Instant.now(), body))
                             .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                            .body(java.util.Map.of(
-                                    "agentStatus", "COMPLETED",
-                                    "resultPayloadJson", "{\"summary\":\"done\"}",
-                                    "resultUrl", "https://results.example/r/1",
-                                    "message", "ok"))
+                            .body(body)
                             .retrieve()
                             .toBodilessEntity();
                     return;
@@ -190,9 +196,10 @@ class RoutingIntegrationTest {
         UUID ownerId = newBuilder();
         UUID agentId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
-        jdbc.update("INSERT INTO agents (id, owner_id, name, status, current_version_id, reputation_score) " +
-                        "VALUES (?, ?, ?, 'ACTIVE', ?, 80.00)",
-                agentId, ownerId, "Stub Agent", versionId);
+        jdbc.update("INSERT INTO agents (id, owner_id, name, status, current_version_id, reputation_score, " +
+                        "signing_secret) VALUES (?, ?, ?, 'ACTIVE', ?, 80.00, ?)",
+                agentId, ownerId, "Stub Agent", versionId, STUB_SECRET);
+        jdbc.update("INSERT INTO agent_profiles (agent_id, is_listed) VALUES (?, true)", agentId);
         jdbc.update("INSERT INTO agent_versions " +
                         "(id, agent_id, version_number, output_spec, capability_categories, webhook_url, max_execution_seconds, price) " +
                         "VALUES (?, ?, 1, ?::jsonb, ?, ?, 60, ?)",
@@ -236,7 +243,7 @@ class RoutingIntegrationTest {
     }
 
     @Test
-    void noMatchingAgentLeavesTaskAwaitingCapacity() {
+    void noMatchingAgentLeavesTaskAwaitingAgent() {
         UUID client = newClient();
         jdbc.update("INSERT INTO wallets (id, user_id, available_balance, escrow_balance) VALUES (?, ?, 100.00, 0.00)",
                 UUID.randomUUID(), client);
@@ -247,7 +254,7 @@ class RoutingIntegrationTest {
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             String status = jdbc.queryForObject("SELECT status FROM tasks WHERE id = ?", String.class, taskId);
-            assertThat(status).isEqualTo("AWAITING_CAPACITY");
+            assertThat(status).isEqualTo("AWAITING_AGENT");
         });
 
         Integer results = jdbc.queryForObject(

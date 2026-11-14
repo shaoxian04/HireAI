@@ -5,8 +5,13 @@ import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
 import com.hireai.utility.result.ResultCode;
+import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
+import com.hireai.domain.biz.task.dispatchattempt.model.DispatchAttemptModel;
+import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
 import com.hireai.domain.biz.task.event.TaskSubmittedDomainEvent;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
+import com.hireai.domain.biz.task.enums.FailureReason;
+import com.hireai.domain.biz.task.model.ClientDeadline;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
@@ -19,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -34,6 +40,9 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     private final ApplicationEventPublisher eventPublisher;
     private final SettlementWriteAppService settlementWriteAppService;
     private final WebhookOutboxAppService webhookOutboxAppService;
+    private final DispatchAttemptRepository dispatchAttemptRepository;
+    /** The app's Clock bean (ClockConfig): stamps the client deadline and the UNAVAILABLE dispatch attempt. */
+    private final Clock clock;
 
     @Override
     public UUID submit(TaskSubmitInfo taskSubmitInfo) {
@@ -58,6 +67,11 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
         String correlationId = UUID.randomUUID().toString();
         TaskModel task = taskSubmitDomainService.submit(taskSubmitInfo);
         UUID taskId = taskRepository.save(task).id();
+        if (taskSubmitInfo.deadlineSeconds() != null) {
+            // Fixed now, at submit: every later selection (re-match, failover) measures against it.
+            taskRepository.stampClientDeadline(taskId,
+                    ClientDeadline.after(clock.instant(), taskSubmitInfo.deadlineSeconds()).at());
+        }
         walletWriteAppService.freeze(taskSubmitInfo.clientId(), taskSubmitInfo.budget(), taskId, correlationId);
         eventPublisher.publishEvent(new TaskSubmittedDomainEvent(
                 taskId, taskSubmitInfo.clientId(), taskSubmitInfo.budget(), task.createdAt(),
@@ -87,10 +101,10 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markAwaitingCapacity(UUID taskId) {
+    public void markAwaitingAgent(UUID taskId) {
         TaskModel task = load(taskId);
-        taskRepository.save(task.markAwaitingCapacity());
-        log.info("Task {} marked AWAITING_CAPACITY (no eligible agent)", taskId);
+        taskRepository.save(task.markAwaitingAgent());
+        log.info("Task {} marked AWAITING_AGENT (no eligible agent)", taskId);
     }
 
     @Override
@@ -100,17 +114,109 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     }
 
     @Override
-    public void cancelAwaitingCapacityWithRefund(UUID taskId) {
+    public void cancelAwaitingAgentWithRefund(UUID taskId) {
         TaskModel task = load(taskId);
-        if (task.status() != TaskStatus.AWAITING_CAPACITY) {
-            log.info("Task {} is {} (not AWAITING_CAPACITY); skipping cancel", taskId, task.status());
+        if (task.status() != TaskStatus.AWAITING_AGENT) {
+            log.info("Task {} is {} (not AWAITING_AGENT); skipping cancel", taskId, task.status());
             return;
         }
-        TaskModel cancelled = task.markCancelled();
-        taskRepository.save(cancelled);
-        settlementWriteAppService.settleRejected(taskId, cancelled.clientId(), cancelled.budget());
-        webhookOutboxAppService.enqueueFailed(cancelled, "CANCELLED");
+        // A direct booking waits here only because its pinned version was unavailable.
+        boolean pinned = taskRepository.findPinnedAgentVersionId(taskId).isPresent();
+        cancelWithRefund(task, FailureReason.noAgentFound(pinned));
         log.info("Task {} CANCELLED after re-match exhaustion; escrow fully refunded", taskId);
+    }
+
+    @Override
+    public void cancelSubmittedWithRefund(UUID taskId) {
+        // Locked like the timeout path (task row -> wallet row), so a concurrent routing write
+        // can't move the task to QUEUED between this status check and the refund.
+        TaskModel task = loadForUpdate(taskId);
+        if (task.status() != TaskStatus.SUBMITTED) {
+            log.info("Task {} is {} (not SUBMITTED); skipping cancel", taskId, task.status());
+            return;
+        }
+        // Routing threw on every sweep: the platform never got the task to an Agent.
+        cancelWithRefund(task, FailureReason.DISPATCH_ABANDONED);
+        log.info("Task {} CANCELLED after routing failed on every SUBMITTED sweep; escrow fully refunded", taskId);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void cancelPinnedAsUnavailable(UUID taskId, UUID agentVersionId) {
+        // Same lock order as the other refund paths: task row, then wallet row in settleRejected.
+        TaskModel task = loadForUpdate(taskId);
+        if (task.status() != TaskStatus.SUBMITTED && task.status() != TaskStatus.AWAITING_AGENT) {
+            log.info("Task {} is {}; skipping pinned fail-fast cancel", taskId, task.status());
+            return;
+        }
+        cancelAsUnavailable(task, agentVersionId);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void cancelUnavailableAtDispatch(UUID taskId, UUID agentVersionId) {
+        cancelAsUnavailable(loadForUpdate(taskId), agentVersionId);
+    }
+
+    private void cancelAsUnavailable(TaskModel task, UUID agentVersionId) {
+        endWithRefund(task.cancelAsUnavailable());
+        appendAttempt(task.id(), agentVersionId, DispatchOutcome.UNAVAILABLE);
+        log.info("Task {} CANCELLED (AGENT_UNAVAILABLE): pinned version {} is no longer available; "
+                + "escrow fully refunded", task.id(), agentVersionId);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void reassign(UUID taskId, UUID newAgentVersionId, Instant executionDeadline) {
+        TaskModel task = loadForUpdate(taskId);
+        UUID previous = task.agentVersionId();
+        taskRepository.save(task.reassign(newAgentVersionId));
+        taskRepository.stampExecutionDeadline(taskId, executionDeadline);
+        log.info("Task {} reassigned from agent version {} to {} (deadline {})",
+                taskId, previous, newAgentVersionId, executionDeadline);
+    }
+
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void failWithRefund(UUID taskId, FailureReason reason) {
+        endWithRefund(loadForUpdate(taskId).markFailed(reason));
+        log.info("Task {} FAILED ({}); escrow fully refunded", taskId, reason);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void appendDispatchAttempt(UUID taskId, UUID agentVersionId, DispatchOutcome outcome) {
+        appendAttempt(taskId, agentVersionId, outcome);
+    }
+
+    /** The one place a dispatch attempt is numbered and appended; the caller holds the task row lock. */
+    private void appendAttempt(UUID taskId, UUID agentVersionId, DispatchOutcome outcome) {
+        DispatchAttemptModel attempt = DispatchAttemptModel.next(taskId, agentVersionId,
+                dispatchAttemptRepository.countByTaskId(taskId), outcome, clock.instant());
+        dispatchAttemptRepository.append(attempt);
+        log.info("Task {} dispatch attempt {} to version {}: {}", taskId, attempt.attemptNumber(),
+                agentVersionId, outcome);
+    }
+
+    /**
+     * The one place a task that ended without a result settles: save the ended copy, refund the
+     * full escrow (a recorded settlement, Hard Invariants #1/#2) and queue the client's
+     * {@code task.failed} webhook, whose reason is the terminal status.
+     */
+    private void endWithRefund(TaskModel ended) {
+        taskRepository.save(ended);
+        settlementWriteAppService.settleRejected(ended.id(), ended.clientId(), ended.budget());
+        webhookOutboxAppService.enqueueFailed(ended, ended.status().name());
+    }
+
+    private TaskModel loadForUpdate(UUID taskId) {
+        return taskRepository.findByIdForUpdate(taskId)
+                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
+    }
+
+    private void cancelWithRefund(TaskModel task, FailureReason reason) {
+        endWithRefund(task.markCancelled(reason));
     }
 
     private TaskModel load(UUID taskId) {

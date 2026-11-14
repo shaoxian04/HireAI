@@ -27,6 +27,15 @@ async def test_list_agents_builds_query_params():
 
 
 @respx.mock
+async def test_list_categories_reads_the_catalogue_categories():
+    rows = [{"category": "summarisation", "label": "Summarisation", "agentCount": 2}]
+    route = respx.get(f"{BASE}/api/catalogue/categories").mock(return_value=ok(rows))
+    out = await client().list_categories()
+    assert out == rows
+    assert route.calls.last.request.headers["Authorization"] == "ApiKey hk_live_testkey"
+
+
+@respx.mock
 async def test_submit_direct_posts_agentid_and_idempotency_key():
     route = respx.post(f"{BASE}/api/tasks/direct").mock(return_value=ok({"id": "t1", "status": "SUBMITTED"}))
     out = await client().submit_direct(title="T", description="d", budget=50, agent_id="a1")
@@ -44,6 +53,21 @@ async def test_submit_routed_posts_output_spec():
     body = json.loads(route.calls.last.request.content)
     assert body["category"] == "summarization"
     assert body["outputSpec"] == {"format": "TEXT", "schema": "", "acceptanceCriteria": "concise"}
+
+
+@respx.mock
+async def test_submit_sends_the_deadline_only_when_given():
+    routed = respx.post(f"{BASE}/api/tasks").mock(return_value=ok({"id": "t2", "status": "SUBMITTED"}))
+    direct = respx.post(f"{BASE}/api/tasks/direct").mock(return_value=ok({"id": "t1", "status": "SUBMITTED"}))
+    await client().submit_routed(title="T", description="d", category="summarisation",
+                                 budget=50, output_format="TEXT", deadline_seconds=600)
+    await client().submit_direct(title="T", description="d", budget=50, agent_id="a1", deadline_seconds=900)
+    assert json.loads(routed.calls.last.request.content)["deadlineSeconds"] == 600
+    assert json.loads(direct.calls.last.request.content)["deadlineSeconds"] == 900
+
+    await client().submit_routed(title="T", description="d", category="summarisation",
+                                 budget=50, output_format="TEXT")
+    assert "deadlineSeconds" not in json.loads(routed.calls.last.request.content)
 
 
 @respx.mock

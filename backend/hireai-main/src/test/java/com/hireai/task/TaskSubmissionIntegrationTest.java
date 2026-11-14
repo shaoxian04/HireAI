@@ -1,5 +1,6 @@
 package com.hireai.task;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.biz.task.routing.RoutingAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
@@ -54,7 +55,7 @@ class TaskSubmissionIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
@@ -72,7 +73,7 @@ class TaskSubmissionIntegrationTest {
     /**
      * This slice asserts the post-submit state in isolation (status SUBMITTED + atomic escrow
      * freeze, Hard Invariant #1). Mock out auto-routing (which now fires on TaskSubmittedDomainEvent
-     * after commit) so it does not flip the un-matched task to AWAITING_CAPACITY before the
+     * after commit) so it does not flip the un-matched task to AWAITING_AGENT before the
      * assertion. Routing is covered by RoutingIntegrationTest.
      */
     @MockBean RoutingAppService routingAppService;

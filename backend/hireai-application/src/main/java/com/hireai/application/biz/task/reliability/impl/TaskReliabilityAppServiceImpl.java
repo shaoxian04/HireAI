@@ -15,14 +15,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Reliability orchestration behind the two sweepers (spec §6). rematchOne is deliberately NOT
- * transactional: it drives RoutingAppService, which publishes to RabbitMQ and manages its own
+ * Reliability orchestration behind the three sweepers (spec §6, #67). rematchOne and
+ * rerouteSubmittedOne are deliberately NOT transactional: it drives RoutingAppService, which publishes to RabbitMQ and manages its own
  * commit-before-publish ordering. timeoutOne and the id reads are transactional. Every write it
  * triggers is status-guarded, so overlapping sweeps and races resolve as no-ops.
  */
@@ -36,7 +37,14 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
     private final SettlementWriteAppService settlementWriteAppService;
     private final WebhookOutboxAppService webhookOutboxAppService;
     private final ReputationWriteAppService reputationWriteAppService;
+    /** Re-match sweeper bound: an AWAITING_AGENT task is cancelled + refunded at this attempt. */
     private final int rematchMaxAttempts;
+    /** SUBMITTED sweeper bound: a stranded SUBMITTED task is cancelled + refunded at this attempt. */
+    private final int submittedMaxAttempts;
+    /** How long a task may sit SUBMITTED before the SUBMITTED sweeper treats it as stranded. */
+    private final Duration submittedMinAge;
+    /** The app's Clock bean (ClockConfig); tests pass their own to pick the moment a sweep runs at. */
+    private final Clock clock;
 
     public TaskReliabilityAppServiceImpl(TaskRepository taskRepository,
                                          RoutingAppService routingAppService,
@@ -44,9 +52,15 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
                                          SettlementWriteAppService settlementWriteAppService,
                                          WebhookOutboxAppService webhookOutboxAppService,
                                          ReputationWriteAppService reputationWriteAppService,
-                                         @Value("${hireai.matching.rematch-max-attempts:3}") int rematchMaxAttempts) {
+                                         @Value("${hireai.matching.rematch-max-attempts:2}") int rematchMaxAttempts,
+                                         @Value("${hireai.matching.submitted-max-attempts:3}") int submittedMaxAttempts,
+                                         @Value("${hireai.matching.submitted-min-age:PT30S}") Duration submittedMinAge,
+                                         Clock clock) {
         if (rematchMaxAttempts < 1) {
             throw new IllegalStateException("rematch-max-attempts must be >= 1; got " + rematchMaxAttempts);
+        }
+        if (submittedMaxAttempts < 1) {
+            throw new IllegalStateException("submitted-max-attempts must be >= 1; got " + submittedMaxAttempts);
         }
         this.taskRepository = taskRepository;
         this.routingAppService = routingAppService;
@@ -54,41 +68,89 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
         this.settlementWriteAppService = settlementWriteAppService;
         this.webhookOutboxAppService = webhookOutboxAppService;
         this.reputationWriteAppService = reputationWriteAppService;
+        if (submittedMinAge.isNegative()) {
+            throw new IllegalStateException("submitted-min-age must be >= 0; got " + submittedMinAge);
+        }
         this.rematchMaxAttempts = rematchMaxAttempts;
+        this.submittedMaxAttempts = submittedMaxAttempts;
+        this.submittedMinAge = submittedMinAge;
+        this.clock = clock;
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<UUID> awaitingCapacityTaskIds() {
-        return taskRepository.findIdsAwaitingCapacity();
+    public List<UUID> awaitingAgentTaskIds() {
+        return taskRepository.findIdsAwaitingAgent();
     }
 
     @Override
     public void rematchOne(UUID taskId) {
         Optional<TaskModel> maybeTask = taskRepository.findById(taskId);
-        if (maybeTask.isEmpty() || maybeTask.get().status() != TaskStatus.AWAITING_CAPACITY) {
+        if (maybeTask.isEmpty() || maybeTask.get().status() != TaskStatus.AWAITING_AGENT) {
             return; // matched or cancelled since the sweep listed it — nothing to do
         }
-        int attempts = taskWriteAppService.registerMatchAttempt(taskId);
         Optional<UUID> pinned = taskRepository.findPinnedAgentVersionId(taskId);
         if (pinned.isPresent()) {
-            // Direct booking: retry ONLY the client's chosen version — never substitute (spec §6.1).
+            // Dispatch no longer parks a pinned booking here (it fails fast, #77), so this is a task
+            // parked before that change. Never retry it (no other Agent may be tried, and the pinned
+            // one is unavailable), but never strand its escrow either: end it the fail-fast way.
+            log.info("Re-match sweeper: pinned task {} is AWAITING_AGENT; cancelling as unavailable", taskId);
+            taskWriteAppService.cancelPinnedAsUnavailable(taskId, pinned.get());
+            return;
+        }
+        int attempts = taskWriteAppService.registerMatchAttempt(taskId);
+        routingAppService.route(taskId);
+        boolean stillHeld = taskRepository.findById(taskId)
+                .map(t -> t.status() == TaskStatus.AWAITING_AGENT)
+                .orElse(false);
+        if (stillHeld && attempts >= rematchMaxAttempts) {
+            taskWriteAppService.cancelAwaitingAgentWithRefund(taskId);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> strandedSubmittedTaskIds() {
+        return taskRepository.findIdsSubmittedBefore(clock.instant().minus(submittedMinAge));
+    }
+
+    @Override
+    public void rerouteSubmittedOne(UUID taskId) {
+        Optional<TaskModel> maybeTask = taskRepository.findById(taskId);
+        if (maybeTask.isEmpty() || maybeTask.get().status() != TaskStatus.SUBMITTED) {
+            return; // routed or cancelled since the sweep listed it
+        }
+        // Shares the match_attempts counter with the re-match sweeper (each has its own limit): a
+        // task that reaches AWAITING_AGENT from here carries the attempts it has already used.
+        int attempts = taskWriteAppService.registerMatchAttempt(taskId);
+        try {
+            routeOrDispatchPinned(taskId);
+        } catch (RuntimeException e) {
+            log.warn("SUBMITTED sweeper: routing failed again for task {} (attempt {})", taskId, attempts, e);
+        }
+        boolean stillSubmitted = taskRepository.findById(taskId)
+                .map(t -> t.status() == TaskStatus.SUBMITTED)
+                .orElse(false);
+        if (stillSubmitted && attempts >= submittedMaxAttempts) {
+            taskWriteAppService.cancelSubmittedWithRefund(taskId);
+        }
+    }
+
+    private void routeOrDispatchPinned(UUID taskId) {
+        Optional<UUID> pinned = taskRepository.findPinnedAgentVersionId(taskId);
+        if (pinned.isPresent()) {
+            // Direct booking: dispatch ONLY the client's chosen version — never substitute (spec §6.1).
+            // If it is no longer available, dispatchDirect cancels the task at once (#77).
             routingAppService.dispatchDirect(taskId, pinned.get());
         } else {
             routingAppService.route(taskId);
-        }
-        boolean stillHeld = taskRepository.findById(taskId)
-                .map(t -> t.status() == TaskStatus.AWAITING_CAPACITY)
-                .orElse(false);
-        if (stillHeld && attempts >= rematchMaxAttempts) {
-            taskWriteAppService.cancelAwaitingCapacityWithRefund(taskId);
         }
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<UUID> executionExpiredTaskIds() {
-        return taskRepository.findIdsExecutionExpired(Instant.now());
+        return taskRepository.findIdsExecutionExpired(clock.instant());
     }
 
     @Override
@@ -106,10 +168,12 @@ public class TaskReliabilityAppServiceImpl implements TaskReliabilityAppService 
         TaskModel timedOut = task.markTimedOut();
         taskRepository.save(timedOut);
         settlementWriteAppService.settleRejected(taskId, timedOut.clientId(), timedOut.budget());
-        // The deadline passed with no result. Stamped at ASSIGNMENT, so the agent had the work.
-        reputationWriteAppService.recordOutcome(taskId, timedOut.agentVersionId(),
-                timedOut.clientId(), ReputationEventType.EXECUTION_TIMEOUT);
-        webhookOutboxAppService.enqueueFailed(timedOut, "TIMED_OUT");
-        log.info("Task {} TIMED_OUT past execution deadline; escrow fully refunded", taskId);
+        // Blame only an Agent that had the work: a task still QUEUED never reached it (#66).
+        if (task.timeoutIsAgentFault()) {
+            reputationWriteAppService.recordOutcome(taskId, timedOut.agentVersionId(),
+                    timedOut.clientId(), ReputationEventType.EXECUTION_TIMEOUT);
+        }
+        webhookOutboxAppService.enqueueFailed(timedOut, timedOut.status().name());
+        log.info("Task {} TIMED_OUT from {} past execution deadline; escrow fully refunded", taskId, task.status());
     }
 }

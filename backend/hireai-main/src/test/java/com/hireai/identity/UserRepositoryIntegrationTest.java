@@ -1,5 +1,6 @@
 package com.hireai.identity;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.domain.biz.identity.enums.Role;
 import com.hireai.domain.biz.identity.model.Credential;
 import com.hireai.domain.biz.identity.model.UserModel;
@@ -38,7 +39,7 @@ class UserRepositoryIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {

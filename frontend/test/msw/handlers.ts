@@ -70,6 +70,8 @@ export const handlers = [
           outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
         },
         createdAt: "2026-06-06T10:00:00Z",
+        hasSigningSecret: true,
+        listed: false,
       },
     ]),
   ),
@@ -89,6 +91,8 @@ export const handlers = [
         outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
       },
       createdAt: "2026-06-06T10:00:00Z",
+      hasSigningSecret: true,
+      listed: false,
     }),
   ),
 
@@ -283,8 +287,9 @@ export const handlers = [
   }),
   http.get("*/api/catalogue/categories", () =>
     ok([
-      { category: "summarisation", agentCount: 1 },
-      { category: "translation", agentCount: 2 },
+      { category: "summarisation", label: "Summarisation", agentCount: 1 },
+      { category: "translation", label: "Translation", agentCount: 2 },
+      { category: "other", label: "Other", agentCount: 0 },
     ]),
   ),
   http.get("*/api/catalogue/agents/:id", ({ params }) =>
@@ -519,6 +524,8 @@ const AGENT_DTO_A1 = {
     outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
   },
   createdAt: "2026-06-06T10:00:00Z",
+  hasSigningSecret: true,
+  listed: true,
 };
 
 export const manageHandlers = [

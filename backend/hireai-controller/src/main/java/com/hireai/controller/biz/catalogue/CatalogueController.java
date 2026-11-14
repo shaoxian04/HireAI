@@ -76,7 +76,7 @@ public class CatalogueController extends BaseController {
     @GetMapping("/categories")
     public WebResult<List<CategoryCountDTO>> categories() {
         return ok(readAppService.categories().stream()
-                .map(c -> new CategoryCountDTO(c.category(), c.agentCount()))
+                .map(c -> new CategoryCountDTO(c.category(), c.label(), c.agentCount()))
                 .toList());
     }
 

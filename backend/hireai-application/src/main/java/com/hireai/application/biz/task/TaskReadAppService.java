@@ -1,5 +1,6 @@
 package com.hireai.application.biz.task;
 
+import com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
@@ -8,6 +9,7 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -23,9 +25,23 @@ public interface TaskReadAppService {
 
     TaskModel getForClient(@NonNull UUID taskId, @NonNull UUID clientId);
 
+    /**
+     * The Agent a task was booked with: the version it was assigned to, else the version the
+     * Client pinned (a direct booking that never got assigned). Empty for a routed task that never
+     * found an Agent. Takes a task the caller has already loaded for its owner. The web rebook
+     * excludes this Agent from the new shortlist (#79).
+     */
+    Optional<UUID> findBookedAgentId(@NonNull TaskModel task);
+
     TaskResultModel getResult(@NonNull UUID taskId, @NonNull UUID clientId);
 
     List<TaskModel> listForClient(@NonNull UUID clientId, @NonNull TaskQuery query);
 
     TaskRoutingView getRoutingView(@NonNull UUID taskId);
+
+    /**
+     * The task's dispatch history in attempt order (#75), to its owner only: NOT_FOUND for any
+     * other client. Empty while the task has not been dispatched.
+     */
+    List<DispatchAttemptView> listDispatchAttempts(@NonNull UUID taskId, @NonNull UUID clientId);
 }

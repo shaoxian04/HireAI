@@ -9,7 +9,7 @@ import java.util.UUID;
  * Orchestrates the routing decision for a submitted task. Reads the task routing view,
  * asks the AgentRepository for ACTIVE candidates, runs the match, and either
  * assign-and-queues the task (then publishes a dispatch message AFTER that write has
- * committed) or marks it AWAITING_CAPACITY. Invoked from RoutingEventListener after the
+ * committed) or marks it AWAITING_AGENT. Invoked from RoutingEventListener after the
  * submit transaction commits (Hard Invariant #1: routing never precedes a committed escrow
  * freeze).
  */
@@ -24,4 +24,16 @@ public interface RoutingAppService {
      * then the dispatch message is published.
      */
     void dispatchDirect(@NonNull UUID taskId, @NonNull UUID agentVersionId);
+
+    /**
+     * Routed failover (#78): the platform-picked Agent of a QUEUED routed task could not take it
+     * (unreachable after the retry schedule, or busy), and that failed attempt is already recorded.
+     * Picks the next Agent (every Agent already tried excluded, same budget and eligibility as
+     * initial matching, at most 3 distinct Agents), reassigns the task with a new execution
+     * deadline and publishes its WorkOrder once the caller's transaction commits. With no untried
+     * eligible Agent left the task ends FAILED with {@code NO_ALTERNATIVE_AGENT} and a refund.
+     *
+     * <p>MUST run inside the caller's transaction, which holds the task row lock.
+     */
+    void failOver(@NonNull UUID taskId);
 }

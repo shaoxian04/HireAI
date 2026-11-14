@@ -1,5 +1,6 @@
 package com.hireai.task;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.application.biz.task.callback.AgentCallbackAppService;
 import com.hireai.application.biz.task.routing.RoutingAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
@@ -60,7 +61,7 @@ class AgentCallbackIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
@@ -82,7 +83,7 @@ class AgentCallbackIntegrationTest {
      * This test drives the task lifecycle MANUALLY (submit → assignAndQueue → markExecuting) to set
      * up the EXECUTING precondition for the callback under test. Mock out auto-routing (which now
      * fires on TaskSubmittedDomainEvent after commit) so it does not pre-empt the manual flow by
-     * marking the un-matched task AWAITING_CAPACITY. Routing itself is covered by RoutingIntegrationTest.
+     * marking the un-matched task AWAITING_AGENT. Routing itself is covered by RoutingIntegrationTest.
      */
     @MockBean RoutingAppService routingAppService;
 

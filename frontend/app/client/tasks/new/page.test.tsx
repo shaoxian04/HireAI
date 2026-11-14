@@ -6,16 +6,20 @@ import { server, ok } from "../../../../test/msw/handlers";
 import { AuthProvider } from "@/lib/auth";
 import SubmitTaskPage from "@/app/client/tasks/new/page";
 
+const nav = vi.hoisted(() => ({ search: "" }));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   useParams: () => ({}),
   usePathname: () => "/client/tasks/new",
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   server.resetHandlers();
   localStorage.clear();
+  nav.search = "";
 });
 afterAll(() => server.close());
 
@@ -56,7 +60,7 @@ describe("submit task — shortlist flow", () => {
   it("finds agents then books an in-budget pick at the agent's price", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(
-      http.get("*/api/tasks/match-preview", () => ok(previewBody)),
+      http.post("*/api/tasks/match-preview", () => ok(previewBody)),
       http.post("*/api/tasks/direct", async ({ request }) => {
         captured = (await request.json()) as Record<string, unknown>;
         return ok({ id: "t-9", status: "SUBMITTED" });
@@ -75,10 +79,29 @@ describe("submit task — shortlist flow", () => {
     expect(captured!.budget).toBe(12); // pays the agent's price, not the typed budget
   });
 
+  it("tells the client when no agent matches the task closely", async () => {
+    let sent: Record<string, unknown> | null = null;
+    server.use(
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>;
+        return ok({ shortlist: [], nearMisses: [], noCloseMatch: true });
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    const dialog = await screen.findByRole("dialog", { name: /pick your agent/i });
+    expect(dialog).toHaveTextContent(/no agent matches this task closely/i);
+    // The relevance check needs the task text, so the preview sends it.
+    expect(sent!.title).toBe("Summarise");
+    expect(sent!.description).toBe("the report");
+  });
+
   it("books a near-miss at its higher price", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(
-      http.get("*/api/tasks/match-preview", () => ok(previewBody)),
+      http.post("*/api/tasks/match-preview", () => ok(previewBody)),
       http.post("*/api/tasks/direct", async ({ request }) => {
         captured = (await request.json()) as Record<string, unknown>;
         return ok({ id: "t-10", status: "SUBMITTED" });
@@ -128,10 +151,10 @@ describe("submit task — shortlist flow", () => {
   });
 
   it("clears and retypes the budget field without a stray leading zero, then searches with the typed value", async () => {
-    let calledUrl = "";
+    let sent: Record<string, unknown> | null = null;
     server.use(
-      http.get("*/api/tasks/match-preview", ({ request }) => {
-        calledUrl = request.url;
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>;
         return ok(previewBody);
       }),
     );
@@ -146,7 +169,8 @@ describe("submit task — shortlist flow", () => {
     expect(budgetInput.value).toBe("45");
     await pickCategory();
     fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
-    await waitFor(() => expect(calledUrl).toContain("budget=45"));
+    await waitFor(() => expect(sent).not.toBeNull());
+    expect(sent!.budget).toBe(45);
   });
 
   it("shows a validation error instead of searching with a silently-substituted 0 when budget is left empty", async () => {
@@ -167,7 +191,7 @@ describe("submit task — idempotency", () => {
   /** Drives the form up to a booked in-budget pick, collecting each POST's Idempotency-Key. */
   async function bookOnce(keys: string[], status: number) {
     server.use(
-      http.get("*/api/tasks/match-preview", () => ok(previewBody)),
+      http.post("*/api/tasks/match-preview", () => ok(previewBody)),
       http.post("*/api/tasks/direct", ({ request }) => {
         keys.push(request.headers.get("Idempotency-Key") ?? "");
         return status === 200
@@ -236,5 +260,173 @@ describe("submit task — escrow preview", () => {
     expect(screen.getByText(/nothing is frozen yet/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/budget/i), { target: { value: "2000" } });
     expect(await screen.findByText(/more than you have available/i)).toBeInTheDocument();
+  });
+});
+
+// "Choose another agent" on a failed task (#79) opens this page as /client/tasks/new?rebook=<id>.
+describe("submit task — rebook a failed task", () => {
+  const failedTask = {
+    id: "t-7", clientId: "u-1", title: "Quarterly digest", description: "Summarise the Q3 board pack",
+    budget: 15, status: "FAILED", failureReason: "AGENT_BUSY", category: "summarisation",
+    agentId: "a-failed", createdAt: "2026-11-01T10:00:00Z",
+    outputSpec: { format: "JSON", schema: null, acceptanceCriteria: "ok" },
+  };
+
+  it("prefills the failed task over any saved draft", async () => {
+    localStorage.setItem(
+      "hireai.taskDraft",
+      JSON.stringify({ title: "Old draft", description: "d", category: "translation", budget: "99" }),
+    );
+    nav.search = "rebook=t-7";
+    server.use(http.get("*/api/tasks/t-7", () => ok(failedTask)));
+    renderPage();
+
+    expect(await screen.findByDisplayValue("Quarterly digest")).toBeInTheDocument();
+    expect(screen.getByLabelText(/description/i)).toHaveValue("Summarise the Q3 board pack");
+    expect(screen.getByLabelText(/category/i)).toHaveValue("summarisation");
+    expect(screen.getByLabelText(/budget/i)).toHaveValue(15);
+    expect(screen.getByText(/the agent that failed it is left off the shortlist/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /find agents/i })).toBeEnabled();
+  });
+
+  it("leaves the failed agent out of the shortlist search", async () => {
+    nav.search = "rebook=t-7";
+    let sent: Record<string, unknown> | null = null;
+    server.use(
+      http.get("*/api/tasks/t-7", () => ok(failedTask)),
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>;
+        return ok(previewBody);
+      }),
+    );
+    renderPage();
+    await screen.findByDisplayValue("Quarterly digest");
+
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+
+    await waitFor(() => expect(sent).not.toBeNull());
+    expect(sent).toEqual({
+      title: "Quarterly digest", description: "Summarise the Q3 board pack", category: "summarisation",
+      budget: 15, exclude: ["a-failed"],
+    });
+  });
+
+  it("books the new pick as a new task and leaves the failed one alone", async () => {
+    nav.search = "rebook=t-7";
+    let captured: Record<string, unknown> | null = null;
+    server.use(
+      http.get("*/api/tasks/t-7", () => ok(failedTask)),
+      http.post("*/api/tasks/match-preview", () => ok(previewBody)),
+      http.post("*/api/tasks/direct", async ({ request }) => {
+        captured = (await request.json()) as Record<string, unknown>;
+        return ok({ id: "t-8", status: "SUBMITTED" });
+      }),
+    );
+    renderPage();
+    await screen.findByDisplayValue("Quarterly digest");
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    await screen.findByRole("dialog", { name: /pick your agent/i });
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(await screen.findByRole("button", { name: /confirm & book/i }));
+
+    await waitFor(() => expect(captured).not.toBeNull());
+    expect(captured).toEqual({
+      title: "Quarterly digest", description: "Summarise the Q3 board pack", budget: 12, agentId: "a-1",
+    });
+  });
+
+  it("falls back to a blank form when the failed task can't be loaded", async () => {
+    nav.search = "rebook=t-404";
+    server.use(
+      http.get("*/api/tasks/t-404", () =>
+        HttpResponse.json({ success: false, code: "NOT_FOUND", message: "Task not found" }, { status: 404 })),
+    );
+    renderPage();
+
+    expect(await screen.findByText(/couldn't load the task to rebook/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/title/i)).toHaveValue("");
+  });
+
+  it("sends the task in a POST body, with no exclusion, on an ordinary new task", async () => {
+    let sent: Record<string, unknown> | null = null;
+    let calledUrl: URL | null = null;
+    server.use(
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        calledUrl = new URL(request.url);
+        sent = (await request.json()) as Record<string, unknown>;
+        return ok(previewBody);
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+
+    await waitFor(() => expect(sent).not.toBeNull());
+    // The task text goes in the body, never in the URL.
+    expect(sent).toEqual({ title: "Summarise", description: "the report", category: "summarisation", budget: 30 });
+    expect(calledUrl!.search).toBe("");
+  });
+});
+
+describe("submit task — deadline", () => {
+  it("sends the optional deadline, in seconds, with the preview and the booking", async () => {
+    let previewSent: Record<string, unknown> | null = null;
+    let booked: Record<string, unknown> | null = null;
+    server.use(
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        previewSent = (await request.json()) as Record<string, unknown>;
+        return ok(previewBody);
+      }),
+      http.post("*/api/tasks/direct", async ({ request }) => {
+        booked = (await request.json()) as Record<string, unknown>;
+        return ok({ id: "t-9", status: "SUBMITTED" });
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    fireEvent.change(screen.getByLabelText(/^deadline$/i), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText(/deadline unit/i), { target: { value: "hours" } });
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    await screen.findByRole("dialog", { name: /pick your agent/i });
+    expect(previewSent!.deadlineSeconds).toBe(7200);
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    fireEvent.click(await screen.findByRole("button", { name: /confirm & book/i }));
+    await waitFor(() => expect(booked).not.toBeNull());
+    expect(booked!.deadlineSeconds).toBe(7200);
+  });
+
+  it("sends no deadline when the field is left empty", async () => {
+    let previewSent: Record<string, unknown> | null = null;
+    server.use(
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        previewSent = (await request.json()) as Record<string, unknown>;
+        return ok(previewBody);
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    await waitFor(() => expect(previewSent).not.toBeNull());
+    expect(previewSent).not.toHaveProperty("deadlineSeconds");
+  });
+
+  it("refuses a deadline that is not a positive whole number", async () => {
+    let searched = false;
+    server.use(
+      http.post("*/api/tasks/match-preview", () => {
+        searched = true;
+        return ok(previewBody);
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    fireEvent.change(screen.getByLabelText(/^deadline$/i), { target: { value: "0" } });
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/deadline/i);
+    expect(searched).toBe(false);
   });
 });

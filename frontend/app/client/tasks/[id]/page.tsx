@@ -229,7 +229,7 @@ function TaskDetail() {
     !result &&
     !RESULT_READY.has(task.status) &&
     !TERMINAL.has(task.status) &&
-    task.status !== "AWAITING_CAPACITY";
+    task.status !== "AWAITING_AGENT";
 
   // Once a task is in a dispute (or resolved via one), the execution pipeline is history — the
   // dispute timeline below tells the story instead.
@@ -298,18 +298,24 @@ function TaskDetail() {
       {/* Renders nothing for a WEB task or an API task with no webhook subscription. */}
       <WebhookDeliveryStatus taskId={task.id} />
 
-      {task.status === "AWAITING_CAPACITY" && (
+      {task.status === "AWAITING_AGENT" && (
         <section aria-live="polite" className="rounded-lg border border-amber/30 bg-amber/10 p-4">
-          <h2 className="text-sm font-semibold text-amber">Waiting for an available agent</h2>
+          <h2 className="text-sm font-semibold text-amber">Awaiting an agent</h2>
           <p className="mt-1.5 text-sm text-muted">
-            No agent currently has capacity for this category. We&apos;ll keep checking and start
-            your task as soon as one is free.
+            No agent takes this category within your budget yet. We&apos;ll check again shortly; if
+            none turns up, the task is cancelled and your credits are refunded.
           </p>
         </section>
       )}
 
       {TERMINAL_FAILURE.has(task.status) && (
-        <TaskFailurePanel status={task.status} budget={task.budget} detail={validation} />
+        <TaskFailurePanel
+          taskId={task.id}
+          status={task.status}
+          failureReason={task.failureReason}
+          budget={task.budget}
+          detail={validation}
+        />
       )}
 
       {!result && RESULT_READY.has(task.status) && (

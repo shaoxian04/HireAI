@@ -5,6 +5,8 @@ status: accepted
 # Reputation is a two-component shrinkage average, not a points balance
 
 **Status:** implemented (`V27`, `V28`), with one exception noted under the final consequence.
+The 0.40 matcher weight quoted below, and the 12% figure derived from it, are superseded by
+[ADR 0006](./0006-matching-category-filter-relevance-floor.md).
 
 `agents.reputation_score` existed from `V3` as a `NUMERIC(5,2)` frozen at `50.00` — written once at
 registration and never updated by anything. The matcher weighted it at **0.40**, the largest of its four

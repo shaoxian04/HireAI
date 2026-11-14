@@ -6,8 +6,9 @@ import type { AgentDTO } from "@/lib/types";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { CategoryTagsInput } from "@/components/CategoryTagsInput";
+import { CategoryPicker } from "@/components/CategoryPicker";
 import { ContractTerms } from "@/components/ContractTerms";
+import { MAX_EXECUTION_HINT, MAX_EXECUTION_SECONDS } from "@/lib/agentLimits";
 
 interface Props {
   agentId: string;
@@ -19,26 +20,35 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
   const ver = agent.currentVersion;
   const [price, setPrice] = useState(ver.price);
   const [maxExec, setMaxExec] = useState(ver.maxExecutionSeconds);
-  const [categoriesCsv, setCategoriesCsv] = useState(
-    ver.capabilityCategories.join(", "),
-  );
+  const [categories, setCategories] = useState<string[]>(ver.capabilityCategories);
+  const [suggestedCategory, setSuggestedCategory] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
-    setSaving(true);
     setError(null);
+    if (!Number.isInteger(maxExec) || maxExec < 1) {
+      setError("Max execution seconds must be at least 1");
+      return;
+    }
+    if (maxExec > MAX_EXECUTION_SECONDS) {
+      setError(`Max execution seconds must be at most ${MAX_EXECUTION_SECONDS} (24 hours)`);
+      return;
+    }
+    if (categories.length === 0) {
+      setError("Pick at least one category");
+      return;
+    }
+    setSaving(true);
     try {
       const updated = await api<AgentDTO>(`/agents/${agentId}/versions`, {
         method: "POST",
         body: JSON.stringify({
           price,
           maxExecutionSeconds: maxExec,
-          capabilityCategories: categoriesCsv
-            .split(",")
-            .map((s) => s.trim().toLowerCase())
-            .filter(Boolean),
+          capabilityCategories: categories,
+          ...(suggestedCategory.trim() ? { suggestedCategory: suggestedCategory.trim() } : {}),
         }),
       });
       onAgentChange(updated);
@@ -86,21 +96,26 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
             onChange={(e) => setPrice(Number(e.target.value))}
           />
         </Field>
-        <Field label="Max execution seconds" htmlFor="maxExec">
+        <Field label="Max execution seconds" htmlFor="maxExec" hint={MAX_EXECUTION_HINT}>
           <Input
             id="maxExec"
             aria-label="Max execution seconds"
             type="number"
             min={1}
+            max={MAX_EXECUTION_SECONDS}
             value={maxExec}
             onChange={(e) => setMaxExec(Number(e.target.value))}
           />
         </Field>
       </div>
 
-      <Field label="Capability categories" htmlFor="categories">
-        <CategoryTagsInput id="categories" value={categoriesCsv} onChange={setCategoriesCsv} />
-      </Field>
+      <CategoryPicker
+        id="categories"
+        value={categories}
+        onChange={setCategories}
+        suggestion={suggestedCategory}
+        onSuggestionChange={setSuggestedCategory}
+      />
 
       {error && (
         <p role="alert" className="text-xs text-red">

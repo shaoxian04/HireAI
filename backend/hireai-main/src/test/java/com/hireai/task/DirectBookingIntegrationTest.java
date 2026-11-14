@@ -1,5 +1,6 @@
 package com.hireai.task;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hireai.application.biz.offering.agent.AgentWriteAppService;
@@ -71,7 +72,7 @@ class DirectBookingIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
@@ -118,7 +119,7 @@ class DirectBookingIntegrationTest {
                 new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON"),
                 List.of(category), "https://agent.example.com/hook", 120,
                 new BigDecimal(price), 5);
-        UUID agentId = agentWriteAppService.register(info);
+        UUID agentId = agentWriteAppService.register(info).agentId();
         agentWriteAppService.activate(agentId, ownerId);
 
         // Mark the profile as listed
@@ -198,13 +199,13 @@ class DirectBookingIntegrationTest {
 
     /**
      * Deactivation race: the agent was suspended between booking-validation and dispatch.
-     * dispatchDirect must NOT throw; it must mark the task AWAITING_CAPACITY and never publish.
-     * Escrow stays frozen (already verified in other tests; not re-asserted here). The race is
-     * exercised by seeding a SUBMITTED task row directly (bypassing book() which would 404 on
-     * an inactive agent), suspending the agent, then calling dispatchDirect directly.
+     * dispatchDirect must NOT throw; the pinned task fails fast to CANCELLED with a refund (#77) and
+     * nothing is published. The race is exercised by seeding a SUBMITTED task row directly (bypassing
+     * book() which would 404 on an inactive agent) with its escrow frozen, suspending the agent, then
+     * calling dispatchDirect directly.
      */
     @Test
-    void deactivatedAgentLandsAwaitingCapacityWithEscrowHeld() {
+    void deactivatedAgentFailsFastToCancelledWithARefund() {
         UUID client = newClient();
         walletWriteAppService.topUp(client, Money.of("50.00"), "seed");
 
@@ -224,15 +225,18 @@ class DirectBookingIntegrationTest {
                 "VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, 'SUBMITTED', now())",
                 taskId, client, "Race task", "Deactivation race test",
                 new BigDecimal("15.00"), outputSpecJson, "summarisation");
+        walletWriteAppService.freeze(client, Money.of("15.00"), taskId, UUID.randomUUID().toString());
 
         // Suspend the agent to simulate the deactivation race.
         jdbc.update("UPDATE agents SET status = 'SUSPENDED' WHERE id = ?", agentId);
 
-        // dispatchDirect must NOT throw, must mark AWAITING_CAPACITY, must NOT publish.
+        // dispatchDirect must NOT throw, must cancel with a refund, must NOT publish.
         routingAppService.dispatchDirect(taskId, agentVersionId);
 
         String status = jdbc.queryForObject("SELECT status FROM tasks WHERE id = ?", String.class, taskId);
-        assertThat(status).isEqualTo("AWAITING_CAPACITY");
+        assertThat(status).isEqualTo("CANCELLED");
+        assertThat(jdbc.queryForObject("SELECT type FROM settlements WHERE task_id = ?", String.class, taskId))
+                .isEqualTo("REJECT");
 
         verify(taskDispatchPublisher, never()).publish(any());
     }

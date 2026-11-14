@@ -18,6 +18,9 @@ import java.util.UUID;
  */
 public final class AgentVersionModel {
 
+    /** Upper bound on a version's declared execution time (24 hours). Mirrored by a DB CHECK. */
+    public static final int MAX_EXECUTION_SECONDS = 86_400;
+
     private final UUID id;
     private final UUID agentId;
     private final int versionNumber;
@@ -56,9 +59,7 @@ public final class AgentVersionModel {
         requirePresent(pricing, "pricing");
         List<String> normalisedCategories = normaliseCategories(capabilityCategories);
         requireHttps(webhookUrl);
-        if (maxExecutionSeconds <= 0) {
-            throw new DomainException(ResultCode.VALIDATION_ERROR, "maxExecutionSeconds must be positive");
-        }
+        requireValidMaxExecutionSeconds(maxExecutionSeconds);
         if (maxConcurrent < 1 || maxConcurrent > 100) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "maxConcurrent must be between 1 and 100");
         }
@@ -81,6 +82,16 @@ public final class AgentVersionModel {
                 .toList();
     }
 
+    private static void requireValidMaxExecutionSeconds(int maxExecutionSeconds) {
+        if (maxExecutionSeconds <= 0) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "maxExecutionSeconds must be positive");
+        }
+        if (maxExecutionSeconds > MAX_EXECUTION_SECONDS) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "maxExecutionSeconds must be at most " + MAX_EXECUTION_SECONDS + " (24 hours)");
+        }
+    }
+
     private static void requireHttps(String webhookUrl) {
         if (webhookUrl == null || webhookUrl.isBlank()) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "Webhook URL is required");
@@ -101,9 +112,7 @@ public final class AgentVersionModel {
                                           List<String> capabilityCategories) {
         requirePresent(pricing, "pricing");
         List<String> normalised = normaliseCategories(capabilityCategories);
-        if (maxExecutionSeconds <= 0) {
-            throw new DomainException(ResultCode.VALIDATION_ERROR, "maxExecutionSeconds must be positive");
-        }
+        requireValidMaxExecutionSeconds(maxExecutionSeconds);
         return new AgentVersionModel(UUID.randomUUID(), agentId, versionNumber + 1, outputSpec,
                 normalised, webhookUrl, maxExecutionSeconds, maxConcurrent, pricing,
                 AgentVersionStatus.ACTIVE, Instant.now());
@@ -113,6 +122,23 @@ public final class AgentVersionModel {
         if (value == null) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, field + " is required");
         }
+    }
+
+    /**
+     * The category a direct booking of this version is filed under: the Client's choice when given,
+     * which this version must serve, else its first capability category.
+     */
+    public String taskCategoryFor(String requested) {
+        if (requested == null) {
+            // Safe: create guarantees >= 1 category.
+            return capabilityCategories.get(0);
+        }
+        if (!capabilityCategories.contains(requested)) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "This agent does not serve category '" + requested + "'. It serves: "
+                            + String.join(", ", capabilityCategories));
+        }
+        return requested;
     }
 
     /** Pricing rule: a task budget must cover this version's price. */

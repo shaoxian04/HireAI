@@ -1,5 +1,6 @@
 package com.hireai.webhook;
 
+import com.hireai.support.harness.HarnessContainers;
 import com.hireai.domain.biz.identity.apikey.model.ApiKeyModel;
 import com.hireai.domain.biz.identity.apikey.repository.ApiKeyRepository;
 import com.hireai.domain.biz.task.webhookdelivery.enums.WebhookEventType;
@@ -51,7 +52,7 @@ class WebhookDeliveryRepositoryIntegrationTest {
     }
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(HarnessContainers.POSTGRES_IMAGE);
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
