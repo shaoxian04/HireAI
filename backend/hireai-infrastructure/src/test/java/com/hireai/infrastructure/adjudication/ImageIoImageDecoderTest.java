@@ -51,8 +51,29 @@ class ImageIoImageDecoderTest {
     }
 
     @Test
-    void aSmallFileDeclaringAnEnormousCanvasIsNeverDecoded() {
-        assertThat(decoder.decode(pngHeaderOnly(100_000, 100_000))).isEmpty();
+    void aSmallFileDeclaringAnEnormousCanvasIsNeverDecodedOnlyItsSizeIsRead() {
+        assertThat(decoder.decode(pngHeaderOnly(100_000, 100_000))).hasValueSatisfying(d -> {
+            assertThat(d.width()).isEqualTo(100_000);
+            assertThat(d.hasPixels()).isFalse();
+        });
+        // One side over the Template's 4096 px is enough, however small the other.
+        assertThat(decoder.decode(pngHeaderOnly(4097, 16))).hasValueSatisfying(d -> assertThat(d.hasPixels()).isFalse());
+    }
+
+    @Test
+    void theEdgeIncludesEveryCornerAndNothingInside() throws Exception {
+        BufferedImage image = new BufferedImage(10, 7, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = image.createGraphics();
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, 10, 7);
+        g.dispose();
+        image.setRGB(9, 6, 0xFFFF0000); // bottom-right corner
+        image.setRGB(0, 3, 0xFF00FF00); // left edge
+        image.setRGB(5, 3, 0xFF0000FF); // inside: never read
+
+        int[] edge = decoder.decode(encode(image, "png")).orElseThrow().borderArgb();
+
+        assertThat(edge).hasSize(2 * 10 + 2 * 5).contains(0xFFFF0000, 0xFF00FF00).doesNotContain(0xFF0000FF);
     }
 
     private static byte[] encode(BufferedImage image, String format) throws Exception {

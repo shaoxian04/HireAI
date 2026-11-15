@@ -113,6 +113,11 @@ public class ValidationAppServiceImpl implements ValidationAppService {
             // Web channel: the Client reviews within the window, or silence counts as acceptance (#94).
             Instant reviewDeadline = reviewWindow.closesAt(clock.instant());
             taskRepository.stampReviewDeadline(task.id(), reviewDeadline);
+            if (report.needsReview()) {
+                // Recorded so the review sweeper can one day treat an anomaly differently; for now the
+                // window still accepts on silence like any other result (owner decision pending).
+                taskRepository.stampReviewReason(task.id(), report.anomalies().isEmpty() ? "UNDECIDED" : "ANOMALY");
+            }
             log.info("Task {} {} validation -> PENDING_REVIEW (review window closes {})",
                     task.id(), report.isPass() ? "passed" : "was sent to review by", reviewDeadline);
             return gated;

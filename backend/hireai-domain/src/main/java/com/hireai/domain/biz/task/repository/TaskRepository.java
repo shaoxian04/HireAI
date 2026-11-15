@@ -41,6 +41,15 @@ public interface TaskRepository {
      * The same Client's other Tasks, submitted before {@code taskId}, with exactly this title and
      * description: the outside data the duplicate-brief Finding reads (spec D7). Oldest first.
      */
+    /**
+     * Operational column write (unmapped on the entity): why a result awaits review although no
+     * check rejected it, {@code ANOMALY} or {@code UNDECIDED} (V45), stamped as it enters PENDING_REVIEW.
+     */
+    void stampReviewReason(UUID taskId, String reason);
+
+    /** The task's review reason; empty for a result every check passed. */
+    Optional<String> findReviewReason(UUID taskId);
+
     List<UUID> findEarlierTaskIdsWithSameBrief(UUID taskId, UUID clientId, String title, String description);
 
     /** Operational column write (unmapped on the entity): the platform accepted on the Client's behalf. */

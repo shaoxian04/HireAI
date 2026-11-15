@@ -172,6 +172,47 @@ class ImageGenerationAcceptanceTest {
 
     // ---- helpers ----
 
+    @Test
+    void anAnomalyNeverSoftensAFormatOrSizeRejectionSoTheFileIsStillReworked() {
+        ValidationReportModel wrongFormat = judge(contract(null, null, null), "application/pdf", null,
+                List.of(new SelfReportedAnomaly("IMAGE_FORMAT", "PDF is what the brief really wants.")), FindingFacts.NONE);
+        ValidationReportModel wrongSize = judge(contract(512, 512, null), "image/png", image(256, 256, WHITE),
+                List.of(new SelfReportedAnomaly("IMAGE_DIMENSIONS", "Smaller looks better.")), FindingFacts.NONE);
+
+        assertThat(wrongFormat.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(wrongFormat.rejectingChecks()).extracting(CheckResult::rule).containsExactly("IMAGE_FORMAT");
+        assertThat(wrongSize.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(wrongSize.rejectingChecks()).extracting(CheckResult::rule).containsExactly("IMAGE_DIMENSIONS");
+        // The anomaly is still kept on the report for the Client to read.
+        assertThat(wrongSize.anomalies()).hasSize(1);
+        assertThat(ImageGenerationTemplate.ANOMALY_ELIGIBLE).containsExactly("IMAGE_BACKGROUND_COLOUR");
+    }
+
+    @Test
+    void aFractionalSizeOrToleranceIsRefusedAtSubmitAndNeverThrowsInTheGate() {
+        Map<String, ParameterValue> params = new HashMap<>(contract(null, null, "#ffffff").params());
+        params.put(ImageGenerationTemplate.WIDTH, new ParameterValue.Number(new BigDecimal("100.5")));
+        params.put(ImageGenerationTemplate.COLOUR_TOLERANCE, new ParameterValue.Number(new BigDecimal("4.5")));
+        Contract fractional = new Contract(ImageGenerationTemplate.IMAGE_GENERATION_V1, params);
+
+        assertThatThrownBy(() -> engine.requireCheckable(fractional))
+                .isInstanceOf(DomainException.class).hasMessageContaining("whole number");
+        ValidationReportModel report = judge(fractional, "image/png", image(100, 64, WHITE));
+        assertThat(report.rejectingChecks()).extracting(CheckResult::rule).containsExactly("IMAGE_DIMENSIONS");
+        // 64.0 is a whole number, written differently.
+        Map<String, ParameterValue> whole = new HashMap<>(contract(null, null, null).params());
+        whole.put(ImageGenerationTemplate.WIDTH, new ParameterValue.Number(new BigDecimal("64.0")));
+        engine.requireCheckable(new Contract(ImageGenerationTemplate.IMAGE_GENERATION_V1, whole));
+    }
+
+    @Test
+    void anImageTooLargeToDecodeIsStillJudgedOnItsSizeAndLeavesTheBackgroundToReview() {
+        ValidationReportModel report = judge(contract(512, 512, "#ffffff"), "image/png", DecodedImage.headerOnly(9000, 9000));
+
+        assertThat(report.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(rules(report)).contains("IMAGE_DIMENSIONS:REJECT", "IMAGE_BACKGROUND_COLOUR:REVIEW");
+    }
+
     private ValidationReportModel judge(Contract contract, String mediaType, DecodedImage image) {
         return judge(contract, mediaType, image, List.of(), FindingFacts.NONE);
     }

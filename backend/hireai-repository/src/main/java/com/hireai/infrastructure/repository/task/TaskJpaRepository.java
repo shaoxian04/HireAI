@@ -68,6 +68,13 @@ public interface TaskJpaRepository extends JpaRepository<TaskDO, UUID> {
     List<UUID> findEarlierIdsWithSameBrief(@Param("taskId") UUID taskId, @Param("clientId") UUID clientId,
                                            @Param("title") String title, @Param("description") String description);
 
+    @Modifying
+    @Query(value = "UPDATE tasks SET review_reason = :reason WHERE id = :id", nativeQuery = true)
+    void stampReviewReason(@Param("id") UUID id, @Param("reason") String reason);
+
+    @Query(value = "SELECT review_reason FROM tasks WHERE id = :id AND review_reason IS NOT NULL", nativeQuery = true)
+    Optional<String> findReviewReason(@Param("id") UUID id);
+
     @Query(value = "SELECT id FROM tasks WHERE status = 'AWAITING_AGENT'", nativeQuery = true)
     List<UUID> findIdsAwaitingAgent();
 

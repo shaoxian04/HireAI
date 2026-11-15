@@ -105,6 +105,16 @@ public class TaskRepositoryImpl implements TaskRepository {
     }
 
     @Override
+    public void stampReviewReason(UUID taskId, String reason) {
+        taskJpa.stampReviewReason(taskId, reason);
+    }
+
+    @Override
+    public Optional<String> findReviewReason(UUID taskId) {
+        return taskJpa.findReviewReason(taskId);
+    }
+
+    @Override
     public List<UUID> findEarlierTaskIdsWithSameBrief(UUID taskId, UUID clientId, String title, String description) {
         return taskJpa.findEarlierIdsWithSameBrief(taskId, clientId, title, description);
     }

@@ -105,16 +105,21 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
             // here means a Template shipped without its checks.
             throw new IllegalStateException("No checks implemented for Template " + template);
         }
-        return ValidationReportModel.of(result.taskId(), attemptNo, applyAnomalies(checks, evidence.anomalies()),
-                findings, evidence.anomalies());
+        Set<String> eligible = template.equals(ImageGenerationTemplate.IMAGE_GENERATION_V1)
+                ? ImageGenerationTemplate.ANOMALY_ELIGIBLE : Set.of();
+        return ValidationReportModel.of(result.taskId(), attemptNo,
+                applyAnomalies(checks, evidence.anomalies(), eligible), findings, evidence.anomalies());
     }
 
     /**
      * D7: an anomaly the Agent reported sends the result to review instead of a deterministic
-     * rejection. One naming a check that rejected turns that check into review; any other adds a
-     * review entry of its own, so every reported anomaly reaches the Client.
+     * rejection, but only for the Template's anomaly-eligible (content) checks: one naming such a
+     * check that rejected turns it into review. An anomaly naming another check of the result
+     * changes nothing (a wrong format, link, fetch or size is always reworked); one naming no check
+     * of the result adds a review entry of its own, so it reaches the Client.
      */
-    private static List<CheckResult> applyAnomalies(List<CheckResult> checks, List<SelfReportedAnomaly> anomalies) {
+    private static List<CheckResult> applyAnomalies(List<CheckResult> checks, List<SelfReportedAnomaly> anomalies,
+                                                    Set<String> anomalyEligible) {
         if (anomalies.isEmpty()) {
             return checks;
         }
@@ -123,10 +128,14 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
             boolean explained = false;
             for (int i = 0; i < out.size(); i++) {
                 CheckResult c = out.get(i);
-                if (c.rejects() && c.rule().equals(anomaly.check())) {
-                    out.set(i, CheckResult.review(c.rule(), c.detail() + ". The Agent reported: "
-                            + anomaly.description()));
+                if (c.rule().equals(anomaly.check())) {
                     explained = true;
+                    if (c.rejects() && anomalyEligible.contains(c.rule())) {
+                        out.set(i, CheckResult.review(c.rule(), c.detail() + ". The Agent reported: "
+                                + anomaly.description()));
+                    }
+                    // Any other named check is left as it is: an ineligible rejection stays a
+                    // rejection (reworked), and the anomaly is still kept on the report.
                 }
             }
             if (!explained) {
@@ -171,7 +180,12 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
     @Override
     public long deliveryByteLimit(Contract contract, long platformLimit) {
         BigDecimal max = number(contract, GenericTemplates.MAX_BYTES);
-        return max == null ? platformLimit : Math.min(max.longValueExact(), platformLimit);
+        if (max == null) {
+            return platformLimit;
+        }
+        // Never longValueExact: a fractional limit (refused at submit) must not throw in the gate.
+        return max.compareTo(BigDecimal.valueOf(platformLimit)) >= 0 ? platformLimit
+                : max.setScale(0, java.math.RoundingMode.FLOOR).longValue();
     }
 
     private List<CheckResult> checkDelivery(Contract contract, DeliveryOutcome delivery) {
@@ -181,7 +195,7 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
             case DeliveryOutcome.Unavailable u ->
                     out.add(new CheckResult(FILE_FETCHED, false, "could not fetch the file: " + u.reason()));
             case DeliveryOutcome.TooLarge t -> {
-                if (maxBytes != null && maxBytes.longValueExact() <= t.limitBytes()) {
+                if (maxBytes != null && maxBytes.compareTo(BigDecimal.valueOf(t.limitBytes())) <= 0) {
                     out.add(new CheckResult(FILE_MAX_BYTES, false,
                             "larger than " + maxBytes.toPlainString() + " bytes, the most allowed"));
                 } else {
@@ -218,6 +232,14 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
         String schema = text(contract, GenericTemplates.SCHEMA);
         if (schema != null) {
             requireUsableSchema(schema);
+        }
+        for (var param : contract.params().entrySet()) {
+            if ((GenericTemplates.WHOLE_NUMBER_PARAMETERS.contains(param.getKey())
+                    || ImageGenerationTemplate.WHOLE_NUMBER_PARAMETERS.contains(param.getKey()))
+                    && param.getValue() instanceof ParameterValue.Number n
+                    && n.value().stripTrailingZeros().scale() > 0) {
+                throw invalid(param.getKey() + " must be a whole number; got " + n.value().toPlainString());
+            }
         }
         String colour = text(contract, ImageGenerationTemplate.BACKGROUND_COLOUR);
         if (contract.template().equals(ImageGenerationTemplate.IMAGE_GENERATION_V1) && colour != null

@@ -2,6 +2,7 @@ package com.hireai.domain.biz.acceptance.template.model;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 
 /**
  * {@code image_generation@1}, the first non-generic Template (spec S5). An image delivered by HTTPS
@@ -32,6 +33,19 @@ public final class ImageGenerationTemplate {
     public static final String IMAGE_BACKGROUND_COLOUR = "IMAGE_BACKGROUND_COLOUR";
     /** A Finding: the Client already submitted this very brief (needs other Tasks, so never moves money). */
     public static final String DUPLICATE_BRIEF = "DUPLICATE_BRIEF";
+
+    /**
+     * The checks a self-reported anomaly may send to review instead of rejecting (D7), as the seeded
+     * definition's {@code anomalyEligible} lists them: content checks only. The link, fetch, format
+     * and size checks are never softened, so a wrong file always goes back for rework.
+     */
+    public static final Set<String> ANOMALY_ELIGIBLE = Set.of(IMAGE_BACKGROUND_COLOUR);
+
+    /** Parameters holding a whole number of pixels or colour levels; anything else is refused at submit. */
+    public static final Set<String> WHOLE_NUMBER_PARAMETERS = Set.of(WIDTH, HEIGHT, COLOUR_TOLERANCE);
+
+    /** The largest width or height the Template allows, and so the largest image the platform decodes. */
+    public static final int MAX_DIMENSION = 4096;
 
     /** The Template's Check Library entries, as its seeded definition lists them. */
     public static final List<String> CHECKS = List.of("FORMAT_FILE_HTTPS_URL", "FILE_FETCHED", IMAGE_FORMAT,

@@ -15,8 +15,16 @@ ALTER TABLE validation_reports ADD CONSTRAINT validation_reports_verdict_check
 ALTER TABLE validation_reports ADD COLUMN findings  JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE validation_reports ADD COLUMN anomalies JSONB NOT NULL DEFAULT '[]'::jsonb;
 
--- 3. image_generation@1. Its checks are Check Library entries (CheckLibrary, ImageGenerationTemplate
---    lists them in this order); DUPLICATE_BRIEF is a Finding. Every pixel check runs only when its
+-- 3. Why a result that passed the gate awaits review because of the engine rather than because
+--    every check passed: ANOMALY (the Agent self-reported one) or UNDECIDED (a check could not
+--    decide). NULL for a result every check passed. Operational, like review_deadline; the review
+--    window still auto-accepts on silence for both (an owner decision on ANOMALY is pending).
+ALTER TABLE tasks ADD COLUMN review_reason TEXT CHECK (review_reason IN ('ANOMALY', 'UNDECIDED'));
+
+-- 4. image_generation@1. Its checks are Check Library entries (CheckLibrary, ImageGenerationTemplate
+--    lists them in this order); DUPLICATE_BRIEF is a Finding. anomalyEligible names the checks a
+--    self-reported anomaly may send to review instead of rejecting: content checks only, never the
+--    link, fetch, format or size checks (ImageGenerationTemplate.ANOMALY_ELIGIBLE). Every pixel check runs only when its
 --    parameters are set, except IMAGE_FORMAT, which always holds the file to an image type.
 --    width/height use "max": an Offer names the largest it can draw. colour_tolerance uses "min":
 --    an Offer names the tightest tolerance it can be held to (unset = 32 per channel).
@@ -27,6 +35,7 @@ INSERT INTO contract_templates (template_key, version, definition) VALUES
   "outputShape": "FILE",
   "checks": ["FORMAT_FILE_HTTPS_URL", "FILE_FETCHED", "IMAGE_FORMAT", "IMAGE_DIMENSIONS",
              "IMAGE_BACKGROUND_COLOUR", "DUPLICATE_BRIEF"],
+  "anomalyEligible": ["IMAGE_BACKGROUND_COLOUR"],
   "parameters": [
     {"name": "formats", "label": "Image formats",
      "description": "The image types the Client accepts. Unset accepts PNG, JPEG and WebP. The size and colour of a WebP are judged by the Client, not automatically.",

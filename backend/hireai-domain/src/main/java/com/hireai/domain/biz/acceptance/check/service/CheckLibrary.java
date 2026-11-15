@@ -125,8 +125,10 @@ public final class CheckLibrary {
             return Optional.of(CheckResult.review(IMAGE_DIMENSIONS, "the platform cannot read the pixels of a "
                     + s.snapshot().mediaType() + " file, so you judge the size (" + wanted + " asked)"));
         }
-        boolean ok = (width == null || width.intValueExact() == image.width())
-                && (height == null || height.intValueExact() == image.height());
+        // compareTo, not intValueExact: a value that is no whole number is refused at submit, and
+        // even one that slipped past would simply not match, never throw inside the gate.
+        boolean ok = (width == null || width.compareTo(BigDecimal.valueOf(image.width())) == 0)
+                && (height == null || height.compareTo(BigDecimal.valueOf(image.height())) == 0);
         return Optional.of(new CheckResult(IMAGE_DIMENSIONS, ok,
                 image.width() + " x " + image.height() + " px; " + wanted + " asked"));
     }
@@ -137,12 +139,13 @@ public final class CheckLibrary {
             return Optional.empty();
         }
         BigDecimal toleranceParam = number(s.contract(), COLOUR_TOLERANCE);
-        int tolerance = (toleranceParam == null ? DEFAULT_COLOUR_TOLERANCE : toleranceParam).intValueExact();
-        String asked = wanted.toLowerCase(Locale.ROOT) + " (within " + tolerance + " per channel)";
+        BigDecimal tolerance = toleranceParam == null ? DEFAULT_COLOUR_TOLERANCE : toleranceParam;
+        String asked = wanted.toLowerCase(Locale.ROOT) + " (within " + tolerance.stripTrailingZeros().toPlainString()
+                + " per channel)";
         DecodedImage image = s.image();
-        if (image == null) {
-            return Optional.of(CheckResult.review(IMAGE_BACKGROUND_COLOUR, "the platform cannot read the pixels of a "
-                    + s.snapshot().mediaType() + " file, so you judge the background; " + asked + " asked"));
+        if (image == null || !image.hasPixels()) {
+            return Optional.of(CheckResult.review(IMAGE_BACKGROUND_COLOUR, "the platform cannot read the pixels of "
+                    + "this " + s.snapshot().mediaType() + " file, so you judge the background; " + asked + " asked"));
         }
         long r = 0, g = 0, b = 0;
         int opaque = 0;
@@ -167,7 +170,7 @@ public final class CheckLibrary {
             distance = Math.max(distance, Math.abs(got[i] - want[i]));
         }
         String measured = String.format(Locale.ROOT, "#%02x%02x%02x", got[0], got[1], got[2]);
-        return Optional.of(new CheckResult(IMAGE_BACKGROUND_COLOUR, distance <= tolerance,
+        return Optional.of(new CheckResult(IMAGE_BACKGROUND_COLOUR, BigDecimal.valueOf(distance).compareTo(tolerance) <= 0,
                 "the background (the image's edge) is " + measured + "; " + asked + " asked"));
     }
 
