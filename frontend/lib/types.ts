@@ -150,6 +150,13 @@ export interface TaskDTO {
   category?: string;
   /** The Agent the task was booked with (`GET /tasks/{id}` only; absent when none was). */
   agentId?: string | null;
+  /**
+   * When the client's review window closes (`GET /tasks/{id}` only): set once the result awaits
+   * review, kept after it resolves. Past it, the platform accepts on the client's behalf (#94).
+   */
+  reviewDeadline?: string | null;
+  /** True when the window closed unreviewed and the result was accepted automatically. */
+  autoAccepted?: boolean | null;
 }
 
 /** Mirrors the backend FailureReason enum (set once when a task ends without a result). */
