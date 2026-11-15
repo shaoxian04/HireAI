@@ -47,8 +47,11 @@ public class ValidationAppServiceImpl implements ValidationAppService {
         // The first result is attempt 1; an Agent's revision after a rejection (#95) is the next one.
         int attempt = reportRepository.findLatestByTaskId(task.id())
                 .map(previous -> previous.attemptNo() + 1).orElse(1);
-        ValidationReportModel report =
-                validationDomainService.validate(task.outputSpec(), task.result(), attempt);
+        // The frozen Contract is the binding contract (Invariant #4). A Task submitted before
+        // Contracts existed has none and finishes under its frozen output_spec.
+        ValidationReportModel report = task.contract() != null
+                ? validationDomainService.validate(task.contract(), task.result(), attempt)
+                : validationDomainService.validate(task.outputSpec(), task.result(), attempt);
         reportRepository.save(report);
 
         if (report.isPass()) {

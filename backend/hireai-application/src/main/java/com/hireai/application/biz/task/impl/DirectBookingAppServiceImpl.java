@@ -7,6 +7,7 @@ import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
+import com.hireai.domain.biz.adjudication.service.ValidationDomainService;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.ClientDeadline;
@@ -40,6 +41,8 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
     private final Clock clock;
     /** Added to the Agent's max execution time, as routing stamps it (ExecutionConfig). */
     private final ExecutionGrace executionGrace;
+    /** Refuses a booking whose adopted schema could not be checked (spec D8). */
+    private final ValidationDomainService validationDomainService;
 
     @Override
     public UUID book(DirectBookingInfo info) {
@@ -61,6 +64,17 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
             Instant now = clock.instant();
             ClientDeadline.after(now, info.deadlineSeconds())
                     .requireAdmits(agent.currentVersion().maxExecutionSeconds(), now, executionGrace);
+        }
+
+        // An Agent registered before D8 may still carry a schema that is not a valid JSON Schema.
+        // The booking would freeze it as the Contract; say whose schema it is, rather than the
+        // request-field message the submit check gives.
+        try {
+            validationDomainService.requireCheckable(agent.currentVersion().outputSpec().toContract());
+        } catch (DomainException e) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "This Agent's output schema is not a "
+                    + "valid JSON Schema, so its results could not be checked and it can't be booked. "
+                    + "Its Builder needs to fix the schema.");
         }
 
         // Adopt the agent's declared output_spec as the task's binding contract (Invariant #4).

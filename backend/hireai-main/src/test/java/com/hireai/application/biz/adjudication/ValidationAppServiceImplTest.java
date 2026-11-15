@@ -15,6 +15,8 @@ import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.shared.model.Money;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
 
 import java.util.List;
 import java.util.Optional;
@@ -70,7 +72,7 @@ class ValidationAppServiceImplTest {
     void passMovesToPendingReviewNoRefund() {
         TaskModel task = resultReceivedTask();
         when(tasks.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(domain.validate(any(), any(), eq(1))).thenReturn(passingReport(task.id()));
+        when(domain.validate(ArgumentMatchers.<Contract>any(), any(), eq(1))).thenReturn(passingReport(task.id()));
         when(apiKeyTaskRepository.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
 
         TaskModel gated = svc.validateAndGate(task);
@@ -87,7 +89,7 @@ class ValidationAppServiceImplTest {
     void failMovesToSpecViolationAndRefunds() {
         TaskModel task = resultReceivedTask();
         when(tasks.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(domain.validate(any(), any(), eq(1)))
+        when(domain.validate(ArgumentMatchers.<Contract>any(), any(), eq(1)))
                 .thenReturn(ValidationReportModel.of(task.id(), 1,
                         List.of(new CheckResult("FORMAT_TEXT_NON_EMPTY", false, "empty payload"))));
         when(apiKeyTaskRepository.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
@@ -114,7 +116,7 @@ class ValidationAppServiceImplTest {
         TaskModel resolved = mock(TaskModel.class);
         when(task.passValidation()).thenReturn(pending);
         when(pending.accept()).thenReturn(resolved);
-        when(domain.validate(any(), any(), anyInt())).thenReturn(passingReport(taskId));
+        when(domain.validate(ArgumentMatchers.<OutputSpec>any(), any(), anyInt())).thenReturn(passingReport(taskId));
         when(apiKeyTaskRepository.findApiKeyIdByTask(taskId)).thenReturn(Optional.of(UUID.randomUUID()));
         when(agentRepository.findOwnerByVersionId(versionId)).thenReturn(Optional.of(builderId));
 
@@ -137,7 +139,7 @@ class ValidationAppServiceImplTest {
         when(task.agentVersionId()).thenReturn(versionId);
         TaskModel pending = mock(TaskModel.class);
         when(task.passValidation()).thenReturn(pending);
-        when(domain.validate(any(), any(), anyInt())).thenReturn(passingReport(taskId));
+        when(domain.validate(ArgumentMatchers.<OutputSpec>any(), any(), anyInt())).thenReturn(passingReport(taskId));
         when(apiKeyTaskRepository.findApiKeyIdByTask(taskId)).thenReturn(Optional.of(UUID.randomUUID()));
         when(agentRepository.findOwnerByVersionId(versionId)).thenReturn(Optional.empty()); // no owner
 
@@ -153,7 +155,7 @@ class ValidationAppServiceImplTest {
     void failEnqueuesFailedSpecViolation() {
         TaskModel task = resultReceivedTask();
         when(tasks.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(domain.validate(any(), any(), eq(1)))
+        when(domain.validate(ArgumentMatchers.<Contract>any(), any(), eq(1)))
                 .thenReturn(ValidationReportModel.of(task.id(), 1,
                         List.of(new CheckResult("FORMAT_TEXT_NON_EMPTY", false, "empty payload"))));
         when(apiKeyTaskRepository.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
@@ -161,5 +163,36 @@ class ValidationAppServiceImplTest {
         svc.validateAndGate(task);
 
         verify(webhookOutbox).enqueueFailed(any(), eq("SPEC_VIOLATION"));
+    }
+
+    @Test
+    void aTaskIsJudgedAgainstTheContractItFroze() {
+        TaskModel task = resultReceivedTask();
+        when(tasks.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(domain.validate(ArgumentMatchers.<Contract>any(), any(), eq(1))).thenReturn(passingReport(task.id()));
+        when(apiKeyTaskRepository.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
+
+        svc.validateAndGate(task);
+
+        verify(domain).validate(eq(task.contract()), eq(task.result()), eq(1));
+        verify(domain, never()).validate(ArgumentMatchers.<OutputSpec>any(), any(), anyInt());
+    }
+
+    @Test
+    void aTaskFromBeforeContractsIsJudgedAgainstItsOutputSpec() {
+        TaskModel legacy = mock(TaskModel.class);
+        OutputSpec spec = new OutputSpec(OutputFormat.TEXT, null, null);
+        TaskResultModel result = TaskResultModel.record(UUID.randomUUID(), "COMPLETED", "\"hi\"", null);
+        when(legacy.contract()).thenReturn(null);
+        when(legacy.outputSpec()).thenReturn(spec);
+        when(legacy.result()).thenReturn(result);
+        when(legacy.passValidation()).thenReturn(mock(TaskModel.class));
+        when(domain.validate(eq(spec), eq(result), eq(1))).thenReturn(passingReport(UUID.randomUUID()));
+        when(apiKeyTaskRepository.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
+
+        svc.validateAndGate(legacy);
+
+        verify(domain).validate(eq(spec), eq(result), eq(1));
+        verify(domain, never()).validate(ArgumentMatchers.<Contract>any(), any(), anyInt());
     }
 }
