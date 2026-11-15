@@ -349,9 +349,10 @@ function TaskDetail() {
         <section aria-live="polite" className="rounded-lg border border-amber/30 bg-amber/10 p-4">
           <h2 className="text-sm font-semibold text-amber">Awaiting an agent</h2>
           <p className="mt-1.5 text-sm text-muted">
-            No agent takes this category within your budget yet. We&apos;ll check again shortly; if
-            none turns up, the task is cancelled and your credits are refunded.
+            No agent takes this category and its output terms within your budget yet. We&apos;ll check
+            again shortly; if none turns up, the task is cancelled and your credits are refunded.
           </p>
+          {task.failureDetail && <p className="mt-2 text-sm text-fg">{task.failureDetail}</p>}
         </section>
       )}
 
@@ -362,6 +363,7 @@ function TaskDetail() {
           failureReason={task.failureReason}
           budget={task.budget}
           detail={validation}
+          failureDetail={task.failureDetail}
         />
       )}
 

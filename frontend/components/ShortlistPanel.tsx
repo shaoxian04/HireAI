@@ -1,6 +1,6 @@
 "use client";
 
-import type { AgentOptionDTO } from "@/lib/types";
+import type { AgentOptionDTO, NoMatchDTO } from "@/lib/types";
 import { Button, Modal } from "@/components/ui";
 import { DeliveryRecord } from "@/components/DeliveryRecord";
 import { ContractDeclines } from "@/components/ContractDeclines";
@@ -12,6 +12,12 @@ interface Props {
   budget: number;
   /** Every in-budget agent's profile was below the relevance floor for this task text. */
   noCloseMatch?: boolean;
+  /** Why the shortlist is empty: the blocking terms (or the relevance floor) with agent counts. */
+  noMatch?: NoMatchDTO | null;
+  /** The plain label of a Contract parameter (falls back to its name). */
+  labelFor?: (parameter: string) => string;
+  /** The Client chose to leave `parameter` unset and search again. Never called on its own. */
+  onRelax?: (parameter: string) => void;
   onSelect: (option: AgentOptionDTO) => void;
   onClose: () => void;
 }
@@ -22,10 +28,16 @@ export function ShortlistPanel({
   nearMisses,
   budget,
   noCloseMatch = false,
+  noMatch = null,
+  labelFor = (p) => p,
+  onRelax,
   onSelect,
   onClose,
 }: Props) {
-  const empty = shortlist.length === 0 && nearMisses.length === 0 && !noCloseMatch;
+  // Terms (not just the task text) excluded agents: explain which, and how relaxing them would help.
+  const termsBlocked =
+    shortlist.length === 0 && !!noMatch?.exclusions.some((e) => e.blocker !== "RELEVANCE_FLOOR");
+  const empty = shortlist.length === 0 && nearMisses.length === 0 && !noCloseMatch && !termsBlocked;
   return (
     <Modal open={open} onClose={onClose} ariaLabel="Pick your agent">
       <div className="flex items-center justify-between gap-4 border-b border-line px-6 py-4">
@@ -51,7 +63,15 @@ export function ShortlistPanel({
         </p>
       ) : (
         <>
-          {noCloseMatch && shortlist.length === 0 && (
+          {termsBlocked && noMatch && (
+            <NoMatchExplanation
+              noMatch={noMatch}
+              labelFor={labelFor}
+              onRelax={onRelax}
+              hasNearMisses={nearMisses.length > 0}
+            />
+          )}
+          {!termsBlocked && noCloseMatch && shortlist.length === 0 && (
             <div role="status" className="px-6 py-6">
               <p className="text-sm font-semibold">No agent matches this task closely</p>
               <p className="mt-1 text-sm text-dim">
@@ -207,6 +227,70 @@ function NearMissRow({
       >
         Select · pays {option.price} cr
       </Button>
+    </div>
+  );
+}
+
+function agents(n: number) {
+  return `${n} ${n === 1 ? "agent" : "agents"}`;
+}
+
+/**
+ * The no-match explanation (spec D35): what ruled the in-budget agents out, and the relax options the
+ * Client may take. The platform never relaxes the terms itself; a suggestion is a button the Client presses.
+ */
+function NoMatchExplanation({
+  noMatch,
+  labelFor,
+  onRelax,
+  hasNearMisses,
+}: {
+  noMatch: NoMatchDTO;
+  labelFor: (parameter: string) => string;
+  onRelax?: (parameter: string) => void;
+  hasNearMisses: boolean;
+}) {
+  return (
+    <div role="status" className="space-y-4 px-6 py-6">
+      <div>
+        <p className="text-sm font-semibold">No agent accepts these terms</p>
+        <p className="mt-1 text-sm text-dim">
+          Agents in this category and budget were ruled out by your output terms.
+          {hasNearMisses && " Agents above your budget that accept them are listed below."}
+        </p>
+      </div>
+      <ul className="divide-y divide-line rounded-lg border border-line bg-surface-2">
+        {noMatch.exclusions.map((e, i) => (
+          <li key={i} className="flex items-baseline justify-between gap-4 px-4 py-2.5 text-sm">
+            <span className="min-w-0 text-fg">
+              {e.blocker === "PARAMETER" && e.parameter
+                ? <>Their offers don&apos;t accept your <span className="font-medium">{labelFor(e.parameter)}</span></>
+                : e.blocker === "TEMPLATE"
+                  ? "They don’t deliver this kind of output"
+                  : "Their profiles don’t describe work like yours"}
+            </span>
+            <span className="shrink-0 font-mono text-xs text-muted tabular">{agents(e.agents)}</span>
+          </li>
+        ))}
+      </ul>
+      {noMatch.suggestions.length > 0 && onRelax && (
+        <div className="space-y-2">
+          <p className="eyebrow">Relax a term</p>
+          <div className="flex flex-wrap gap-2">
+            {noMatch.suggestions.map((sg) => (
+              <Button
+                key={sg.parameter}
+                variant="secondary"
+                className="!px-3 !py-1.5"
+                onClick={() => onRelax(sg.parameter)}
+              >
+                Drop {labelFor(sg.parameter)} → {agents(sg.agents)}
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs text-dim">We never change your terms for you. Dropping one searches again without it.</p>
+        </div>
+      )}
     </div>
   );
 }

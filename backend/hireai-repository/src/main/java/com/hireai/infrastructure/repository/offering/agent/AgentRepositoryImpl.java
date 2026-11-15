@@ -179,7 +179,8 @@ public class AgentRepositoryImpl implements AgentRepository {
                 row.getMaxConcurrent() == null ? 5 : row.getMaxConcurrent(),
                 row.getInFlight() == null ? 0L : row.getInFlight(),
                 row.getSampleCount() == null ? 0L : row.getSampleCount(),
-                row.getSimilarity());
+                row.getSimilarity(),
+                row.getOffer() == null ? null : acceptanceJsonMapper.offerFromJson(row.getOffer()));
     }
 
     private AgentModel toModel(AgentDO entity) {

@@ -1,5 +1,7 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
+
 import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.SubmitContext;
 import com.hireai.application.biz.task.SubmitFingerprint;
@@ -91,7 +93,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         String category = categoryRepository.load().requireKnown(submitted.category());
         TaskSubmitInfo info = new TaskSubmitInfo(submitted.clientId(), submitted.title(),
                 submitted.description(), submitted.budget(), submitted.outputSpec(), category,
-                submitted.deadlineSeconds(), submitted.items());
+                submitted.deadlineSeconds(), submitted.contract(), submitted.items());
         try {
             return self().submitRoutedTx(ctx, info);
         } catch (IdempotencyRaceException e) {
@@ -106,7 +108,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
                 : new DirectBookingInfo(booked.clientId(), booked.title(), booked.description(),
                         booked.budget(), booked.agentId(),
                         categoryRepository.load().requireKnown(booked.category()), booked.deadlineSeconds(),
-                        booked.items());
+                        booked.contract(), booked.items());
         try {
             return self().submitDirectTx(ctx, info);
         } catch (IdempotencyRaceException e) {
@@ -195,7 +197,15 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         String kind = info.category() == null ? "direct" : "direct|" + info.category();
         return SubmitFingerprint.of(info.title(), info.description(),
                 info.agentId().toString(), info.budget().value(), kind + deadlinePart(info.deadlineSeconds())
-                        + itemsPart(info.items()));
+                        + contractPart(info.contract()) + itemsPart(info.items()));
+    }
+
+    /**
+     * A Contract joins the fingerprint (#91; params are held sorted, so equal Contracts render alike);
+     * without one it stays as before.
+     */
+    private static String contractPart(Contract contract) {
+        return contract == null ? "" : "|contract=" + contract.template() + contract.params();
     }
 
     /** A deadline joins the fingerprint (as relative seconds, so a retry matches); without one it stays as before. */

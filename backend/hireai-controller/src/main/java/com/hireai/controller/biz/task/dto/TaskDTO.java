@@ -49,6 +49,12 @@ public record TaskDTO(
          */
         RejectionDTO rejection,
         /**
+         * Why no Agent matched the task (#91): the blocking Contract parameter, Template version or the
+         * relevance floor, with Agent counts. Present while it waits AWAITING_AGENT and after it ends
+         * NO_ELIGIBLE_AGENT; absent otherwise and on list/command responses.
+         */
+        String failureDetail,
+        /**
          * A multi-Item Task (spec S3): how many Items, the price of one ({@code budget} is the
          * escrow, price × count), and each Item with its outcome. All three are absent on a
          * single-deliverable Task; {@code items} is also absent on list responses.

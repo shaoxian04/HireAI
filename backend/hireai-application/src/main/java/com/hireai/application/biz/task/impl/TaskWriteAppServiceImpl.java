@@ -114,9 +114,11 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markAwaitingAgent(UUID taskId) {
+    public void markAwaitingAgent(UUID taskId, String noMatchDetail) {
         TaskModel task = load(taskId);
         taskRepository.save(task.markAwaitingAgent());
+        taskRepository.stampFailureDetail(taskId, noMatchDetail == null || noMatchDetail.length() <= 1000
+                ? noMatchDetail : noMatchDetail.substring(0, 999) + "…"); // the V42 column's limit
         log.info("Task {} marked AWAITING_AGENT (no eligible agent)", taskId);
     }
 

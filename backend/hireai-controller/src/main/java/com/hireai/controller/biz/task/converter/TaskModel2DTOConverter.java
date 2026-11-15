@@ -35,18 +35,21 @@ public final class TaskModel2DTOConverter {
 
     /** {@code agentId} is the Agent the task was booked with, resolved by the caller (nullable). */
     public static TaskDTO toDTO(TaskModel task, UUID agentId) {
-        return toDTO(task, agentId, null);
+        return toDTO(task, agentId, null, null, null);
     }
 
     /** Also carries the task's review window (#94), resolved by the caller (nullable). */
     public static TaskDTO toDTO(TaskModel task, UUID agentId, ReviewWindowState reviewWindow) {
-        return toDTO(task, agentId, reviewWindow, null);
+        return toDTO(task, agentId, reviewWindow, null, null);
     }
 
-    /** Also carries the task's latest rejection round (#95), resolved by the caller (nullable). */
+    /**
+     * Also carries the task's latest rejection round (#95) and its failure detail (#91), both resolved
+     * by the caller (nullable).
+     */
     public static TaskDTO toDTO(TaskModel task, UUID agentId, ReviewWindowState reviewWindow,
-                                RejectionModel rejection) {
-        return toDTO(task, agentId, reviewWindow, rejection, null, false);
+                                RejectionModel rejection, String failureDetail) {
+        return toDTO(task, agentId, reviewWindow, rejection, failureDetail, null, false);
     }
 
     /**
@@ -55,7 +58,8 @@ public final class TaskModel2DTOConverter {
      * from the Items, since each Item settled on its own.
      */
     public static TaskDTO toDTO(TaskModel task, UUID agentId, ReviewWindowState reviewWindow,
-                                RejectionModel rejection, TaskItems items, boolean listItems) {
+                                RejectionModel rejection, String failureDetail, TaskItems items,
+                                boolean listItems) {
         OutputSpec spec = task.outputSpec();
         BigDecimal payout = null;
         BigDecimal commission = null;
@@ -110,6 +114,7 @@ public final class TaskModel2DTOConverter {
                 reviewWindow == null ? null : reviewWindow.deadline(),
                 reviewWindow != null && reviewWindow.autoAccepted() ? Boolean.TRUE : null,
                 RejectionDTO.from(rejection),
+                failureDetail,
                 multiItem ? items.count() : null,
                 multiItem ? items.all().get(0).price().value() : null,
                 multiItem && listItems ? items.all().stream().map(TaskModel2DTOConverter::toItemDTO).toList() : null);

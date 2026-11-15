@@ -1,5 +1,10 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.application.biz.acceptance.TemplateReadAppService;
+import com.hireai.domain.biz.acceptance.coverage.info.ContractTerms;
+import com.hireai.domain.biz.acceptance.coverage.info.Coverage;
+import com.hireai.domain.biz.acceptance.coverage.service.OfferCoverageDomainService;
+
 import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.utility.result.ResultCode;
@@ -37,6 +42,8 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
     private final AgentRepository agentRepository;
     private final StorefrontRepository agentProfileRepository;
     private final TaskWriteAppService taskWriteAppService;
+    private final TemplateReadAppService templateReadAppService;
+    private final OfferCoverageDomainService offerCoverageDomainService;
     /** The app's Clock bean: a booking's deadline is counted from the booking. */
     private final Clock clock;
     /** Added to the Agent's max execution time, as routing stamps it (ExecutionConfig). */
@@ -77,13 +84,28 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
                     + "Its Builder needs to fix the schema.");
         }
 
+        if (info.contract() != null) {
+            // Booking under the Client's own Contract (#91): it must be valid for its Template and the
+            // Agent's Offer must cover it, or the Agent would be held to terms it never offered.
+            templateReadAppService.requireValid(info.contract());
+            ContractTerms terms = templateReadAppService.termsFor(info.contract());
+            Coverage coverage = offerCoverageDomainService.coverage(terms.template(), terms.contract(),
+                    agent.currentVersion().offer());
+            if (!coverage.covered()) {
+                throw new DomainException(ResultCode.VALIDATION_ERROR, coverage.templateOffered()
+                        ? "This Agent's Offer does not cover the Contract's " + String.join(", ",
+                                coverage.blockingParameters())
+                        : "This Agent does not offer Template " + info.contract().template());
+            }
+        }
+
         // Adopt the agent's declared output_spec as the task's binding contract (Invariant #4).
         // The task category (stats/labels, rebook) is the client's choice when given, which the
         // agent must serve; otherwise the agent's first capability category.
         TaskSubmitInfo submitInfo = new TaskSubmitInfo(
                 info.clientId(), info.title(), info.description(), info.budget(),
                 agent.currentVersion().outputSpec(), agent.currentVersion().taskCategoryFor(info.category()),
-                info.deadlineSeconds(), info.items());
+                info.deadlineSeconds(), info.contract(), info.items());
 
         UUID taskId = taskWriteAppService.submitDirectlyBooked(submitInfo, agent.currentVersionId());
         log.info("Task {} direct-booked to agent {} (version {})",

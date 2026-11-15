@@ -126,6 +126,16 @@ public class TaskRepositoryImpl implements TaskRepository {
     }
 
     @Override
+    public void stampFailureDetail(UUID taskId, String failureDetail) {
+        taskJpa.stampFailureDetail(taskId, failureDetail);
+    }
+
+    @Override
+    public Optional<String> findFailureDetail(UUID taskId) {
+        return taskJpa.findFailureDetail(taskId);
+    }
+
+    @Override
     public void pinAgentVersion(UUID taskId, UUID agentVersionId) {
         taskJpa.pinAgentVersion(taskId, agentVersionId);
     }
