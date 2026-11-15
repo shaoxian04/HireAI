@@ -175,6 +175,12 @@ hireai:
     # after this long, so escrow doesn't hang forever.
     ruling-accept-after: ${RULING_ACCEPT_AFTER:PT2M}
     accept-sweep-interval: ${RULING_ACCEPT_SWEEP_INTERVAL:PT1M}
+    # Loser pays (#96, spec D43): the arbitration cost and the Appeal Fee of a web appeal to an
+    # admin, in credits. The side the effective ruling goes against bears each, capped at 20% of
+    # the Item price (domain policy); the platform covers the excess. 0 turns a fee off.
+    # ruling-accept-after above is also the window in which either side may accept or appeal.
+    cost: ${ARBITRATION_COST:3.00}
+    appeal-fee: ${APPEAL_FEE:5.00}
   storage:
     # Supabase Storage (public-read bucket; uploads happen ONLY server-side with the service key).
     supabase-url: ${SUPABASE_URL:}

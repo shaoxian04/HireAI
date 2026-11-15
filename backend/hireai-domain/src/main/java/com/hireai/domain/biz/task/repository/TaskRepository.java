@@ -46,7 +46,7 @@ public interface TaskRepository {
      */
     /**
      * Operational column write (unmapped on the entity): why a result awaits review although no
-     * check rejected it, {@code ANOMALY} or {@code UNDECIDED} (V45), stamped as it enters PENDING_REVIEW.
+     * check rejected it, {@code ANOMALY} or {@code UNDECIDED}, stamped as it enters PENDING_REVIEW.
      */
     void stampReviewReason(UUID taskId, String reason);
 

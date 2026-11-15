@@ -34,6 +34,7 @@ describe("client disputes list", () => {
             status: "RULED",
             proposedCategory: "FULFILLED",
             updatedAt: "2026-07-03T10:00:00Z",
+            awaitingYou: true,
           },
           {
             disputeId: "d-2",

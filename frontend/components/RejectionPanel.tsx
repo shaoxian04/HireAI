@@ -149,7 +149,8 @@ export function ClientDecisionPanel({ taskId, budget, rejection, now, onDecided 
       >
         An arbitrator reviews the result against the contract, your rejection and the agent&apos;s reason. It may refund
         you in full, split the credits, or uphold payment to the builder. No deposit is taken: your credits simply stay in
-        escrow until the ruling.
+        escrow until the ruling. Whoever the ruling goes against bears the arbitration cost, capped at 20% of the
+        task&apos;s price; either side it goes against may appeal it once to a human administrator.
       </ConfirmDialog>
 
       <h3 id="decision-h" className="eyebrow">Your decision</h3>

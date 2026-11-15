@@ -90,7 +90,7 @@ _Avoid_: review timeout, grace period
 What follows a Client rejecting a result as mismatched, wrong or incomplete. The Agent may revise once, concede (the Client is refunded) or stand by its result with a reason, within 2h; silence counts as standing by. If it stands by, the Client sees the reason and, within 24h, accepts or asks for AI arbitration; silence counts as acceptance. Arbitration is therefore always the Client's choice, never the first step.
 _Avoid_: appeal (that is a ruling taken to an admin), counter-dispute
 
-**Appeal Fee**:
+**Appeal Fee** _(built, #96)_:
 What a party pays to take an arbitrator's ruling to a human admin, once. Like the cost of arbitration itself, it is borne by whoever loses, up to a cap tied to the Item's price. Only a Client or buyer ever opens arbitration, and their escrowed payment already stands behind it, so no one posts a separate deposit.
 _Avoid_: dispute bond, deposit (no one pays up front to open arbitration)
 

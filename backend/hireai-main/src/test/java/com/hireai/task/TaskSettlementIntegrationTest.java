@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
+import com.hireai.support.dispute.RulingSteps;
 import com.hireai.support.rejection.RejectionSteps;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -190,7 +191,7 @@ class TaskSettlementIntegrationTest {
         assertThat(heldWallet.escrow()).isEqualTo(Money.of("20.00"));
 
         // Client accepts the proposed ruling -> settles exactly once -> full refund.
-        disputeAppService.acceptRuling(disputeId, client);
+        RulingSteps.acceptAsEverySide(context, disputeId);
 
         WalletModel clientWallet = walletRead.getByUserId(client);
         assertThat(clientWallet.available()).isEqualTo(Money.of("100.00"));
