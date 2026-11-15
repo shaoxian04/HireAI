@@ -6,7 +6,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http } from "msw";
-import { server, ok } from "../../../../test/msw/handlers";
+import { server, ok, fail } from "../../../../test/msw/handlers";
 import { AuthProvider } from "@/lib/auth";
 import RegisterAgentPage from "@/app/builder/agents/new/page";
 
@@ -183,6 +183,36 @@ describe("agent registration — category list", () => {
     fireEvent.click(screen.getByRole("button", { name: /register agent/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/pick at least one category/i);
     expect(posted).toBe(false);
+  });
+});
+
+describe("agent registration — output schema", () => {
+  it("explains what the schema is for and that blank accepts any JSON", () => {
+    renderPage();
+    expect(screen.getByText(/leave it blank to accept any json/i)).toBeInTheDocument();
+  });
+
+  it("shows the server's refusal of an invalid schema under the Schema field, and clears it on edit", async () => {
+    server.use(
+      http.post("*/api/agents", () =>
+        fail("VALIDATION_ERROR", "outputSpec.schema: is not a valid JSON Schema (it is not JSON: Unrecognized token 'totals'). Give a JSON Schema object, or leave it blank to accept any JSON"),
+      ),
+    );
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: "Bot" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Summarisation" }));
+    fireEvent.change(screen.getByLabelText(/webhook/i), { target: { value: "https://a.example/run" } });
+    const schema = screen.getByLabelText(/^schema$/i);
+    fireEvent.change(schema, { target: { value: "totals please" } });
+    fireEvent.click(screen.getByRole("button", { name: /register agent/i }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/^Schema is not a valid JSON Schema/);
+    expect(alert.id).toBe("outputSpec.schema-note");
+    expect(schema).toHaveAttribute("aria-invalid", "true");
+
+    fireEvent.change(schema, { target: { value: '{"type":"object"}' } });
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   });
 });
 

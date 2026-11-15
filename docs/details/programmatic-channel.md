@@ -67,10 +67,10 @@ A machine client must not be asked for a human "review, then accept or reject". 
 
 This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject are denied to API keys (401), API tasks have no dispute path, and they can't be reviewed, so they never produce a Satisfaction event. Human-submitted tasks are unchanged. Settlement is fully deterministic with no LLM (Inv #3).
 
-**What the gate actually checks** (`ValidationDomainServiceImpl`) is format and JSON Schema only:
-- `TEXT` passes on any non-blank payload.
-- `JSON` must parse, and a blank or non-JSON-Schema `schema` is skipped.
-- `FILE` needs a valid HTTPS URL.
+**What the gate actually checks** (`ValidationDomainServiceImpl`) is the task's frozen [Contract](data-model.md#acceptance): format, optional text length, and JSON Schema only:
+- `text_basic` (TEXT) passes on any non-blank payload, within `min_length`/`max_length` when the Contract sets them (characters of the payload).
+- `custom_json` (JSON) must parse and, when the Contract has a `schema`, match it. A non-blank `schema` that is not a valid JSON Schema 2020-12 object is a **400 at submit** (nothing frozen), so a schema is never silently skipped. Only a task from before Contracts (no `contract`) still skips a prose schema, under its `output_spec`.
+- `file_basic` (FILE) needs a valid HTTPS URL.
 - `acceptanceCriteria` is **never evaluated** here. It is only arbitration evidence, and API tasks don't reach arbitration.
 
 **Accepted limitation:** a fully autonomous client has no recourse for output that is spec-valid but poor; it pays. Its levers are a real JSON Schema (or a stricter format) and agent choice. A programmatic dispute API is out of scope.

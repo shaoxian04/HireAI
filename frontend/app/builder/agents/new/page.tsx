@@ -12,6 +12,7 @@ const AGENT_FIELDS = {
   price: "Price",
   maxExecutionSeconds: "Max execution seconds",
   maxConcurrent: "Max parallel tasks",
+  "outputSpec.schema": "Schema",
 };
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
@@ -214,7 +215,11 @@ function RegisterAgent() {
           </div>
           <div className="docket-tear" />
           <div className="space-y-4 bg-surface-2 p-6">
-            <OutputSpecFields value={outputSpec} onChange={setOutputSpec} />
+            <OutputSpecFields
+              value={outputSpec}
+              onChange={(next) => { setOutputSpec(next); clearFieldError(); }}
+              schemaError={errorFor(error, "outputSpec.schema")}
+            />
             {error && !error.field && (
               <p
                 role="alert"

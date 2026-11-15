@@ -30,6 +30,33 @@ class NetworkntSchemaValidatorTest {
     }
 
     @Test
+    void aJsonSchemaObjectHasNoProblem() {
+        assertThat(validator.problemWith("{}")).isEmpty();
+        assertThat(validator.problemWith(
+                "{\"type\":\"object\",\"required\":[\"total\"],\"properties\":{\"total\":{\"type\":\"number\"}}}"))
+                .isEmpty();
+    }
+
+    @Test
+    void proseIsNotJson() {
+        assertThat(validator.problemWith("must be a summary under 200 words")).get().asString()
+                .contains("not JSON");
+    }
+
+    @Test
+    void jsonThatIsNotAnObjectIsNotASchemaObject() {
+        assertThat(validator.problemWith("[1,2]")).get().asString().contains("not a JSON object");
+        assertThat(validator.problemWith("true")).get().asString().contains("not a JSON object");
+    }
+
+    @Test
+    void anObjectBreakingTheMetaSchemaIsNotAValidSchema() {
+        assertThat(validator.problemWith("{\"type\":\"objekt\"}")).isPresent();
+        assertThat(validator.problemWith("{\"required\":\"total\"}")).isPresent();
+        assertThat(validator.problemWith("{\"minLength\":-1}")).isPresent();
+    }
+
+    @Test
     void jsonSchemaMatchAndMismatch() {
         String schema = "{\"type\":\"object\",\"required\":[\"title\"],\"properties\":{\"title\":{\"type\":\"string\"}}}";
         assertThat(validator.check("{\"title\":\"hi\"}", schema).schemaMatches()).isTrue();
