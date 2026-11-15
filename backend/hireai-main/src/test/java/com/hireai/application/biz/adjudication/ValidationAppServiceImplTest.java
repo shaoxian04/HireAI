@@ -41,7 +41,9 @@ class ValidationAppServiceImplTest {
     private final com.hireai.application.biz.reputation.ReputationWriteAppService reputationWrite =
             mock(com.hireai.application.biz.reputation.ReputationWriteAppService.class);
     private final ValidationAppServiceImpl svc = new ValidationAppServiceImpl(domain, reports, tasks, settlement,
-            agentRepository, apiKeyTaskRepository, webhookOutbox, reputationWrite);
+            agentRepository, apiKeyTaskRepository, webhookOutbox, reputationWrite,
+            new com.hireai.domain.biz.task.model.ReviewWindow(java.time.Duration.ofHours(24)),
+            java.time.Clock.systemUTC());
 
     /** Build a RESULT_RECEIVED TaskModel via the canonical transition chain. */
     private TaskModel resultReceivedTask() {

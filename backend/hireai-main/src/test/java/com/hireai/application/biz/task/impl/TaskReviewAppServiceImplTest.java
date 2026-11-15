@@ -52,7 +52,8 @@ class TaskReviewAppServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new TaskReviewAppServiceImpl(taskRepository, agentRepository,
-                settlementWriteAppService, disputeAppService, reputationWriteAppService);
+                settlementWriteAppService, disputeAppService, reputationWriteAppService,
+                java.time.Clock.systemUTC());
     }
 
     /** Build a task in PENDING_REVIEW (passed the validation gate) so accept/reject are legal. */

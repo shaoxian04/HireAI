@@ -352,6 +352,7 @@ function TaskDetail() {
           report={validation}
           spec={task.outputSpec}
           awaitingYou={task.status === "PENDING_REVIEW"}
+          autoAccepted={!!task.autoAccepted}
         />
       )}
 
@@ -375,7 +376,12 @@ function TaskDetail() {
             </a>
           )}
           {task.status === "PENDING_REVIEW" && (
-            <ResultReviewBar taskId={task.id} budget={task.budget} onResolved={setTask} />
+            <ResultReviewBar
+              taskId={task.id}
+              budget={task.budget}
+              reviewDeadline={task.reviewDeadline}
+              onResolved={setTask}
+            />
           )}
         </section>
       )}
@@ -386,9 +392,16 @@ function TaskDetail() {
             <div className="space-y-1">
               <h2 className="eyebrow">Settlement</h2>
               {task.resolution === "ACCEPTED" ? (
-                <p className="text-[0.9375rem] text-fg">
-                  <span className="tabular font-bold text-green">{task.payoutAmount} cr</span> paid to the builder
-                </p>
+                <>
+                  <p className="text-[0.9375rem] text-fg">
+                    <span className="tabular font-bold text-green">{task.payoutAmount} cr</span> paid to the builder
+                  </p>
+                  {task.autoAccepted && (
+                    <p className="text-sm text-muted">
+                      Accepted automatically: the review window closed before you decided.
+                    </p>
+                  )}
+                </>
               ) : (
                 <p className="text-[0.9375rem] text-fg">
                   <span className="tabular font-bold text-fg">{task.refundAmount} cr</span> refunded to your wallet
@@ -398,7 +411,13 @@ function TaskDetail() {
             </div>
             <span aria-hidden style={{ animationDelay: "250ms" }} className={`inspect-stamp stamp mr-2 ${task.resolution === "ACCEPTED" ? "text-green" : "text-fg"}`}>
               {task.resolution === "ACCEPTED" ? "PAID" : "REFUNDED"}
-              <small>{task.resolution === "ACCEPTED" ? "work accepted" : "work rejected"}</small>
+              <small>
+                {task.resolution === "ACCEPTED"
+                  ? task.autoAccepted
+                    ? "auto-accepted"
+                    : "work accepted"
+                  : "work rejected"}
+              </small>
             </span>
           </div>
           {task.resolution === "ACCEPTED" && (

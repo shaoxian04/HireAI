@@ -1,6 +1,7 @@
 package com.hireai.application.biz.task;
 
 import com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView;
+import com.hireai.domain.biz.task.info.ReviewWindowState;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
@@ -32,6 +33,13 @@ public interface TaskReadAppService {
      * excludes this Agent from the new shortlist (#79).
      */
     Optional<UUID> findBookedAgentId(@NonNull TaskModel task);
+
+    /**
+     * The review window of a task the caller has already loaded for its owner (#94): when it
+     * closes, and whether it closed unreviewed and was accepted on the Client's behalf. Empty when
+     * the task never awaited review on the web channel.
+     */
+    Optional<ReviewWindowState> findReviewWindow(@NonNull TaskModel task);
 
     /**
      * Why no Agent matched a task the caller has already loaded for its owner (#91): shown while it

@@ -36,6 +36,13 @@ public record TaskDTO(
          */
         UUID agentId,
         /**
+         * When the Client's review window closes (#94): set once the result awaits review on the
+         * web channel, and kept after it is resolved. Absent on list/command responses.
+         */
+        Instant reviewDeadline,
+        /** True when the window closed unreviewed and the platform accepted on the Client's behalf. */
+        Boolean autoAccepted,
+        /**
          * Why no Agent matched the task (#91): the blocking Contract parameter, Template version or the
          * relevance floor, with Agent counts. Present while it waits AWAITING_AGENT and after it ends
          * NO_ELIGIBLE_AGENT; absent otherwise and on list/command responses.
