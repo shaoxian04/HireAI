@@ -1,5 +1,6 @@
 package com.hireai.domain.biz.offering.agent.model;
 
+import com.hireai.domain.biz.acceptance.offer.model.Offer;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.enums.AgentStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -84,11 +85,17 @@ public final class AgentModel {
      */
     public AgentModel publishNewVersion(Pricing pricing, int maxExecutionSeconds,
                                         List<String> capabilityCategories) {
+        return publishNewVersion(pricing, maxExecutionSeconds, capabilityCategories, null);
+    }
+
+    /** As above, with an edited Offer for the new version (null keeps the current one). */
+    public AgentModel publishNewVersion(Pricing pricing, int maxExecutionSeconds,
+                                        List<String> capabilityCategories, Offer offer) {
         if (currentVersion == null) {
             throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
                     "Agent has no current version to supersede");
         }
-        AgentVersionModel next = currentVersion.supersededBy(pricing, maxExecutionSeconds, capabilityCategories);
+        AgentVersionModel next = currentVersion.supersededBy(pricing, maxExecutionSeconds, capabilityCategories, offer);
         UUID newCurrentVersionId = currentVersionId != null ? next.id() : currentVersionId;
         return new AgentModel(id, ownerId, name, status, newCurrentVersionId,
                 reputationScore, next, createdAt, hasSigningSecret);

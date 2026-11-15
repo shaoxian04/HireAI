@@ -1,6 +1,10 @@
 package com.hireai.domain.biz.offering.agent.model;
 
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.acceptance.contract.model.ParameterValue;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
+import com.hireai.domain.biz.acceptance.offer.model.OfferTerm;
+import com.hireai.domain.biz.acceptance.offer.model.ParameterRange;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.enums.AgentVersionStatus;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -128,12 +132,54 @@ public final class AgentVersionModel {
      */
     public AgentVersionModel supersededBy(Pricing pricing, int maxExecutionSeconds,
                                           List<String> capabilityCategories) {
+        return supersededBy(pricing, maxExecutionSeconds, capabilityCategories, null);
+    }
+
+    /**
+     * Supersession with an edited {@link Offer} (null keeps this version's). The output spec and
+     * webhook still carry over. The new Offer must still accept this Agent's own output contract,
+     * because a direct booking freezes exactly that ({@link OutputSpec#toContract()}): an Agent is
+     * never held to a Contract its Offer did not accept. Bounds against the Templates are the app
+     * layer's check ({@code TemplateReadAppService#requireValid(Offer)}).
+     */
+    public AgentVersionModel supersededBy(Pricing pricing, int maxExecutionSeconds,
+                                          List<String> capabilityCategories, Offer newOffer) {
         requirePresent(pricing, "pricing");
         List<String> normalised = normaliseCategories(capabilityCategories);
         requireValidMaxExecutionSeconds(maxExecutionSeconds);
-        return new AgentVersionModel(UUID.randomUUID(), agentId, versionNumber + 1, outputSpec, offer,
-                normalised, webhookUrl, maxExecutionSeconds, maxConcurrent, pricing,
-                AgentVersionStatus.ACTIVE, Instant.now());
+        if (newOffer != null) {
+            requireAcceptsOwnContract(newOffer);
+        }
+        return new AgentVersionModel(UUID.randomUUID(), agentId, versionNumber + 1, outputSpec,
+                newOffer == null ? offer : newOffer, normalised, webhookUrl, maxExecutionSeconds, maxConcurrent,
+                pricing, AgentVersionStatus.ACTIVE, Instant.now());
+    }
+
+    /**
+     * The Offer must name the Template of this Agent's own Contract and accept each value that
+     * Contract sets. Own Contracts set at most {@code custom_json}'s schema (text), so only text
+     * values need a range check here; coverage of client Contracts at matching time is the coverage
+     * domain service's job.
+     */
+    private void requireAcceptsOwnContract(Offer candidate) {
+        Contract own = outputSpec.toContract();
+        OfferTerm term = candidate.terms().stream()
+                .filter(t -> t.template().equals(own.template()))
+                .findFirst()
+                .orElseThrow(() -> new DomainException(ResultCode.VALIDATION_ERROR,
+                        "The Offer must keep " + own.template() + ", the Template of this Agent's output "
+                                + "contract: direct bookings are judged under it"));
+        own.params().forEach((name, value) -> {
+            ParameterRange range = term.params().get(name);
+            boolean accepted = range instanceof ParameterRange.AnyValue
+                    || (value instanceof ParameterValue.Text text && range instanceof ParameterRange.OneOf oneOf
+                    && oneOf.values().contains(text.value()));
+            if (!accepted) {
+                throw new DomainException(ResultCode.VALIDATION_ERROR,
+                        "The Offer for " + own.template() + " must still accept this Agent's own " + name
+                                + " (any value, or a list that includes it): direct bookings are judged under it");
+            }
+        });
     }
 
     private static void requirePresent(Object value, String field) {

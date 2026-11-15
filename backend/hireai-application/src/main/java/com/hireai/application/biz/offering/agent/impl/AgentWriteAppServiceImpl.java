@@ -103,15 +103,19 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
         AgentModel agent = loadOwned(agentId, ownerId);
         categoryRepository.load().requireAllKnown(info.capabilityCategories());
         assertWebhookDeliverable(agent);
+        if (info.offer() != null) {
+            // An edited Offer must fit the Templates it names; an unchanged one was checked when set.
+            templateReadAppService.requireValid(info.offer());
+        }
         AgentModel updated = agent.publishNewVersion(Pricing.of(info.price()),
-                info.maxExecutionSeconds(), info.capabilityCategories());
+                info.maxExecutionSeconds(), info.capabilityCategories(), info.offer());
         Optional<CategorySuggestion> suggestion = CategorySuggestion.of(info.suggestedCategory(),
                 agentId, updated.currentVersion().id(), ownerId, Instant.now());
         agentRepository.publishNewVersion(updated);
         suggestion.ifPresent(categorySuggestionRepository::record);
-        log.info("Agent {} published version {} by owner {} (price={}, maxExec={})",
+        log.info("Agent {} published version {} by owner {} (price={}, maxExec={}, offerEdited={})",
                 agentId, updated.currentVersion().versionNumber(), ownerId,
-                info.price(), info.maxExecutionSeconds());
+                info.price(), info.maxExecutionSeconds(), info.offer() != null);
         return agentRepository.findById(agentId)
                 .orElseThrow(() -> new DomainException(ResultCode.INTERNAL_ERROR,
                         "Agent disappeared after publishing a version: " + agentId));
