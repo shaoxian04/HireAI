@@ -16,4 +16,9 @@ public interface TemplateRepository {
 
     /** Every published version, ordered by key then version. */
     List<TemplateModel> findAll();
+
+    /** Every published version of one key (spec D36), ordered by version; empty for an unknown key. */
+    default List<TemplateModel> findVersions(String key) {
+        return findAll().stream().filter(t -> t.ref().key().equals(key)).toList();
+    }
 }
