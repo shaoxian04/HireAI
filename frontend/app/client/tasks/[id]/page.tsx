@@ -339,6 +339,7 @@ function TaskDetail() {
           report={validation}
           spec={task.outputSpec}
           awaitingYou={task.status === "PENDING_REVIEW"}
+          autoAccepted={!!task.autoAccepted}
         />
       )}
 
