@@ -2,7 +2,6 @@
 import base64
 import json
 
-import httpx2
 import pytest
 from langchain_openai import ChatOpenAI
 
@@ -10,6 +9,13 @@ from app.config import Settings
 from app.graph import nodes
 from app.graph.build import build_graph, run_arbitration
 from app.schemas import ArbitrationRequest, RulingResult
+
+# The HTTP library the installed openai client runs on: httpx on the locked openai 2.x,
+# httpx2 on openai 3.x. The wire-format test builds its MockTransport from whichever is present.
+try:
+    import httpx2 as http_lib
+except ImportError:
+    import httpx as http_lib
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
 PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
@@ -292,16 +298,16 @@ def _completion(text: str) -> dict:
 ])
 async def test_openai_receives_the_snapshot_as_a_content_part(content, media_type, expected_part):
     # The real ChatOpenAI adapter over a mock transport: checks the wire format, never the network.
-    # (openai's client runs on httpx2, which respx does not patch.)
+    # (A MockTransport, not respx: respx doesn't patch httpx2, which openai 3.x runs on.)
     sent_bodies = []
 
     def handler(request):
         sent_bodies.append(json.loads(request.content))
-        return httpx2.Response(200, json=_completion("looked at it"))
+        return http_lib.Response(200, json=_completion("looked at it"))
 
     llm = ChatOpenAI(model="gpt-4o", api_key="test-key", base_url="https://openai.test/v1",
                      max_retries=0,
-                     http_async_client=httpx2.AsyncClient(transport=httpx2.MockTransport(handler)))
+                     http_async_client=http_lib.AsyncClient(transport=http_lib.MockTransport(handler)))
     req = _request(content, media_type)
     evidence = await _gather(req)
 
