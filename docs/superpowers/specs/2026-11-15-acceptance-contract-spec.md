@@ -310,7 +310,8 @@ D41 sets these defaults. All of them are configurable, and a Contract may overri
 - **Frontend (vitest):** the booking screen shows the extracted checks, the unmapped requirements, the no-match explanation with relax suggestions, and the review and response windows. The prior art is the existing page tests.
 - **Caveats and checks beyond CI:**
   - Integration tests skip silently without Docker, so every slice must be run with Docker available.
-  - Every slice is also verified by a live E2E run on the local stack, per the project's demo runbook.
+  - Every slice is also verified by a live E2E run on the local stack, per the project's demo runbook. The run is **driven in real Chrome**: the full happy path plus the slice's new flows.
+  - **Frontend quality is part of acceptance, not optional.** The Chrome run checks layout, copy, empty, loading and error states, and both light and dark themes, against the project's frontend design direction. A slice whose UI works but looks broken or confusing is not done.
   - Denied-status assertions use the full app, which returns 401 for every authenticated-but-forbidden request, not the 403 a `@WebMvcTest` slice gives.
 
 ## Out of Scope
