@@ -72,7 +72,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 
 **Adjudication**
 - `validation_reports`: soft task reference, `attempt_no`, `verdict`, `checks`.
-- `task_rejections` (`V41`): one row per A/B/C rejection round, UNIQUE (`task_id`, `round`): `reason_category`, `reason`, `rejected_at`, `response_deadline`, `revision_allowed`, `response` (`REVISE`/`CONCEDE`/`STAND_BY`), `response_reason`, `response_silent`, `responded_at`, `decision_deadline`, `decision` (`ACCEPT`/`ARBITRATE`), `decision_silent`, `decided_at`; `replaced_result_*` (what a revision replaced); `notice_sent_at`/`notice_attempts` (notice delivery, retried up to 5 times while the window is open).
+- `task_rejections` (`V42`): one row per A/B/C rejection round, UNIQUE (`task_id`, `round`): `reason_category`, `reason`, `rejected_at`, `response_deadline`, `revision_allowed`, `response` (`REVISE`/`CONCEDE`/`STAND_BY`), `response_reason`, `response_silent`, `responded_at`, `decision_deadline`, `decision` (`ACCEPT`/`ARBITRATE`), `decision_silent`, `decided_at`; `replaced_result_*` (what a revision replaced); `notice_sent_at`/`notice_attempts` (notice delivery, retried up to 5 times while the window is open).
 - `disputes`: `task_id` UNIQUE (soft reference), `raised_by`, `reason_category`, `status`, `correlation_id`, `resolved_at`.
 - `dispute_rulings`: `tier`, `decided_by` (`ARBITRATOR`, `ADMINISTRATOR`, `FALLBACK`), `category`, `rationale`. **Append-only by trigger.**
 
@@ -84,7 +84,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 
 ## Status enums
 
-- **Task:** `SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED → PENDING_REVIEW → RESOLVED`, with the rejection response path (`AWAITING_AGENT_RESPONSE`, `AWAITING_CLIENT_DECISION`, since `V41`) and `DISPUTED` between review and resolved. Off-path: `AWAITING_AGENT`, `TIMED_OUT`, `SPEC_VIOLATION`, `FAILED`, `CANCELLED`.
+- **Task:** `SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED → PENDING_REVIEW → RESOLVED`, with the rejection response path (`AWAITING_AGENT_RESPONSE`, `AWAITING_CLIENT_DECISION`, since `V42`) and `DISPUTED` between review and resolved. Off-path: `AWAITING_AGENT`, `TIMED_OUT`, `SPEC_VIOLATION`, `FAILED`, `CANCELLED`.
   - `AWAITING_AGENT`: no eligible agent for a routed task. Retried by a sweeper, then `CANCELLED` with a refund. Named `AWAITING_CAPACITY` before `V29`, which rewrote existing rows and the status CHECK.
   - `QUEUED → RESULT_RECEIVED`: a result is accepted from `QUEUED` as well as `EXECUTING`, because a fast agent can call back before the dispatch consumer marks the task `EXECUTING`.
   - Marking `EXECUTING` is idempotent: `QUEUED → EXECUTING`, and a no-op from any later state. It is illegal only from `SUBMITTED` or `AWAITING_AGENT`.

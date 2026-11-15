@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * JPA entity for a task_rejections row (V41). The notice-delivery and replaced-result columns are
+ * JPA entity for a task_rejections row (V42). The notice-delivery and replaced-result columns are
  * not mapped: they are written by native updates only, so a full-row save never overwrites them.
  */
 @Entity
