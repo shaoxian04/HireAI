@@ -14,6 +14,7 @@ import com.hireai.domain.biz.identity.apikey.model.SpendCaps;
 import com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository;
 import com.hireai.domain.biz.task.idempotency.repository.IdempotencyRepository;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
+import com.hireai.domain.biz.task.item.info.ItemInput;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.utility.exception.DomainException;
@@ -108,7 +109,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
                 : new DirectBookingInfo(booked.clientId(), booked.title(), booked.description(),
                         booked.budget(), booked.agentId(),
                         categoryRepository.load().requireKnown(booked.category()), booked.deadlineSeconds(),
-                        booked.contract(), booked.items());
+                        booked.contract(), booked.items(), booked.engagementId());
         try {
             return self().submitDirectTx(ctx, info);
         } catch (IdempotencyRaceException e) {
@@ -197,7 +198,8 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         String kind = info.category() == null ? "direct" : "direct|" + info.category();
         return SubmitFingerprint.of(info.title(), info.description(),
                 info.agentId().toString(), info.budget().value(), kind + deadlinePart(info.deadlineSeconds())
-                        + contractPart(info.contract()) + itemsPart(info.items()));
+                        + contractPart(info.contract()) + itemsPart(info.items())
+                        + (info.engagementId() == null ? "" : "|engagement=" + info.engagementId()));
     }
 
     /**
@@ -213,13 +215,22 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         return deadlineSeconds == null ? "" : "|deadline=" + deadlineSeconds;
     }
 
-    /** A multi-Item Task's Items join the fingerprint (count, then each input); without Items it stays as before. */
-    private static String itemsPart(java.util.List<String> items) {
+    /**
+     * A multi-Item Task's Items join the fingerprint (count, then each input and its document, if any);
+     * without Items it stays as before.
+     */
+    private static String itemsPart(java.util.List<ItemInput> items) {
         if (items.isEmpty()) {
             return "";
         }
         StringBuilder part = new StringBuilder("|items=").append(items.size());
-        items.forEach(input -> part.append('|').append(input.length()).append(':').append(input));
+        items.forEach(item -> {
+            String input = item.input() == null ? "" : item.input();
+            part.append('|').append(input.length()).append(':').append(input);
+            if (item.hasSource()) {
+                part.append("@").append(item.sourceSnapshotId());
+            }
+        });
         return part.toString();
     }
 

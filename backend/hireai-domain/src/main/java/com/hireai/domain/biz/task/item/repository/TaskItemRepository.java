@@ -2,9 +2,12 @@ package com.hireai.domain.biz.task.item.repository;
 
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
 import com.hireai.domain.biz.task.item.model.TaskItems;
+import com.hireai.domain.biz.task.enums.TaskStatus;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -27,4 +30,10 @@ public interface TaskItemRepository {
 
     /** The Items of several Tasks at once (list views); Tasks without Items are absent. */
     Map<UUID, TaskItems> findByTaskIds(Collection<UUID> taskIds);
+
+    /** One Item by its id (a signed source link names the Item). */
+    Optional<TaskItemModel> findById(UUID itemId);
+
+    /** The statuses of every Task with an Item whose input is this SourceSnapshot (D32 retention). */
+    List<TaskStatus> taskStatusesUsingSource(UUID sourceSnapshotId);
 }

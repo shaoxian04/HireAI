@@ -1,6 +1,7 @@
 package com.hireai.application.biz.task.item;
 
 import com.hireai.domain.biz.task.info.AgentResultInfo;
+import com.hireai.domain.biz.task.item.info.ItemInput;
 import com.hireai.domain.biz.task.item.model.TaskItems;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.shared.model.Money;
@@ -18,7 +19,7 @@ import java.util.UUID;
 public interface TaskItemAppService {
 
     /** Creates the Items of a Task being submitted, each priced at {@code price} (same transaction). */
-    void createForSubmit(UUID taskId, List<String> inputs, Money price);
+    void createForSubmit(UUID taskId, List<ItemInput> inputs, Money price);
 
     /** Whether the Task has Items (is a multi-Item Task). */
     boolean hasItems(UUID taskId);

@@ -1,6 +1,7 @@
 package com.hireai.domain.biz.task.item;
 
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
+import com.hireai.domain.biz.task.item.info.ItemInput;
 import com.hireai.domain.biz.task.item.model.ItemCheck;
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
 import com.hireai.domain.biz.task.item.model.TaskItems;
@@ -43,6 +44,20 @@ class TaskItemsTest {
                 .isInstanceOf(DomainException.class).hasMessageContaining("at most " + TaskItems.MAX_ITEMS);
         assertThatThrownBy(() -> TaskItems.submit(taskId, List.of("a", " "), Money.of("1.00")))
                 .isInstanceOf(DomainException.class).hasMessageContaining("Item 2");
+    }
+
+    @Test
+    void anItemCanReferenceASourceSnapshotAndKeepsItThroughItsTransitions() {
+        UUID source = UUID.randomUUID();
+        TaskItems items = TaskItems.submitInputs(taskId,
+                List.of(new ItemInput("invoice-1.pdf", source), new ItemInput("plain text", null)), Money.of("1.00"));
+
+        TaskItemModel first = items.item(1);
+        assertThat(first.sourceSnapshotId()).isEqualTo(source);
+        assertThat(items.item(2).sourceSnapshotId()).isNull();
+        assertThat(first.recordResult("COMPLETED", "ok", null, PASSED).accept().sourceSnapshotId()).isEqualTo(source);
+        assertThat(first.recordFailure("FAILED").sourceSnapshotId()).isEqualTo(source);
+        assertThat(items.sourceSnapshotIds()).containsExactly(source);
     }
 
     @Test

@@ -64,7 +64,7 @@ public class GlobalExceptionConfiguration {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<WebResult<Void>> handleOversizeUpload(MaxUploadSizeExceededException ex) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
-                .body(WebResult.error(ResultCode.VALIDATION_ERROR, "Upload exceeds the 2 MB limit"));
+                .body(WebResult.error(ResultCode.VALIDATION_ERROR, "Upload exceeds the size limit"));
     }
 
     @ExceptionHandler(AuthenticationFailedException.class)

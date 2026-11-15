@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * One Item of a multi-Item Task (spec S3) and its outcome. Amounts appear once the Item settled:
@@ -23,7 +24,9 @@ public record TaskItemDTO(
         Boolean autoAccepted,
         BigDecimal payoutAmount,
         BigDecimal commissionAmount,
-        BigDecimal refundAmount
+        BigDecimal refundAmount,
+        /** The SourceSnapshot this Item's input is (an Engagement's document); absent for a text Item. */
+        UUID sourceId
 ) {
 
     /** One Acceptance Check as run on this Item's result. */

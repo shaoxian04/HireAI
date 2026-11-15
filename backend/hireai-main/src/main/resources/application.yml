@@ -29,8 +29,10 @@ spring:
     locations: classpath:db/migration
   servlet:
     multipart:
-      max-file-size: 2MB
-      max-request-size: 5MB
+      # The largest upload is an Engagement document (hireai.source.max-bytes); storefront images
+      # keep their own 2 MB check in the service.
+      max-file-size: 25MB
+      max-request-size: 26MB
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -69,6 +71,10 @@ hireai:
   # application.yml; consumed by Plan 4's RoutingAppServiceImpl. Localhost default for the demo.
   platform:
     public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
+  source:
+    # Engagement documents (spec S4): the largest upload, and how often the D32 retention pass runs.
+    max-bytes: ${SOURCE_MAX_BYTES:26214400}
+    retention-sweep-interval: ${SOURCE_RETENTION_SWEEP_INTERVAL:PT1H}
   matching:
     # Multi-factor matcher weights (must sum to 1.0; checked at startup) + epsilon-greedy exploration
     # rate. Explained in docs/details/matching.md (ADR 0006 for relevance).

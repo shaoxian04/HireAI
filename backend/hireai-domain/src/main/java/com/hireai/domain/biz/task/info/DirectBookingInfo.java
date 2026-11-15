@@ -1,6 +1,7 @@
 package com.hireai.domain.biz.task.info;
 
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.task.item.info.ItemInput;
 import com.hireai.domain.biz.task.item.model.TaskItems;
 import com.hireai.domain.shared.model.Money;
 
@@ -17,14 +18,37 @@ import java.util.UUID;
  *
  * <p>{@code items} are the inputs of a multi-Item Task (spec S3), empty for a single-deliverable
  * booking. With Items, {@code budget} is the per-Item price (it must cover the Agent's price) and the
- * Task freezes {@link #escrow()}.
+ * Task freezes {@link #escrow()}. {@code engagementId} books under the Client's Engagement with this
+ * Agent (ADR 0010): only then may an Item's input be a SourceSnapshot (a confidential document).
  */
 public record DirectBookingInfo(UUID clientId, String title, String description,
                                 Money budget, UUID agentId, String category, Long deadlineSeconds,
-                                Contract contract, List<String> items) {
+                                Contract contract, List<ItemInput> items, UUID engagementId) {
 
     public DirectBookingInfo {
         items = items == null ? List.of() : List.copyOf(items);
+    }
+
+    public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,
+                             String category, Long deadlineSeconds, Contract contract, List<ItemInput> items) {
+        this(clientId, title, description, budget, agentId, category, deadlineSeconds, contract, items, null);
+    }
+
+    /** Whether any Item's input is a SourceSnapshot (allowed only under an Engagement, ADR 0010). */
+    public boolean hasSources() {
+        return items.stream().anyMatch(ItemInput::hasSource);
+    }
+
+    /** This booking with {@code chosen} as its Contract. */
+    public DirectBookingInfo withContract(Contract chosen) {
+        return new DirectBookingInfo(clientId, title, description, budget, agentId, category, deadlineSeconds,
+                chosen, items, engagementId);
+    }
+
+    /** This booking with its Items replaced (a document Item's blank input becomes its file name). */
+    public DirectBookingInfo withItems(List<ItemInput> replaced) {
+        return new DirectBookingInfo(clientId, title, description, budget, agentId, category, deadlineSeconds,
+                contract, replaced, engagementId);
     }
 
     public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,

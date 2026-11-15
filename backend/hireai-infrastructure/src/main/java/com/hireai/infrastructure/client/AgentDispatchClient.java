@@ -207,7 +207,10 @@ public class AgentDispatchClient implements AgentNoticePort {
                 payload.executionDeadline() == null ? null : payload.executionDeadline().toString(),
                 payload.callbackUrl(),
                 payload.items().stream()
-                        .map(item -> new WebhookDispatchBody.Item(item.itemNo(), item.input()))
+                        .map(item -> new WebhookDispatchBody.Item(item.itemNo(), item.input(),
+                                item.source() == null ? null : new WebhookDispatchBody.Source(item.source().url(),
+                                        item.source().sha256(), item.source().mediaType(), item.source().sizeBytes(),
+                                        item.source().filename(), item.source().expiresAt().toString())))
                         .toList());
     }
 

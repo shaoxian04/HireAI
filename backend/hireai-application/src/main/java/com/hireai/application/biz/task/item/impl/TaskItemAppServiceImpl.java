@@ -17,6 +17,7 @@ import com.hireai.domain.biz.task.item.enums.ItemStatus;
 import com.hireai.domain.biz.task.item.info.AgentItemResultInfo;
 import com.hireai.domain.biz.task.item.model.ItemCheck;
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
+import com.hireai.domain.biz.task.item.info.ItemInput;
 import com.hireai.domain.biz.task.item.model.TaskItems;
 import com.hireai.domain.biz.task.item.repository.TaskItemRepository;
 import com.hireai.domain.biz.task.model.ReviewWindow;
@@ -67,8 +68,8 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
     private final DeliverySnapshotAppService deliverySnapshotAppService;
 
     @Override
-    public void createForSubmit(UUID taskId, List<String> inputs, Money price) {
-        taskItemRepository.insertAll(TaskItems.submit(taskId, inputs, price));
+    public void createForSubmit(UUID taskId, List<ItemInput> inputs, Money price) {
+        taskItemRepository.insertAll(TaskItems.submitInputs(taskId, inputs, price));
     }
 
     @Override

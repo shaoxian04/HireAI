@@ -1,6 +1,7 @@
 package com.hireai.application.biz.task.routing.impl;
 
 import com.hireai.application.biz.acceptance.TemplateReadAppService;
+import com.hireai.application.biz.acceptance.source.SourceSnapshotAppService;
 import com.hireai.application.biz.offering.embedding.TaskTextEmbeddingAppService;
 import com.hireai.domain.biz.task.info.MatchCriteria;
 import com.hireai.domain.biz.task.routing.info.NoMatchExplanation;
@@ -65,6 +66,8 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     private final Clock clock;
     /** Added to the Agent's max execution time when stamping the execution deadline (ExecutionConfig). */
     private final ExecutionGrace executionGrace;
+    /** Signs each document Item's download link into the WorkOrder (spec S4, D31). */
+    private final SourceSnapshotAppService sourceSnapshotAppService;
 
     /**
      * Public base URL the Agent uses to call back. NON-final so @RequiredArgsConstructor takes only the
@@ -240,8 +243,11 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                 view.outputSpecJson(),
                 executionDeadline,
                 callbackUrl,
-                // A multi-Item Task's Items travel in the WorkOrder (spec S3); none for a single Task.
-                taskReadAppService.workOrderItems(view.taskId()));
+                // A multi-Item Task's Items travel in the WorkOrder (spec S3); none for a single Task. An Item
+                // whose input is a SourceSnapshot carries a link signed for it alone, expiring at the
+                // execution deadline (S4, D31).
+                sourceSnapshotAppService.withSignedLinks(taskReadAppService.workOrderItems(view.taskId()),
+                        executionDeadline));
         return new DispatchMessage(view.taskId(), agentVersionId, target.webhookUrl(), correlationId, payload);
     }
 }
