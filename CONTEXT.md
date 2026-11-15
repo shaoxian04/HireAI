@@ -48,7 +48,7 @@ _Avoid_: idempotency key (that's the header/input; this is the stored record)
 One outbound notification of a single Task's terminal event (`task.completed`/`task.failed`), enqueued as an outbox row in the same transaction as settlement and retried until delivered or dead. Cannot exist without the Task event that produced it.
 _Avoid_: webhook (ambiguous with WebhookSubscription — say "delivery" for the per-event half)
 
-### Acceptance _(designed, not built; see the #46 design spec)_
+### Acceptance _(Contract, Template and Offer are built as data derived from the output spec and not yet enforced; the rest is designed, not built; see the #46 design spec)_
 
 **Contract**:
 The single binding agreement a Task is judged against, frozen at submission. It states the shape of the deliverable, how it will be accepted, and how money moves on each outcome. Automated acceptance looks only at the Contract; the Task's description is evidence of intent that an arbitrator may read, never a ground for automatic rejection. Where the two conflict, the Contract wins.

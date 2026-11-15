@@ -1,5 +1,7 @@
 package com.hireai.controller.biz.catalogue.dto;
 
+import com.hireai.controller.biz.acceptance.dto.OfferDTO;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -14,6 +16,8 @@ public record AgentProfileDTO(
         String sampleOutput,
         List<String> galleryUrls,
         OutputSpecDTO outputSpec,
+        /** The terms the Agent works under (ADR 0009); a direct booking freezes the matching Contract. */
+        OfferDTO offer,
         StatsDTO stats,
         List<ReviewDTO> reviews
 ) {

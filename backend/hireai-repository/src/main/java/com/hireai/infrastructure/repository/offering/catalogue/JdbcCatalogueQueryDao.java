@@ -101,7 +101,7 @@ public class JdbcCatalogueQueryDao implements CatalogueQueryPort {
                        p.tagline, p.logo_url, p.cover_url, p.is_featured,
                        p.description, p.sample_output, p.gallery_urls,
                        v.capability_categories, v.price, v.max_execution_seconds,
-                       v.output_spec::text AS output_spec_json,
+                       v.output_spec::text AS output_spec_json, v.offer::text AS offer_json,
                        r.rating_avg, COALESCE(r.rating_count, 0) AS rating_count,
                        COALESCE(s.request_count, 0) AS request_count,
                        COALESCE(s.completed_count, 0) AS completed_count,
@@ -136,6 +136,7 @@ public class JdbcCatalogueQueryDao implements CatalogueQueryPort {
                     rs.getString("sample_output"),
                     stringList(rs.getArray("gallery_urls")),
                     rs.getString("output_spec_json"),
+                    rs.getString("offer_json"),
                     rs.getInt("completed_count"),
                     turnaround == null ? null : turnaround.doubleValue());
         });

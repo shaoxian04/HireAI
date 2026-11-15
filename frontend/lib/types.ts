@@ -79,10 +79,61 @@ export interface OutputSpecDTO {
   acceptanceCriteria: string;
 }
 
+// ── Acceptance: Template → Offer → Contract (ADR 0009) ──
+
+/** The one comparison a Template parameter follows. */
+export type ParameterComparison = "max" | "min" | "subset" | "enum" | "flag";
+
+/** `GET /catalogue/templates` — a published, versioned Template. */
+export interface TemplateDTO {
+  key: string;
+  version: number;
+  title: string;
+  description: string | null;
+  outputShape: OutputFormat;
+  checks: string[];
+  parameters: TemplateParameterDTO[];
+  expectationMode: string;
+  /** Fraction of the price the Builder's side receives under each ruling. */
+  rulingSettlement: Record<string, number>;
+  status: "ACTIVE" | "RETIRED";
+  publishedAt: string;
+}
+
+export interface TemplateParameterDTO {
+  name: string;
+  label: string;
+  description: string | null;
+  comparison: ParameterComparison;
+  /** Only the fields the comparison uses are present. */
+  bounds: { minimum?: number; maximum?: number; allowedValues?: string[]; maxLength?: number };
+}
+
+/** A contract parameter value: number (max/min), string (enum), string[] (subset), boolean (flag). */
+export type ContractValue = number | string | string[] | boolean;
+
+/** The Contract a Task froze at submit. */
+export interface ContractDTO {
+  template: string;
+  version: number;
+  params: Record<string, ContractValue>;
+}
+
+/** The range an Offer accepts for one parameter. */
+export type OfferRange = { bound: number } | { oneOf: string[] } | { any: true } | { acceptsTrue: boolean };
+
+/** An agent version's Offer: its price and the Templates and ranges it accepts. */
+export interface OfferDTO {
+  price: number;
+  terms: { template: string; version: number; params: Record<string, OfferRange> }[];
+}
+
 // ── Agents ──
 
 export interface AgentVersionDTO {
   outputSpec: OutputSpecDTO;
+  /** The version's Offer (absent only in old fixtures). */
+  offer?: OfferDTO;
   capabilityCategories: string[];
   webhookUrl: string;
   maxExecutionSeconds: number;
@@ -137,6 +188,8 @@ export interface TaskDTO {
   budget: number;
   status: TaskStatus;
   outputSpec: OutputSpecDTO;
+  /** The Contract frozen at submit; absent on tasks submitted before Contracts existed. */
+  contract?: ContractDTO | null;
   createdAt: string;
   resolution?: TaskResolution | null;
   resolvedAt?: string | null;
@@ -225,6 +278,8 @@ export interface AgentProfileDTO {
   sampleOutput: string | null;
   galleryUrls: string[];
   outputSpec: OutputSpecDTO;
+  /** The terms the Agent works under; a booking freezes the matching Contract. */
+  offer?: OfferDTO;
   stats: CatalogueStatsDTO;
   reviews: CatalogueReviewDTO[];
 }

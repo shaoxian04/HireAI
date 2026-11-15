@@ -91,7 +91,7 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   `/builder`; `builder/agents/[id]` — manage console. Above the tabs, `components/manage/SigningSecretPanel.tsx`
   shows whether a signing secret is set (`AgentDTO.hasSigningSecret`; the value is never readable) and
   offers rotation behind a confirm dialog, `POST /agents/{id}/rotate-secret`, revealing the new value
-  once in a modal. An agent without a secret gets an amber prompt to get one instead. Tabs: Storefront · Pricing · Stats ·
+  once in a modal. An agent without a secret gets an amber prompt to get one instead. Tabs: Storefront · Pricing (the output contract plus the version's Offer, `OfferPanel`) · Stats ·
   **Reputation** · Reviews; image uploader via `apiUpload`). **Reputation** renders the owner-only
   breakdown from `GET /api/agents/{id}/reputation`: the score on a marked 0–100 scale (50 = the
   neutral start), Reliability and Satisfaction as separate meters, and the event stream with each
@@ -112,7 +112,7 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   preview call is a `POST /tasks/match-preview` with the task text in the body (never in the URL), sent only by `fetchMatchPreview` in `lib/rebook.ts`, the one place that sends `exclude` — **no reputation number and no stars**: the shortlist once divided the routing composite by 20
   and drew it as a five-star client rating, which is a different quantity entirely); `client/tasks/[id]` — polls
   the task every 2 s, backing off to 30 s while nothing changes and snapping back on any status change;
-  shows an `InspectionReport` above the result; at `PENDING_REVIEW` renders the `ResultReviewBar` (accept, confirmed in a `ConfirmDialog` naming the escrowed amount / reject with an A/B/C reason), then on
+  shows the task's frozen Contract in plain words in the work-order docket (`ContractPanel` in `components/AcceptanceTerms.tsx`, Template titles and labels from `GET /catalogue/templates`; a task from before Contracts says it is judged against its output spec); shows an `InspectionReport` above the result; at `PENDING_REVIEW` renders the `ResultReviewBar` (accept, confirmed in a `ConfirmDialog` naming the escrowed amount / reject with an A/B/C reason), then on
   `RESOLVED` shows the settled summary plus a dismissible `RatingPrompt` (`POST /api/tasks/{id}/review`,
   accepted-only and once per task — a rating left later beats one never given, so it must stay skippable).
   On a **terminal failure** (`SPEC_VIOLATION`/`TIMED_OUT`/`FAILED`/`CANCELLED`)

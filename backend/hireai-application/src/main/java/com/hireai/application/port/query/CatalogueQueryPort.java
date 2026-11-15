@@ -42,7 +42,7 @@ public interface CatalogueQueryPort {
     }
 
     record AgentProfileRow(AgentCardRow card, String description, String sampleOutput,
-                           List<String> galleryUrls, String outputSpecJson,
+                           List<String> galleryUrls, String outputSpecJson, String offerJson,
                            int completedCount, Double avgTurnaroundSeconds) {
     }
 

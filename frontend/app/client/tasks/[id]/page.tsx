@@ -17,6 +17,7 @@ import { ResultView } from "@/components/ResultView";
 import { ResultReviewBar } from "@/components/ResultReviewBar";
 import { RatingPrompt } from "@/components/RatingPrompt";
 import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
+import { ContractPanel } from "@/components/AcceptanceTerms";
 
 const POLL_MS = 2000;
 /** Polling slows down while nothing changes (a long-running task), up to this ceiling. */
@@ -279,6 +280,16 @@ function TaskDetail() {
         <section className="px-6 py-5">
           <h2 className="eyebrow">Brief</h2>
           <RichText text={task.description} className="mt-2 text-[0.9375rem] leading-relaxed text-muted" />
+        </section>
+
+        {/* The Contract frozen at submit: what the result is accepted against (ADR 0009). */}
+        <section aria-labelledby="contract-h" className="border-t border-line px-6 py-5">
+          <h2 id="contract-h" className="eyebrow">
+            Contract
+          </h2>
+          <div className="mt-2">
+            <ContractPanel contract={task.contract} legacyFormat={task.outputSpec?.format} />
+          </div>
         </section>
 
         {/* pipeline — hidden once the task is in dispute; the dispute timeline replaces it */}

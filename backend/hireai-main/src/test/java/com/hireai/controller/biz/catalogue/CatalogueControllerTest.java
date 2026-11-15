@@ -32,7 +32,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(CatalogueController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, com.hireai.application.biz.acceptance.AcceptanceJsonMapper.class})
 @WithMockUser
 @ActiveProfiles("test")
 class CatalogueControllerTest {
@@ -117,6 +117,7 @@ class CatalogueControllerTest {
         AgentProfileRow profileRow = new AgentProfileRow(
                 cardRow, "A detailed description", "sample output here",
                 List.of(), "{\"format\":\"JSON\",\"schema\":\"{}\",\"acceptanceCriteria\":\"valid JSON\"}",
+                "{\"terms\":[{\"template\":\"custom_json\",\"version\":1,\"params\":{\"schema\":{\"oneOf\":[\"{}\"]}}}]}",
                 6, 45.0);
 
         ReviewRow review = new ReviewRow(UUID.randomUUID(), 5, "Great agent!", null, "client",

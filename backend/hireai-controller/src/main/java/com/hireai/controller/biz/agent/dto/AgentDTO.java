@@ -1,5 +1,7 @@
 package com.hireai.controller.biz.agent.dto;
 
+import com.hireai.controller.biz.acceptance.dto.OfferDTO;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -28,6 +30,8 @@ public record AgentDTO(
             UUID id,
             int versionNumber,
             OutputSpecDTO outputSpec,
+            /** The version's Offer (ADR 0009): the Templates and ranges it accepts, at its price. */
+            OfferDTO offer,
             List<String> capabilityCategories,
             String webhookUrl,
             int maxExecutionSeconds,

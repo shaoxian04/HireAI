@@ -12,6 +12,7 @@ import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
 import com.hireai.domain.biz.offering.agent.model.Pricing;
 import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
+import com.hireai.application.biz.acceptance.AcceptanceJsonMapper;
 import com.hireai.application.biz.task.OutputSpecJsonMapper;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.utility.exception.DomainException;
@@ -35,12 +36,14 @@ public class AgentRepositoryImpl implements AgentRepository {
     private final AgentJpaRepository agentJpa;
     private final AgentVersionJpaRepository versionJpa;
     private final OutputSpecJsonMapper outputSpecJsonMapper;
+    private final AcceptanceJsonMapper acceptanceJsonMapper;
 
     public AgentRepositoryImpl(AgentJpaRepository agentJpa, AgentVersionJpaRepository versionJpa,
-                               OutputSpecJsonMapper outputSpecJsonMapper) {
+                               OutputSpecJsonMapper outputSpecJsonMapper, AcceptanceJsonMapper acceptanceJsonMapper) {
         this.agentJpa = agentJpa;
         this.versionJpa = versionJpa;
         this.outputSpecJsonMapper = outputSpecJsonMapper;
+        this.acceptanceJsonMapper = acceptanceJsonMapper;
     }
 
     @Override
@@ -54,6 +57,7 @@ public class AgentRepositoryImpl implements AgentRepository {
             versionJpa.save(new AgentVersionDO(
                     version.id(), version.agentId(), version.versionNumber(),
                     outputSpecJsonMapper.toJson(version.outputSpec()),
+                    acceptanceJsonMapper.toJson(version.offer()),
                     version.capabilityCategories(), version.webhookUrl(),
                     version.maxExecutionSeconds(), version.maxConcurrent(), version.pricing().price(),
                     version.status().name(), version.createdAt()));
@@ -71,6 +75,7 @@ public class AgentRepositoryImpl implements AgentRepository {
         versionJpa.save(new AgentVersionDO(
                 v.id(), v.agentId(), v.versionNumber(),
                 outputSpecJsonMapper.toJson(v.outputSpec()),
+                acceptanceJsonMapper.toJson(v.offer()),
                 v.capabilityCategories(), v.webhookUrl(),
                 v.maxExecutionSeconds(), v.maxConcurrent(), v.pricing().price(),
                 v.status().name(), v.createdAt()));
@@ -188,6 +193,7 @@ public class AgentRepositoryImpl implements AgentRepository {
         return new AgentVersionModel(
                 entity.getId(), entity.getAgentId(), entity.getVersionNumber(),
                 outputSpecJsonMapper.fromJson(entity.getOutputSpec()),
+                acceptanceJsonMapper.offerFromJson(entity.getOffer()),
                 entity.getCapabilityCategories(), entity.getWebhookUrl(),
                 entity.getMaxExecutionSeconds(), entity.getMaxConcurrent(), Pricing.of(entity.getPrice()),
                 AgentVersionStatus.valueOf(entity.getStatus()), entity.getGmtCreate());
