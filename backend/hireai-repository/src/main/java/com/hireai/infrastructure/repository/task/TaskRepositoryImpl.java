@@ -4,6 +4,7 @@ import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.enums.TaskStatus;
+import com.hireai.domain.biz.task.info.ReviewWindowState;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskQuery;
@@ -80,6 +81,27 @@ public class TaskRepositoryImpl implements TaskRepository {
     @Override
     public void stampExecutionDeadline(UUID taskId, Instant deadline) {
         taskJpa.stampExecutionDeadline(taskId, deadline);
+    }
+
+    @Override
+    public void stampReviewDeadline(UUID taskId, Instant deadline) {
+        taskJpa.stampReviewDeadline(taskId, deadline);
+    }
+
+    @Override
+    public void markReviewAutoAccepted(UUID taskId) {
+        taskJpa.markReviewAutoAccepted(taskId);
+    }
+
+    @Override
+    public Optional<ReviewWindowState> findReviewWindow(UUID taskId) {
+        return taskJpa.findReviewDeadline(taskId)
+                .map(deadline -> new ReviewWindowState(deadline, taskJpa.isReviewAutoAccepted(taskId)));
+    }
+
+    @Override
+    public List<UUID> findIdsReviewExpired(Instant now) {
+        return taskJpa.findIdsReviewExpired(now);
     }
 
     @Override

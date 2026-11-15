@@ -2,6 +2,7 @@ package com.hireai.controller.biz.task.converter;
 
 import com.hireai.controller.biz.task.dto.TaskDTO;
 import com.hireai.domain.biz.task.enums.TaskResolution;
+import com.hireai.domain.biz.task.info.ReviewWindowState;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.ledger.settlement.service.SettlementPolicy;
@@ -27,6 +28,11 @@ public final class TaskModel2DTOConverter {
 
     /** {@code agentId} is the Agent the task was booked with, resolved by the caller (nullable). */
     public static TaskDTO toDTO(TaskModel task, UUID agentId) {
+        return toDTO(task, agentId, null);
+    }
+
+    /** Also carries the task's review window (#94), resolved by the caller (nullable). */
+    public static TaskDTO toDTO(TaskModel task, UUID agentId, ReviewWindowState reviewWindow) {
         OutputSpec spec = task.outputSpec();
         BigDecimal payout = null;
         BigDecimal commission = null;
@@ -60,6 +66,8 @@ public final class TaskModel2DTOConverter {
                 refund,
                 task.failureReason() == null ? null : task.failureReason().name(),
                 task.category(),
-                agentId);
+                agentId,
+                reviewWindow == null ? null : reviewWindow.deadline(),
+                reviewWindow != null && reviewWindow.autoAccepted() ? Boolean.TRUE : null);
     }
 }

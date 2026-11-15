@@ -6,6 +6,7 @@ import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView;
 import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
+import com.hireai.domain.biz.task.info.ReviewWindowState;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
 import com.hireai.domain.biz.task.model.ClientDeadline;
 import com.hireai.domain.biz.task.model.TaskModel;
@@ -45,6 +46,11 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
         // No status filter: the Agent may have been deactivated since, which is often why it failed.
         return agentRepository.findReputationTargetByVersionId(versionId)
                 .map(AgentReputationTarget::agentId);
+    }
+
+    @Override
+    public Optional<ReviewWindowState> findReviewWindow(TaskModel task) {
+        return taskRepository.findReviewWindow(task.id());
     }
 
     @Override

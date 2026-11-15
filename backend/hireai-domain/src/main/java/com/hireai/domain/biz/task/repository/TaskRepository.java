@@ -1,5 +1,6 @@
 package com.hireai.domain.biz.task.repository;
 
+import com.hireai.domain.biz.task.info.ReviewWindowState;
 import com.hireai.domain.biz.task.model.TaskModel;
 
 import java.util.List;
@@ -29,6 +30,21 @@ public interface TaskRepository {
 
     /** Operational column write (unmapped on the entity — see plan Global Constraints). */
     void stampExecutionDeadline(UUID taskId, java.time.Instant deadline);
+
+    /**
+     * Operational column write (unmapped on the entity): when the Client's review window closes,
+     * set once as the task enters PENDING_REVIEW (#94).
+     */
+    void stampReviewDeadline(UUID taskId, java.time.Instant deadline);
+
+    /** Operational column write (unmapped on the entity): the platform accepted on the Client's behalf. */
+    void markReviewAutoAccepted(UUID taskId);
+
+    /** The task's review window; empty when it never had one (an API task, or one never reviewed). */
+    Optional<ReviewWindowState> findReviewWindow(UUID taskId);
+
+    /** Ids still PENDING_REVIEW whose review window closed at or before {@code now}. */
+    List<UUID> findIdsReviewExpired(java.time.Instant now);
 
     /**
      * Operational column write (unmapped on the entity): the Client's deadline, set once at submit

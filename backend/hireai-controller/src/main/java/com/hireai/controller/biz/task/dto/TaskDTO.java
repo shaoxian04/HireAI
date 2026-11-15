@@ -31,7 +31,14 @@ public record TaskDTO(
          * The Agent the task was booked with or assigned to; absent when none was (a routed task
          * that never found one) and on list/command responses, which don't resolve it.
          */
-        UUID agentId
+        UUID agentId,
+        /**
+         * When the Client's review window closes (#94): set once the result awaits review on the
+         * web channel, and kept after it is resolved. Absent on list/command responses.
+         */
+        Instant reviewDeadline,
+        /** True when the window closed unreviewed and the platform accepted on the Client's behalf. */
+        Boolean autoAccepted
 ) {
 
     public record OutputSpecDTO(String format, String schema, String acceptanceCriteria) {
