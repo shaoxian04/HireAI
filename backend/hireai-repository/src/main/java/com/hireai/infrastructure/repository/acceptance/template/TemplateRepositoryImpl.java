@@ -41,6 +41,11 @@ public class TemplateRepositoryImpl implements TemplateRepository {
         return jdbc.query(SELECT + " ORDER BY template_key, version", rowMapper());
     }
 
+    @Override
+    public List<TemplateModel> findVersions(String key) {
+        return jdbc.query(SELECT + " WHERE template_key = ? ORDER BY version", rowMapper(), key);
+    }
+
     private RowMapper<TemplateModel> rowMapper() {
         return (rs, rowNum) -> {
             Timestamp publishedAt = rs.getTimestamp("published_at");

@@ -4,6 +4,8 @@ import type { AgentOptionDTO, NoMatchDTO } from "@/lib/types";
 import { Button, Modal } from "@/components/ui";
 import { DeliveryRecord } from "@/components/DeliveryRecord";
 import { ContractDeclines } from "@/components/ContractDeclines";
+import { VersionFallbackNotice } from "@/components/VersionFallbackNotice";
+import type { VersionFallbackDTO } from "@/lib/types";
 
 interface Props {
   open: boolean;
@@ -18,6 +20,10 @@ interface Props {
   labelFor?: (parameter: string) => string;
   /** The Client chose to leave `parameter` unset and search again. Never called on its own. */
   onRelax?: (parameter: string) => void;
+  /** The terms were matched under the previous Template version (no agent accepts the current one yet). */
+  fallback?: VersionFallbackDTO | null;
+  /** The plain title of the terms' Template, for the fallback notice. */
+  templateTitle?: string;
   onSelect: (option: AgentOptionDTO) => void;
   onClose: () => void;
 }
@@ -31,6 +37,8 @@ export function ShortlistPanel({
   noMatch = null,
   labelFor = (p) => p,
   onRelax,
+  fallback = null,
+  templateTitle,
   onSelect,
   onClose,
 }: Props) {
@@ -56,6 +64,12 @@ export function ShortlistPanel({
           ✕
         </button>
       </div>
+
+      {fallback && (
+        <div className="border-b border-line px-6 py-4">
+          <VersionFallbackNotice fallback={fallback} templateTitle={templateTitle} context="preview" />
+        </div>
+      )}
 
       {empty ? (
         <p className="px-6 py-8 text-sm text-dim">

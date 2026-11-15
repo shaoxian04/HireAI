@@ -23,6 +23,7 @@ import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
 import { ContractPanel } from "@/components/AcceptanceTerms";
 import { ItemsPanel } from "@/components/ItemsPanel";
 import { ReceiptsPanel } from "@/components/ReceiptsPanel";
+import { VersionFallbackNotice } from "@/components/VersionFallbackNotice";
 import { DispatchHistory } from "@/components/ContractDeclines";
 import { AgentResponsePending, ClientDecisionPanel, RevisedResultNotice } from "@/components/RejectionPanel";
 
@@ -330,6 +331,11 @@ function TaskDetail() {
           </h2>
           <div className="mt-2">
             <ContractPanel contract={task.contract} legacyFormat={task.outputSpec?.format} />
+            {task.templateFallback && (
+              <div className="mt-3">
+                <VersionFallbackNotice fallback={task.templateFallback} context="task" />
+              </div>
+            )}
           </div>
         </section>
 

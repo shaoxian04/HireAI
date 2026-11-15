@@ -156,7 +156,8 @@ public final class AgentVersionModel {
     }
 
     /**
-     * The Offer must name the Template of this Agent's own Contract and accept each value that
+     * The Offer must name the Template of this Agent's own Contract (any version of it: after a new
+     * version's transition only the new one may be named, spec D36) and accept each value that
      * Contract sets. Own Contracts set at most {@code custom_json}'s schema (text), so only text
      * values need a range check here; coverage of client Contracts at matching time is the coverage
      * domain service's job.
@@ -164,7 +165,7 @@ public final class AgentVersionModel {
     private void requireAcceptsOwnContract(Offer candidate) {
         Contract own = outputSpec.toContract();
         OfferTerm term = candidate.terms().stream()
-                .filter(t -> t.template().equals(own.template()))
+                .filter(t -> t.template().key().equals(own.template().key())) // any live version (D36)
                 .findFirst()
                 .orElseThrow(() -> new DomainException(ResultCode.VALIDATION_ERROR,
                         "The Offer must keep " + own.template() + ", the Template of this Agent's output "

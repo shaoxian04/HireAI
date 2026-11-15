@@ -100,6 +100,24 @@ export interface TemplateDTO {
   rulingSettlement: Record<string, number>;
   status: "ACTIVE" | "RETIRED";
   publishedAt: string;
+  /** New Contracts use this version: the newest active one of its key (absent from older backends). */
+  current?: boolean;
+  /** Current, or the previous version during its transition. Offers may name only these. */
+  takesNewContracts?: boolean;
+  /** When the previous version's transition ends; absent for the current version and closed ones. */
+  takesNewContractsUntil?: string;
+}
+
+/**
+ * A Contract made under the previous Template version during a transition, because no agent's Offer
+ * covers the current one yet. `usedVersion` takes new Contracts until `transitionEndsAt`.
+ */
+export interface VersionFallbackDTO {
+  template: string;
+  currentVersion: number;
+  usedVersion: number;
+  transitionEndsAt: string;
+  summary: string;
 }
 
 export interface TemplateParameterDTO {
@@ -227,6 +245,8 @@ export interface TaskDTO {
   itemCount?: number | null;
   itemPrice?: number | null;
   items?: TaskItemDTO[] | null;
+  /** The frozen Contract uses the previous Template version during its transition (no agent covered the current one). */
+  templateFallback?: VersionFallbackDTO | null;
 }
 
 /** An Item's own state inside a multi-Item Task. */
@@ -698,6 +718,8 @@ export interface MatchPreviewDTO {
   noCloseMatch?: boolean;
   /** Why the shortlist is empty (absent when it isn't): what excluded the in-budget agents. */
   noMatch?: NoMatchDTO;
+  /** The terms were matched under the previous Template version: no agent accepts the current one yet. */
+  fallback?: VersionFallbackDTO;
 }
 
 /** What excluded an agent: a Contract parameter its Offer doesn't cover, the relevance floor, or the Template. */
