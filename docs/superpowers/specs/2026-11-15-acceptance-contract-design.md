@@ -204,6 +204,12 @@ The numbers follow the grilling questions; gaps in the sequence are questions th
   - Only the client or buyer opens arbitration, and their frozen escrow is the security.
   - The arbitration cost is borne by the loser, capped at 20% of the Item price, and the platform covers any excess. A client's share comes out of the refund; a Builder's, out of its earnings wallet.
   - The Appeal Fee follows the same rule.
+- **D44 (2026-11-15, settled during ticketing).** An **Engagement** is a standing agreement between a buyer and an Agent the buyer chose.
+  - It records the buyer's consent to send confidential documents, and an optional Template variant, which the Agent must accept.
+  - It is built in ticket #104.
+- **D45 (2026-11-15, settled during ticketing).** The first invoice Template emits only duplicate and arithmetic Findings.
+  - Findings that need the buyer's reference data (supplier master data, PO existence) wait for a later ticket that designs how that data gets in.
+- **Tickets:** #88–#110 are sub-issues of #87, with native blocking edges. The first frontier is #88 and #94.
 - **D9, D26.** There is **one** spec for acceptance, #46 and #50.
   - **Dependencies folded in:**
     - SourceSnapshot (input documents, ADR 0004),
