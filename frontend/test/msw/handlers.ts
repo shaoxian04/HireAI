@@ -285,6 +285,7 @@ export const handlers = [
     if (category && !CARD.categories.includes(category)) return ok([]);
     return ok([CARD]);
   }),
+  http.get("*/api/catalogue/templates", () => ok(TEMPLATES)),
   http.get("*/api/catalogue/categories", () =>
     ok([
       { category: "summarisation", label: "Summarisation", agentCount: 1 },
@@ -626,3 +627,25 @@ export const manageHandlers = [
 
 export const server = setupServer(...handlers, ...manageHandlers);
 export { ok, fail };
+
+/** Two published Templates for forms that offer output terms (#91). */
+export const TEMPLATES = [
+  {
+    key: "text_basic", version: 1, title: "Text", description: "A plain-text result.", outputShape: "TEXT",
+    checks: [], parameters: [], expectationMode: "NONE",
+    rulingSettlement: { FULFILLED: 1, PARTIALLY_FULFILLED: 0.5, NOT_FULFILLED: 0 },
+    status: "ACTIVE", publishedAt: "2026-11-15T00:00:00Z",
+  },
+  {
+    key: "file_basic", version: 1, title: "File", description: "A delivered file.", outputShape: "FILE",
+    checks: [], expectationMode: "NONE",
+    parameters: [
+      { name: "max_bytes", label: "Largest file accepted", description: null, comparison: "min",
+        bounds: { minimum: 1, maximum: 104857600 } },
+      { name: "media_types", label: "Accepted file types", description: null, comparison: "subset",
+        bounds: { allowedValues: ["application/pdf", "image/png"] } },
+    ],
+    rulingSettlement: { FULFILLED: 1, PARTIALLY_FULFILLED: 0.5, NOT_FULFILLED: 0 },
+    status: "ACTIVE", publishedAt: "2026-11-15T00:00:00Z",
+  },
+];

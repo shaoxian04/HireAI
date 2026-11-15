@@ -73,3 +73,40 @@ describe("ShortlistPanel", () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+describe("ShortlistPanel — no-match explanation (#91)", () => {
+  const noMatch = {
+    summary: "s",
+    exclusions: [
+      { blocker: "PARAMETER" as const, parameter: "max_bytes", agents: 3 },
+      { blocker: "RELEVANCE_FLOOR" as const, parameter: null, agents: 1 },
+      { blocker: "TEMPLATE" as const, parameter: null, agents: 1 },
+    ],
+    suggestions: [{ parameter: "max_bytes", agents: 2 }],
+  };
+
+  it("names each blocking term with its agent count and offers the relax as the Client's choice", () => {
+    const onRelax = vi.fn();
+    render(<ShortlistPanel open budget={30} shortlist={[]} nearMisses={[]} onSelect={noop} onClose={noop}
+      noMatch={noMatch} labelFor={(p) => (p === "max_bytes" ? "Largest file accepted" : p)} onRelax={onRelax} />);
+
+    expect(screen.getByText(/no agent accepts these terms/i)).toBeTruthy();
+    expect(screen.getByText("Largest file accepted")).toBeTruthy();
+    expect(screen.getByText("3 agents")).toBeTruthy();
+    expect(screen.getByText(/describe work like yours/i)).toBeTruthy();
+    expect(screen.getByText(/deliver this kind of output/i)).toBeTruthy();
+    expect(screen.queryByText(/no agents match this category/i)).toBeNull();
+    expect(onRelax).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /drop largest file accepted → 2 agents/i }));
+    expect(onRelax).toHaveBeenCalledWith("max_bytes");
+  });
+
+  it("keeps the close-match copy when only the relevance floor ruled agents out", () => {
+    render(<ShortlistPanel open budget={30} shortlist={[]} nearMisses={[]} onSelect={noop} onClose={noop}
+      noCloseMatch noMatch={{ summary: "s", suggestions: [],
+        exclusions: [{ blocker: "RELEVANCE_FLOOR", parameter: null, agents: 2 }] }} />);
+    expect(screen.getByText(/no agent matches this task closely/i)).toBeTruthy();
+    expect(screen.queryByText(/no agent accepts these terms/i)).toBeNull();
+  });
+});

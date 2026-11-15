@@ -203,6 +203,8 @@ export interface TaskDTO {
   category?: string;
   /** The Agent the task was booked with (`GET /tasks/{id}` only; absent when none was). */
   agentId?: string | null;
+  /** Why no agent matched (`GET /tasks/{id}` only): while AWAITING_AGENT and after NO_ELIGIBLE_AGENT. */
+  failureDetail?: string | null;
 }
 
 /** Mirrors the backend FailureReason enum (set once when a task ends without a result). */
@@ -302,6 +304,8 @@ export interface DirectBookRequest {
   category?: string;
   /** Optional: seconds from booking the result is needed by; a slower agent is refused. */
   deadlineSeconds?: number;
+  /** Optional: the Contract to book under; the agent's Offer must cover it, and it is frozen on the task. */
+  contract?: ContractDTO;
 }
 
 export type CatalogueSort = "hot" | "rating" | "price_asc" | "price_desc" | "newest";
@@ -536,6 +540,8 @@ export interface MatchPreviewRequest {
   deadlineSeconds?: number;
   /** Agents to leave out of both lists (the Agent that failed a rebooked task). */
   exclude?: string[];
+  /** Optional: only agents whose Offer covers this Contract are listed. */
+  contract?: ContractDTO;
 }
 
 export interface MatchPreviewDTO {
@@ -543,6 +549,19 @@ export interface MatchPreviewDTO {
   nearMisses: AgentOptionDTO[];
   /** True when the shortlist is empty only because no in-budget agent's profile fits the task text. */
   noCloseMatch?: boolean;
+  /** Why the shortlist is empty (absent when it isn't): what excluded the in-budget agents. */
+  noMatch?: NoMatchDTO;
+}
+
+/** What excluded an agent: a Contract parameter its Offer doesn't cover, the relevance floor, or the Template. */
+export type NoMatchBlocker = "PARAMETER" | "RELEVANCE_FLOOR" | "TEMPLATE";
+
+export interface NoMatchDTO {
+  summary: string;
+  /** Each blocker with the number of in-budget agents it excluded, most first. */
+  exclusions: { blocker: NoMatchBlocker; parameter?: string | null; agents: number }[];
+  /** Leaving `parameter` unset would make `agents` more agents eligible. Never applied for you. */
+  suggestions: { parameter: string; agents: number }[];
 }
 
 // ── Validation report (spec-violation reason) ───────────────────────────────

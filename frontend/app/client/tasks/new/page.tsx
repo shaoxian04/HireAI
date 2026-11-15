@@ -10,10 +10,13 @@ import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { ShortlistPanel } from "@/components/ShortlistPanel";
 import { CategoryCombobox } from "@/components/CategoryCombobox";
+import { ContractTermsField, parameterLabel, withoutParameter } from "@/components/ContractTermsField";
+import { refOf, useTemplates } from "@/components/AcceptanceTerms";
 import { fetchMatchPreview } from "@/lib/rebook";
 import { DEADLINE_UNITS, toDeadlineSeconds, type DeadlineUnit } from "@/lib/deadline";
 import type {
   AgentOptionDTO,
+  ContractDTO,
   DirectBookRequest,
   MatchPreviewDTO,
   TaskDTO,
@@ -35,6 +38,7 @@ interface Draft {
   budget: string;
   deadline?: string;
   deadlineUnit?: DeadlineUnit;
+  contract?: ContractDTO | null;
 }
 
 function SubmitTask() {
@@ -50,6 +54,11 @@ function SubmitTask() {
   const [deadline, setDeadline] = useState("");
   const [deadlineUnit, setDeadlineUnit] = useState<DeadlineUnit>("hours");
   const deadlineSeconds = toDeadlineSeconds(deadline, deadlineUnit);
+  // The output terms the shortlist must accept and the booking freezes (#91); null = the agent's own.
+  const [contract, setContract] = useState<ContractDTO | null>(null);
+  const templates = useTemplates(true);
+  const contractTemplate =
+    contract && templates.status === "ready" ? templates.byRef.get(refOf(contract.template, contract.version)) : undefined;
   const [preview, setPreview] = useState<MatchPreviewDTO | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [selected, setSelected] = useState<AgentOptionDTO | null>(null);
@@ -67,6 +76,7 @@ function SubmitTask() {
     ? {
         title, description, budget: selected.price, agentId: selected.agentId, // the agent's price, not the typed budget
         ...(typeof deadlineSeconds === "number" ? { deadlineSeconds } : {}),
+        ...(contract ? { contract } : {}),
       }
     : null;
   const getIdempotencyKey = useIdempotencyKey(directBookSignature(bookingBody));
@@ -124,6 +134,7 @@ function SubmitTask() {
       );
       setDeadline(typeof d.deadline === "string" ? d.deadline : "");
       if (d.deadlineUnit && DEADLINE_UNITS.some((u) => u.value === d.deadlineUnit)) setDeadlineUnit(d.deadlineUnit);
+      if (d.contract && typeof d.contract.template === "string" && d.contract.params) setContract(d.contract);
     } catch {
       /* ignore a malformed draft */
     }
@@ -138,9 +149,9 @@ function SubmitTask() {
       firstPersist.current = false;
       return;
     }
-    const draft: Draft = { title, description, category, budget, deadline, deadlineUnit };
+    const draft: Draft = { title, description, category, budget, deadline, deadlineUnit, contract };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [title, description, category, budget, deadline, deadlineUnit, rebookId]);
+  }, [title, description, category, budget, deadline, deadlineUnit, contract, rebookId]);
 
   async function onFind(e: FormEvent) {
     e.preventDefault();
@@ -160,11 +171,16 @@ function SubmitTask() {
       setError({ field: "deadlineSeconds", message: "Enter the deadline as a whole number, up to 30 days, or leave it empty" });
       return;
     }
+    await search(budgetNum, contract);
+  }
+
+  async function search(budgetNum: number, terms: ContractDTO | null) {
     setLoading(true);
     try {
       const result = await fetchMatchPreview({
         title, description, category, budget: budgetNum, exclude: excluded,
-        ...(deadlineSeconds !== null ? { deadlineSeconds } : {}),
+        ...(typeof deadlineSeconds === "number" ? { deadlineSeconds } : {}),
+        ...(terms ? { contract: terms } : {}),
       });
       setPreview(result);
       setPreviewOpen(true);
@@ -173,6 +189,15 @@ function SubmitTask() {
     } finally {
       setLoading(false);
     }
+  }
+
+  /** The Client chose a relax suggestion: drop that term and search again with the rest. */
+  function onRelax(parameter: string) {
+    if (!contract) return;
+    const relaxed = withoutParameter(contract, parameter);
+    setContract(relaxed);
+    setSelected(null);
+    void search(Number(budget), relaxed);
   }
 
   async function onBook() {
@@ -243,6 +268,11 @@ function SubmitTask() {
                 onChange={(v) => { setCategory(v); clearFieldError(); }}
               />
             </Field>
+            <ContractTermsField
+              templates={templates}
+              value={contract}
+              onChange={(next) => { setContract(next); clearFieldError(); }}
+            />
           </div>
           <div className="docket-tear" />
           <div className="space-y-4 bg-surface-2 p-6">
@@ -318,6 +348,9 @@ function SubmitTask() {
           shortlist={preview.shortlist}
           nearMisses={preview.nearMisses}
           noCloseMatch={preview.noCloseMatch ?? false}
+          noMatch={preview.noMatch ?? null}
+          labelFor={(p) => parameterLabel(contractTemplate, p)}
+          onRelax={onRelax}
           budget={budgetValue}
           onSelect={(o) => {
             setSelected(o);
@@ -350,6 +383,11 @@ function SubmitTask() {
             {selected.price > budgetValue && (
               <> This is above your {budgetValue} cr budget.</>
             )}
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            {contractTemplate
+              ? <>The agent is held to your output terms: {contractTemplate.title}.</>
+              : "The agent works under its own output terms."}
           </p>
           <div className="mt-4 flex items-center gap-4">
             <Button onClick={onBook} disabled={loading}>
