@@ -1,5 +1,7 @@
 package com.hireai.domain.biz.offering.agent.info;
 
+import com.hireai.domain.biz.acceptance.offer.model.Offer;
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
@@ -22,11 +24,24 @@ import java.util.UUID;
  * (#85), computed by the candidate query from vectors of the same model. Null when the Agent has no
  * vector of that model, or when the task text couldn't be embedded; the matcher then treats the Agent
  * as neutral (it passes the floor and scores 0.5 on relevance).
+ *
+ * <p>{@code offer} is the version's Offer (spec D34, #91): when the criteria carry Contract terms, the
+ * matcher keeps the candidate only if it covers them.
  */
 public record AgentCandidate(UUID agentId, UUID agentVersionId, List<String> capabilityCategories,
                              BigDecimal price, String webhookUrl, int maxExecutionSeconds,
                              BigDecimal reputationScore, String outputSpecJson,
-                             int maxConcurrent, long inFlight, long sampleCount, Double similarity) {
+                             int maxConcurrent, long inFlight, long sampleCount, Double similarity,
+                             Offer offer) {
+
+    /** A candidate without an Offer: it covers no Contract, so only coverage-free matching keeps it. */
+    public AgentCandidate(UUID agentId, UUID agentVersionId, List<String> capabilityCategories,
+                          BigDecimal price, String webhookUrl, int maxExecutionSeconds,
+                          BigDecimal reputationScore, String outputSpecJson,
+                          int maxConcurrent, long inFlight, long sampleCount, Double similarity) {
+        this(agentId, agentVersionId, capabilityCategories, price, webhookUrl, maxExecutionSeconds,
+                reputationScore, outputSpecJson, maxConcurrent, inFlight, sampleCount, similarity, null);
+    }
 
     /** A candidate without a relevance signal (no task or Agent vector). */
     public AgentCandidate(UUID agentId, UUID agentVersionId, List<String> capabilityCategories,

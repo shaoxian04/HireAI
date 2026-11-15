@@ -34,12 +34,13 @@ public interface RoutedFailoverDomainService {
 
     /**
      * Why a hop found nobody, once {@link #selectNext} came back empty (#59): {@code NO_ELIGIBLE_AGENT}
-     * when an untried Agent exists but the client deadline rules every one out, otherwise
+     * when an untried Agent that is otherwise eligible under {@code criteria} (budget, Offer coverage,
+     * relevance floor) exists but the client deadline rules every one out, otherwise
      * {@code NO_ALTERNATIVE_AGENT} (nobody untried is left, or the Agent limit is reached).
      *
      * @param candidatesIgnoringDeadline the same candidate query without the client-deadline bound,
      *                                   or {@code null} when the task has no deadline
      */
-    FailureReason exhaustionReason(List<DispatchAttemptView> history,
+    FailureReason exhaustionReason(MatchCriteria criteria, List<DispatchAttemptView> history,
                                    List<AgentCandidate> candidatesIgnoringDeadline);
 }

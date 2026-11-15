@@ -1,6 +1,9 @@
 package com.hireai.application.biz.task.routing.impl;
 
+import com.hireai.application.biz.acceptance.TemplateReadAppService;
 import com.hireai.application.biz.offering.embedding.TaskTextEmbeddingAppService;
+import com.hireai.domain.biz.task.info.MatchCriteria;
+import com.hireai.domain.biz.task.routing.info.NoMatchExplanation;
 import com.hireai.application.biz.task.routing.RoutingAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
@@ -55,6 +58,8 @@ public class RoutingAppServiceImpl implements RoutingAppService {
     private final TaskDispatchPublisher taskDispatchPublisher;
     private final DispatchAttemptRepository dispatchAttemptRepository;
     private final RoutedFailoverDomainService routedFailoverDomainService;
+    /** Resolves the task's Contract to its Template version, for Offer coverage (#91). */
+    private final TemplateReadAppService templateReadAppService;
     /** The task text's vector for the relevance floor and term (#85); empty = rank without relevance. */
     private final TaskTextEmbeddingAppService taskTextEmbeddingAppService;
     /** The app's Clock bean (ClockConfig); tests pass a fixed one to pin the execution deadline. */
@@ -80,12 +85,17 @@ public class RoutingAppServiceImpl implements RoutingAppService {
         Instant now = selectionInstant();
         List<AgentCandidate> candidates = agentRepository.findActiveCandidates(
                 view.category(), view.budget(), longestExecutionSeconds(view, now), taskVector);
-        Optional<UUID> chosen = routingMatchDomainService.selectOne(view, candidates);
+        MatchCriteria criteria = criteriaFor(view);
+        Optional<UUID> chosen = routingMatchDomainService.selectOne(criteria, candidates);
 
         if (chosen.isEmpty()) {
-            log.info("No ACTIVE agent matched task {} (category={}, budget={}, clientDeadline={}); "
-                    + "marking AWAITING_AGENT", taskId, view.category(), view.budget(), view.clientDeadline());
-            taskWriteAppService.markAwaitingAgent(taskId);
+            // The blocking parameter (or the relevance floor) travels to the task's failure detail (D35).
+            String detail = routingMatchDomainService.explainNoMatch(criteria, candidates)
+                    .map(NoMatchExplanation::summary)
+                    .orElse(null);
+            log.info("No ACTIVE agent matched task {} (category={}, budget={}, clientDeadline={}): {}; "
+                    + "marking AWAITING_AGENT", taskId, view.category(), view.budget(), view.clientDeadline(), detail);
+            taskWriteAppService.markAwaitingAgent(taskId, detail);
             return;
         }
 
@@ -139,12 +149,13 @@ public class RoutingAppServiceImpl implements RoutingAppService {
         Long deadlineBound = longestExecutionSeconds(view, now);
         List<AgentCandidate> candidates = agentRepository.findActiveCandidates(
                 view.category(), view.budget(), deadlineBound, taskVector);
-        Optional<AgentCandidate> next = routedFailoverDomainService.selectNext(view, history, candidates);
+        MatchCriteria criteria = criteriaFor(view);
+        Optional<AgentCandidate> next = routedFailoverDomainService.selectNext(criteria, history, candidates);
         if (next.isEmpty()) {
             // Tell "only the client deadline rules the rest out" apart from "nobody untried is left".
             List<AgentCandidate> ignoringDeadline = deadlineBound == null ? null
                     : agentRepository.findActiveCandidates(view.category(), view.budget(), null, taskVector);
-            FailureReason reason = routedFailoverDomainService.exhaustionReason(history, ignoringDeadline);
+            FailureReason reason = routedFailoverDomainService.exhaustionReason(criteria, history, ignoringDeadline);
             log.info("Task {}: no untried eligible Agent left after {} attempt(s); failing with {}",
                     taskId, history.size(), reason);
             taskWriteAppService.failWithRefund(taskId, reason);
@@ -201,6 +212,14 @@ public class RoutingAppServiceImpl implements RoutingAppService {
             }
         });
         return true;
+    }
+
+    /**
+     * The task's matching criteria with its Contract terms, so every selection keeps only Agents whose
+     * Offer covers the Contract (#91). A view without a Contract filters no Offer.
+     */
+    private MatchCriteria criteriaFor(TaskRoutingView view) {
+        return view.contract() == null ? view : view.withTerms(templateReadAppService.termsFor(view.contract()));
     }
 
     /**

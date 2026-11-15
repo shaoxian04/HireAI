@@ -1,6 +1,9 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.application.biz.acceptance.TemplateReadAppService;
 import com.hireai.application.biz.offering.embedding.TaskTextEmbeddingAppService;
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.task.info.MatchCriteria;
 import com.hireai.application.biz.task.MatchPreviewAppService;
 import com.hireai.application.port.query.MatchPreviewQueryPort;
 import com.hireai.application.port.query.MatchPreviewQueryPort.ShortlistCandidateRow;
@@ -39,6 +42,8 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
     private final RoutingMatchDomainService matcher;
     private final CategoryRepository categoryRepository;
     private final TaskTextEmbeddingAppService taskTextEmbeddingAppService;
+    /** Validates the preview's Contract and resolves its Template version (#91). */
+    private final TemplateReadAppService templateReadAppService;
     /** The app's Clock bean: the preview's deadline is counted from the request. */
     private final Clock clock;
     /** Added to an Agent's max execution time, as routing stamps it (ExecutionConfig). */
@@ -51,9 +56,15 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
      */
     @Override
     public MatchPreview preview(String title, String description, String category, Money budget,
-                                Set<UUID> excludedAgentIds, Long deadlineSeconds) {
+                                Set<UUID> excludedAgentIds, Long deadlineSeconds, Contract contract) {
         // An unknown slug is a 400 naming the valid ones (#80).
         String normalized = categoryRepository.load().requireKnown(category);
+        MatchCriteria criteria = new PreviewCriteria(normalized, budget.value());
+        if (contract != null) {
+            // A Contract outside its Template's bounds (or an unknown Template) is a 400, as at submit.
+            templateReadAppService.requireValid(contract);
+            criteria = criteria.withTerms(templateReadAppService.termsFor(contract));
+        }
         Set<UUID> excluded = excludedAgentIds == null ? Set.of() : excludedAgentIds;
         // Excluded before ranking, so they leave the shortlist and the near-misses alike.
         Long longestExecution = null;
@@ -73,7 +84,6 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
                         (a, b) -> a));
 
         List<AgentCandidate> candidates = rows.stream().map(this::toCandidate).toList();
-        PreviewCriteria criteria = new PreviewCriteria(normalized, budget.value());
         List<AgentOption> shortlist = matcher
                 .rank(criteria, candidates).stream()
                 .limit(SHORTLIST_LIMIT)
@@ -81,10 +91,13 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
                 .toList();
 
         BigDecimal budgetValue = budget.value();
-        // Near-misses meet the relevance floor too: an off-topic Agent is no useful suggestion.
+        // Near-misses meet the relevance floor and Offer coverage too: an off-topic Agent, or one that
+        // would not accept the Contract, is no useful suggestion.
+        MatchCriteria terms = criteria;
         List<AgentOption> nearMisses = rows.stream()
                 .filter(r -> r.price().compareTo(budgetValue) > 0)
                 .filter(r -> matcher.passesRelevanceFloor(toCandidate(r)))
+                .filter(r -> matcher.covers(terms, toCandidate(r)))
                 .sorted(Comparator.comparing(ShortlistCandidateRow::price)
                         .thenComparing(ShortlistCandidateRow::agentVersionId))
                 .limit(NEAR_MISS_LIMIT)
@@ -92,7 +105,8 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
                 .toList();
 
         return new MatchPreview(withContractDeclines(shortlist), withContractDeclines(nearMisses),
-                matcher.noCloseMatch(criteria, candidates));
+                matcher.noCloseMatch(criteria, candidates),
+                matcher.explainNoMatch(criteria, candidates).orElse(null));
     }
 
     /** Adds each Agent's public contract-decline rate (#93): shown to the Client, never ranked on. */
@@ -110,7 +124,7 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
     private AgentCandidate toCandidate(ShortlistCandidateRow r) {
         return new AgentCandidate(r.agentId(), r.agentVersionId(), r.capabilityCategories(),
                 r.price(), r.webhookUrl(), r.maxExecutionSeconds(), r.reputationScore(),
-                r.outputSpecJson(), r.maxConcurrent(), r.inFlight(), r.sampleCount(), r.similarity());
+                r.outputSpecJson(), r.maxConcurrent(), r.inFlight(), r.sampleCount(), r.similarity(), r.offer());
     }
 
     private AgentOption toOption(ShortlistCandidateRow r) {

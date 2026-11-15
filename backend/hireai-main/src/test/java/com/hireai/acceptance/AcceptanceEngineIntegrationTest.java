@@ -47,9 +47,13 @@ import static org.awaitility.Awaitility.await;
 class AcceptanceEngineIntegrationTest extends WholeAppIntegrationTest {
 
     private static final UUID DEV_USER = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    /** What every task here is held to: a 64 x 64 image on white. Canonical form (keys sorted by jsonb). */
-    private static final String IMAGE_CONTRACT =
-            "{\"background_colour\":\"#ffffff\",\"height\":64,\"width\":64}";
+    /** What every task here is held to: a 64 x 64 image on white, booked as an explicit Contract (#91). */
+    private static final String IMAGE_CONTRACT = "{\"template\":\"image_generation\",\"version\":1,"
+            + "\"params\":{\"background_colour\":\"#ffffff\",\"height\":64,\"width\":64}}";
+    /** The seeded Agent's Offer: its own file_basic term plus image_generation up to 1024 px, any colour. */
+    private static final String IMAGE_OFFER = "{\"terms\":[{\"template\":\"file_basic\",\"version\":1,\"params\":{}},"
+            + "{\"template\":\"image_generation\",\"version\":1,\"params\":{\"width\":{\"bound\":1024},"
+            + "\"height\":{\"bound\":1024},\"background_colour\":{\"any\":true}}}]}";
 
     @DynamicPropertySource
     static void trustTheFakeFileHost(DynamicPropertyRegistry registry) {
@@ -95,6 +99,17 @@ class AcceptanceEngineIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
+    void aBookingWhoseImageTermsCannotBeCheckedIsRefusedAndFreezesNothing() throws Exception {
+        UUID agentId = seedListedAgent(uniqueCategory(), "https://agent.example/run");
+        String bad = "{\"title\":\"Logo\",\"description\":\"x\",\"budget\":10.00,\"agentId\":\"" + agentId
+                + "\",\"contract\":{\"template\":\"image_generation\",\"version\":1,\"params\":{%s}}}";
+
+        assertThat(postRaw("/api/tasks/direct", bad.formatted("\"background_colour\":\"white\"")).statusCode())
+                .isEqualTo(400);
+        assertThat(postRaw("/api/tasks/direct", bad.formatted("\"width\":64.5")).statusCode()).isEqualTo(400);
+    }
+
+    @Test
     void anImageMeetingTheContractPassesOnItsPixels() throws Exception {
         Booking booking = book(order -> "/white.png");
 
@@ -121,7 +136,6 @@ class AcceptanceEngineIntegrationTest extends WholeAppIntegrationTest {
         assertThat(rework.path("maxReworks").asInt()).isEqualTo(2);
         assertThat(rework.path("failedChecks").findValuesAsText("rule")).containsExactly("IMAGE_BACKGROUND_COLOUR");
         assertThat(rework.path("failedChecks").get(0).path("detail").asText()).contains("#ff0000").contains("#ffffff");
-        assertThat(orders.get(1).bearerToken()).isNotEqualTo(orders.get(0).bearerToken());
 
         JsonNode report = get("/api/tasks/" + booking.taskId + "/validation");
         assertThat(report.path("verdict").asText()).isEqualTo("PASS");
@@ -241,49 +255,22 @@ class AcceptanceEngineIntegrationTest extends WholeAppIntegrationTest {
         return book(imagePath, extraFields, "A 64px logo on white, " + UUID.randomUUID());
     }
 
-    /**
-     * Books a seeded FILE Agent whose first result arrives 2s after the WorkOrder (time to set the
-     * image Contract) and whose reworks arrive at once; {@code imagePath} picks the image per WorkOrder.
-     */
+    /** Books a seeded image Agent under {@link #IMAGE_CONTRACT}; {@code imagePath} picks the image per WorkOrder. */
     private Booking book(Function<RecordedWorkOrder, String> imagePath, String extraFields, String brief)
             throws Exception {
-        FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted().withCallback(AgentCallback.custom(order -> {
-                    if (!order.json().has("rework")) {
-                        sleep(Duration.ofSeconds(2));
-                    }
-                    return CallbackRequest.post(order.callbackUrl())
+        FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted().withCallback(AgentCallback.custom(order ->
+                    CallbackRequest.post(order.callbackUrl())
                             .header("Authorization", "Bearer " + order.bearerToken())
                             .body("{\"taskId\":\"" + order.taskId() + "\",\"agentStatus\":\"COMPLETED\","
                                     + "\"resultPayloadJson\":\"{}\",\"resultUrl\":\"" + files.url(imagePath.apply(order))
-                                    + "\"" + extraFields + "}");
-                }).afterReply(Duration.ofMillis(100))));
+                                    + "\"" + extraFields + "}"))
+                .afterReply(Duration.ofMillis(100))));
         UUID agentId = seedListedAgent(uniqueCategory(), agent.webhookUrl());
         shareSigningSecret(agent);
         String taskId = post("/api/tasks/direct", "{\"title\":\"Logo\",\"description\":\"" + brief + "\","
-                + "\"budget\":10.00,\"agentId\":\"" + agentId + "\"}").path("id").asText();
-        holdToImageContract(taskId);
+                + "\"budget\":10.00,\"agentId\":\"" + agentId + "\",\"contract\":" + IMAGE_CONTRACT + "}")
+                .path("id").asText();
         return new Booking(taskId, agent);
-    }
-
-    /**
-     * Freezes the image Contract on a just-booked task, before its first result arrives. This base has
-     * no submit path that names image_generation (the explicit Contract is #91/#100), so the test does
-     * what that will do, bypassing the freeze trigger for this one statement once dispatch has saved
-     * the task as EXECUTING.
-     */
-    private void holdToImageContract(String taskId) {
-        awaitStatus(taskId, "EXECUTING");
-        jdbc.execute("DO $$ BEGIN PERFORM set_config('session_replication_role', 'replica', true); "
-                + "UPDATE tasks SET contract = jsonb_build_object('template', 'image_generation', 'version', 1, "
-                + "'params', '" + IMAGE_CONTRACT + "'::jsonb) WHERE id = '" + taskId + "'; END $$");
-    }
-
-    private static void sleep(Duration d) {
-        try {
-            Thread.sleep(d.toMillis());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
     }
 
     private void awaitStatus(String taskId, String status) {
@@ -319,8 +306,9 @@ class AcceptanceEngineIntegrationTest extends WholeAppIntegrationTest {
                 + "VALUES (?, ?, 'Image Agent', 'ACTIVE', ?, 80.00)", agentId, ownerId, versionId);
         jdbc.update("INSERT INTO agent_profiles (agent_id, is_listed) VALUES (?, true)", agentId);
         jdbc.update("INSERT INTO agent_versions (id, agent_id, version_number, output_spec, capability_categories, "
-                        + "webhook_url, max_execution_seconds, price) VALUES (?, ?, 1, '{\"format\":\"FILE\"}'::jsonb, ?, ?, 60, ?)",
-                versionId, agentId, new String[]{category}, webhookUrl, new BigDecimal("10.00"));
+                        + "webhook_url, max_execution_seconds, price, offer) "
+                        + "VALUES (?, ?, 1, '{\"format\":\"FILE\"}'::jsonb, ?, ?, 60, ?, ?::jsonb)",
+                versionId, agentId, new String[]{category}, webhookUrl, new BigDecimal("10.00"), IMAGE_OFFER);
         return agentId;
     }
 

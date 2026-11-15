@@ -1,13 +1,21 @@
 package com.hireai.domain.biz.task.routing.service.impl;
 
+import com.hireai.domain.biz.acceptance.coverage.info.ContractTerms;
+import com.hireai.domain.biz.acceptance.coverage.info.Coverage;
+import com.hireai.domain.biz.acceptance.coverage.service.OfferCoverageDomainService;
+import com.hireai.domain.biz.acceptance.coverage.service.impl.OfferCoverageDomainServiceImpl;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.task.info.MatchCriteria;
+import com.hireai.domain.biz.task.routing.info.NoMatchExplanation;
 import com.hireai.domain.biz.task.routing.info.ScoredCandidate;
 import com.hireai.domain.biz.task.routing.service.MatchingPolicy;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.random.RandomGenerator;
@@ -36,10 +44,18 @@ public class RoutingMatchDomainServiceImpl implements RoutingMatchDomainService 
 
     private final MatchingPolicy policy;
     private final RandomGenerator rng;
+    private final OfferCoverageDomainService coverage;
 
-    public RoutingMatchDomainServiceImpl(MatchingPolicy policy, RandomGenerator rng) {
+    public RoutingMatchDomainServiceImpl(MatchingPolicy policy, RandomGenerator rng,
+                                         OfferCoverageDomainService coverage) {
         this.policy = policy;
         this.rng = rng;
+        this.coverage = coverage;
+    }
+
+    /** With the standard coverage rules (the service is stateless). */
+    public RoutingMatchDomainServiceImpl(MatchingPolicy policy, RandomGenerator rng) {
+        this(policy, rng, new OfferCoverageDomainServiceImpl());
     }
 
     @Override
@@ -50,6 +66,7 @@ public class RoutingMatchDomainServiceImpl implements RoutingMatchDomainService 
         List<AgentCandidate> eligible = candidates.stream()
                 .filter(c -> coversCategory(c, criteria.category()))
                 .filter(c -> withinBudget(c, criteria))
+                .filter(c -> covers(criteria, c))
                 .filter(this::passesRelevanceFloor)
                 .toList();
         RelevanceRange range = RelevanceRange.of(eligible);
@@ -81,7 +98,70 @@ public class RoutingMatchDomainServiceImpl implements RoutingMatchDomainService 
     @Override
     public boolean noCloseMatch(MatchCriteria criteria, List<AgentCandidate> candidates) {
         return rank(criteria, candidates).isEmpty() && candidates.stream()
-                .anyMatch(c -> withinBudget(c, criteria) && !passesRelevanceFloor(c));
+                .anyMatch(c -> withinBudget(c, criteria) && covers(criteria, c) && !passesRelevanceFloor(c));
+    }
+
+    @Override
+    public boolean covers(MatchCriteria criteria, AgentCandidate candidate) {
+        return coverageOf(criteria, candidate).covered();
+    }
+
+    @Override
+    public Optional<NoMatchExplanation> explainNoMatch(MatchCriteria criteria, List<AgentCandidate> candidates) {
+        if (criteria == null || !rank(criteria, candidates == null ? List.of() : candidates).isEmpty()) {
+            return Optional.empty();
+        }
+        Map<String, Integer> byParameter = new TreeMap<>();
+        Map<String, Integer> relaxable = new TreeMap<>();
+        int belowFloor = 0;
+        int templateNotOffered = 0;
+        for (AgentCandidate c : candidates == null ? List.<AgentCandidate>of() : candidates) {
+            if (!coversCategory(c, criteria.category()) || !withinBudget(c, criteria)) {
+                continue;
+            }
+            Coverage result = coverageOf(criteria, c);
+            boolean floor = passesRelevanceFloor(c);
+            if (!floor) {
+                belowFloor++;
+            }
+            if (!result.templateOffered()) {
+                templateNotOffered++;
+                continue;
+            }
+            for (String parameter : result.blockingParameters()) {
+                byParameter.merge(parameter, 1, Integer::sum);
+            }
+            if (floor && result.blockingParameters().size() == 1) {
+                relaxable.merge(result.blockingParameters().get(0), 1, Integer::sum);
+            }
+        }
+        List<NoMatchExplanation.Exclusion> exclusions = new ArrayList<>();
+        byParameter.forEach((p, n) ->
+                exclusions.add(new NoMatchExplanation.Exclusion(NoMatchExplanation.Blocker.PARAMETER, p, n)));
+        if (belowFloor > 0) {
+            exclusions.add(new NoMatchExplanation.Exclusion(NoMatchExplanation.Blocker.RELEVANCE_FLOOR, null,
+                    belowFloor));
+        }
+        if (templateNotOffered > 0) {
+            exclusions.add(new NoMatchExplanation.Exclusion(NoMatchExplanation.Blocker.TEMPLATE, null,
+                    templateNotOffered));
+        }
+        // Stable sort: parameters (already in name order), then the floor, then the Template.
+        exclusions.sort(Comparator.comparingInt(NoMatchExplanation.Exclusion::agents).reversed());
+        List<NoMatchExplanation.RelaxSuggestion> suggestions = new ArrayList<>();
+        relaxable.forEach((p, n) -> suggestions.add(new NoMatchExplanation.RelaxSuggestion(p, n)));
+        suggestions.sort(Comparator.comparingInt(NoMatchExplanation.RelaxSuggestion::agents).reversed());
+        ContractTerms terms = criteria.contractTerms();
+        return Optional.of(new NoMatchExplanation(terms == null ? null : terms.contract().template(),
+                exclusions, suggestions));
+    }
+
+    private Coverage coverageOf(MatchCriteria criteria, AgentCandidate candidate) {
+        ContractTerms terms = criteria == null ? null : criteria.contractTerms();
+        if (terms == null) {
+            return Coverage.full();
+        }
+        return coverage.coverage(terms.template(), terms.contract(), candidate.offer());
     }
 
     private double score(AgentCandidate c, MatchCriteria criteria, RelevanceRange range) {

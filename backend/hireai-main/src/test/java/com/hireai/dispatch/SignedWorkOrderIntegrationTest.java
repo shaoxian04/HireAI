@@ -161,5 +161,6 @@ class SignedWorkOrderIntegrationTest extends WholeAppIntegrationTest {
         jdbc.update("INSERT INTO agent_versions (id, agent_id, version_number, output_spec, capability_categories, "
                         + "webhook_url, max_execution_seconds, price) VALUES (?, ?, 1, ?::jsonb, ?, ?, 60, ?)",
                 versionId, agentId, AGENT_SPEC, new String[]{category}, webhookUrl, new BigDecimal("10.00"));
+        acceptAnyJsonSchema(versionId);
     }
 }

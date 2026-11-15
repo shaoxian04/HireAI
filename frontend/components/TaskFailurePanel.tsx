@@ -11,6 +11,8 @@ interface Props {
   failureReason?: FailureReason | null;
   budget: number;
   detail?: ValidationReportDTO | null;
+  /** Why no agent matched (NO_ELIGIBLE_AGENT): the blocking term or the relevance floor, with counts. */
+  failureDetail?: string | null;
 }
 
 type Tone = "red" | "amber" | "dim";
@@ -66,7 +68,7 @@ const REASON_COPY: Record<FailureReason, { headline: string; why: string }> = {
   },
   NO_ELIGIBLE_AGENT: {
     headline: "No agent was available",
-    why: "We kept looking for an agent that takes this category within your budget, but none turned up in time, so we released your task rather than hold your credits.",
+    why: "We kept looking for an agent that takes this category and your output terms within your budget, but none turned up in time, so we released your task rather than hold your credits.",
   },
   DISPATCH_ABANDONED: {
     headline: "We couldn't hand your task to an agent",
@@ -102,7 +104,7 @@ const HEAD_CLS: Record<Tone, string> = {
   dim: "text-fg",
 };
 
-export function TaskFailurePanel({ taskId, status, failureReason, budget, detail }: Props) {
+export function TaskFailurePanel({ taskId, status, failureReason, budget, detail, failureDetail }: Props) {
   const statusCopy = COPY[status];
   if (!statusCopy) return null;
   const copy = { ...statusCopy, ...(failureReason ? REASON_COPY[failureReason] : {}) };
@@ -122,6 +124,12 @@ export function TaskFailurePanel({ taskId, status, failureReason, budget, detail
               The agent was sent the failing checks and reworked it{" "}
               {detail!.rejectedAttempts! - 1 === 1 ? "once" : `${detail!.rejectedAttempts! - 1} times`}; it still
               failed, so the task ended here. A failed automatic check can&apos;t be disputed.
+            </p>
+          )}
+          {failureReason === "NO_ELIGIBLE_AGENT" && failureDetail && (
+            <p className="rounded-md border border-line bg-surface-2 px-3 py-2 text-sm text-fg">
+              <span className="eyebrow mr-2">What ruled agents out</span>
+              {failureDetail}
             </p>
           )}
           <p className="pt-2 text-sm font-semibold text-fg">{budget} cr refunded to your wallet</p>

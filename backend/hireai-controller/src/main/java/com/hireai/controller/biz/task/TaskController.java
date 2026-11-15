@@ -21,6 +21,7 @@ import com.hireai.controller.biz.task.dto.DirectBookRequest;
 import com.hireai.controller.biz.task.dto.DispatchAttemptDTO;
 import com.hireai.controller.biz.task.dto.MatchPreviewDTO;
 import com.hireai.controller.biz.task.dto.MatchPreviewRequest;
+import com.hireai.controller.biz.acceptance.converter.ContractRequest2ModelConverter;
 import com.hireai.controller.biz.task.dto.RejectTaskRequest;
 import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
 import com.hireai.controller.biz.task.dto.TaskDTO;
@@ -127,7 +128,7 @@ public class TaskController extends BaseController {
                 new DirectBookingInfo(clientId, request.title(), request.description(),
                         Money.of(request.budget()), request.agentId(),
                         request.category() == null || request.category().isBlank() ? null : request.category(),
-                        request.deadlineSeconds()));
+                        request.deadlineSeconds(), ContractRequest2ModelConverter.toModel(request.contract())));
         return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId)));
     }
 
@@ -151,7 +152,8 @@ public class TaskController extends BaseController {
         UUID agentId = readAppService.findBookedAgentId(task).orElse(null);
         return ok(TaskModel2DTOConverter.toDTO(task, agentId,
                 readAppService.findReviewWindow(task).orElse(null),
-                rejectionAppService.findLatest(task.id()).orElse(null)));
+                rejectionAppService.findLatest(task.id()).orElse(null),
+                readAppService.findFailureDetail(task).orElse(null)));
     }
 
     @GetMapping("/{taskId}/result")
@@ -251,12 +253,14 @@ public class TaskController extends BaseController {
      * lists: the web rebook passes the Agent that just failed the task (#79). {@code deadlineSeconds}
      * leaves out Agents that can't finish in time, counted from this request (#83). {@code title} and
      * {@code description} are the task text the relevance floor and ranking compare profiles with (#85).
+     * {@code contract} (optional) keeps only Agents whose Offer covers it; an empty shortlist comes with
+     * {@code noMatch}, naming what excluded the Agents and how relaxing it would help (#91).
      */
     @PostMapping("/match-preview")
     public WebResult<MatchPreviewDTO> matchPreview(@Valid @RequestBody MatchPreviewRequest request) {
         return ok(MatchPreview2DTOConverter.toDTO(matchPreviewAppService.preview(
                 request.title(), request.description(), request.category(), Money.of(request.budget()), excludedAgents(request.exclude()),
-                request.deadlineSeconds())));
+                request.deadlineSeconds(), ContractRequest2ModelConverter.toModel(request.contract()))));
     }
 
     private static Set<UUID> excludedAgents(List<UUID> exclude) {

@@ -1,5 +1,7 @@
 package com.hireai.controller.biz.task.dto;
 
+import com.hireai.controller.biz.acceptance.dto.ContractRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import com.hireai.domain.biz.task.model.ClientDeadline;
@@ -26,6 +28,8 @@ public record DirectBookRequest(
         /** Optional: how many seconds from booking the Client needs the result (#83). */
         @Positive(message = "deadlineSeconds must be positive")
         @Max(value = ClientDeadline.MAX_SECONDS, message = "deadlineSeconds must be at most 2592000 (30 days)")
-        Long deadlineSeconds
+        Long deadlineSeconds,
+        /** Optional (#91): the Contract to book under; only Agents whose Offer covers it qualify. */
+        @Valid ContractRequest contract
 ) {
 }

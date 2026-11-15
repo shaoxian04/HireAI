@@ -176,7 +176,7 @@ class ReputationEmissionIntegrationTest {
         taskRepository.save(task);
         walletWrite.topUp(client, Money.of("100.00"), "topup-" + task.id());
         walletWrite.freeze(client, Money.of("20.00"), task.id(), "freeze-" + task.id());
-        taskWriteAppService.markAwaitingAgent(task.id());
+        taskWriteAppService.markAwaitingAgent(task.id(), null);
 
         taskWriteAppService.cancelAwaitingAgentWithRefund(task.id());
 

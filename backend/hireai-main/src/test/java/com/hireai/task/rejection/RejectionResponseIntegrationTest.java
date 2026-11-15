@@ -398,5 +398,6 @@ class RejectionResponseIntegrationTest extends WholeAppIntegrationTest {
                         + "webhook_url, max_execution_seconds, price) VALUES (?, ?, 1, ?::jsonb, ?, ?, 60, ?)",
                 versionId, agentId, "{\"format\":\"JSON\"}", new String[]{category}, webhookUrl,
                 new BigDecimal("10.00"));
+        acceptAnyJsonSchema(versionId); // its own schema would not cover the task's (#91)
     }
 }

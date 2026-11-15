@@ -135,5 +135,6 @@ class CallbackTokenLifetimeIntegrationTest extends WholeAppIntegrationTest {
                         + "webhook_url, max_execution_seconds, price) VALUES (?, ?, 1, ?::jsonb, ?, ?, ?, ?)",
                 versionId, agentId, "{\"format\":\"JSON\"}", new String[]{category}, webhookUrl,
                 MAX_EXECUTION_SECONDS, new BigDecimal("10.00"));
+        acceptAnyJsonSchema(versionId);
     }
 }

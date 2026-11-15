@@ -1,5 +1,6 @@
 package com.hireai.domain.biz.task.info;
 
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.task.model.ClientDeadline;
 
 import java.math.BigDecimal;
@@ -18,11 +19,21 @@ import java.util.UUID;
  *
  * <p>{@code clientDeadline} is the Client's deadline fixed at submit, or null when none was given
  * (#83); every selection for this task admits only Agents that fit it at that moment.
+ *
+ * <p>{@code contract} is the task's frozen Contract (or, for a task from before V39, its output spec's
+ * equivalent): every selection admits only Agents whose Offer covers it (#91).
  */
 public record TaskRoutingView(UUID taskId, String title, String description, String category,
                               BigDecimal budget, String status, String outputSpecJson,
-                              ClientDeadline clientDeadline)
+                              ClientDeadline clientDeadline, Contract contract)
         implements MatchCriteria {
+
+    /** A view without a Contract (only tests build one): routing then filters no Offer. */
+    public TaskRoutingView(UUID taskId, String title, String description, String category,
+                           BigDecimal budget, String status, String outputSpecJson,
+                           ClientDeadline clientDeadline) {
+        this(taskId, title, description, category, budget, status, outputSpecJson, clientDeadline, null);
+    }
 
     /** A view of a task without a client deadline. */
     public TaskRoutingView(UUID taskId, String title, String description, String category,

@@ -94,6 +94,7 @@ class AgentWebhookSsrfIntegrationTest extends WholeAppIntegrationTest {
         assertThat(post("/api/agents/" + agentId + "/activate", "").statusCode()).isEqualTo(200);
         jdbc.update("UPDATE agent_profiles SET is_listed = true WHERE agent_id = ?", agentId); // routed work needs a listed storefront (#81)
         UUID versionId = jdbc.queryForObject("SELECT current_version_id FROM agents WHERE id = ?", UUID.class, agentId);
+        acceptAnyJsonSchema(versionId); // its own schema "{}" would not cover the task's (#91)
         dns.answer(host, "169.254.169.254");
         int lookupsBeforeSend = (int) dns.lookups().stream().filter(host::equals).count();
 
@@ -204,5 +205,6 @@ class AgentWebhookSsrfIntegrationTest extends WholeAppIntegrationTest {
                         + "webhook_url, max_execution_seconds, price) VALUES (?, ?, 1, ?::jsonb, ?, ?, 60, ?)",
                 versionId, agentId, "{\"format\":\"JSON\"}", new String[]{category}, webhookUrl,
                 new BigDecimal("10.00"));
+        acceptAnyJsonSchema(versionId);
     }
 }

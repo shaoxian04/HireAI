@@ -44,6 +44,13 @@ describe("TaskFailurePanel", () => {
     expect(screen.queryByText(/ran out of time/i)).toBeNull();
   });
 
+  it("says what ruled agents out when no agent was eligible (#91)", () => {
+    render(<TaskFailurePanel taskId="t-1" status="CANCELLED" failureReason="NO_ELIGIBLE_AGENT" budget={5}
+      failureDetail="No eligible Agent: parameter schema excluded 2 Agents." />);
+    expect(screen.getByText(/what ruled agents out/i)).toBeTruthy();
+    expect(screen.getByText(/parameter schema excluded 2 agents/i)).toBeTruthy();
+  });
+
   it("shows the failed-check reason for spec-violation when detail is provided", () => {
     const detail: ValidationReportDTO = {
       verdict: "FAIL",

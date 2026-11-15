@@ -73,6 +73,16 @@ public interface TaskRepository {
     /** The Client's deadline stamped at submit; empty when the Client gave none. */
     Optional<java.time.Instant> findClientDeadline(UUID taskId);
 
+    /**
+     * Operational column write (unmapped on the entity): why no Agent matched the task (#91), written at
+     * each no-match pass while it waits AWAITING_AGENT and kept as the failure detail when it ends
+     * NO_ELIGIBLE_AGENT. Null clears it.
+     */
+    void stampFailureDetail(UUID taskId, String failureDetail);
+
+    /** The task's failure detail; empty when none was recorded. */
+    Optional<String> findFailureDetail(UUID taskId);
+
     /** Operational column write (unmapped on the entity). Pins the agent version for direct bookings. */
     void pinAgentVersion(UUID taskId, UUID agentVersionId);
 

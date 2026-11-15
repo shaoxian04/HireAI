@@ -205,6 +205,8 @@ class RoutingIntegrationTest {
                         "VALUES (?, ?, 1, ?::jsonb, ?, ?, 60, ?)",
                 versionId, agentId, "{\"format\":\"JSON\"}",
                 new String[]{category}, webhookUrl, new java.math.BigDecimal(price));
+        // Accept any schema: this test is about dispatch, not Offer coverage (#91).
+        jdbc.update("UPDATE agent_versions SET offer = ?::jsonb WHERE id = ?", "{\"terms\":[{\"template\":\"custom_json\",\"version\":1,\"params\":{\"schema\":{\"any\":true}}}]}", versionId);
         return versionId;
     }
 
