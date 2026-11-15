@@ -59,6 +59,11 @@ public class NoOpTaskExecutionPortConfig {
             public void declineAsBusy(UUID taskId, UUID agentVersionId) {
                 log.debug("No-op declineAsBusy for task {}", taskId);
             }
+
+            @Override
+            public void declineContract(UUID taskId, UUID agentVersionId, String reason) {
+                log.debug("No-op declineContract for task {}", taskId);
+            }
         };
     }
 }

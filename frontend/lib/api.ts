@@ -84,3 +84,20 @@ export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
   const res = await fetch(`/api${path}`, { method: "POST", body: form, headers });
   return parseEnvelope<T>(res);
 }
+
+/**
+ * Binary variant for the frozen DeliverySnapshot download (`GET /tasks/{id}/deliverable`): same
+ * bearer token and 401 handling, returns the body as a Blob. Error bodies are still the JSON
+ * envelope, so a non-2xx goes through `parseEnvelope` and throws its `ApiError`.
+ */
+export async function apiBlob(path: string): Promise<Blob> {
+  const token = readToken();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`/api${path}`, { headers });
+  if (!res.ok) {
+    await parseEnvelope<never>(res);
+    throw new ApiError("UNKNOWN", res.statusText || "Request failed", res.status);
+  }
+  return res.blob();
+}

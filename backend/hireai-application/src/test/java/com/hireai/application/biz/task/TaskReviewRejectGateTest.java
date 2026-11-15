@@ -48,7 +48,13 @@ class TaskReviewRejectGateTest {
         disputeAppService = mock(DisputeAppService.class);
         reputationWriteAppService = mock(ReputationWriteAppService.class);
         service = new TaskReviewAppServiceImpl(taskRepository, agentRepository, settlement,
-                disputeAppService, reputationWriteAppService, java.time.Clock.systemUTC(), org.mockito.Mockito.mock(com.hireai.application.biz.task.item.TaskItemAppService.class));
+                new com.hireai.application.biz.task.impl.AcceptedSettlement(taskRepository, agentRepository,
+                        settlement, reputationWriteAppService),
+                mock(com.hireai.domain.biz.task.rejection.repository.RejectionRepository.class),
+                new com.hireai.domain.biz.task.rejection.model.RejectionWindows(
+                        java.time.Duration.ofHours(2), java.time.Duration.ofHours(24)),
+                mock(org.springframework.context.ApplicationEventPublisher.class),
+                java.time.Clock.systemUTC(), mock(com.hireai.application.biz.task.item.TaskItemAppService.class));
 
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         when(agentRepository.findOwnerByVersionId(agentVersionId)).thenReturn(Optional.of(builderId));
@@ -73,13 +79,13 @@ class TaskReviewRejectGateTest {
     }
 
     @Test
-    void mismatchOpensDispute() {
+    void mismatchWaitsForTheAgentsResponseInsteadOfOpeningADispute() {
         service.reject(pendingReview.id(), clientId, RejectReason.A_MISMATCH, "wrong");
-        verify(disputeAppService).openDispute(any(TaskModel.class), eq(clientId), eq(RejectReason.A_MISMATCH));
+        verifyNoInteractions(disputeAppService);
         verify(settlement, never()).settleRejected(any(), any(), any());
         ArgumentCaptor<TaskModel> cap = ArgumentCaptor.forClass(TaskModel.class);
         verify(taskRepository).save(cap.capture());
-        assertThat(cap.getValue().status()).isEqualTo(TaskStatus.DISPUTED);
+        assertThat(cap.getValue().status()).isEqualTo(TaskStatus.AWAITING_AGENT_RESPONSE);
     }
 
     @Test

@@ -9,6 +9,8 @@ import com.hireai.domain.biz.task.repository.TaskQuery;
 import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
 
+import com.hireai.domain.biz.acceptance.delivery.model.DeliverySnapshot;
+
 import java.util.List;
 import java.util.Optional;
 import java.util.Collection;
@@ -46,6 +48,19 @@ public interface TaskReadAppService {
     Optional<ReviewWindowState> findReviewWindow(@NonNull TaskModel task);
 
     TaskResultModel getResult(@NonNull UUID taskId, @NonNull UUID clientId);
+
+    /** The result's DeliverySnapshot (D24), or empty when it has none (not a file, or not fetched). */
+    Optional<DeliverySnapshot> findDeliverySnapshot(@NonNull TaskResultModel result);
+
+    /**
+     * The frozen file of the client's own task: its snapshot and bytes, never re-fetched from the
+     * Agent's link. NOT_FOUND for another client's task, a task with no snapshot, or retired content.
+     */
+    FrozenDeliverable getDeliverable(@NonNull UUID taskId, @NonNull UUID clientId);
+
+    /** A DeliverySnapshot with its bytes, for the owner-only download. */
+    record FrozenDeliverable(DeliverySnapshot snapshot, byte[] content) {
+    }
 
     List<TaskModel> listForClient(@NonNull UUID clientId, @NonNull TaskQuery query);
 

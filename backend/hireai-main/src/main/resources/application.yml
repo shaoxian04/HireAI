@@ -103,6 +103,14 @@ hireai:
     # PENDING_REVIEW, then the review-window sweeper accepts and settles it on the Client's behalf.
     window: ${REVIEW_WINDOW:PT24H}
     sweep-interval: ${REVIEW_SWEEP_INTERVAL:PT1M}
+  rejection:
+    # Rejection response path (#95): after an A/B/C rejection the Agent has agent-response-window
+    # to revise once, concede or stand by (silence = standing by); after a stand-by the Client has
+    # client-decision-window to accept or request arbitration (silence = acceptance). The sweeper
+    # applies both silences and retries rejection notices that did not reach the Agent.
+    agent-response-window: ${AGENT_RESPONSE_WINDOW:PT2H}
+    client-decision-window: ${CLIENT_DECISION_WINDOW:PT24H}
+    sweep-interval: ${REJECTION_SWEEP_INTERVAL:PT1M}
   dispatch:
     # HMAC secret for dispatch tokens. MUST be overridden in real deploys. A token expires at
     # the task's execution deadline + 5 minutes (DispatchTokenService.CALLBACK_MARGIN).

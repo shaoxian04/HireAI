@@ -1,5 +1,6 @@
 "use client";
 
+import { DeliverablePanel, LegacyDeliverableLink } from "@/components/DeliverablePanel";
 import { RichText } from "@/components/RichText";
 import { REJECT_LABEL } from "@/components/DisputeProgressPanel";
 import type { RejectReason } from "@/lib/types";
@@ -240,15 +241,15 @@ function AdminDisputeDetail() {
           label="Agent result (what was delivered)"
           body={prettyJson(detail.resultPayloadJson)}
         />
-        {detail.resultUrl && (
-          <a
-            href={detail.resultUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex text-sm font-semibold text-accent hover:underline"
-          >
-            Open deliverable
-          </a>
+        {detail.deliverable ? (
+          <DeliverablePanel
+            deliverable={detail.deliverable}
+            sourceUrl={detail.resultUrl}
+            downloadPath={`/admin/disputes/${detail.disputeId}/deliverable`}
+            fileStem={`deliverable-${detail.taskId}`}
+          />
+        ) : (
+          detail.resultUrl && <LegacyDeliverableLink url={detail.resultUrl} />
         )}
 
         {/* Arbitration / ruling history */}

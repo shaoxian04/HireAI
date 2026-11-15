@@ -40,6 +40,13 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
+        <!-- Apache HttpClient 5 (version from the Spring Boot BOM): its DnsResolver hook lets the
+             DeliverySnapshot fetch connect to the exact addresses the SSRF guard vetted, closing
+             the DNS-rebinding gap the JDK HttpClient leaves (DeliverableFetchClient). -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

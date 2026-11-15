@@ -91,11 +91,13 @@
         <!-- Apache HttpClient 5: lets TestRestTemplate surface a 401 response on a POST with a
              body. The JDK HttpURLConnection (SimpleClientHttpRequestFactory) instead throws
              HttpRetryException ("cannot retry due to server authentication, in streaming mode")
-             on a 401 to a streamed POST, which would mask the assertion. Test scope only. -->
+             on a 401 to a streamed POST, which would mask the assertion. It is also a runtime
+             dependency since #97 (hireai-infrastructure's DeliverableFetchClient pins DNS through it),
+             so it must NOT be test-scoped here: a test scope in this module would override the
+             transitive compile scope and leave it out of the boot jar. -->
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
-            <scope>test</scope>
         </dependency>
     </dependencies>
 

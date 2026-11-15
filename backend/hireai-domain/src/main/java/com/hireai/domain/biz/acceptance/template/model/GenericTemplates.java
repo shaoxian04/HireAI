@@ -19,6 +19,10 @@ public final class GenericTemplates {
     public static final String MIN_LENGTH = "min_length";
     /** {@code text_basic}'s optional most characters (comparison {@code min}). */
     public static final String MAX_LENGTH = "max_length";
+    /** {@code file_basic}'s optional largest file in bytes (comparison {@code min}). */
+    public static final String MAX_BYTES = "max_bytes";
+    /** {@code file_basic}'s optional accepted media types (comparison {@code subset}). */
+    public static final String MEDIA_TYPES = "media_types";
 
     private GenericTemplates() {
     }

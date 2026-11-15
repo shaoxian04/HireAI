@@ -13,6 +13,8 @@ export type TaskStatus =
   | "EXECUTING"
   | "RESULT_RECEIVED"
   | "PENDING_REVIEW"
+  | "AWAITING_AGENT_RESPONSE"
+  | "AWAITING_CLIENT_DECISION"
   | "RESOLVED"
   | "AWAITING_AGENT"
   | "TIMED_OUT"
@@ -211,6 +213,11 @@ export interface TaskDTO {
   /** True when the window closed unreviewed and the result was accepted automatically. */
   autoAccepted?: boolean | null;
   /**
+   * The latest round of the rejection response path (`GET /tasks/{id}` only), once the client
+   * rejected for reason A/B/C (#95); kept after it settles.
+   */
+  rejection?: RejectionDTO | null;
+  /**
    * A multi-Item Task (#103): how many Items, the price of one (`budget` is the escrow, price × count),
    * and each Item with its outcome (`GET /tasks/{id}` and review responses only). All absent on a
    * single-deliverable task.
@@ -238,6 +245,33 @@ export interface TaskItemDTO {
   refundAmount?: number | null;
 }
 
+/** What the agent did with an A/B/C rejection (task/rejection/enums/AgentResponse.java). */
+export type AgentRejectionResponse = "REVISE" | "CONCEDE" | "STAND_BY";
+
+/** One round of the rejection response path (#95, spec D20). */
+export interface RejectionDTO {
+  round: number;
+  reasonCategory: RejectReason;
+  reason?: string | null;
+  rejectedAt: string;
+  /** Until when the agent may revise (if `revisionAllowed`), concede or stand by. */
+  responseDeadline: string;
+  /** False once the agent has revised this task: it may only concede or stand by. */
+  revisionAllowed: boolean;
+  response?: AgentRejectionResponse | null;
+  /** The agent's reason for standing by its result; absent when it stayed silent. */
+  responseReason?: string | null;
+  /** True when the agent's window closed without a response (counts as standing by). */
+  responseSilent: boolean;
+  respondedAt?: string | null;
+  /** After a stand-by: until when the client may accept or request arbitration. */
+  decisionDeadline?: string | null;
+  decision?: "ACCEPT" | "ARBITRATE" | null;
+  /** True when the client's window closed without a decision (counts as acceptance). */
+  decisionSilent: boolean;
+  decidedAt?: string | null;
+}
+
 /** Mirrors the backend FailureReason enum (set once when a task ends without a result). */
 export type FailureReason =
   | "AGENT_UNREACHABLE"
@@ -248,7 +282,8 @@ export type FailureReason =
   | "DISPATCH_ABANDONED"
   | "EXECUTION_TIMEOUT"
   | "AGENT_REPORTED_FAILURE"
-  | "SPEC_VIOLATION";
+  | "SPEC_VIOLATION"
+  | "CONTRACT_DECLINED";
 
 export interface CreateTaskRequest {
   title: string;
@@ -262,8 +297,22 @@ export interface TaskResultDTO {
   taskId: string;
   agentStatus: string;
   resultPayloadJson: string;
+  /** Where a FILE result was fetched from. Never followed again once a `deliverable` exists. */
   resultUrl: string | null;
   receivedAt: string;
+  /** The frozen copy of a FILE result (DeliverySnapshot, #97); absent when none was kept. */
+  deliverable?: DeliverableDTO;
+}
+
+/** A DeliverySnapshot's metadata; the bytes come from `GET /tasks/{id}/deliverable`. */
+export interface DeliverableDTO {
+  /** What the platform judged the bytes to be, e.g. `image/png`. */
+  mediaType: string;
+  /** The agent's Content-Type, when it sent one. */
+  declaredMediaType: string | null;
+  sizeBytes: number;
+  sha256: string;
+  fetchedAt: string;
 }
 
 // ── Catalogue (public discovery) ──
@@ -303,6 +352,8 @@ export interface CatalogueStatsDTO {
   completedCount: number;
   successRate: number | null;
   avgTurnaroundSeconds: number | null;
+  /** Public contract-decline rate (#93). */
+  contractDeclines?: ContractDeclineRateDTO;
 }
 
 export interface AgentProfileDTO {
@@ -412,7 +463,7 @@ export interface BuilderEarningsDTO {
 // ── Dispute / arbitration ──────────────────────────────────────────────────
 
 /**
- * Dispute reason categories exposed in the reject UI (A/B/C open a dispute;
+ * Reject reason categories exposed in the reject UI (A/B/C start the rejection response path, #95;
  * D_CHANGED_MIND is a backend-only option that charges the client in full — NOT
  * offered through this UI).
  */
@@ -506,6 +557,8 @@ export interface AdminDisputeDetailDTO {
   resultPayloadJson: string | null;
   resultUrl: string | null;
   agentStatus: string | null;
+  /** The disputed result's frozen file (#97); null when none was kept. */
+  deliverable: DeliverableDTO | null;
   actionable: boolean;
   settlementPreview: AdminSettlementPreviewDTO | null;
   rulings: RulingDTO[];
@@ -554,6 +607,33 @@ export interface AgentOptionDTO {
   availability: "AVAILABLE" | "BUSY";
   outputFormat: string | null;
   capabilityCategories: string[];
+  /** Public contract-decline rate (#93). */
+  contractDeclines?: ContractDeclineRateDTO;
+}
+
+/**
+ * An agent's public contract-decline rate: `declined` of the `answered` work orders whose terms it
+ * took or turned down (busy or unreachable replies don't count). `rate` is null when it answered none.
+ */
+export interface ContractDeclineRateDTO {
+  declined: number;
+  answered: number;
+  rate: number | null;
+}
+
+/** Mirrors the backend DispatchOutcome enum. */
+export type DispatchOutcome = "ACCEPTED" | "UNREACHABLE" | "BUSY" | "UNAVAILABLE" | "CONTRACT_DECLINED";
+
+/** One row of `GET /tasks/{id}/attempts`: which agent the task was handed to, and how that ended. */
+export interface DispatchAttemptDTO {
+  attemptNumber: number;
+  agentId: string | null;
+  agentName: string | null;
+  agentVersionId: string;
+  outcome: DispatchOutcome;
+  occurredAt: string;
+  /** The agent's own reason on a CONTRACT_DECLINED row. */
+  declineReason: string | null;
 }
 
 /**
@@ -681,6 +761,7 @@ export type ReputationEventDTO = {
     | "DISPUTE_WON"
     | "DISPUTE_PARTIAL"
     | "DISPUTE_LOST"
+    | "REJECTION_CONCEDED"
     | "RATING";
   quality: number;
   weight: number;

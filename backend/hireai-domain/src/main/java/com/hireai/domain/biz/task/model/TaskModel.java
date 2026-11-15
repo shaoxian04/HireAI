@@ -273,10 +273,79 @@ public final class TaskModel {
         return endWithoutResult(TaskStatus.FAILED, reason);
     }
 
-    /** PENDING_REVIEW → RESOLVED (ACCEPTED): the client accepted the result. */
+    /**
+     * PENDING_REVIEW|AWAITING_CLIENT_DECISION → RESOLVED (ACCEPTED): the client accepted the result,
+     * either on review or after the Agent stood by it following a rejection (#95). The rejection's
+     * reason is kept, so the record shows the result was once rejected.
+     */
     public TaskModel accept() {
-        requireStatus(TaskStatus.PENDING_REVIEW, "accept");
-        return resolved(TaskResolution.ACCEPTED, null);
+        requireStatusIn("accept", TaskStatus.PENDING_REVIEW, TaskStatus.AWAITING_CLIENT_DECISION);
+        return resolved(TaskResolution.ACCEPTED, this.rejectionReason);
+    }
+
+    // --- Rejection response path (#95, spec D20) ---
+
+    /**
+     * PENDING_REVIEW → AWAITING_AGENT_RESPONSE: the client rejected for reason A/B/C. The Agent may
+     * now revise once, concede or stand by; nothing is arbitrated yet.
+     */
+    public TaskModel awaitAgentResponse(RejectReason reasonCategory, String reason) {
+        requireStatus(TaskStatus.PENDING_REVIEW, "awaitAgentResponse");
+        requireDisputable(reasonCategory);
+        return withRejection(TaskStatus.AWAITING_AGENT_RESPONSE, this.result, trimReason(reason), reasonCategory);
+    }
+
+    /**
+     * AWAITING_AGENT_RESPONSE → RESULT_RECEIVED: the Agent revised its result. The revision replaces
+     * the delivered result and goes through validation again, like the first one.
+     */
+    public TaskModel revise(TaskResultModel revised) {
+        requireStatus(TaskStatus.AWAITING_AGENT_RESPONSE, "revise");
+        requirePresent(revised, "revised result");
+        if (!revised.taskId().equals(this.id)) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "A revision must be for task " + id);
+        }
+        return withRejection(TaskStatus.RESULT_RECEIVED, revised, this.rejectionReason, this.rejectReasonCategory);
+    }
+
+    /** AWAITING_AGENT_RESPONSE → RESOLVED (REJECTED): the Agent conceded; the client is refunded. */
+    public TaskModel concede() {
+        requireStatus(TaskStatus.AWAITING_AGENT_RESPONSE, "concede");
+        return resolved(TaskResolution.REJECTED, this.rejectionReason);
+    }
+
+    /**
+     * AWAITING_AGENT_RESPONSE → AWAITING_CLIENT_DECISION: the Agent stood by its result, with a
+     * reason or by staying silent. The client now accepts or requests arbitration.
+     */
+    public TaskModel awaitClientDecision() {
+        requireStatus(TaskStatus.AWAITING_AGENT_RESPONSE, "awaitClientDecision");
+        return withRejection(TaskStatus.AWAITING_CLIENT_DECISION, this.result, this.rejectionReason,
+                this.rejectReasonCategory);
+    }
+
+    /**
+     * AWAITING_CLIENT_DECISION → DISPUTED: the client asked for AI arbitration of the rejection the
+     * Agent stood by. Only the client opens arbitration (D17′); no deposit is taken.
+     */
+    public TaskModel requestArbitration() {
+        requireStatus(TaskStatus.AWAITING_CLIENT_DECISION, "requestArbitration");
+        return withRejection(TaskStatus.DISPUTED, this.result, this.rejectionReason, this.rejectReasonCategory);
+    }
+
+    private TaskModel withRejection(TaskStatus newStatus, TaskResultModel newResult, String reason,
+                                    RejectReason reasonCategory) {
+        return new TaskModel(id, clientId, title, description, budget, outputSpec, contract, category,
+                newStatus, agentVersionId, newResult, createdAt,
+                this.resolution, this.resolvedAt, reason, reasonCategory, this.failureReason);
+    }
+
+    private static void requireDisputable(RejectReason reasonCategory) {
+        requirePresent(reasonCategory, "reject reason category");
+        if (!reasonCategory.opensDispute()) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Only an A/B/C reason starts the rejection response path; got " + reasonCategory);
+        }
     }
 
     /**

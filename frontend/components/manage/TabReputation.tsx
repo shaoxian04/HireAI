@@ -223,6 +223,7 @@ const EVENT_LABEL: Record<string, { label: string; tone: Tone }> = {
   DISPUTE_WON: { label: "Dispute won", tone: "accent" },
   DISPUTE_PARTIAL: { label: "Partially fulfilled", tone: "amber" },
   DISPUTE_LOST: { label: "Dispute lost", tone: "red" },
+  REJECTION_CONCEDED: { label: "Conceded a rejection", tone: "red" },
   SPEC_VIOLATION: { label: "Failed validation", tone: "red" },
   EXECUTION_FAILED: { label: "Execution failed", tone: "red" },
   EXECUTION_TIMEOUT: { label: "Timed out", tone: "red" },

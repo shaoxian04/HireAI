@@ -1,7 +1,7 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.graph.state import ArbitrationState
-from app.graph.tools import fetch_result_content, validate_against_schema
+from app.graph.tools import describe_deliverable, fetch_result_content, validate_against_schema
 from app.schemas import RulingResult
 
 CATEGORIES = {"FULFILLED", "PARTIALLY_FULFILLED", "NOT_FULFILLED"}
@@ -34,7 +34,12 @@ async def gather_evidence(state: ArbitrationState, *, max_bytes: int, timeout: f
         parts.append(f"AGENT OUTPUT (inline):\n{req.result_payload_json}")
         check = validate_against_schema(req.result_payload_json, req.schema_)
         parts.append(f"SCHEMA CHECK: {check}")
-    if req.format == "FILE" and req.result_url:
+    if req.deliverable is not None:
+        # D24: judge the platform's frozen copy; the Agent's link is never fetched again.
+        frozen = describe_deliverable(req.deliverable, max_bytes=max_bytes)
+        parts.append(f"AGENT OUTPUT (file):\n{frozen}")
+    elif req.format == "FILE" and req.result_url:
+        # Only a Task from before DeliverySnapshots has no frozen copy.
         try:
             fetched = await fetch_result_content(
                 req.result_url, max_bytes=max_bytes, timeout=timeout

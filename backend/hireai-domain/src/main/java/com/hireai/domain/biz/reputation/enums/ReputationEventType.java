@@ -36,6 +36,12 @@ public enum ReputationEventType {
     DISPUTE_LOST(ReputationComponent.RELIABILITY, BigDecimal.ZERO),
 
     /**
+     * The Agent conceded a Client's A/B/C rejection and the Client was refunded (#95, spec D22):
+     * quality 0, like a lost dispute, but without an arbitration.
+     */
+    REJECTION_CONCEDED(ReputationComponent.RELIABILITY, BigDecimal.ZERO),
+
+    /**
      * A finished multi-Item Task (spec D22, D27): one event per Task, weight 1, whose quality is the
      * fraction of its Items that were accepted. Quality is carried per event, like {@link #RATING}.
      */

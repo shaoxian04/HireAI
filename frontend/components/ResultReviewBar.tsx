@@ -27,8 +27,9 @@ const REJECT_REASONS: { value: RejectReason; label: string }[] = [
 /**
  * Accept/Reject action bar shown under the result panel while the task is PENDING_REVIEW.
  * Accept settles escrow to the builder (net of commission).
- * Reject opens a dispute: the client picks a required reason category and an optional detail;
- * an arbitrator reviews the dispute and issues a ruling (refund, split, or uphold payment).
+ * Reject sends the client's reason (a required category and an optional detail) to the agent,
+ * which may revise once, concede (full refund) or stand by its result; only then does the client
+ * choose between accepting and AI arbitration (#95).
  */
 export function ResultReviewBar({ taskId, budget, reviewDeadline, now, onResolved }: Props) {
   const current = useNow(now);
@@ -143,9 +144,9 @@ function ReviewActions({
   return (
     <>
       <p className="text-sm text-muted">
-        Accepting pays the builder out of escrow. Rejecting opens a dispute that an arbitrator
-        will review — the outcome may be a full refund, a partial settlement, or upholding
-        payment to the builder.
+        Accepting pays the builder out of escrow. Rejecting sends your reason to the agent, which
+        can revise its result, concede and refund you, or stand by it — then you choose whether to
+        accept or ask an AI arbitrator to rule.
       </p>
       {error && (
         <p role="alert" className="text-xs text-red">
@@ -163,7 +164,7 @@ function ReviewActions({
         </div>
       ) : (
         <div className="space-y-4">
-          <Field label="Dispute reason" hint="Required — an arbitrator will review this">
+          <Field label="Reason for rejecting" hint="Required — the agent sees this and responds to it">
             <div className="space-y-2" role="radiogroup">
               {REJECT_REASONS.map(({ value, label }) => (
                 <label
@@ -195,7 +196,7 @@ function ReviewActions({
           </Field>
           <div className="flex items-center gap-3">
             <Button variant="danger" onClick={onSubmitDispute} disabled={busy || !reasonCategory}>
-              Submit dispute
+              Send rejection
             </Button>
             <Button
               variant="ghost"

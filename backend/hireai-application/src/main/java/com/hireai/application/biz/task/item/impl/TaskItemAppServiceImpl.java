@@ -1,6 +1,8 @@
 package com.hireai.application.biz.task.item.impl;
 
+import com.hireai.application.biz.acceptance.delivery.DeliverySnapshotAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.domain.biz.acceptance.delivery.model.DeliveryOutcome;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.item.TaskItemAppService;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
@@ -61,6 +63,8 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
     private final ApiKeyTaskRepository apiKeyTaskRepository;
     private final ReviewWindow reviewWindow;
     private final Clock clock;
+    /** Freezes an Item's file deliverable before its checks run (D24), keyed by the Item's id. */
+    private final DeliverySnapshotAppService deliverySnapshotAppService;
 
     @Override
     public void createForSubmit(UUID taskId, List<String> inputs, Money price) {
@@ -192,9 +196,14 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
             return item.recordFailure(itemResult == null ? "MISSING" : itemResult.agentStatus());
         }
         String payload = itemResult.resultPayloadJson() == null ? "" : itemResult.resultPayloadJson();
-        ValidationReportModel report = validationDomainService.validate(contract,
-                TaskResultModel.record(item.taskId(), itemResult.agentStatus(), payload, itemResult.resultUrl()),
-                FIRST_ATTEMPT);
+        // The Item's result as the checks see it, under the Item's own id, so a file deliverable gets
+        // its own DeliverySnapshot (one per Item) and every later step judges that frozen copy.
+        TaskResultModel asResult = TaskResultModel.rehydrate(item.id(), item.taskId(),
+                itemResult.agentStatus().trim(), payload, itemResult.resultUrl(), clock.instant());
+        DeliveryOutcome delivery = validationDomainService.needsDelivery(contract, asResult)
+                ? deliverySnapshotAppService.capture(contract, asResult)
+                : null;
+        ValidationReportModel report = validationDomainService.validate(contract, asResult, delivery, FIRST_ATTEMPT);
         List<ItemCheck> checks = report.checks().stream()
                 .map(c -> new ItemCheck(c.rule(), c.passed(), c.detail()))
                 .toList();

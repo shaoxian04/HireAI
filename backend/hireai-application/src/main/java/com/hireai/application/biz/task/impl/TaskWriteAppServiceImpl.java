@@ -203,10 +203,23 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
         appendAttempt(taskId, agentVersionId, outcome);
     }
 
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void appendContractDecline(UUID taskId, UUID agentVersionId, String reason) {
+        append(DispatchAttemptModel.contractDeclined(taskId, agentVersionId,
+                dispatchAttemptRepository.countByTaskId(taskId), reason, clock.instant()));
+    }
+
     /** The one place a dispatch attempt is numbered and appended; the caller holds the task row lock. */
     private void appendAttempt(UUID taskId, UUID agentVersionId, DispatchOutcome outcome) {
-        DispatchAttemptModel attempt = DispatchAttemptModel.next(taskId, agentVersionId,
-                dispatchAttemptRepository.countByTaskId(taskId), outcome, clock.instant());
+        append(DispatchAttemptModel.next(taskId, agentVersionId,
+                dispatchAttemptRepository.countByTaskId(taskId), outcome, clock.instant()));
+    }
+
+    private void append(DispatchAttemptModel attempt) {
+        UUID taskId = attempt.taskId();
+        UUID agentVersionId = attempt.agentVersionId();
+        DispatchOutcome outcome = attempt.outcome();
         dispatchAttemptRepository.append(attempt);
         log.info("Task {} dispatch attempt {} to version {}: {}", taskId, attempt.attemptNumber(),
                 agentVersionId, outcome);

@@ -36,7 +36,7 @@ _Avoid_: awaiting capacity (the old status name; capacity is the Agent declining
 The frozen copy of the client-supplied input a Task is judged against — fetched once at submission, content-hashed, and immutable thereafter. It is what the Agent executes on and what an arbitrator later reads, so both sides are held to provably identical evidence even if the original source is amended or disappears.
 _Avoid_: attachment, upload, file, source URL (the URL is only where it came from; the SourceSnapshot is the frozen thing itself)
 
-**DeliverySnapshot** _(designed, not built)_:
+**DeliverySnapshot** _(built for FILE results, #97; per-Item snapshots come with Items)_:
 The frozen copy of what an Agent delivered for an Item — fetched once when the result arrives, content-hashed, and immutable thereafter. Every later step (Acceptance Checks, AI Review, the client's review, arbitration) judges this copy, never the Agent's link, so a deliverable cannot be swapped or withdrawn after the fact. The output-side twin of SourceSnapshot.
 _Avoid_: result URL, attachment (the URL is only where the Agent put it)
 
@@ -85,6 +85,10 @@ _Avoid_: LLM validation, AI check
 **Review Window** _(built, #94)_:
 The time a Client has to accept or reject a result that passed validation (24h by default). When it closes unreviewed, the Client's silence counts as acceptance: the platform accepts and settles on their behalf, so no Builder's pay is held hostage to a Client who never looks.
 _Avoid_: review timeout, grace period
+
+**Rejection Response** _(built, #95)_:
+What follows a Client rejecting a result as mismatched, wrong or incomplete. The Agent may revise once, concede (the Client is refunded) or stand by its result with a reason, within 2h; silence counts as standing by. If it stands by, the Client sees the reason and, within 24h, accepts or asks for AI arbitration; silence counts as acceptance. Arbitration is therefore always the Client's choice, never the first step.
+_Avoid_: appeal (that is a ruling taken to an admin), counter-dispute
 
 **Appeal Fee**:
 What a party pays to take an arbitrator's ruling to a human admin, once. Like the cost of arbitration itself, it is borne by whoever loses, up to a cap tied to the Item's price. Only a Client or buyer ever opens arbitration, and their escrowed payment already stands behind it, so no one posts a separate deposit.

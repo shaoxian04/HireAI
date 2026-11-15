@@ -62,9 +62,9 @@ CREATE TRIGGER trg_task_item_settlements_no_delete
     FOR EACH ROW EXECUTE FUNCTION task_item_settlements_block_mutation();
 
 -- A finished multi-Item Task writes ONE reputation event, weight 1, quality = accepted fraction
--- (D22, D27). MERGE NOTE: #95 re-creates this CHECK too (REJECTION_CONCEDED); keep both values.
+-- (D22, D27). Keeps every value V42 (#95) allowed.
 ALTER TABLE reputation_events DROP CONSTRAINT IF EXISTS reputation_events_event_type_check;
 ALTER TABLE reputation_events ADD CONSTRAINT reputation_events_event_type_check
     CHECK (event_type IN (
         'TASK_ACCEPTED', 'SPEC_VIOLATION', 'EXECUTION_FAILED', 'EXECUTION_TIMEOUT',
-        'DISPUTE_WON', 'DISPUTE_PARTIAL', 'DISPUTE_LOST', 'RATING', 'ITEMS_SETTLED'));
+        'DISPUTE_WON', 'DISPUTE_PARTIAL', 'DISPUTE_LOST', 'RATING', 'REJECTION_CONCEDED', 'ITEMS_SETTLED'));

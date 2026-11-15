@@ -1,6 +1,8 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.application.biz.acceptance.delivery.DeliverySnapshotAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
+import com.hireai.domain.biz.acceptance.delivery.model.DeliverySnapshot;
 import com.hireai.domain.biz.offering.agent.info.AgentReputationTarget;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.utility.result.ResultCode;
@@ -42,6 +44,7 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     private final DispatchAttemptRepository dispatchAttemptRepository;
     private final AgentRepository agentRepository;
     private final TaskItemRepository taskItemRepository;
+    private final DeliverySnapshotAppService deliverySnapshotAppService;
 
     @Override
     public Optional<UUID> findBookedAgentId(TaskModel task) {
@@ -75,6 +78,22 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
             throw new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId);
         }
         return task;
+    }
+
+    @Override
+    public Optional<DeliverySnapshot> findDeliverySnapshot(TaskResultModel result) {
+        return deliverySnapshotAppService.findForResult(result);
+    }
+
+    @Override
+    public FrozenDeliverable getDeliverable(UUID taskId, UUID clientId) {
+        TaskResultModel result = getResult(taskId, clientId);
+        DeliverySnapshot snapshot = deliverySnapshotAppService.findForResult(result)
+                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "No delivered file for task: " + taskId));
+        byte[] content = deliverySnapshotAppService.content(snapshot)
+                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
+                        "The delivered file for task " + taskId + " is no longer kept"));
+        return new FrozenDeliverable(snapshot, content);
     }
 
     @Override

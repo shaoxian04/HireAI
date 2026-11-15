@@ -1,6 +1,7 @@
 package com.hireai.domain.biz.adjudication.service;
 
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.acceptance.delivery.model.DeliveryOutcome;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
 import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -12,8 +13,26 @@ import com.hireai.domain.biz.task.model.TaskResultModel;
  */
 public interface ValidationDomainService {
 
-    /** Judges a result against the Contract the Task froze at submit. */
-    ValidationReportModel validate(Contract contract, TaskResultModel result, int attemptNo);
+    /**
+     * Judges a result against the Contract the Task froze at submit. A {@code file_basic} result
+     * whose link is HTTPS is judged on {@code delivery}, its DeliverySnapshot or why there is none
+     * (D24); {@code delivery} may be null only when {@link #needsDelivery} is false.
+     */
+    ValidationReportModel validate(Contract contract, TaskResultModel result, DeliveryOutcome delivery, int attemptNo);
+
+    /** {@link #validate(Contract, TaskResultModel, DeliveryOutcome, int)} for a result that needs no delivery. */
+    default ValidationReportModel validate(Contract contract, TaskResultModel result, int attemptNo) {
+        return validate(contract, result, null, attemptNo);
+    }
+
+    /** True when the result's deliverable must be fetched and frozen before it can be judged. */
+    boolean needsDelivery(Contract contract, TaskResultModel result);
+
+    /**
+     * The most bytes the deliverable may have: the Contract's {@code max_bytes} when set, never more
+     * than {@code platformLimit}. The fetch reads one byte past it to tell "at the limit" from "over".
+     */
+    long deliveryByteLimit(Contract contract, long platformLimit);
 
     /**
      * Judges a result of a Task submitted before Contracts existed (its Contract is null) against

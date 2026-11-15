@@ -6,6 +6,7 @@ import com.hireai.application.biz.task.SubmitContext;
 import com.hireai.application.biz.task.SubmitOrchestrationAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.reputation.ReviewAppService;
+import com.hireai.application.biz.task.RejectionAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.biz.agent.dto.ReviewDTO;
@@ -32,6 +33,8 @@ import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
+import com.hireai.domain.biz.task.model.TaskResultModel;
+import org.springframework.http.ResponseEntity;
 import com.hireai.domain.biz.task.repository.TaskQuery;
 import com.hireai.domain.shared.model.Money;
 import com.hireai.utility.exception.DomainException;
@@ -74,6 +77,7 @@ public class TaskController extends BaseController {
     private final ValidationReadAppService validationReadAppService;
     /** The client's star rating — distinct from reviewAppService, which is accept/reject. */
     private final ReviewAppService ratingAppService;
+    private final RejectionAppService rejectionAppService;
 
     public TaskController(SubmitOrchestrationAppService submitOrchestrationAppService,
                           TaskReadAppService readAppService,
@@ -82,7 +86,8 @@ public class TaskController extends BaseController {
                           TaskReviewAppService reviewAppService,
                           MatchPreviewAppService matchPreviewAppService,
                           ValidationReadAppService validationReadAppService,
-                          ReviewAppService ratingAppService) {
+                          ReviewAppService ratingAppService,
+                          RejectionAppService rejectionAppService) {
         this.submitOrchestrationAppService = submitOrchestrationAppService;
         this.readAppService = readAppService;
         this.currentUser = currentUser;
@@ -91,6 +96,7 @@ public class TaskController extends BaseController {
         this.matchPreviewAppService = matchPreviewAppService;
         this.validationReadAppService = validationReadAppService;
         this.ratingAppService = ratingAppService;
+        this.rejectionAppService = rejectionAppService;
     }
 
     @PostMapping
@@ -147,14 +153,29 @@ public class TaskController extends BaseController {
         TaskModel task = readAppService.getForClient(id, clientId);
         UUID agentId = readAppService.findBookedAgentId(task).orElse(null);
         return ok(TaskModel2DTOConverter.toDTO(task, agentId,
-                readAppService.findReviewWindow(task).orElse(null), readAppService.findItems(task), true));
+                readAppService.findReviewWindow(task).orElse(null),
+                rejectionAppService.findLatest(task.id()).orElse(null), readAppService.findItems(task), true));
     }
 
     @GetMapping("/{taskId}/result")
     public WebResult<TaskResultDTO> getResult(@PathVariable("taskId") UUID taskId) {
         UUID clientId = currentUser.currentUserId();
-        TaskResultDTO dto = TaskResult2DTOConverter.toDTO(readAppService.getResult(taskId, clientId));
+        TaskResultModel result = readAppService.getResult(taskId, clientId);
+        TaskResultDTO dto = TaskResult2DTOConverter.toDTO(result,
+                readAppService.findDeliverySnapshot(result).orElse(null));
         return ok(dto);
+    }
+
+    /**
+     * The frozen file of a FILE result (D24), owner-only: the DeliverySnapshot's bytes, never the
+     * Agent's link. The bytes are Agent-supplied, so they are always sent as an attachment with
+     * {@code nosniff} and a sandbox CSP, and as {@code application/octet-stream} unless the platform
+     * recognised them as one of the file_basic types ({@link DeliverableResponse}).
+     */
+    @GetMapping("/{taskId}/deliverable")
+    public ResponseEntity<byte[]> getDeliverable(@PathVariable("taskId") UUID taskId) {
+        UUID clientId = currentUser.currentUserId();
+        return DeliverableResponse.of(taskId, readAppService.getDeliverable(taskId, clientId));
     }
 
     @GetMapping("/{id}/validation")
@@ -185,7 +206,7 @@ public class TaskController extends BaseController {
         // One read for the page's Items: a multi-Item Task's amounts come from its Items (spec S3).
         Map<UUID, TaskItems> items = readAppService.findItems(owned.stream().map(TaskModel::id).toList());
         List<TaskDTO> tasks = owned.stream()
-                .map(task -> TaskModel2DTOConverter.toDTO(task, null, null, items.get(task.id()), false))
+                .map(task -> TaskModel2DTOConverter.toDTO(task, null, null, null, items.get(task.id()), false))
                 .toList();
         return ok(tasks);
     }
@@ -208,7 +229,8 @@ public class TaskController extends BaseController {
     private TaskDTO withItems(TaskModel task) {
         // Same view as GET /{id}: the page replaces its task with this, so keep the review window.
         return TaskModel2DTOConverter.toDTO(task, readAppService.findBookedAgentId(task).orElse(null),
-                readAppService.findReviewWindow(task).orElse(null), readAppService.findItems(task), true);
+                readAppService.findReviewWindow(task).orElse(null),
+                rejectionAppService.findLatest(task.id()).orElse(null), readAppService.findItems(task), true);
     }
 
     @PostMapping("/{id}/reject")
@@ -216,6 +238,17 @@ public class TaskController extends BaseController {
                                      @Valid @RequestBody RejectTaskRequest request) {
         UUID clientId = currentUser.currentUserId();
         reviewAppService.reject(id, clientId, request.reasonCategory(), request.reason());
+        return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
+    }
+
+    /**
+     * Ask for AI arbitration of a result the Agent stood by after your A/B/C rejection (#95). Only the
+     * task's Client can, only while it awaits their decision (409 otherwise), and no deposit is taken.
+     */
+    @PostMapping("/{id}/arbitration")
+    public WebResult<TaskDTO> requestArbitration(@PathVariable("id") UUID id) {
+        UUID clientId = currentUser.currentUserId();
+        rejectionAppService.requestArbitration(id, clientId);
         return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
     }
 

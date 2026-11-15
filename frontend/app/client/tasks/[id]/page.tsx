@@ -10,8 +10,11 @@ import { AppShell } from "@/components/AppShell";
 import { StatusTrack } from "@/components/StatusTrack";
 import { InspectionReport } from "@/components/InspectionReport";
 import { TaskFailurePanel } from "@/components/TaskFailurePanel";
+import { DeliverablePanel, LegacyDeliverableLink } from "@/components/DeliverablePanel";
 import WebhookDeliveryStatus from "@/components/WebhookDeliveryStatus";
-import type { TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO, ValidationReportDTO } from "@/lib/types";
+import type {
+  TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO, ValidationReportDTO, DispatchAttemptDTO,
+} from "@/lib/types";
 import { Badge, Skeleton } from "@/components/ui";
 import { ResultView } from "@/components/ResultView";
 import { ResultReviewBar } from "@/components/ResultReviewBar";
@@ -19,6 +22,8 @@ import { RatingPrompt } from "@/components/RatingPrompt";
 import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
 import { ContractPanel } from "@/components/AcceptanceTerms";
 import { ItemsPanel } from "@/components/ItemsPanel";
+import { DispatchHistory } from "@/components/ContractDeclines";
+import { AgentResponsePending, ClientDecisionPanel, RevisedResultNotice } from "@/components/RejectionPanel";
 
 const POLL_MS = 2000;
 /** Polling slows down while nothing changes (a long-running task), up to this ceiling. */
@@ -48,6 +53,8 @@ function humanize(v: string | null | undefined): string {
 const RESULT_READY: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
   "RESULT_RECEIVED",
   "PENDING_REVIEW",
+  "AWAITING_AGENT_RESPONSE",
+  "AWAITING_CLIENT_DECISION",
   "DISPUTED",
   "RESOLVED",
 ]);
@@ -68,6 +75,7 @@ function TaskDetail() {
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<DisputeOutcomeDTO | null>(null);
   const [validation, setValidation] = useState<ValidationReportDTO | null>(null);
+  const [attempts, setAttempts] = useState<DispatchAttemptDTO[]>([]);
 
   // Keep the latest result in a ref so the interval closure can read it without re-subscribing.
   const resultRef = useRef<TaskResultDTO | null>(null);
@@ -105,6 +113,17 @@ function TaskDetail() {
       .catch(() => { /* no report — panel still renders without the drawer */ });
     return () => { cancelled = true; };
   }, [task?.status, id, hasResult]);
+
+  // The hand-off history (#75, #93): re-read whenever the status moves, so a failover or a declined
+  // contract shows up. Best-effort: on any error the section just stays off.
+  useEffect(() => {
+    if (!task?.status) return;
+    let cancelled = false;
+    api<DispatchAttemptDTO[]>(`/tasks/${id}/attempts`)
+      .then((a) => { if (!cancelled) setAttempts(a ?? []); })
+      .catch(() => { /* no history shown */ });
+    return () => { cancelled = true; };
+  }, [task?.status, id]);
 
   // While the task is under dispute, poll the outcome so the client sees it move live through
   // ARBITRATING -> RULED (accept/appeal) -> ESCALATED -> RESOLVED.
@@ -156,6 +175,10 @@ function TaskDetail() {
         if (cancelled) return;
         setTask(t);
 
+        // A revision (#95) replaces the result: fetch it again when the task returns to review.
+        if (t.status === "PENDING_REVIEW" && lastStatus !== null && lastStatus !== "PENDING_REVIEW") {
+          resultRef.current = null;
+        }
         // The validated agent result exists from RESULT_RECEIVED onward; fetch it once. A multi-Item
         // task's results arrive per Item on the task itself, so there is no single result to fetch.
         if (RESULT_READY.has(t.status) && !resultRef.current && !t.items?.length) {
@@ -342,6 +365,8 @@ function TaskDetail() {
         />
       )}
 
+      <DispatchHistory attempts={attempts} />
+
       {multiItem && <ItemsPanel task={task} onChange={setTask} />}
 
       {!result && !multiItem && RESULT_READY.has(task.status) && (
@@ -378,15 +403,29 @@ function TaskDetail() {
             </p>
           </div>
           <ResultView payload={result.resultPayloadJson} />
-          {result.resultUrl && (
-            <a
-              href={result.resultUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-medium text-accent underline-offset-4 hover:underline"
-            >
-              Open deliverable ↗
-            </a>
+          {result.deliverable ? (
+            <DeliverablePanel
+              deliverable={result.deliverable}
+              sourceUrl={result.resultUrl}
+              downloadPath={`/tasks/${task.id}/deliverable`}
+              fileStem={`deliverable-${task.id}`}
+            />
+          ) : (
+            result.resultUrl && <LegacyDeliverableLink url={result.resultUrl} />
+          )}
+          {task.status === "PENDING_REVIEW" && task.rejection?.response === "REVISE" && (
+            <RevisedResultNotice rejection={task.rejection} />
+          )}
+          {task.status === "AWAITING_AGENT_RESPONSE" && task.rejection && (
+            <AgentResponsePending rejection={task.rejection} />
+          )}
+          {task.status === "AWAITING_CLIENT_DECISION" && task.rejection && (
+            <ClientDecisionPanel
+              taskId={task.id}
+              budget={task.budget}
+              rejection={task.rejection}
+              onDecided={setTask}
+            />
           )}
           {task.status === "PENDING_REVIEW" && (
             <ResultReviewBar
@@ -450,22 +489,34 @@ function TaskDetail() {
                       Accepted automatically: the review window closed before you decided.
                     </p>
                   )}
+                  {task.rejection?.decisionSilent && (
+                    <p className="text-sm text-muted">
+                      Accepted automatically: the agent stood by its result and you didn&apos;t decide in time.
+                    </p>
+                  )}
                 </>
               ) : (
-                <p className="text-[0.9375rem] text-fg">
-                  <span className="tabular font-bold text-fg">{task.refundAmount} cr</span> refunded to your wallet
-                  {task.rejectionReason ? <span className="text-muted"> — “{task.rejectionReason}”</span> : null}
-                </p>
+                <>
+                  <p className="text-[0.9375rem] text-fg">
+                    <span className="tabular font-bold text-fg">{task.refundAmount} cr</span> refunded to your wallet
+                    {task.rejectionReason ? <span className="text-muted"> — “{task.rejectionReason}”</span> : null}
+                  </p>
+                  {task.rejection?.response === "CONCEDE" && (
+                    <p className="text-sm text-muted">The agent conceded your rejection.</p>
+                  )}
+                </>
               )}
             </div>
             <span aria-hidden style={{ animationDelay: "250ms" }} className={`inspect-stamp stamp mr-2 ${task.resolution === "ACCEPTED" ? "text-green" : "text-fg"}`}>
               {task.resolution === "ACCEPTED" ? "PAID" : "REFUNDED"}
               <small>
                 {task.resolution === "ACCEPTED"
-                  ? task.autoAccepted
+                  ? task.autoAccepted || task.rejection?.decisionSilent
                     ? "auto-accepted"
                     : "work accepted"
-                  : "work rejected"}
+                  : task.rejection?.response === "CONCEDE"
+                    ? "agent conceded"
+                    : "work rejected"}
               </small>
             </span>
           </div>

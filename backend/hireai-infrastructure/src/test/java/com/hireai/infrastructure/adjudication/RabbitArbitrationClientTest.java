@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.adjudication;
 
+import com.hireai.application.biz.adjudication.port.ArbitrationDeliverable;
 import com.hireai.application.biz.adjudication.port.ArbitrationRequestMessage;
 import com.hireai.application.biz.adjudication.port.RulingInfo;
 import com.hireai.domain.biz.adjudication.model.DisputeModel;
@@ -38,7 +39,8 @@ class RabbitArbitrationClientTest {
                 .dispute(RejectReason.A_MISMATCH, "wrong");
         DisputeModel dispute = DisputeModel.open(task.id(), clientId, RejectReason.A_MISMATCH, "dispute-" + task.id());
 
-        Optional<RulingInfo> result = client.requestRuling(dispute, task);
+        ArbitrationDeliverable deliverable = new ArbitrationDeliverable("ab12", "image/png", 3, "AQID");
+        Optional<RulingInfo> result = client.requestRuling(dispute, task, deliverable);
 
         assertThat(result).isEmpty(); // async — ruling arrives via callback
         ArgumentCaptor<ArbitrationRequestMessage> cap = ArgumentCaptor.forClass(ArbitrationRequestMessage.class);
@@ -53,5 +55,6 @@ class RabbitArbitrationClientTest {
         assertThat(msg.taskDescription()).isEqualTo("d"); // arbitrator sees what the client actually asked for
         assertThat(msg.resultPayloadJson()).isEqualTo("{\"a\":1}");
         assertThat(msg.reasonCategory()).isEqualTo("A_MISMATCH");
+        assertThat(msg.deliverable()).isEqualTo(deliverable); // the frozen snapshot, not the Agent's link (D24)
     }
 }

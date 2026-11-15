@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.adjudication;
 
+import com.hireai.application.biz.adjudication.port.ArbitrationDeliverable;
 import com.hireai.application.biz.adjudication.port.ArbitrationGateway;
 import com.hireai.application.biz.adjudication.port.RulingInfo;
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
@@ -20,7 +21,7 @@ import java.util.Optional;
 public class StubArbitrationClient implements ArbitrationGateway {
 
     @Override
-    public Optional<RulingInfo> requestRuling(DisputeModel dispute, TaskModel task) {
+    public Optional<RulingInfo> requestRuling(DisputeModel dispute, TaskModel task, ArbitrationDeliverable deliverable) {
         RulingCategory category = switch (dispute.reasonCategory()) {
             case A_MISMATCH -> RulingCategory.NOT_FULFILLED;
             case B_FACTUAL -> RulingCategory.PARTIALLY_FULFILLED;

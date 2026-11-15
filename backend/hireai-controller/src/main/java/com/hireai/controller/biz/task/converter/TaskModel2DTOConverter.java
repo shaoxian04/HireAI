@@ -1,11 +1,13 @@
 package com.hireai.controller.biz.task.converter;
 
 import com.hireai.controller.biz.acceptance.converter.Acceptance2DTOConverter;
+import com.hireai.controller.biz.task.dto.RejectionDTO;
 import com.hireai.controller.biz.task.dto.TaskDTO;
 import com.hireai.controller.biz.task.dto.TaskItemDTO;
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
 import com.hireai.domain.biz.task.item.model.TaskItems;
+import com.hireai.domain.biz.task.rejection.model.RejectionModel;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.info.ReviewWindowState;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -38,7 +40,13 @@ public final class TaskModel2DTOConverter {
 
     /** Also carries the task's review window (#94), resolved by the caller (nullable). */
     public static TaskDTO toDTO(TaskModel task, UUID agentId, ReviewWindowState reviewWindow) {
-        return toDTO(task, agentId, reviewWindow, null, false);
+        return toDTO(task, agentId, reviewWindow, null);
+    }
+
+    /** Also carries the task's latest rejection round (#95), resolved by the caller (nullable). */
+    public static TaskDTO toDTO(TaskModel task, UUID agentId, ReviewWindowState reviewWindow,
+                                RejectionModel rejection) {
+        return toDTO(task, agentId, reviewWindow, rejection, null, false);
     }
 
     /**
@@ -46,8 +54,8 @@ public final class TaskModel2DTOConverter {
      * {@code listItems} false keeps the Item list out (list views) while the amounts still come
      * from the Items, since each Item settled on its own.
      */
-    public static TaskDTO toDTO(TaskModel task, UUID agentId, ReviewWindowState reviewWindow, TaskItems items,
-                                boolean listItems) {
+    public static TaskDTO toDTO(TaskModel task, UUID agentId, ReviewWindowState reviewWindow,
+                                RejectionModel rejection, TaskItems items, boolean listItems) {
         OutputSpec spec = task.outputSpec();
         BigDecimal payout = null;
         BigDecimal commission = null;
@@ -101,6 +109,7 @@ public final class TaskModel2DTOConverter {
                 agentId,
                 reviewWindow == null ? null : reviewWindow.deadline(),
                 reviewWindow != null && reviewWindow.autoAccepted() ? Boolean.TRUE : null,
+                RejectionDTO.from(rejection),
                 multiItem ? items.count() : null,
                 multiItem ? items.all().get(0).price().value() : null,
                 multiItem && listItems ? items.all().stream().map(TaskModel2DTOConverter::toItemDTO).toList() : null);

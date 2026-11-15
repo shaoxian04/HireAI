@@ -15,6 +15,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import time
 
 import httpx
@@ -39,6 +40,19 @@ DEMO_SUMMARY = (
 
 SIGNATURE_HEADER = "X-HireAI-Signature"
 SECRET_ENV = "HIREAI_AGENT_SIGNING_SECRET"
+# FILE tasks: the https link the stub delivers. A "#deliver:<url>" tag in the task description wins,
+# so one running stub can deliver a passing file and a wrong-type one in the same demo.
+FILE_URL_ENV = "HIREAI_AGENT_FILE_URL"
+_DELIVER_TAG = re.compile(r"#deliver:(\S+)")
+
+
+def file_url_for(work_order: dict) -> str | None:
+    """The resultUrl for a FILE WorkOrder (tag in the description, else the env), else None."""
+    spec = work_order.get("outputSpec") or {}
+    if spec.get("format") != "FILE":
+        return None
+    tagged = _DELIVER_TAG.search(work_order.get("description") or "")
+    return tagged.group(1) if tagged else os.environ.get(FILE_URL_ENV)
 # Reject a signature whose timestamp is further than this from our clock (replay window).
 TOLERANCE_SECONDS = 300
 
@@ -65,6 +79,50 @@ def sign_body(secret: str, body: bytes, now: float | None = None) -> str:
     return f"t={timestamp},v1={digest}"
 
 
+REJECTION_EVENT = "task.rejected"
+REJECTION_ENV = "HIREAI_AGENT_REJECTION_RESPONSE"
+REJECTION_ACTIONS = ("REVISE", "CONCEDE", "STAND_BY", "SILENT")
+REVISED_SUMMARY = DEMO_SUMMARY + " (Revised: figures re-checked against the source article.)"
+
+
+def choose_rejection_response(notice: dict) -> str:
+    """How the stub answers a rejection notice, so a demo can drive every branch.
+
+    A tag in the client's rejection text wins (#revise, #concede, #standby, #silent); otherwise
+    HIREAI_AGENT_REJECTION_RESPONSE (default STAND_BY). A revision the notice no longer allows
+    falls back to standing by.
+    """
+    reason = (notice.get("reason") or "").lower()
+    tags = {"#revise": "REVISE", "#concede": "CONCEDE", "#standby": "STAND_BY", "#silent": "SILENT"}
+    action = next((a for tag, a in tags.items() if tag in reason), None)
+    if action is None:
+        configured = os.environ.get(REJECTION_ENV, "STAND_BY").upper()
+        action = configured if configured in REJECTION_ACTIONS else "STAND_BY"
+    if action == "REVISE" and not notice.get("revisionAllowed", False):
+        action = "STAND_BY"
+    return action
+
+
+def rejection_response_body(notice: dict, action: str) -> dict:
+    body = {"taskId": notice["taskId"], "action": action}
+    if action == "STAND_BY":
+        body["reason"] = "The summary states only figures that appear in the source article."
+    if action == "REVISE":
+        body["resultPayloadJson"] = json.dumps({"summary": REVISED_SUMMARY})
+    return body
+
+
+async def _respond_to_rejection(notice: dict, action: str, token: str, secret: str | None = None):
+    await asyncio.sleep(2)  # simulate thinking it over
+    raw = json.dumps(rejection_response_body(notice, action)).encode()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    if secret:
+        headers[SIGNATURE_HEADER] = sign_body(secret, raw)
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post(notice["responseUrl"], headers=headers, content=raw)
+    log.info("Rejection response %s for %s -> HTTP %s", action, notice["taskId"], response.status_code)
+
+
 @app.post("/run")
 async def run(request: Request, authorization: str = Header(default="")):
     if not authorization.startswith("Bearer "):
@@ -76,6 +134,13 @@ async def run(request: Request, authorization: str = Header(default="")):
         log.warning("Rejected a WorkOrder with a missing or invalid %s", SIGNATURE_HEADER)
         raise HTTPException(status_code=401, detail="Invalid WorkOrder signature")
     body = json.loads(raw)
+    if body.get("event") == REJECTION_EVENT:
+        action = choose_rejection_response(body)
+        log.info("Rejection notice for %s (round %s, %s): %r -> %s", body["taskId"], body.get("round"),
+                 body.get("reasonCategory"), body.get("reason"), action)
+        if action != "SILENT":
+            asyncio.create_task(_respond_to_rejection(body, action, token, secret))
+        return {"accepted": True, "taskId": body["taskId"]}
     task_id = body["taskId"]
     callback_url = body["callbackUrl"]
     # Log the task content so a live run visibly proves the WorkOrder carries the client's
@@ -89,7 +154,7 @@ async def run(request: Request, authorization: str = Header(default="")):
     # Process asynchronously so the dispatch POST returns immediately (202-style).
     items = body.get("items")
     extra = {"items": items} if items else {}  # only multi-Item WorkOrders carry items
-    asyncio.create_task(_complete(task_id, callback_url, token, secret, **extra))
+    asyncio.create_task(_complete(task_id, callback_url, token, secret, file_url_for(body), **extra))
     return {"accepted": True, "taskId": task_id}
 
 
@@ -111,13 +176,14 @@ def item_results(items: list[dict]) -> list[dict]:
 
 
 async def _complete(task_id: str, callback_url: str, token: str, secret: str | None = None,
-                    items: list[dict] | None = None):
-    await asyncio.sleep(2)  # simulate execution
+                    result_url: str | None = None, items: list[dict] | None = None):
+    # simulate execution; HIREAI_AGENT_WORK_SECONDS lengthens it for a staged demo
+    await asyncio.sleep(float(os.environ.get("HIREAI_AGENT_WORK_SECONDS", "2")))
     callback_body = {
         # Names the task this result answers; the platform rejects a signed body for another task.
         "taskId": task_id,
         "agentStatus": "COMPLETED",
-        "resultUrl": None,
+        "resultUrl": result_url,
         "message": "stub agent completed",
     }
     if items:

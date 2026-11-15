@@ -1,9 +1,12 @@
 package com.hireai.domain.biz.task.dispatchattempt.repository;
 
+import com.hireai.domain.biz.task.dispatchattempt.info.ContractDeclineRate;
 import com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView;
 import com.hireai.domain.biz.task.dispatchattempt.model.DispatchAttemptModel;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -19,4 +22,10 @@ public interface DispatchAttemptRepository {
 
     /** The task's history in attempt order, each with the Agent that owns the version. */
     List<DispatchAttemptView> findByTaskId(UUID taskId);
+
+    /**
+     * The public contract-decline rate of each given Agent, over all its versions (#93). Every
+     * requested Agent is in the map; one with no history gets {@link ContractDeclineRate#NONE}.
+     */
+    Map<UUID, ContractDeclineRate> declineRatesByAgentId(Collection<UUID> agentIds);
 }

@@ -1,13 +1,16 @@
 package com.hireai.controller.biz.agentcallback;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hireai.application.biz.task.RejectionAppService;
 import com.hireai.application.biz.task.callback.AgentCallbackAppService;
 import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.controller.base.BaseController;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.controller.base.WebResult;
+import com.hireai.controller.biz.agentcallback.dto.AgentRejectionResponseRequest;
 import com.hireai.controller.biz.agentcallback.dto.AgentResultCallbackRequest;
+import com.hireai.domain.biz.task.info.AgentRejectionResponseInfo;
 import com.hireai.domain.biz.task.info.AgentResultInfo;
 import com.hireai.domain.biz.task.item.info.AgentItemResultInfo;
 import jakarta.validation.ConstraintViolation;
@@ -44,12 +47,15 @@ public class AgentCallbackController extends BaseController {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final AgentCallbackAppService agentCallbackAppService;
+    private final RejectionAppService rejectionAppService;
     private final ObjectMapper objectMapper;
     private final Validator validator;
 
     public AgentCallbackController(AgentCallbackAppService agentCallbackAppService,
+                                   RejectionAppService rejectionAppService,
                                    ObjectMapper objectMapper, Validator validator) {
         this.agentCallbackAppService = agentCallbackAppService;
+        this.rejectionAppService = rejectionAppService;
         this.objectMapper = objectMapper;
         this.validator = validator;
     }
@@ -62,7 +68,7 @@ public class AgentCallbackController extends BaseController {
         String token = extractBearer(authorization);
         byte[] body = rawBody == null ? new byte[0] : rawBody;
         agentCallbackAppService.authenticate(taskId, token, signature, body);
-        AgentResultCallbackRequest request = parse(body);
+        AgentResultCallbackRequest request = parse(body, AgentResultCallbackRequest.class);
         // The signature covers the body, and the body names its task: binding it to the path (and
         // so to the token, which authenticate matched to the path) stops a signed result for one
         // task being replayed onto another task of the same Agent.
@@ -98,17 +104,42 @@ public class AgentCallbackController extends BaseController {
         }
     }
 
-    private AgentResultCallbackRequest parse(byte[] body) {
-        AgentResultCallbackRequest request;
+    /**
+     * The Agent's response to a rejection notice (#95): revise once, concede, or stand by with a
+     * reason. Authenticated exactly like the result callback (Hard Invariant #6): the dispatch token
+     * the notice carried, for THIS task, plus a fresh signature over the raw body with the Agent's
+     * current secret, checked before the body is parsed; the signed body must name this task.
+     * 409 when the task is not awaiting a response, the window has closed, or a revision is not allowed.
+     */
+    @PostMapping("/{taskId}/rejection-response")
+    public WebResult<Void> respondToRejection(@PathVariable("taskId") UUID taskId,
+                                              @RequestHeader(value = "Authorization", required = false) String authorization,
+                                              @RequestHeader(value = SIGNATURE_HEADER, required = false) String signature,
+                                              @RequestBody(required = false) byte[] rawBody) {
+        String token = extractBearer(authorization);
+        byte[] body = rawBody == null ? new byte[0] : rawBody;
+        agentCallbackAppService.authenticate(taskId, token, signature, body);
+        AgentRejectionResponseRequest request = parse(body, AgentRejectionResponseRequest.class);
+        if (!taskId.equals(request.taskId())) {
+            throw new DispatchTokenInvalidException(
+                    "Signed response body is for task " + request.taskId() + ", not " + taskId);
+        }
+        rejectionAppService.respond(taskId, token, new AgentRejectionResponseInfo(
+                request.action(), request.reason(), request.resultPayloadJson(), request.resultUrl()));
+        return ok();
+    }
+
+    private <T> T parse(byte[] body, Class<T> type) {
+        T request;
         try {
-            request = body.length == 0 ? null : objectMapper.readValue(body, AgentResultCallbackRequest.class);
+            request = body.length == 0 ? null : objectMapper.readValue(body, type);
         } catch (IOException ex) {
             request = null;
         }
         if (request == null) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "Request body is missing or malformed");
         }
-        Set<ConstraintViolation<AgentResultCallbackRequest>> violations = validator.validate(request);
+        Set<ConstraintViolation<T>> violations = validator.validate(request);
         violations.stream()
                 .min(Comparator.comparing(v -> v.getPropertyPath().toString()))
                 .ifPresent(v -> {

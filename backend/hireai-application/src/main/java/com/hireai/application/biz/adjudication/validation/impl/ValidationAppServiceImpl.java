@@ -1,6 +1,9 @@
 package com.hireai.application.biz.adjudication.validation.impl;
 
+import com.hireai.application.biz.acceptance.delivery.DeliverySnapshotAppService;
 import com.hireai.application.biz.adjudication.validation.ValidationAppService;
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.acceptance.delivery.model.DeliveryOutcome;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
@@ -31,6 +34,7 @@ import java.util.UUID;
 public class ValidationAppServiceImpl implements ValidationAppService {
 
     private final ValidationDomainService validationDomainService;
+    private final DeliverySnapshotAppService deliverySnapshotAppService;
     private final ValidationReportRepository reportRepository;
     private final TaskRepository taskRepository;
     private final SettlementWriteAppService settlementWriteAppService;
@@ -42,15 +46,21 @@ public class ValidationAppServiceImpl implements ValidationAppService {
     /** The app's Clock bean (ClockConfig): the review window opens at this instant. */
     private final Clock clock;
 
-    private static final int FIRST_ATTEMPT = 1; // retry attempts arrive in Plan 2
-
     @Override
     public TaskModel validateAndGate(TaskModel task) {
+        // The first result is attempt 1; an Agent's revision after a rejection (#95) is the next one.
+        int attempt = reportRepository.findLatestByTaskId(task.id())
+                .map(previous -> previous.attemptNo() + 1).orElse(1);
         // The frozen Contract is the binding contract (Invariant #4). A Task submitted before
-        // Contracts existed has none and finishes under its frozen output_spec.
-        ValidationReportModel report = task.contract() != null
-                ? validationDomainService.validate(task.contract(), task.result(), FIRST_ATTEMPT)
-                : validationDomainService.validate(task.outputSpec(), task.result(), FIRST_ATTEMPT);
+        // Contracts existed has none and finishes under its frozen output_spec, through the same
+        // D39 mapping (ValidationDomainService#validate(OutputSpec, ...)).
+        Contract contract = task.contract() != null ? task.contract() : task.outputSpec().toContract();
+        // A file is fetched and frozen once, here, before any check (D24): every later step judges
+        // the DeliverySnapshot, never the Agent's link.
+        DeliveryOutcome delivery = validationDomainService.needsDelivery(contract, task.result())
+                ? deliverySnapshotAppService.capture(contract, task.result())
+                : null;
+        ValidationReportModel report = validationDomainService.validate(contract, task.result(), delivery, attempt);
         reportRepository.save(report);
 
         if (report.isPass()) {

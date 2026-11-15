@@ -34,7 +34,7 @@ export function reviewWindowClosed(deadline: string | null | undefined, now: Dat
 }
 
 /** "22h 30m left", "12m left", "under a minute left". */
-function timeLeft(ms: number): string {
+export function timeLeft(ms: number): string {
   const minutes = Math.floor(ms / 60_000);
   if (minutes < 1) return "under a minute left";
   const h = Math.floor(minutes / 60);

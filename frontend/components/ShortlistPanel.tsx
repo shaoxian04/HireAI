@@ -3,6 +3,7 @@
 import type { AgentOptionDTO } from "@/lib/types";
 import { Button, Modal } from "@/components/ui";
 import { DeliveryRecord } from "@/components/DeliveryRecord";
+import { ContractDeclines } from "@/components/ContractDeclines";
 
 interface Props {
   open: boolean;
@@ -152,6 +153,7 @@ function OptionCard({
         {option.outputFormat && (
           <span className="rounded border border-line px-1.5 py-0.5">{option.outputFormat}</span>
         )}
+        <ContractDeclines rate={option.contractDeclines} className="basis-full" />
       </div>
       <div className="mt-auto flex items-center justify-between pt-1">
         <span className="inline-flex items-center gap-1.5 text-xs">
@@ -191,6 +193,11 @@ function NearMissRow({
               reliabilityCount={option.reliabilityCount}
             />
           </p>
+          {option.contractDeclines && (
+            <p className="truncate text-xs text-dim">
+              <ContractDeclines rate={option.contractDeclines} />
+            </p>
+          )}
         </div>
       </div>
       <Button
