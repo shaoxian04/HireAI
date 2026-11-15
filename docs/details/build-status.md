@@ -61,6 +61,7 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 
 ### Matching
 
+- **Routed JSON tasks with a schema match narrowly, confirmed (#91).** A migrated JSON Offer accepts only its Agent's own schema string, and a schemaless JSON Agent only Contracts without a schema, so a routed task whose schema isn't byte-equal to an Agent's own waits `AWAITING_AGENT` and ends `NO_ELIGIBLE_AGENT`. Builders can't widen an Offer until the Offer editor (#89) lands; the failure detail names `schema` as the blocker.
 - **τ not tuned on live data, confirmed.** The relevance floor (`hireai.matching.relevance-floor`) is provisional. On the recorded test set (`TauTestSetTest`) it removes off-bucket Agents but cuts within a bucket on both sides: a general summariser misses a lease summary while a medical summariser passes.
 - **`text_embeddings` grows without bound, confirmed.** One row per distinct task text and model; nothing evicts old rows.
 - **A failover hop ranks without relevance when the first routing pass had no vector, confirmed.** The hop runs under the task's row lock, so it reads only the cache and never calls the provider.

@@ -86,7 +86,7 @@ describe("task detail — failure panel", () => {
     );
     render(<AuthProvider><TaskDetailPage /></AuthProvider>);
     expect(await screen.findByText("Awaiting an agent")).toBeInTheDocument();
-    expect(screen.getByText(/no agent takes this category within your budget/i)).toBeInTheDocument();
+    expect(screen.getByText(/no agent takes this category and its output terms within your budget/i)).toBeInTheDocument();
     expect(screen.getByText(/credits are refunded/i)).toBeInTheDocument();
     expect(screen.queryByText(/capacity/i)).toBeNull();
   });
