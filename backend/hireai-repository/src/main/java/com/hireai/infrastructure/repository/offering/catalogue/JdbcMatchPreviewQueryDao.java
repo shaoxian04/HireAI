@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.repository.offering.catalogue;
 
+import com.hireai.application.biz.acceptance.AcceptanceJsonMapper;
 import com.hireai.application.port.query.MatchPreviewQueryPort;
 import com.hireai.domain.biz.offering.embedding.info.TextVector;
 import com.hireai.infrastructure.repository.offering.embedding.PgVectors;
@@ -38,14 +39,17 @@ public class JdbcMatchPreviewQueryDao implements MatchPreviewQueryPort {
                    v.capability_categories AS capability_categories,
                    v.output_spec::text     AS output_spec_json,
                    v.output_spec->>'format' AS output_format,
+                   v.offer::text           AS offer_json,
                    v.webhook_url           AS webhook_url,
                    v.max_execution_seconds AS max_execution_seconds,
             """ + MatchCandidateSql.LOAD_COLUMNS + MatchCandidateSql.ELIGIBLE_FROM;
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final AcceptanceJsonMapper acceptanceJsonMapper;
 
-    public JdbcMatchPreviewQueryDao(NamedParameterJdbcTemplate jdbc) {
+    public JdbcMatchPreviewQueryDao(NamedParameterJdbcTemplate jdbc, AcceptanceJsonMapper acceptanceJsonMapper) {
         this.jdbc = jdbc;
+        this.acceptanceJsonMapper = acceptanceJsonMapper;
     }
 
     @Override
@@ -75,7 +79,8 @@ public class JdbcMatchPreviewQueryDao implements MatchPreviewQueryPort {
                 rs.getInt("max_concurrent"),
                 rs.getLong("in_flight"),
                 rs.getLong("sample_count"),
-                rs.getObject("similarity", Double.class)));
+                rs.getObject("similarity", Double.class),
+                acceptanceJsonMapper.offerFromJson(rs.getString("offer_json"))));
     }
 
     private static List<String> stringList(Array array) throws SQLException {

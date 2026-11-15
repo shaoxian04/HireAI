@@ -28,6 +28,11 @@ public final class TaskModel2DTOConverter {
 
     /** {@code agentId} is the Agent the task was booked with, resolved by the caller (nullable). */
     public static TaskDTO toDTO(TaskModel task, UUID agentId) {
+        return toDTO(task, agentId, null);
+    }
+
+    /** Also carries the task's failure detail (#91), resolved by the caller (nullable). */
+    public static TaskDTO toDTO(TaskModel task, UUID agentId, String failureDetail) {
         OutputSpec spec = task.outputSpec();
         BigDecimal payout = null;
         BigDecimal commission = null;
@@ -62,6 +67,7 @@ public final class TaskModel2DTOConverter {
                 refund,
                 task.failureReason() == null ? null : task.failureReason().name(),
                 task.category(),
-                agentId);
+                agentId,
+                failureDetail);
     }
 }

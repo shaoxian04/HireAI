@@ -1,6 +1,7 @@
 package com.hireai.application.biz.acceptance;
 
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.acceptance.coverage.info.ContractTerms;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
 import com.hireai.domain.biz.acceptance.template.model.TemplateModel;
 import com.hireai.domain.biz.acceptance.template.model.TemplateRef;
@@ -24,6 +25,13 @@ public interface TemplateReadAppService {
      * bounds; VALIDATION_ERROR otherwise (an unknown Template included).
      */
     void requireValid(Contract contract);
+
+    /**
+     * The Contract with its Template version, for Offer coverage (#91). VALIDATION_ERROR when the
+     * Template is unknown. Does not check the bounds or the Template's status (a frozen Contract stays
+     * judged under its own version).
+     */
+    ContractTerms termsFor(Contract contract);
 
     /** Every Offer term names an existing Template version with in-bounds ranges; VALIDATION_ERROR otherwise. */
     void requireValid(Offer offer);

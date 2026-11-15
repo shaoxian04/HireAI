@@ -32,7 +32,12 @@ public interface TaskWriteAppService {
      */
     void assignAndQueue(@NonNull UUID taskId, @NonNull UUID agentVersionId, @NonNull Instant executionDeadline);
 
-    void markAwaitingAgent(@NonNull UUID taskId);
+    /**
+     * SUBMITTED/AWAITING_AGENT -> AWAITING_AGENT, recording why nothing matched ({@code noMatchDetail},
+     * nullable; #91). It stays on the task as its failure detail if the re-match sweeper later cancels it
+     * with NO_ELIGIBLE_AGENT.
+     */
+    void markAwaitingAgent(@NonNull UUID taskId, String noMatchDetail);
 
     /** Re-match bookkeeping: increments and returns the task's match_attempts counter. */
     int registerMatchAttempt(@NonNull UUID taskId);

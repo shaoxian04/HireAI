@@ -337,7 +337,7 @@ class TaskControllerTest {
         UUID agentId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
         when(matchPreviewAppService.preview(eq("Summarise"), eq("Private contract text"), eq("summarisation"),
-                eq(Money.of(new BigDecimal("30"))), eq(Set.of()), isNull()))
+                eq(Money.of(new BigDecimal("30"))), eq(Set.of()), isNull(), isNull()))
                 .thenReturn(new MatchPreview(
                         List.of(new AgentOption(agentId, versionId, "Alpha", "tag", "logo",
                                 new BigDecimal("12.00"), new BigDecimal("80.00"), true, "JSON",
@@ -360,7 +360,7 @@ class TaskControllerTest {
 
     @Test
     void matchPreviewSaysWhenNoAgentMatchesTheTaskClosely() throws Exception {
-        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), isNull()))
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), isNull(), isNull()))
                 .thenReturn(new MatchPreview(List.of(), List.of(), true));
 
         mockMvc.perform(post("/api/tasks/match-preview")
@@ -368,6 +368,44 @@ class TaskControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.shortlist").isEmpty())
                 .andExpect(jsonPath("$.data.noCloseMatch").value(true));
+    }
+
+    @Test
+    void matchPreviewReadsTheContractAndExplainsAnEmptyShortlist() throws Exception {
+        var contract = new com.hireai.domain.biz.acceptance.contract.model.Contract(
+                new com.hireai.domain.biz.acceptance.template.model.TemplateRef("file_basic", 1), java.util.Map.of(
+                "max_bytes", new com.hireai.domain.biz.acceptance.contract.model.ParameterValue.Number(
+                        new BigDecimal("1000")),
+                "media_types", new com.hireai.domain.biz.acceptance.contract.model.ParameterValue.TextSet(
+                        Set.of("image/png"))));
+        var explanation = new com.hireai.domain.biz.task.routing.info.NoMatchExplanation(contract.template(),
+                List.of(new com.hireai.domain.biz.task.routing.info.NoMatchExplanation.Exclusion(
+                        com.hireai.domain.biz.task.routing.info.NoMatchExplanation.Blocker.PARAMETER, "max_bytes", 2)),
+                List.of(new com.hireai.domain.biz.task.routing.info.NoMatchExplanation.RelaxSuggestion("max_bytes", 2)));
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), isNull(),
+                eq(contract)))
+                .thenReturn(new MatchPreview(List.of(), List.of(), false, explanation));
+
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(previewBody(",\"contract\":{\"template\":\"file_basic\",\"version\":1,"
+                                + "\"params\":{\"max_bytes\":1000,\"media_types\":[\"image/png\"]}}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.noMatch.summary")
+                        .value("No eligible Agent: parameter max_bytes excluded 2 Agents."))
+                .andExpect(jsonPath("$.data.noMatch.exclusions[0].blocker").value("PARAMETER"))
+                .andExpect(jsonPath("$.data.noMatch.exclusions[0].parameter").value("max_bytes"))
+                .andExpect(jsonPath("$.data.noMatch.suggestions[0].agents").value(2));
+    }
+
+    @Test
+    void matchPreviewRejectsAContractValueOfNoKnownKind() throws Exception {
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(previewBody(",\"contract\":{\"template\":\"file_basic\",\"version\":1,"
+                                + "\"params\":{\"max_bytes\":{\"nested\":1}}}")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     @Test
@@ -382,7 +420,7 @@ class TaskControllerTest {
     void matchPreviewPassesEveryExcludedAgentToTheService() throws Exception {
         UUID failed = UUID.randomUUID();
         UUID other = UUID.randomUUID();
-        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of(failed, other)), isNull()))
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of(failed, other)), isNull(), isNull()))
                 .thenReturn(new MatchPreview(List.of(), List.of(), false));
 
         mockMvc.perform(post("/api/tasks/match-preview")
@@ -394,7 +432,7 @@ class TaskControllerTest {
 
     @Test
     void matchPreviewPassesTheOptionalDeadlineOn() throws Exception {
-        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), eq(3600L)))
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), eq(3600L), isNull()))
                 .thenReturn(new MatchPreview(List.of(), List.of(), false));
 
         mockMvc.perform(post("/api/tasks/match-preview")

@@ -5,6 +5,17 @@ import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
 import com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView;
 import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.task.info.PreviewCriteria;
+import com.hireai.domain.biz.task.info.MatchCriteria;
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.acceptance.coverage.info.ContractTerms;
+import com.hireai.domain.biz.acceptance.offer.model.Offer;
+import com.hireai.domain.biz.acceptance.offer.model.OfferTerm;
+import com.hireai.domain.biz.acceptance.template.enums.ExpectationMode;
+import com.hireai.domain.biz.acceptance.template.enums.OutputShape;
+import com.hireai.domain.biz.acceptance.template.enums.TemplateStatus;
+import com.hireai.domain.biz.acceptance.template.model.GenericTemplates;
+import com.hireai.domain.biz.acceptance.template.model.TemplateModel;
+import com.hireai.domain.biz.acceptance.template.model.TemplateRef;
 import com.hireai.domain.biz.task.routing.service.impl.RoutedFailoverDomainServiceImpl;
 import com.hireai.domain.biz.task.routing.service.impl.RoutingMatchDomainServiceImpl;
 import org.junit.jupiter.api.Test;
@@ -13,6 +24,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
@@ -116,7 +128,7 @@ class RoutedFailoverDomainServiceTest {
         AgentCandidate first = candidate(UUID.randomUUID(), "10.00");
         AgentCandidate tooSlow = candidate(UUID.randomUUID(), "20.00");
 
-        assertThat(service.exhaustionReason(List.of(tried(first, 1, DispatchOutcome.BUSY)), List.of(first, tooSlow)))
+        assertThat(service.exhaustionReason(CRITERIA, List.of(tried(first, 1, DispatchOutcome.BUSY)), List.of(first, tooSlow)))
                 .isEqualTo(FailureReason.NO_ELIGIBLE_AGENT);
     }
 
@@ -124,7 +136,7 @@ class RoutedFailoverDomainServiceTest {
     void nobodyUntriedLeftIsNoAlternativeAgentEvenWithADeadline() {
         AgentCandidate only = candidate(UUID.randomUUID(), "10.00");
 
-        assertThat(service.exhaustionReason(List.of(tried(only, 1, DispatchOutcome.BUSY)), List.of(only)))
+        assertThat(service.exhaustionReason(CRITERIA, List.of(tried(only, 1, DispatchOutcome.BUSY)), List.of(only)))
                 .isEqualTo(FailureReason.NO_ALTERNATIVE_AGENT);
     }
 
@@ -132,7 +144,7 @@ class RoutedFailoverDomainServiceTest {
     void withoutADeadlineTheReasonIsNoAlternativeAgent() {
         AgentCandidate only = candidate(UUID.randomUUID(), "10.00");
 
-        assertThat(service.exhaustionReason(List.of(tried(only, 1, DispatchOutcome.BUSY)), null))
+        assertThat(service.exhaustionReason(CRITERIA, List.of(tried(only, 1, DispatchOutcome.BUSY)), null))
                 .isEqualTo(FailureReason.NO_ALTERNATIVE_AGENT);
     }
 
@@ -143,7 +155,43 @@ class RoutedFailoverDomainServiceTest {
             history.add(tried(candidate(UUID.randomUUID(), "10.00"), i, DispatchOutcome.UNREACHABLE));
         }
 
-        assertThat(service.exhaustionReason(history, List.of(candidate(UUID.randomUUID(), "20.00"))))
+        assertThat(service.exhaustionReason(CRITERIA, history, List.of(candidate(UUID.randomUUID(), "20.00"))))
                 .isEqualTo(FailureReason.NO_ALTERNATIVE_AGENT);
+    }
+
+    @Test
+    void failoverAppliesTheSameOfferCoverageFilter() {
+        AgentCandidate first = candidate(UUID.randomUUID(), "10.00");
+        AgentCandidate textOnly = withOffer(candidate(UUID.randomUUID(), "10.00"), GenericTemplates.TEXT_BASIC_V1);
+        AgentCandidate jsonAgent = withOffer(candidate(UUID.randomUUID(), "20.00"), GenericTemplates.CUSTOM_JSON_V1);
+        MatchCriteria wantsJson = CRITERIA.withTerms(JSON_TERMS);
+
+        assertThat(service.selectNext(wantsJson, List.of(tried(first, 1, DispatchOutcome.BUSY)),
+                List.of(first, textOnly, jsonAgent))).contains(jsonAgent);
+    }
+
+    @Test
+    void anUntriedAgentWhoseOfferDoesNotCoverTheContractIsNoReasonToBlameTheDeadline() {
+        AgentCandidate first = candidate(UUID.randomUUID(), "10.00");
+        AgentCandidate textOnly = withOffer(candidate(UUID.randomUUID(), "10.00"), GenericTemplates.TEXT_BASIC_V1);
+
+        assertThat(service.exhaustionReason(CRITERIA.withTerms(JSON_TERMS),
+                List.of(tried(first, 1, DispatchOutcome.BUSY)), List.of(first, textOnly)))
+                .isEqualTo(FailureReason.NO_ALTERNATIVE_AGENT);
+    }
+
+    private static final ContractTerms JSON_TERMS = new ContractTerms(
+            new TemplateModel(GenericTemplates.CUSTOM_JSON_V1, "JSON", "Any JSON", OutputShape.JSON, List.of(),
+                    List.of(), ExpectationMode.NONE,
+                    Map.of("FULFILLED", BigDecimal.ONE, "PARTIALLY_FULFILLED", BigDecimal.ONE,
+                            "NOT_FULFILLED", BigDecimal.ZERO),
+                    TemplateStatus.ACTIVE, Instant.now()),
+            new Contract(GenericTemplates.CUSTOM_JSON_V1, Map.of()));
+
+    private static AgentCandidate withOffer(AgentCandidate c, TemplateRef template) {
+        return new AgentCandidate(c.agentId(), c.agentVersionId(), c.capabilityCategories(), c.price(),
+                c.webhookUrl(), c.maxExecutionSeconds(), c.reputationScore(), c.outputSpecJson(),
+                c.maxConcurrent(), c.inFlight(), c.sampleCount(), c.similarity(),
+                Offer.of(new OfferTerm(template, Map.of())));
     }
 }

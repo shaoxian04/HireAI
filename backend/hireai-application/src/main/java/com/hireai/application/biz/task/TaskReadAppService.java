@@ -33,6 +33,12 @@ public interface TaskReadAppService {
      */
     Optional<UUID> findBookedAgentId(@NonNull TaskModel task);
 
+    /**
+     * Why no Agent matched a task the caller has already loaded for its owner (#91): shown while it
+     * waits AWAITING_AGENT and once it ended NO_ELIGIBLE_AGENT, empty otherwise.
+     */
+    Optional<String> findFailureDetail(@NonNull TaskModel task);
+
     TaskResultModel getResult(@NonNull UUID taskId, @NonNull UUID clientId);
 
     List<TaskModel> listForClient(@NonNull UUID clientId, @NonNull TaskQuery query);

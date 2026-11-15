@@ -37,12 +37,12 @@ public class RoutedFailoverDomainServiceImpl implements RoutedFailoverDomainServ
     }
 
     @Override
-    public FailureReason exhaustionReason(List<DispatchAttemptView> history,
+    public FailureReason exhaustionReason(MatchCriteria criteria, List<DispatchAttemptView> history,
                                           List<AgentCandidate> candidatesIgnoringDeadline) {
         Tried tried = Tried.from(history);
         boolean onlyTheDeadlineStoodInTheWay = candidatesIgnoringDeadline != null
                 && !tried.limitReached()
-                && !tried.untried(candidatesIgnoringDeadline).isEmpty();
+                && !matcher.rank(criteria, tried.untried(candidatesIgnoringDeadline)).isEmpty();
         return onlyTheDeadlineStoodInTheWay ? FailureReason.NO_ELIGIBLE_AGENT : FailureReason.NO_ALTERNATIVE_AGENT;
     }
 

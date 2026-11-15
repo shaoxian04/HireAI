@@ -34,7 +34,13 @@ public record TaskDTO(
          * The Agent the task was booked with or assigned to; absent when none was (a routed task
          * that never found one) and on list/command responses, which don't resolve it.
          */
-        UUID agentId
+        UUID agentId,
+        /**
+         * Why no Agent matched the task (#91): the blocking Contract parameter, Template version or the
+         * relevance floor, with Agent counts. Present while it waits AWAITING_AGENT and after it ends
+         * NO_ELIGIBLE_AGENT; absent otherwise and on list/command responses.
+         */
+        String failureDetail
 ) {
 
     public record OutputSpecDTO(String format, String schema, String acceptanceCriteria) {

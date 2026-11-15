@@ -1,5 +1,7 @@
 package com.hireai.controller.biz.task.dto;
 
+import com.hireai.controller.biz.acceptance.dto.ContractRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import com.hireai.domain.biz.task.model.ClientDeadline;
@@ -31,6 +33,8 @@ public record MatchPreviewRequest(
         @Max(value = ClientDeadline.MAX_SECONDS, message = "deadlineSeconds must be at most 2592000 (30 days)")
         Long deadlineSeconds,
         /** Optional: Agents to leave out of both lists (the web rebook passes the one that failed). */
-        List<@NotNull UUID> exclude
+        List<@NotNull UUID> exclude,
+        /** Optional (#91): the Contract to book under; only Agents whose Offer covers it qualify. */
+        @Valid ContractRequest contract
 ) {
 }
