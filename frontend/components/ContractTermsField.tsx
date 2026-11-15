@@ -47,7 +47,8 @@ export function ContractTermsField({ templates, value, onChange, error = null }:
       </div>
     );
   }
-  const active = [...templates.byRef.values()].filter((t) => t.status === "ACTIVE");
+  // Only current versions: during a transition the platform falls back to the previous one itself.
+  const active = [...templates.byRef.values()].filter((t) => t.status === "ACTIVE" && t.current !== false);
   const selectedRef = value ? refOf(value.template, value.version) : "";
   const template = value ? templates.byRef.get(selectedRef) : undefined;
 
