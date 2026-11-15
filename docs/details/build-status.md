@@ -45,6 +45,7 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 - **No per-Item rejection yet.** A multi-Item Task's Items are accepted (one by one, all at once, or by the review window); reject is refused with 409. Rejecting Items, and its D20 path, come with the sampling and reviewer flow (spec S8).
 - **No web submit UI and no MCP for Items.** Items are submitted through `items` on `POST /api/tasks` and `/api/tasks/direct`; the submit page's upload flow is #104 (SourceSnapshot), and MCP `submit_task` does not take Items.
 - **A whole-Task failure leaves Items `AWAITING_RESULT`.** A timeout, cancel or Agent-reported failure refunds the whole escrow at once (one task-level settlement) and writes the single-Task event; the Items keep their first state and the task page shows them as not delivered.
+- **File Items are fetched one after another inside the callback.** Each FILE Item's deliverable gets its own DeliverySnapshot (keyed by the Item's id), fetched in the callback transaction under the task row lock, so a large batch of slow links holds that lock for up to the fetch timeout per Item. The task API does not yet show an Item's snapshot or offer its download.
 - **Item inputs are text.** Each Item's input is at most 5000 characters, not a document; documents arrive with SourceSnapshot (#104).
 
 ### Reputation
