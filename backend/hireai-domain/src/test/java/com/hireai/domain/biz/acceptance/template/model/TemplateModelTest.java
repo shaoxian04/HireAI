@@ -128,6 +128,24 @@ class TemplateModelTest {
     }
 
     @Test
+    void anOfferRangeOutsideTheBoundsSaysWhichTemplateAndWhatTheBoundsAllow() {
+        assertOfferRejected(Map.of("max_pages", new ParameterRange.Bound(new BigDecimal("500"))),
+                "demo_work@1", "Max pages (max_pages)", "between 1 and 100", "500");
+        assertOfferRejected(Map.of("tone", new ParameterRange.OneOf(Set.of("angry"))),
+                "Tone (tone)", "formal, casual", "angry");
+        assertOfferRejected(Map.of("notes", new ParameterRange.OneOf(Set.of("far too long a note"))),
+                "Notes (notes)", "at most 10 characters");
+        assertOfferRejected(Map.of("max_pages", new ParameterRange.AnyValue()),
+                "Max pages (max_pages)", "needs a single number");
+        assertOfferRejected(Map.of("cite_sources", new ParameterRange.Bound(BigDecimal.ONE)),
+                "Cite sources (cite_sources)", "yes or no");
+        assertOfferRejected(Map.of("tone", new ParameterRange.Bound(BigDecimal.ONE)),
+                "Tone (tone)", "any value or a list of values");
+        assertOfferRejected(Map.of("colour", new ParameterRange.AnyValue()),
+                "demo_work@1 has no parameter colour", "max_pages", "cite_sources");
+    }
+
+    @Test
     void aParameterMustDeclareBoundsThatFitItsComparison() {
         assertThatThrownBy(() -> new TemplateParameter("languages", "L", "d", ParameterComparison.SUBSET,
                 ParameterBounds.numeric(BigDecimal.ONE, BigDecimal.TEN)))
@@ -155,6 +173,16 @@ class TemplateModelTest {
     private static void assertRejected(Map<String, ParameterValue> params, String parameter) {
         assertThatThrownBy(() -> TEMPLATE.requireValid(new Contract(REF, params)))
                 .isInstanceOf(DomainException.class).hasMessageContaining(parameter);
+    }
+
+    private static void assertOfferRejected(Map<String, ParameterRange> params, String... phrases) {
+        assertThatThrownBy(() -> TEMPLATE.requireValid(new OfferTerm(REF, params)))
+                .isInstanceOf(DomainException.class)
+                .satisfies(e -> {
+                    for (String phrase : phrases) {
+                        org.assertj.core.api.Assertions.assertThat(e.getMessage()).contains(phrase);
+                    }
+                });
     }
 
     private static TemplateModel template(TemplateStatus status, List<TemplateParameter> parameters) {
