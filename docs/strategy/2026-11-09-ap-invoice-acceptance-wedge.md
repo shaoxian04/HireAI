@@ -212,7 +212,7 @@ stateDiagram-v2
 
 | Needed | Today | Gap |
 |---|---|---|
-| Vendor receives the documents and the schema | Dispatch sends only the category (#45) | Must fix before any demo |
+| Vendor receives the documents and the schema | Since PR #86 the WorkOrder carries the title, the description and the frozen `outputSpec` (#45 closed). The input documents themselves still have no carrier (`SourceSnapshot` is planned, ADR 0004) | Document input is still a gap |
 | Deterministic rules on structured output | TEXT passes any non-blank output; a blank schema is skipped; `acceptanceCriteria` is unused | A rule engine is needed |
 | Rules that read buyer reference data | None | Reference-data connector or upload |
 | Sample audit with a recorded seed and reviewer workflow | None | New |

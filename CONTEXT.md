@@ -36,6 +36,10 @@ _Avoid_: awaiting capacity (the old status name; capacity is the Agent declining
 The frozen copy of the client-supplied input a Task is judged against — fetched once at submission, content-hashed, and immutable thereafter. It is what the Agent executes on and what an arbitrator later reads, so both sides are held to provably identical evidence even if the original source is amended or disappears.
 _Avoid_: attachment, upload, file, source URL (the URL is only where it came from; the SourceSnapshot is the frozen thing itself)
 
+**DeliverySnapshot** _(designed, not built)_:
+The frozen copy of what an Agent delivered for an Item — fetched once when the result arrives, content-hashed, and immutable thereafter. Every later step (Acceptance Checks, AI Review, the client's review, arbitration) judges this copy, never the Agent's link, so a deliverable cannot be swapped or withdrawn after the fact. The output-side twin of SourceSnapshot.
+_Avoid_: result URL, attachment (the URL is only where the Agent put it)
+
 **IdempotencyRecord**:
 A dedup record of one submit attempt, keyed by (owner, idempotency key). Belongs to the submission act, not to ApiKey — it applies to any submitter, human JWT included, whenever a request carries an `Idempotency-Key`.
 _Avoid_: idempotency key (that's the header/input; this is the stored record)
@@ -43,6 +47,44 @@ _Avoid_: idempotency key (that's the header/input; this is the stored record)
 **WebhookDelivery**:
 One outbound notification of a single Task's terminal event (`task.completed`/`task.failed`), enqueued as an outbox row in the same transaction as settlement and retried until delivered or dead. Cannot exist without the Task event that produced it.
 _Avoid_: webhook (ambiguous with WebhookSubscription — say "delivery" for the per-event half)
+
+### Acceptance _(designed, not built; see the #46 design spec)_
+
+**Contract**:
+The single binding agreement a Task is judged against, frozen at submission. It states the shape of the deliverable, how it will be accepted, and how money moves on each outcome. Automated acceptance looks only at the Contract; the Task's description is evidence of intent that an arbitrator may read, never a ground for automatic rejection. Where the two conflict, the Contract wins.
+_Avoid_: output spec (the old, narrower name, which covered only the shape), agreement, terms
+
+**Template**:
+The platform-authored, versioned definition of one kind of work: which Acceptance Checks it may use, the bounds on each parameter, and how each ruling settles. Every Contract is built from exactly one Template version.
+_Avoid_: category (a category is how work is found; a Template is how it is judged), schema
+
+**Offer**:
+An Agent's standing declaration of which Template versions it will work under, the parameter range it is willing to be held to, and its price. Only an Agent whose Offer covers a Task's Contract can be given that Task, so no Agent is ever held to terms it did not accept.
+_Avoid_: output spec (the old single-shape declaration it replaces), listing, capability
+
+**Acceptance Check**:
+One test of whether the delivery conforms to the Contract — judged only against the current Task's input and Contract, never against other Tasks or outside data. Its outcome can move money.
+_Avoid_: validation rule, business rule (a check that looks outside the Task is a Finding)
+
+**Item**:
+One deliverable unit inside a Task, accepted and settled on its own. A marketplace Task has one Item; a batch of 500 invoices is one Task with 500 Items, so one bad invoice never drags the other 499 down with it.
+_Avoid_: batch (a batch is just a Task with many Items), document, line, sub-task
+
+**Check Library**:
+The platform-curated catalogue of Acceptance Checks a Contract may use, each with fixed meaning and adjustable parameters ("background colour is red, within this hue range"). A natural-language requirement either maps onto an entry or is not automatically checked — no check is invented at submission.
+_Avoid_: rules engine, validators
+
+**Finding**:
+A fact about the Task's *input* noticed while accepting it — a duplicate invoice, a source document that does not add up, a supplier missing from the buyer's records. Reported to the client; it never changes what the Agent is paid.
+_Avoid_: error, violation, exception (none of these are the Agent's fault)
+
+**AI Review**:
+An optional, client-paid acceptance step in which a model judges the criteria code cannot check. Chosen and priced at submission, never switched on mid-task. For a human client it is a pre-review report; for a machine client it decides settlement.
+_Avoid_: LLM validation, AI check
+
+**Appeal Fee**:
+What a party pays to take an arbitrator's ruling to a human admin, once. Like the cost of arbitration itself, it is borne by whoever loses, up to a cap tied to the Item's price. Only a Client or buyer ever opens arbitration, and their escrowed payment already stands behind it, so no one posts a separate deposit.
+_Avoid_: dispute bond, deposit (no one pays up front to open arbitration)
 
 ### Reputation
 
