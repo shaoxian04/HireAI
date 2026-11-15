@@ -109,7 +109,7 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
         TaskModel task = load(taskId);
         taskRepository.save(task.markAwaitingAgent());
         taskRepository.stampFailureDetail(taskId, noMatchDetail == null || noMatchDetail.length() <= 1000
-                ? noMatchDetail : noMatchDetail.substring(0, 999) + "…"); // the V41 column's limit
+                ? noMatchDetail : noMatchDetail.substring(0, 999) + "…"); // the V42 column's limit
         log.info("Task {} marked AWAITING_AGENT (no eligible agent)", taskId);
     }
 
