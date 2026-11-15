@@ -38,4 +38,5 @@ cloudflared tunnel --url http://localhost:9000     # -> https://<random>.tryclou
 ## Wire contracts
 
 - **Receives:** the WorkOrder (shape, rules and signature verification in `docs/details/matching.md`) with headers `Authorization: Bearer <token>`, `X-Correlation-ID: <id>` and, when the agent has a secret, `X-HireAI-Signature`. The stub logs the title and description it received, then returns its staged output whatever was asked.
+- **Rejection notices** (`event: "task.rejected"`, [shape](../docs/details/matching.md#rejection-notice)): after ~2s it answers at `responseUrl` with a signed `REVISE` (a re-worded summary), `CONCEDE` or `STAND_BY`. A `#revise`, `#concede`, `#standby` or `#silent` tag in the Client's rejection text picks the answer; otherwise `HIREAI_AGENT_REJECTION_RESPONSE` (default `STAND_BY`). A revision the notice no longer allows becomes a stand-by.
 - **Sends** to `callbackUrl`: `{ taskId, agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }` with `Authorization: Bearer <same token>` and, when the secret is set, `X-HireAI-Signature` over the exact body bytes (`sign_body`).

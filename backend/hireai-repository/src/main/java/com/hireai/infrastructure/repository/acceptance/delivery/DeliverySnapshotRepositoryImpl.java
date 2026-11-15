@@ -10,7 +10,7 @@ import java.sql.Timestamp;
 import java.util.Optional;
 import java.util.UUID;
 
-/** {@code delivery_snapshots} (V42) with plain JDBC: insert-only, the table's trigger refuses changes. */
+/** {@code delivery_snapshots} (V43) with plain JDBC: insert-only, the table's trigger refuses changes. */
 @Repository
 public class DeliverySnapshotRepositoryImpl implements DeliverySnapshotRepository {
 

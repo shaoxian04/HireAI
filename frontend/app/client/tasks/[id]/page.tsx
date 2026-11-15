@@ -19,6 +19,7 @@ import { ResultReviewBar } from "@/components/ResultReviewBar";
 import { RatingPrompt } from "@/components/RatingPrompt";
 import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
 import { ContractPanel } from "@/components/AcceptanceTerms";
+import { AgentResponsePending, ClientDecisionPanel, RevisedResultNotice } from "@/components/RejectionPanel";
 
 const POLL_MS = 2000;
 /** Polling slows down while nothing changes (a long-running task), up to this ceiling. */
@@ -48,6 +49,8 @@ function humanize(v: string | null | undefined): string {
 const RESULT_READY: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
   "RESULT_RECEIVED",
   "PENDING_REVIEW",
+  "AWAITING_AGENT_RESPONSE",
+  "AWAITING_CLIENT_DECISION",
   "DISPUTED",
   "RESOLVED",
 ]);
@@ -156,6 +159,10 @@ function TaskDetail() {
         if (cancelled) return;
         setTask(t);
 
+        // A revision (#95) replaces the result: fetch it again when the task returns to review.
+        if (t.status === "PENDING_REVIEW" && lastStatus !== null && lastStatus !== "PENDING_REVIEW") {
+          resultRef.current = null;
+        }
         // The validated agent result exists from RESULT_RECEIVED onward; fetch it once.
         if (RESULT_READY.has(t.status) && !resultRef.current) {
           try {
@@ -374,6 +381,20 @@ function TaskDetail() {
           ) : (
             result.resultUrl && <LegacyDeliverableLink url={result.resultUrl} />
           )}
+          {task.status === "PENDING_REVIEW" && task.rejection?.response === "REVISE" && (
+            <RevisedResultNotice rejection={task.rejection} />
+          )}
+          {task.status === "AWAITING_AGENT_RESPONSE" && task.rejection && (
+            <AgentResponsePending rejection={task.rejection} />
+          )}
+          {task.status === "AWAITING_CLIENT_DECISION" && task.rejection && (
+            <ClientDecisionPanel
+              taskId={task.id}
+              budget={task.budget}
+              rejection={task.rejection}
+              onDecided={setTask}
+            />
+          )}
           {task.status === "PENDING_REVIEW" && (
             <ResultReviewBar
               taskId={task.id}
@@ -400,22 +421,34 @@ function TaskDetail() {
                       Accepted automatically: the review window closed before you decided.
                     </p>
                   )}
+                  {task.rejection?.decisionSilent && (
+                    <p className="text-sm text-muted">
+                      Accepted automatically: the agent stood by its result and you didn&apos;t decide in time.
+                    </p>
+                  )}
                 </>
               ) : (
-                <p className="text-[0.9375rem] text-fg">
-                  <span className="tabular font-bold text-fg">{task.refundAmount} cr</span> refunded to your wallet
-                  {task.rejectionReason ? <span className="text-muted"> — “{task.rejectionReason}”</span> : null}
-                </p>
+                <>
+                  <p className="text-[0.9375rem] text-fg">
+                    <span className="tabular font-bold text-fg">{task.refundAmount} cr</span> refunded to your wallet
+                    {task.rejectionReason ? <span className="text-muted"> — “{task.rejectionReason}”</span> : null}
+                  </p>
+                  {task.rejection?.response === "CONCEDE" && (
+                    <p className="text-sm text-muted">The agent conceded your rejection.</p>
+                  )}
+                </>
               )}
             </div>
             <span aria-hidden style={{ animationDelay: "250ms" }} className={`inspect-stamp stamp mr-2 ${task.resolution === "ACCEPTED" ? "text-green" : "text-fg"}`}>
               {task.resolution === "ACCEPTED" ? "PAID" : "REFUNDED"}
               <small>
                 {task.resolution === "ACCEPTED"
-                  ? task.autoAccepted
+                  ? task.autoAccepted || task.rejection?.decisionSilent
                     ? "auto-accepted"
                     : "work accepted"
-                  : "work rejected"}
+                  : task.rejection?.response === "CONCEDE"
+                    ? "agent conceded"
+                    : "work rejected"}
               </small>
             </span>
           </div>

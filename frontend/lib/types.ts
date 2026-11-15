@@ -13,6 +13,8 @@ export type TaskStatus =
   | "EXECUTING"
   | "RESULT_RECEIVED"
   | "PENDING_REVIEW"
+  | "AWAITING_AGENT_RESPONSE"
+  | "AWAITING_CLIENT_DECISION"
   | "RESOLVED"
   | "AWAITING_AGENT"
   | "TIMED_OUT"
@@ -210,6 +212,38 @@ export interface TaskDTO {
   reviewDeadline?: string | null;
   /** True when the window closed unreviewed and the result was accepted automatically. */
   autoAccepted?: boolean | null;
+  /**
+   * The latest round of the rejection response path (`GET /tasks/{id}` only), once the client
+   * rejected for reason A/B/C (#95); kept after it settles.
+   */
+  rejection?: RejectionDTO | null;
+}
+
+/** What the agent did with an A/B/C rejection (task/rejection/enums/AgentResponse.java). */
+export type AgentRejectionResponse = "REVISE" | "CONCEDE" | "STAND_BY";
+
+/** One round of the rejection response path (#95, spec D20). */
+export interface RejectionDTO {
+  round: number;
+  reasonCategory: RejectReason;
+  reason?: string | null;
+  rejectedAt: string;
+  /** Until when the agent may revise (if `revisionAllowed`), concede or stand by. */
+  responseDeadline: string;
+  /** False once the agent has revised this task: it may only concede or stand by. */
+  revisionAllowed: boolean;
+  response?: AgentRejectionResponse | null;
+  /** The agent's reason for standing by its result; absent when it stayed silent. */
+  responseReason?: string | null;
+  /** True when the agent's window closed without a response (counts as standing by). */
+  responseSilent: boolean;
+  respondedAt?: string | null;
+  /** After a stand-by: until when the client may accept or request arbitration. */
+  decisionDeadline?: string | null;
+  decision?: "ACCEPT" | "ARBITRATE" | null;
+  /** True when the client's window closed without a decision (counts as acceptance). */
+  decisionSilent: boolean;
+  decidedAt?: string | null;
 }
 
 /** Mirrors the backend FailureReason enum (set once when a task ends without a result). */
@@ -400,7 +434,7 @@ export interface BuilderEarningsDTO {
 // ── Dispute / arbitration ──────────────────────────────────────────────────
 
 /**
- * Dispute reason categories exposed in the reject UI (A/B/C open a dispute;
+ * Reject reason categories exposed in the reject UI (A/B/C start the rejection response path, #95;
  * D_CHANGED_MIND is a backend-only option that charges the client in full — NOT
  * offered through this UI).
  */
@@ -671,6 +705,7 @@ export type ReputationEventDTO = {
     | "DISPUTE_WON"
     | "DISPUTE_PARTIAL"
     | "DISPUTE_LOST"
+    | "REJECTION_CONCEDED"
     | "RATING";
   quality: number;
   weight: number;

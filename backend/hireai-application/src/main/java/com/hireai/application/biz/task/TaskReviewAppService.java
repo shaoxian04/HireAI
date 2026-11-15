@@ -9,7 +9,9 @@ import java.util.UUID;
 
 /**
  * Client review of a PENDING_REVIEW task: accept (escrow -> builder payout net of
- * commission) or reject (category-gated: D charges 85/15, A/B/C opens a dispute).
+ * commission) or reject (category-gated: D charges 85/15; A/B/C opens a round of the rejection
+ * response path, {@link RejectionAppService}, #95). Accept also takes a result the Agent stood by
+ * after a rejection (AWAITING_CLIENT_DECISION).
  * Settlement is synchronous and atomic with the task transition; the TaskModel state guard
  * makes it exactly-once. A result left unreviewed past its review window is accepted on the
  * Client's behalf by the review-window sweeper (#94).

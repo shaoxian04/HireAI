@@ -46,10 +46,11 @@ public class ValidationAppServiceImpl implements ValidationAppService {
     /** The app's Clock bean (ClockConfig): the review window opens at this instant. */
     private final Clock clock;
 
-    private static final int FIRST_ATTEMPT = 1; // retry attempts arrive in Plan 2
-
     @Override
     public TaskModel validateAndGate(TaskModel task) {
+        // The first result is attempt 1; an Agent's revision after a rejection (#95) is the next one.
+        int attempt = reportRepository.findLatestByTaskId(task.id())
+                .map(previous -> previous.attemptNo() + 1).orElse(1);
         // The frozen Contract is the binding contract (Invariant #4). A Task submitted before
         // Contracts existed has none and finishes under its frozen output_spec, through the same
         // D39 mapping (ValidationDomainService#validate(OutputSpec, ...)).
@@ -59,7 +60,7 @@ public class ValidationAppServiceImpl implements ValidationAppService {
         DeliveryOutcome delivery = validationDomainService.needsDelivery(contract, task.result())
                 ? deliverySnapshotAppService.capture(contract, task.result())
                 : null;
-        ValidationReportModel report = validationDomainService.validate(contract, task.result(), delivery, FIRST_ATTEMPT);
+        ValidationReportModel report = validationDomainService.validate(contract, task.result(), delivery, attempt);
         reportRepository.save(report);
 
         if (report.isPass()) {

@@ -79,6 +79,50 @@ def sign_body(secret: str, body: bytes, now: float | None = None) -> str:
     return f"t={timestamp},v1={digest}"
 
 
+REJECTION_EVENT = "task.rejected"
+REJECTION_ENV = "HIREAI_AGENT_REJECTION_RESPONSE"
+REJECTION_ACTIONS = ("REVISE", "CONCEDE", "STAND_BY", "SILENT")
+REVISED_SUMMARY = DEMO_SUMMARY + " (Revised: figures re-checked against the source article.)"
+
+
+def choose_rejection_response(notice: dict) -> str:
+    """How the stub answers a rejection notice, so a demo can drive every branch.
+
+    A tag in the client's rejection text wins (#revise, #concede, #standby, #silent); otherwise
+    HIREAI_AGENT_REJECTION_RESPONSE (default STAND_BY). A revision the notice no longer allows
+    falls back to standing by.
+    """
+    reason = (notice.get("reason") or "").lower()
+    tags = {"#revise": "REVISE", "#concede": "CONCEDE", "#standby": "STAND_BY", "#silent": "SILENT"}
+    action = next((a for tag, a in tags.items() if tag in reason), None)
+    if action is None:
+        configured = os.environ.get(REJECTION_ENV, "STAND_BY").upper()
+        action = configured if configured in REJECTION_ACTIONS else "STAND_BY"
+    if action == "REVISE" and not notice.get("revisionAllowed", False):
+        action = "STAND_BY"
+    return action
+
+
+def rejection_response_body(notice: dict, action: str) -> dict:
+    body = {"taskId": notice["taskId"], "action": action}
+    if action == "STAND_BY":
+        body["reason"] = "The summary states only figures that appear in the source article."
+    if action == "REVISE":
+        body["resultPayloadJson"] = json.dumps({"summary": REVISED_SUMMARY})
+    return body
+
+
+async def _respond_to_rejection(notice: dict, action: str, token: str, secret: str | None = None):
+    await asyncio.sleep(2)  # simulate thinking it over
+    raw = json.dumps(rejection_response_body(notice, action)).encode()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    if secret:
+        headers[SIGNATURE_HEADER] = sign_body(secret, raw)
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post(notice["responseUrl"], headers=headers, content=raw)
+    log.info("Rejection response %s for %s -> HTTP %s", action, notice["taskId"], response.status_code)
+
+
 @app.post("/run")
 async def run(request: Request, authorization: str = Header(default="")):
     if not authorization.startswith("Bearer "):
@@ -90,6 +134,13 @@ async def run(request: Request, authorization: str = Header(default="")):
         log.warning("Rejected a WorkOrder with a missing or invalid %s", SIGNATURE_HEADER)
         raise HTTPException(status_code=401, detail="Invalid WorkOrder signature")
     body = json.loads(raw)
+    if body.get("event") == REJECTION_EVENT:
+        action = choose_rejection_response(body)
+        log.info("Rejection notice for %s (round %s, %s): %r -> %s", body["taskId"], body.get("round"),
+                 body.get("reasonCategory"), body.get("reason"), action)
+        if action != "SILENT":
+            asyncio.create_task(_respond_to_rejection(body, action, token, secret))
+        return {"accepted": True, "taskId": body["taskId"]}
     task_id = body["taskId"]
     callback_url = body["callbackUrl"]
     # Log the task content so a live run visibly proves the WorkOrder carries the client's

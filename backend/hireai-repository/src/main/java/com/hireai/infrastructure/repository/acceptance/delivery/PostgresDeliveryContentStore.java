@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
 /**
- * {@link DeliveryContentStore} on {@code delivery_snapshot_contents} (V42): bytes in a BYTEA,
+ * {@link DeliveryContentStore} on {@code delivery_snapshot_contents} (V43): bytes in a BYTEA,
  * keyed by their SHA-256, so identical deliverables are stored once. Bounded by
  * {@code hireai.delivery.max-bytes}; replace this adapter (not the callers) to move the bytes to a
  * private object-storage bucket.

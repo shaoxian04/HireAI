@@ -89,7 +89,7 @@ public class SecurityConfig {
                         // Equivalent to letting them fall through to anyRequest() below; kept explicit
                         // to document intent. An API_CLIENT key is denied (401 at the full app).
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
-                                "/api/tasks/*/accept", "/api/tasks/*/reject").hasAnyRole("CLIENT", "BUILDER", "ADMIN")
+                                "/api/tasks/*/accept", "/api/tasks/*/reject", "/api/tasks/*/arbitration").hasAnyRole("CLIENT", "BUILDER", "ADMIN")
                         // Key management is JWT-only (a leaked key cannot mint keys).
                         .requestMatchers("/api/keys/**").hasRole("CLIENT")
                         // Subscription management is JWT-only (a leaked key cannot repoint the callback).

@@ -6,6 +6,7 @@ import com.hireai.application.biz.task.SubmitContext;
 import com.hireai.application.biz.task.SubmitOrchestrationAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.reputation.ReviewAppService;
+import com.hireai.application.biz.task.RejectionAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.biz.agent.dto.ReviewDTO;
@@ -74,6 +75,7 @@ public class TaskController extends BaseController {
     private final ValidationReadAppService validationReadAppService;
     /** The client's star rating — distinct from reviewAppService, which is accept/reject. */
     private final ReviewAppService ratingAppService;
+    private final RejectionAppService rejectionAppService;
 
     public TaskController(SubmitOrchestrationAppService submitOrchestrationAppService,
                           TaskReadAppService readAppService,
@@ -82,7 +84,8 @@ public class TaskController extends BaseController {
                           TaskReviewAppService reviewAppService,
                           MatchPreviewAppService matchPreviewAppService,
                           ValidationReadAppService validationReadAppService,
-                          ReviewAppService ratingAppService) {
+                          ReviewAppService ratingAppService,
+                          RejectionAppService rejectionAppService) {
         this.submitOrchestrationAppService = submitOrchestrationAppService;
         this.readAppService = readAppService;
         this.currentUser = currentUser;
@@ -91,6 +94,7 @@ public class TaskController extends BaseController {
         this.matchPreviewAppService = matchPreviewAppService;
         this.validationReadAppService = validationReadAppService;
         this.ratingAppService = ratingAppService;
+        this.rejectionAppService = rejectionAppService;
     }
 
     @PostMapping
@@ -146,7 +150,8 @@ public class TaskController extends BaseController {
         TaskModel task = readAppService.getForClient(id, clientId);
         UUID agentId = readAppService.findBookedAgentId(task).orElse(null);
         return ok(TaskModel2DTOConverter.toDTO(task, agentId,
-                readAppService.findReviewWindow(task).orElse(null)));
+                readAppService.findReviewWindow(task).orElse(null),
+                rejectionAppService.findLatest(task.id()).orElse(null)));
     }
 
     @GetMapping("/{taskId}/result")
@@ -213,6 +218,17 @@ public class TaskController extends BaseController {
                                      @Valid @RequestBody RejectTaskRequest request) {
         UUID clientId = currentUser.currentUserId();
         reviewAppService.reject(id, clientId, request.reasonCategory(), request.reason());
+        return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
+    }
+
+    /**
+     * Ask for AI arbitration of a result the Agent stood by after your A/B/C rejection (#95). Only the
+     * task's Client can, only while it awaits their decision (409 otherwise), and no deposit is taken.
+     */
+    @PostMapping("/{id}/arbitration")
+    public WebResult<TaskDTO> requestArbitration(@PathVariable("id") UUID id) {
+        UUID clientId = currentUser.currentUserId();
+        rejectionAppService.requestArbitration(id, clientId);
         return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
     }
 
