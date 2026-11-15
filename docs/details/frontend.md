@@ -101,6 +101,7 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   editor that also *edits* an already-published reply (`PUT …/reviews/{id}/response` replaces).
 - `client/` — **Marketplace** (search/category/sort/hot strip/agent grid); `client/tasks` — task list +
   wallet (resolution badges on each task row); `client/tasks/new` — **searchable category picker** (`CategoryCombobox` from `/catalogue/categories`, strict —
+  plus optional **Output terms** (`ContractTermsField`: a Template from `/catalogue/templates` and its parameters; "The agent's own terms" sends no Contract), sent as `contract` with the preview and the booking; the shortlist lists only agents whose Offer covers them, and an empty one shows the no-match explanation with a "Drop X → N agents" button per relax suggestion, which only the Client presses —
   Find-agents gated on a real category) → match-preview **shortlist → pick → book** at the
   agent's price (the `ShortlistPanel` opens in a `Modal` popout of ranked agent cards: profile avatars,
   best-match highlight, a plain-language `DeliveryRecord`, above-budget near-miss drawer, and a
@@ -116,7 +117,7 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   `RESOLVED` shows the settled summary plus a dismissible `RatingPrompt` (`POST /api/tasks/{id}/review`,
   accepted-only and once per task — a rating left later beats one never given, so it must stay skippable).
   On a **terminal failure** (`SPEC_VIOLATION`/`TIMED_OUT`/`FAILED`/`CANCELLED`)
-  it renders a `TaskFailurePanel` (plain-English cause from the task's `failureReason`, falling back to per-status copy when it is absent, + `{budget} cr refunded` line; the spec-violation panel
+  it renders a `TaskFailurePanel` (plain-English cause from the task's `failureReason`, falling back to per-status copy when it is absent, + `{budget} cr refunded` line; a `NO_ELIGIBLE_AGENT` panel also shows the task's `failureDetail`; the spec-violation panel
   fetches the real failing-check reason from `GET /api/tasks/{id}/validation`). Every failure panel's action is
   **Choose another agent**, the rebook flow below. **Once the task is in a dispute** the execution pipeline is replaced by a
   `DisputeProgressPanel` — a reject→arbitrator→admin **timeline** with Accept-ruling / Appeal actions while a

@@ -26,6 +26,14 @@ near-miss above that budget. When the shortlist is empty only because every in-b
 floor, the response says `noCloseMatch: true` and the web shows "No agent matches this task closely" above
 any near-misses (an empty category gives `false`).
 
+**No-match explanation** (spec D35). When nothing ranks, `RoutingMatchDomainService.explainNoMatch` looks at
+the Agents that serve the category within budget (and the deadline) and counts, per blocker, how many it
+excluded: each Contract parameter, the Template version (`TEMPLATE`), and the relevance floor
+(`RELEVANCE_FLOOR`); one Agent can count under several. Its relax suggestions say, per parameter, how many
+Agents leaving it unset would make eligible (only Agents that parameter alone excluded, above the floor). The
+platform never applies one: match-preview returns it as `noMatch`, the web shows it with a "Drop X → N agents"
+button per suggestion, and a routed task stores its one-line `summary()` as the task's `failureDetail`.
+
 **One eligibility, one score.** The shortlist, routed selection and failover consider the same Agents
 and score them the same way; only the platform's own picks (`selectOne`) add the ε lottery. An Agent is
 eligible when:
@@ -45,6 +53,15 @@ eligible when:
   Agent can rule out a slower one. An Agent admitted this way never gets an execution deadline after the
   Client's. A direct booking of an Agent that can't fit is refused with a 400 before anything is frozen;
   a booked task's pinned dispatch is not re-checked.
+- <a id="offer-coverage"></a>its version's **Offer covers the Contract** (spec D34, `OfferCoverageDomainService`;
+  checked in `rank`): the Offer has a term for the Contract's exact Template version, and every parameter the
+  Contract sets passes its comparison against the term's range (`max` value <= bound, `min` value >= bound,
+  `subset` all values in the set, `enum` value in the set, `any` covering both, `flag` false or accepted). A
+  parameter the Contract leaves unset, or a false flag, is always covered; one set by the Contract but not named
+  by the term is not. A routed task's Contract is its frozen one (an output spec's equivalent for a task from
+  before `V39`); match-preview and direct booking take an optional `contract`, and without one the preview
+  filters no Offer. A direct booking under a Contract its Agent's Offer doesn't cover is a 400, and the Contract
+  is frozen on the task. The above-budget near-misses must be covered too;
 - <a id="relevance-floor"></a>its profile is not clearly irrelevant: the **raw** cosine similarity between
   the task text's vector and the Agent's profile vector is at least τ (`hireai.matching.relevance-floor`,
   provisional; checked in `rank`). See [relevance](#relevance) for the vectors and the fallbacks.
@@ -151,8 +168,9 @@ invite a second, paid submit.
 | Pinned task: every dispatch attempt failed (Agent unreachable, timed out or non-2xx) | `FAILED` (`AGENT_UNREACHABLE`) | Yes | Yes | `EXECUTION_FAILED` |
 | Pinned task: the Agent declined as busy (429/503) | `FAILED` (`AGENT_BUSY`) | Yes | Yes | No |
 
-- **`AWAITING_AGENT`** means no eligible (`ACTIVE`, listed) agent covers the category within budget and,
-  when set, the Client's deadline. Only routed tasks wait there. Load is soft, so a busy agent never causes
+- **`AWAITING_AGENT`** means no eligible (`ACTIVE`, listed) agent covers the category and the Contract within
+  budget and, when set, the Client's deadline. Each no-match pass records the explanation's summary as the
+  task's `failureDetail` (`GET /api/tasks/{id}`, the web task page), kept when the task ends `NO_ELIGIBLE_AGENT`. Only routed tasks wait there. Load is soft, so a busy agent never causes
   it. The re-match sweeper (`AwaitingAgentRematchSweeper`) retries it up to
   `hireai.matching.rematch-max-attempts` times, then cancels with a refund and `NO_ELIGIBLE_AGENT`.
 - **Pinned tasks never substitute, and fail fast.** A direct booking is dispatched only to its exact version,
@@ -183,8 +201,8 @@ invite a second, paid submit.
   The new WorkOrder is published only after that transaction commits. At most **3 distinct Agents**
   (`RoutedFailoverDomainService.MAX_DISTINCT_AGENTS`) are tried per task. With no untried eligible Agent
   left, or 3 tried, the task ends `FAILED` with `NO_ALTERNATIVE_AGENT`, a full refund and a `task.failed`
-  webhook. If untried Agents exist but the [client deadline](#client-deadline) rules every one out at
-  that hop, the reason is `NO_ELIGIBLE_AGENT` instead. A late callback from a replaced Agent gets 401: its token names the old version, which is no
+  webhook. If untried Agents that are otherwise eligible (budget, Offer coverage, relevance floor) exist but the
+  [client deadline](#client-deadline) rules every one out at that hop, the reason is `NO_ELIGIBLE_AGENT` instead. A late callback from a replaced Agent gets 401: its token names the old version, which is no
   longer the task's assigned one. A dead letter or busy reply for a replaced version is ignored. If the
   publish still fails after the commit (the dispatch template retries it first), the task stays `QUEUED` and
   its execution timeout refunds it without blame.
