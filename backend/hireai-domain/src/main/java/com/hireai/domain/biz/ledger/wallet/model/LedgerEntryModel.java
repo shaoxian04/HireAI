@@ -15,8 +15,9 @@ import java.util.UUID;
  * <ul>
  *   <li>{@code TOPUP}, {@code REFUND}, and credit-side {@code PAYOUT}/{@code SPLIT} rows:
  *       {@code amount} is the positive delta applied to the available balance.</li>
- *   <li>{@code ESCROW_FREEZE} rows: {@code amount} is recorded negated (the available
- *       balance decreases by {@code abs(amount)}).</li>
+ *   <li>{@code ESCROW_FREEZE}, {@code ARBITRATION_FEE} and {@code APPEAL_FEE} rows: {@code amount}
+ *       is recorded negated (the available balance decreases by {@code abs(amount)}; a fee leaves
+ *       the wallet, a freeze moves into escrow).</li>
  *   <li>Escrow-release rows ({@code PAYOUT}/{@code COMMISSION}/{@code SPLIT} emitted by
  *       {@link WalletModel#release}): {@code amount} is the positive amount leaving escrow;
  *       the available balance is <em>unchanged</em>.</li>

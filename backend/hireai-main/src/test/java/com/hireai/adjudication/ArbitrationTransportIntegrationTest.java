@@ -26,6 +26,7 @@ import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
+import com.hireai.support.dispute.RulingSteps;
 import com.hireai.support.rejection.RejectionSteps;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -248,7 +249,7 @@ class ArbitrationTransportIntegrationTest {
         assertThat(clientAfterRuling.escrow()).isEqualTo(Money.of("100.00")); // still held
 
         // Client accepts the proposed ruling -> settles exactly once.
-        disputeAppService.acceptRuling(dispute.id(), f.clientId());
+        RulingSteps.acceptAsEverySide(context, dispute.id());
 
         // Assert full resolution + refund
         TaskModel resolved = taskRepository.findById(f.taskId()).orElseThrow();
@@ -289,7 +290,7 @@ class ArbitrationTransportIntegrationTest {
         assertThat(settlementRepository.findByTaskId(f.taskId())).isEmpty();
 
         // Client accepts the proposed ruling -> settles exactly once.
-        disputeAppService.acceptRuling(dispute.id(), f.clientId());
+        RulingSteps.acceptAsEverySide(context, dispute.id());
 
         WalletModel afterFirst = walletRepository.findByUserId(f.clientId()).orElseThrow();
         int settlementCount = jdbc.queryForObject(

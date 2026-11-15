@@ -101,6 +101,21 @@ public final class WalletModel {
         append(type, amount, taskId, correlationId);
     }
 
+    /**
+     * Debit a dispute fee from the available balance (the loser's share, D43). Recorded negated,
+     * like a freeze: the available balance decreases by {@code abs(amount)}.
+     */
+    public void chargeFee(Money amount, UUID taskId, LedgerEntryType type, String correlationId) {
+        requireType(type, LedgerEntryType.ARBITRATION_FEE, LedgerEntryType.APPEAL_FEE);
+        requirePositive(amount);
+        if (amount.isGreaterThan(available)) {
+            throw new DomainException(ResultCode.INSUFFICIENT_BALANCE,
+                    "Available balance " + available + " is less than the fee " + amount);
+        }
+        available = available.subtract(amount);
+        append(type, amount.negated(), taskId, correlationId);
+    }
+
     private void append(LedgerEntryType type, Money delta, UUID taskId, String correlationId) {
         append(type, delta, taskId, correlationId, delta);
     }

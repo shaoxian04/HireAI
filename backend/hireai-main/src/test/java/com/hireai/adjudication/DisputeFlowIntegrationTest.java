@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
+import com.hireai.support.dispute.RulingSteps;
 import com.hireai.support.rejection.RejectionSteps;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -178,7 +179,7 @@ class DisputeFlowIntegrationTest {
         assertThat(heldWallet.escrow()).isEqualTo(Money.of("100.00")); // still held
 
         // Client accepts the proposed ruling -> settles exactly once.
-        disputeAppService.acceptRuling(disputeId, f.clientId());
+        RulingSteps.acceptAsEverySide(context, disputeId);
 
         TaskModel task = taskRepository.findById(f.taskId()).orElseThrow();
         assertThat(task.status()).isEqualTo(TaskStatus.RESOLVED);
@@ -208,7 +209,7 @@ class DisputeFlowIntegrationTest {
         WalletModel heldWallet = walletRepository.findByUserId(f.clientId()).orElseThrow();
         assertThat(heldWallet.escrow()).isEqualTo(Money.of("100.00")); // still held pending accept
 
-        disputeAppService.acceptRuling(disputeId, f.clientId());
+        RulingSteps.acceptAsEverySide(context, disputeId);
 
         SettlementModel s = settlementRepository.findByTaskId(f.taskId()).orElseThrow();
         assertThat(s.type()).isEqualTo(SettlementType.SPLIT);
@@ -237,7 +238,7 @@ class DisputeFlowIntegrationTest {
         assertThat(disputeRepository.findById(disputeId).orElseThrow().status())
                 .isEqualTo(DisputeStatus.RULED);
 
-        disputeAppService.acceptRuling(disputeId, f.clientId());
+        RulingSteps.acceptAsEverySide(context, disputeId);
 
         SettlementModel s = settlementRepository.findByTaskId(f.taskId()).orElseThrow();
         assertThat(s.type()).isEqualTo(SettlementType.ACCEPT);

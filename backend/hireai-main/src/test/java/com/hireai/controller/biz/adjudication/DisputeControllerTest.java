@@ -76,7 +76,7 @@ class DisputeControllerTest {
     void acceptRuling_delegates() throws Exception {
         when(currentUserProvider.currentUserId()).thenReturn(CLIENT_ID);
         when(disputeReadAppService.getOutcomeByDispute(eq(DISPUTE_ID), eq(CLIENT_ID)))
-                .thenReturn(resolvedDisputeWithOneRuling());
+                .thenReturn(viewOf(resolvedDisputeWithOneRuling()));
 
         mvc.perform(post("/api/disputes/{id}/accept-ruling", DISPUTE_ID).with(csrf()))
                 .andExpect(status().isOk())
@@ -98,7 +98,7 @@ class DisputeControllerTest {
     void appeal_delegates() throws Exception {
         when(currentUserProvider.currentUserId()).thenReturn(CLIENT_ID);
         when(disputeReadAppService.getOutcomeByDispute(eq(DISPUTE_ID), eq(CLIENT_ID)))
-                .thenReturn(resolvedDisputeWithOneRuling());
+                .thenReturn(viewOf(resolvedDisputeWithOneRuling()));
 
         mvc.perform(post("/api/disputes/{id}/appeal", DISPUTE_ID).with(csrf()))
                 .andExpect(status().isOk());
@@ -116,7 +116,7 @@ class DisputeControllerTest {
     void mine_returnsRows() throws Exception {
         when(currentUserProvider.currentUserId()).thenReturn(CLIENT_ID);
         when(disputeReadAppService.myDisputes(eq(CLIENT_ID))).thenReturn(List.of(
-                new DisputeMineRow(DISPUTE_ID, TASK_ID, "t", "RULED", "FULFILLED", Instant.now())));
+                new DisputeMineRow(DISPUTE_ID, TASK_ID, "t", "RULED", "FULFILLED", Instant.now(), true)));
 
         mvc.perform(get("/api/disputes/mine"))
                 .andExpect(status().isOk())
@@ -128,5 +128,13 @@ class DisputeControllerTest {
                 .andExpect(jsonPath("$.data[0].taskTitle").value("t"))
                 .andExpect(jsonPath("$.data[0].status").value("RULED"))
                 .andExpect(jsonPath("$.data[0].proposedCategory").value("FULFILLED"));
+    }
+
+    private static com.hireai.application.biz.adjudication.dispute.view.DisputeOutcomeView viewOf(
+            com.hireai.domain.biz.adjudication.model.DisputeModel dispute) {
+        return new com.hireai.application.biz.adjudication.dispute.view.DisputeOutcomeView(dispute,
+                java.util.Set.of(com.hireai.domain.biz.adjudication.enums.DisputeParty.CLIENT), java.util.Set.of(),
+                null, com.hireai.domain.shared.model.Money.of("3.00"), com.hireai.domain.shared.model.Money.of("5.00"),
+                java.util.List.of(), null, null, null, false);
     }
 }
