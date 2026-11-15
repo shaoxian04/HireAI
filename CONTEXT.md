@@ -82,6 +82,10 @@ _Avoid_: error, violation, exception (none of these are the Agent's fault)
 An optional, client-paid acceptance step in which a model judges the criteria code cannot check. Chosen and priced at submission, never switched on mid-task. For a human client it is a pre-review report; for a machine client it decides settlement.
 _Avoid_: LLM validation, AI check
 
+**Review Window** _(built, #94)_:
+The time a Client has to accept or reject a result that passed validation (24h by default). When it closes unreviewed, the Client's silence counts as acceptance: the platform accepts and settles on their behalf, so no Builder's pay is held hostage to a Client who never looks.
+_Avoid_: review timeout, grace period
+
 **Appeal Fee**:
 What a party pays to take an arbitrator's ruling to a human admin, once. Like the cost of arbitration itself, it is borne by whoever loses, up to a cap tied to the Item's price. Only a Client or buyer ever opens arbitration, and their escrowed payment already stands behind it, so no one posts a separate deposit.
 _Avoid_: dispute bond, deposit (no one pays up front to open arbitration)
