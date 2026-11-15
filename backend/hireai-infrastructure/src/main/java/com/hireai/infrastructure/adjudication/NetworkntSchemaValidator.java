@@ -83,7 +83,11 @@ public class NetworkntSchemaValidator implements SchemaValidator {
         try {
             node = mapper.readTree(schema);
         } catch (JsonProcessingException e) {
-            return Optional.of("it is not JSON: " + e.getOriginalMessage());
+            // The parser's own message is noise to a person ("Unrecognized token ..."); the line and
+            // column are what help them find the mistake.
+            var at = e.getLocation();
+            return Optional.of(at == null ? "it is not JSON"
+                    : "it is not JSON (problem at line " + at.getLineNr() + ", column " + at.getColumnNr() + ")");
         }
         if (node == null || !node.isObject()) {
             return Optional.of("it is not a JSON object");

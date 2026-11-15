@@ -93,8 +93,8 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
     private void requireUsableSchema(String schema) {
         Optional<String> problem = schemaValidator.problemWith(schema);
         if (problem.isPresent()) {
-            throw invalid(SCHEMA_FIELD + "is not a valid JSON Schema (" + problem.get()
-                    + "). Give a JSON Schema object, or leave it blank to accept any JSON");
+            throw invalid(SCHEMA_FIELD + "is not a valid JSON Schema: " + problem.get()
+                    + ". Give a JSON Schema object, such as {\"type\":\"object\"}, or leave it blank to accept any JSON.");
         }
     }
 
