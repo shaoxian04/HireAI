@@ -12,6 +12,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 /** Inbound HTTP DTO for a direct booking: client hires a specific agent by id. */
@@ -30,6 +31,13 @@ public record DirectBookRequest(
         @Max(value = ClientDeadline.MAX_SECONDS, message = "deadlineSeconds must be at most 2592000 (30 days)")
         Long deadlineSeconds,
         /** Optional (#91): the Contract to book under; only Agents whose Offer covers it qualify. */
-        @Valid ContractRequest contract
+        @Valid ContractRequest contract,
+        /**
+         * Optional: the inputs of a multi-Item Task (spec S3), one per Item, 2 to 1000. With Items,
+         * {@code budget} is the price of ONE Item and the Task freezes budget × the Item count.
+         */
+        @Size(max = 1000, message = "items: a Task can hold at most 1000 Items")
+        List<@NotBlank(message = "items: an Item must not be blank")
+             @Size(max = 5000, message = "items: an Item must have at most 5000 characters") String> items
 ) {
 }

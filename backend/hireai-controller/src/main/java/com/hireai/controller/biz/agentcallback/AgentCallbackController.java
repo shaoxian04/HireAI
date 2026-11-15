@@ -12,6 +12,7 @@ import com.hireai.controller.biz.agentcallback.dto.AgentRejectionResponseRequest
 import com.hireai.controller.biz.agentcallback.dto.AgentResultCallbackRequest;
 import com.hireai.domain.biz.task.info.AgentRejectionResponseInfo;
 import com.hireai.domain.biz.task.info.AgentResultInfo;
+import com.hireai.domain.biz.task.item.info.AgentItemResultInfo;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.springframework.http.HttpStatus;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -75,9 +77,31 @@ public class AgentCallbackController extends BaseController {
                     "Signed callback body is for task " + request.taskId() + ", not " + taskId);
         }
         AgentResultInfo result = new AgentResultInfo(
-                request.agentStatus(), request.resultPayloadJson(), request.resultUrl(), request.message());
+                request.agentStatus(), payloadOf(request), request.resultUrl(), request.message(),
+                request.hasItems() ? request.items().stream()
+                        .map(i -> new AgentItemResultInfo(i.itemNo(), i.agentStatus(), i.resultPayloadJson(),
+                                i.resultUrl()))
+                        .toList() : List.of());
         agentCallbackAppService.recordResult(taskId, token, result);
         return ok();
+    }
+
+    /**
+     * The Task-level payload. A single-deliverable result must carry one; a multi-Item callback may
+     * leave it out, and the Task's result record then keeps the Items as the Agent sent them.
+     */
+    private String payloadOf(AgentResultCallbackRequest request) {
+        if (request.resultPayloadJson() != null && !request.resultPayloadJson().isBlank()) {
+            return request.resultPayloadJson();
+        }
+        if (!request.hasItems()) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "resultPayloadJson: must not be blank");
+        }
+        try {
+            return objectMapper.writeValueAsString(request.items());
+        } catch (IOException ex) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "items: could not be read");
+        }
     }
 
     /**

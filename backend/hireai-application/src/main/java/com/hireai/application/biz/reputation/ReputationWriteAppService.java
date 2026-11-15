@@ -30,6 +30,12 @@ public interface ReputationWriteAppService {
      */
     void recordOutcome(UUID taskId, UUID agentVersionId, UUID clientId, ReputationEventType type);
 
+    /**
+     * Records the one outcome of a finished multi-Item Task (spec D22, D27): weight 1, quality the
+     * accepted fraction. Same silences as {@link #recordOutcome} (self-dealing, already recorded).
+     */
+    void recordItemsOutcome(UUID taskId, UUID agentVersionId, UUID clientId, int acceptedItems, int totalItems);
+
     /** Records a client rating (1–5 stars) against Satisfaction. */
     void recordRating(UUID taskId, UUID agentVersionId, UUID clientId, int stars);
 

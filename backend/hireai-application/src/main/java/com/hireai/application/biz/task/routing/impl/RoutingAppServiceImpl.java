@@ -239,7 +239,9 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                 // contract. The candidate supplies only webhookUrl/version identity — not the spec.
                 view.outputSpecJson(),
                 executionDeadline,
-                callbackUrl);
+                callbackUrl,
+                // A multi-Item Task's Items travel in the WorkOrder (spec S3); none for a single Task.
+                taskReadAppService.workOrderItems(view.taskId()));
         return new DispatchMessage(view.taskId(), agentVersionId, target.webhookUrl(), correlationId, payload);
     }
 }

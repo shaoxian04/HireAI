@@ -13,7 +13,11 @@ import com.hireai.domain.biz.acceptance.delivery.model.DeliverySnapshot;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
+import java.util.Map;
 import java.util.UUID;
+import com.hireai.domain.biz.task.item.info.DispatchItem;
+import com.hireai.domain.biz.task.item.model.TaskItems;
 
 /**
  * Orchestrates task READ use cases. Enforces Hard Invariant #5 (server-side identity +
@@ -73,4 +77,13 @@ public interface TaskReadAppService {
      * other client. Empty while the task has not been dispatched.
      */
     List<DispatchAttemptView> listDispatchAttempts(@NonNull UUID taskId, @NonNull UUID clientId);
+
+    /** A multi-Item Task's Items as its WorkOrder carries them (spec S3); empty for a single-deliverable Task. */
+    List<DispatchItem> workOrderItems(UUID taskId);
+
+    /** The Task's Items in Item order; empty for a single-deliverable Task (no ownership check: pass an owned Task). */
+    TaskItems findItems(TaskModel task);
+
+    /** The Items of several Tasks (list views); Tasks without Items are absent from the map. */
+    Map<UUID, TaskItems> findItems(Collection<UUID> taskIds);
 }
