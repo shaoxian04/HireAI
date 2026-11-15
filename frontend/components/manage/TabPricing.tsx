@@ -7,7 +7,16 @@ import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { CategoryPicker } from "@/components/CategoryPicker";
-import { OfferPanel } from "@/components/AcceptanceTerms";
+import { OfferPanel, useTemplates } from "@/components/AcceptanceTerms";
+import {
+  OfferEditor,
+  offerDraftOf,
+  offerDraftProblems,
+  offerTermsFromDraft,
+  ownContractOf,
+  type OfferDraft,
+} from "@/components/OfferEditor";
+import { Skeleton } from "@/components/ui";
 import { ContractTerms } from "@/components/ContractTerms";
 import { MAX_EXECUTION_HINT, MAX_EXECUTION_SECONDS } from "@/lib/agentLimits";
 
@@ -26,9 +35,37 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const own = ownContractOf(ver.outputSpec);
+  const [draft, setDraft] = useState<OfferDraft | null>(null);
+  const [showProblems, setShowProblems] = useState(false);
+  const templates = useTemplates(draft !== null);
+  const templateList = templates.status === "ready" ? [...templates.byRef.values()] : [];
+  const problems = draft && showProblems ? offerDraftProblems(draft, templateList) : {};
+
+  function startEditing() {
+    setDraft(offerDraftOf(ver.offer, own));
+    setShowProblems(false);
+  }
+
+  function stopEditing() {
+    setDraft(null);
+    setShowProblems(false);
+    setError(null);
+  }
 
   async function handleSave() {
     setError(null);
+    if (draft) {
+      if (templates.status !== "ready") {
+        setError("The Templates haven't loaded, so the edited Offer can't be published. Keep the current Offer or try again.");
+        return;
+      }
+      if (Object.keys(offerDraftProblems(draft, templateList)).length > 0) {
+        setShowProblems(true);
+        setError("Fix the offer terms marked above before publishing.");
+        return;
+      }
+    }
     if (!Number.isInteger(maxExec) || maxExec < 1) {
       setError("Max execution seconds must be at least 1");
       return;
@@ -50,9 +87,12 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
           maxExecutionSeconds: maxExec,
           capabilityCategories: categories,
           ...(suggestedCategory.trim() ? { suggestedCategory: suggestedCategory.trim() } : {}),
+          ...(draft ? { offer: { terms: offerTermsFromDraft(draft, templateList) } } : {}),
         }),
       });
       onAgentChange(updated);
+      setDraft(null);
+      setShowProblems(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
@@ -84,11 +124,46 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
           </h3>
           <p className="mt-1 text-sm text-muted">
             The terms this version works under: the Templates it accepts and the range of each parameter it can be
-            held to. It mirrors the output contract above and carries over to each new version.
+            held to. Routed tasks reach this agent only when their terms fall inside it. It carries over to each new
+            version unless you edit it here; the price is the one below.
           </p>
         </div>
         <div className="border-t border-line px-5 py-4">
-          <OfferPanel offer={ver.offer} />
+          {draft === null ? (
+            <div className="space-y-4">
+              <OfferPanel offer={ver.offer} />
+              <Button variant="secondary" size="sm" onClick={startEditing}>
+                Edit offer
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted">
+                Tick each Template this version accepts, then choose how far it can be held on each parameter. A
+                parameter you leave unset is accepted only when a task leaves it unset too. The edited Offer is
+                published with the new version.
+              </p>
+              {templates.status === "loading" && (
+                <div role="status" className="space-y-2">
+                  <span className="sr-only">Loading the Templates</span>
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              )}
+              {templates.status === "error" && (
+                <p role="alert" className="rounded-md border border-red/30 bg-red/10 px-3 py-2 text-sm text-red">
+                  Couldn&apos;t load the Templates, so the Offer can&apos;t be edited right now. Keep the current Offer
+                  and try again later.
+                </p>
+              )}
+              {templates.status === "ready" && (
+                <OfferEditor templates={templateList} value={draft} own={own} problems={problems} onChange={setDraft} />
+              )}
+              <Button variant="ghost" size="sm" onClick={stopEditing}>
+                Keep the current offer
+              </Button>
+            </div>
+          )}
         </div>
       </section>
 
