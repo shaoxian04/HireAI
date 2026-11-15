@@ -176,7 +176,9 @@ class MultiItemTaskIntegrationTest extends WholeAppIntegrationTest {
 
         clock.set(Instant.parse("2026-11-22T23:00:00Z")); // Sunday night: still open
         assertThat(taskReviewAppService.reviewExpiredTaskIds()).doesNotContain(taskId);
-        post("/api/tasks/" + taskId + "/items/1/accept");
+        JsonNode afterOne = post("/api/tasks/" + taskId + "/items/1/accept");
+        // The page swaps its task for this response, so it keeps the window it still shows.
+        assertThat(Instant.parse(afterOne.get("reviewDeadline").asText())).isEqualTo(deadline);
 
         clock.set(deadline);
         assertThat(taskReviewAppService.reviewExpiredTaskIds()).contains(taskId);

@@ -53,6 +53,7 @@ describe("ItemsPanel", () => {
     expect(within(rows[1]).getByText(/4.00 cr refunded/i)).toBeInTheDocument();
     expect(within(rows[2]).getByText(/agent couldn.t do it/i)).toBeInTheDocument();
     expect(screen.getByText("24h left")).toBeInTheDocument();
+    expect(screen.getByText(/weekends don.t count/i)).toBeInTheDocument();
   });
 
   it("accepts one Item and shows the task the backend returns", async () => {
@@ -91,7 +92,7 @@ describe("ItemsPanel", () => {
     );
     render(<ItemsPanel task={task()} now={NOW} onChange={() => {}} />);
 
-    await user.click(screen.getByRole("button", { name: /accept all 1 awaiting/i }));
+    await user.click(screen.getByRole("button", { name: /accept the last item awaiting review/i }));
     expect(called).toBe(false);
     await user.click(await screen.findByRole("button", { name: /accept and release 4.00 cr/i }));
     await waitFor(() => expect(called).toBe(true));

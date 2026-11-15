@@ -206,7 +206,9 @@ public class TaskController extends BaseController {
     }
 
     private TaskDTO withItems(TaskModel task) {
-        return TaskModel2DTOConverter.toDTO(task, null, null, readAppService.findItems(task), true);
+        // Same view as GET /{id}: the page replaces its task with this, so keep the review window.
+        return TaskModel2DTOConverter.toDTO(task, readAppService.findBookedAgentId(task).orElse(null),
+                readAppService.findReviewWindow(task).orElse(null), readAppService.findItems(task), true);
     }
 
     @PostMapping("/{id}/reject")

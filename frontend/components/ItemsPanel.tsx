@@ -174,11 +174,11 @@ export function ItemsPanel({ task, now, onChange }: Props) {
 
       {reviewing && (
         <div className="space-y-3">
-          <ReviewWindowNotice deadline={task.reviewDeadline} now={current} />
+          <ReviewWindowNotice deadline={task.reviewDeadline} now={current} subject="items" />
           {canDecide && awaiting.length > 0 && (
             <div className="flex flex-wrap items-center gap-3">
               <Button disabled={busy} onClick={() => setConfirmingAll(true)}>
-                Accept all {awaiting.length} awaiting review
+                {awaiting.length === 1 ? "Accept the last Item awaiting review" : `Accept all ${awaiting.length} awaiting review`}
               </Button>
               <p className="text-xs text-dim">Rejecting single Items is not available yet.</p>
             </div>
@@ -199,14 +199,14 @@ export function ItemsPanel({ task, now, onChange }: Props) {
 
       <ConfirmDialog
         open={confirmingAll}
-        title={`Accept ${awaiting.length} Items and pay the builder?`}
+        title={awaiting.length === 1 ? "Accept the last Item and pay the builder?" : `Accept ${awaiting.length} Items and pay the builder?`}
         confirmLabel={`Accept and release ${cr(releaseOnAll)}`}
         busy={busy}
         onConfirm={() => accept(`/tasks/${task.id}/accept`)}
         onCancel={() => setConfirmingAll(false)}
       >
-        The {cr(releaseOnAll)} held for these Items is released to the builder, less the platform&apos;s 15% fee.
-        Accepted Items can no longer be disputed.
+        {`The ${cr(releaseOnAll)} held for ${awaiting.length === 1 ? "this Item" : "these Items"} is released to the `
+          + "builder, less the platform's 15% fee. Accepted Items can no longer be disputed."}
       </ConfirmDialog>
     </section>
   );

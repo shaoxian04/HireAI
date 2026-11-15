@@ -405,12 +405,12 @@ function TaskDetail() {
             <div className="space-y-1">
               <h2 className="eyebrow">Settlement</h2>
               <p className="text-[0.9375rem] text-fg">
-                <span className="tabular font-bold text-green">{Number(task.payoutAmount ?? 0).toFixed(2)} cr</span> paid
+                <span className="tabular font-bold text-green">{Number(task.payoutAmount ?? 0).toFixed(2)} cr</span>{" "}paid
                 to the builder for {task.items!.filter((i) => i.status === "ACCEPTED").length} of {task.itemCount} Items
               </p>
               {task.refundAmount ? (
                 <p className="text-sm text-muted">
-                  <span className="tabular font-semibold text-fg">{Number(task.refundAmount).toFixed(2)} cr</span> refunded
+                  <span className="tabular font-semibold text-fg">{Number(task.refundAmount).toFixed(2)} cr</span>{" "}refunded
                   to your wallet for the Items that weren&apos;t delivered as the contract asks.
                 </p>
               ) : null}
