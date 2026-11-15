@@ -43,6 +43,7 @@ export function checkName(rule: string): string {
   return CHECK_NAME[rule] ?? rule.toLowerCase().replace(/_/g, " ");
 }
 
+/** A check rule in plain words (unknown rules fall back to their name). */
 export function ruleText(rule: string): string {
   return RULE_TEXT[rule] ?? rule.toLowerCase().replace(/_/g, " ");
 }

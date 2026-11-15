@@ -173,23 +173,49 @@ async def run(request: Request, authorization: str = Header(default="")):
     if body.get("rework"):
         log.info("Rework %s/%s for %s; failed: %s", body["rework"].get("reworkNo"), body["rework"].get("maxReworks"),
                  task_id, [c.get("rule") for c in body["rework"].get("failedChecks", [])])
-    asyncio.create_task(_complete(task_id, callback_url, token, secret, file_url_for(body), anomalies_for(body)))
+    items = body.get("items")
+    extra = {"items": items} if items else {}  # only multi-Item WorkOrders carry items
+    anomalies = anomalies_for(body)
+    if anomalies:
+        extra["anomalies"] = anomalies
+    asyncio.create_task(_complete(task_id, callback_url, token, secret, file_url_for(body), **extra))
     return {"accepted": True, "taskId": task_id}
 
 
+def item_results(items: list[dict]) -> list[dict]:
+    """One result per Item of a multi-Item WorkOrder. Tags in an Item's input stage the outcome:
+    #fail -> the Item is reported FAILED, #empty -> an empty result (fails a text Contract),
+    #skip -> left out of the callback (the platform counts it as failed); otherwise a staged text."""
+    results = []
+    for item in items:
+        text = item.get("input", "")
+        if "#skip" in text:
+            continue
+        if "#fail" in text:
+            results.append({"itemNo": item["itemNo"], "agentStatus": "FAILED"})
+            continue
+        payload = "" if "#empty" in text else f"Extracted from item {item['itemNo']}: {text}"
+        results.append({"itemNo": item["itemNo"], "agentStatus": "COMPLETED", "resultPayloadJson": payload})
+    return results
+
+
 async def _complete(task_id: str, callback_url: str, token: str, secret: str | None = None,
-                    result_url: str | None = None, anomalies: list[dict] | None = None):
+                    result_url: str | None = None, items: list[dict] | None = None,
+                    anomalies: list[dict] | None = None):
     # simulate execution; HIREAI_AGENT_WORK_SECONDS lengthens it for a staged demo
     await asyncio.sleep(float(os.environ.get("HIREAI_AGENT_WORK_SECONDS", "2")))
-    result_payload = json.dumps({"summary": DEMO_SUMMARY})
     callback_body = {
         # Names the task this result answers; the platform rejects a signed body for another task.
         "taskId": task_id,
         "agentStatus": "COMPLETED",
-        "resultPayloadJson": result_payload,
         "resultUrl": result_url,
         "message": "stub agent completed",
     }
+    if items:
+        # A multi-Item Task: answer every Item under its itemNo.
+        callback_body["items"] = item_results(items)
+    else:
+        callback_body["resultPayloadJson"] = json.dumps({"summary": DEMO_SUMMARY})
     if anomalies:
         callback_body["anomalies"] = anomalies
     # Serialise once and sign exactly these bytes: the platform verifies the raw body.

@@ -3,6 +3,10 @@ package com.hireai.controller.biz.task.converter;
 import com.hireai.controller.biz.acceptance.converter.Acceptance2DTOConverter;
 import com.hireai.controller.biz.task.dto.RejectionDTO;
 import com.hireai.controller.biz.task.dto.TaskDTO;
+import com.hireai.controller.biz.task.dto.TaskItemDTO;
+import com.hireai.domain.biz.task.item.enums.ItemStatus;
+import com.hireai.domain.biz.task.item.model.TaskItemModel;
+import com.hireai.domain.biz.task.item.model.TaskItems;
 import com.hireai.domain.biz.task.rejection.model.RejectionModel;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.info.ReviewWindowState;
@@ -45,11 +49,38 @@ public final class TaskModel2DTOConverter {
      */
     public static TaskDTO toDTO(TaskModel task, UUID agentId, ReviewWindowState reviewWindow,
                                 RejectionModel rejection, String failureDetail) {
+        return toDTO(task, agentId, reviewWindow, rejection, failureDetail, null, false);
+    }
+
+    /**
+     * Also carries a multi-Item Task's Items (spec S3; null or empty for a single-deliverable Task).
+     * {@code listItems} false keeps the Item list out (list views) while the amounts still come
+     * from the Items, since each Item settled on its own.
+     */
+    public static TaskDTO toDTO(TaskModel task, UUID agentId, ReviewWindowState reviewWindow,
+                                RejectionModel rejection, String failureDetail, TaskItems items,
+                                boolean listItems) {
         OutputSpec spec = task.outputSpec();
         BigDecimal payout = null;
         BigDecimal commission = null;
         BigDecimal refund = null;
-        if (task.resolution() == TaskResolution.ACCEPTED) {
+        boolean multiItem = items != null && !items.isEmpty();
+        if (multiItem) {
+            Money net = Money.ZERO;
+            Money cut = Money.ZERO;
+            Money back = Money.ZERO;
+            for (TaskItemModel item : items.all()) {
+                if (item.status() == ItemStatus.ACCEPTED) {
+                    net = net.add(SettlementPolicy.netOf(item.price()));
+                    cut = cut.add(SettlementPolicy.commissionOn(item.price()));
+                } else if (item.isSettled()) {
+                    back = back.add(item.price());
+                }
+            }
+            payout = net.isPositive() ? net.value() : null;
+            commission = cut.isPositive() ? cut.value() : null;
+            refund = back.isPositive() ? back.value() : null;
+        } else if (task.resolution() == TaskResolution.ACCEPTED) {
             payout = SettlementPolicy.netOf(task.budget()).value();
             commission = SettlementPolicy.commissionOn(task.budget()).value();
         } else if (task.resolution() == TaskResolution.PARTIALLY_ACCEPTED) {
@@ -83,6 +114,23 @@ public final class TaskModel2DTOConverter {
                 reviewWindow == null ? null : reviewWindow.deadline(),
                 reviewWindow != null && reviewWindow.autoAccepted() ? Boolean.TRUE : null,
                 RejectionDTO.from(rejection),
-                failureDetail);
+                failureDetail,
+                multiItem ? items.count() : null,
+                multiItem ? items.all().get(0).price().value() : null,
+                multiItem && listItems ? items.all().stream().map(TaskModel2DTOConverter::toItemDTO).toList() : null);
+    }
+
+    private static TaskItemDTO toItemDTO(TaskItemModel item) {
+        boolean accepted = item.status() == ItemStatus.ACCEPTED;
+        boolean refunded = item.isSettled() && !accepted;
+        return new TaskItemDTO(item.itemNo(), item.input(), item.status().name(), item.price().value(),
+                item.resultPayload(), item.resultUrl(),
+                item.checks().isEmpty() ? null : item.checks().stream()
+                        .map(c -> new TaskItemDTO.CheckDTO(c.rule(), c.passed(), c.detail()))
+                        .toList(),
+                item.autoAccepted() ? Boolean.TRUE : null,
+                accepted ? SettlementPolicy.netOf(item.price()).value() : null,
+                accepted ? SettlementPolicy.commissionOn(item.price()).value() : null,
+                refunded ? item.price().value() : null);
     }
 }

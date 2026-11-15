@@ -219,6 +219,32 @@ export interface TaskDTO {
   rejection?: RejectionDTO | null;
   /** Why no agent matched (`GET /tasks/{id}` only): while AWAITING_AGENT and after NO_ELIGIBLE_AGENT. */
   failureDetail?: string | null;
+  /**
+   * A multi-Item Task (#103): how many Items, the price of one (`budget` is the escrow, price × count),
+   * and each Item with its outcome (`GET /tasks/{id}` and review responses only). All absent on a
+   * single-deliverable task.
+   */
+  itemCount?: number | null;
+  itemPrice?: number | null;
+  items?: TaskItemDTO[] | null;
+}
+
+/** An Item's own state inside a multi-Item Task. */
+export type ItemStatus = "AWAITING_RESULT" | "PENDING_REVIEW" | "ACCEPTED" | "SPEC_VIOLATION" | "FAILED";
+
+/** One Item of a multi-Item Task and its outcome; amounts appear once it settled. */
+export interface TaskItemDTO {
+  itemNo: number;
+  input: string;
+  status: ItemStatus;
+  price: number;
+  resultPayload?: string | null;
+  resultUrl?: string | null;
+  checks?: { rule: string; passed: boolean; detail?: string | null }[] | null;
+  autoAccepted?: boolean | null;
+  payoutAmount?: number | null;
+  commissionAmount?: number | null;
+  refundAmount?: number | null;
 }
 
 /** What the agent did with an A/B/C rejection (task/rejection/enums/AgentResponse.java). */

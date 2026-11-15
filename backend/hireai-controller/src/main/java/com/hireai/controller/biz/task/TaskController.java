@@ -51,6 +51,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
+import com.hireai.domain.biz.task.item.model.TaskItems;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -111,7 +113,9 @@ public class TaskController extends BaseController {
                 Money.of(request.budget()),
                 new OutputSpec(specRequest.format(), specRequest.schema(), specRequest.acceptanceCriteria()),
                 request.category(),
-                request.deadlineSeconds());
+                request.deadlineSeconds(),
+                null, // routed submit has no explicit Contract yet (#100)
+                request.items());
         UUID taskId = submitOrchestrationAppService.submitRouted(
                 submitContext(clientId, idempotencyKey), info);
         TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId));
@@ -128,7 +132,8 @@ public class TaskController extends BaseController {
                 new DirectBookingInfo(clientId, request.title(), request.description(),
                         Money.of(request.budget()), request.agentId(),
                         request.category() == null || request.category().isBlank() ? null : request.category(),
-                        request.deadlineSeconds(), ContractRequest2ModelConverter.toModel(request.contract())));
+                        request.deadlineSeconds(), ContractRequest2ModelConverter.toModel(request.contract()),
+                        request.items()));
         return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId)));
     }
 
@@ -153,7 +158,7 @@ public class TaskController extends BaseController {
         return ok(TaskModel2DTOConverter.toDTO(task, agentId,
                 readAppService.findReviewWindow(task).orElse(null),
                 rejectionAppService.findLatest(task.id()).orElse(null),
-                readAppService.findFailureDetail(task).orElse(null)));
+                readAppService.findFailureDetail(task).orElse(null), readAppService.findItems(task), true));
     }
 
     @GetMapping("/{taskId}/result")
@@ -202,9 +207,11 @@ public class TaskController extends BaseController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         UUID clientId = currentUser.currentUserId();
-        List<TaskDTO> tasks = readAppService.listForClient(clientId, new TaskQuery(page, size))
-                .stream()
-                .map(TaskModel2DTOConverter::toDTO)
+        List<TaskModel> owned = readAppService.listForClient(clientId, new TaskQuery(page, size));
+        // One read for the page's Items: a multi-Item Task's amounts come from its Items (spec S3).
+        Map<UUID, TaskItems> items = readAppService.findItems(owned.stream().map(TaskModel::id).toList());
+        List<TaskDTO> tasks = owned.stream()
+                .map(task -> TaskModel2DTOConverter.toDTO(task, null, null, null, null, items.get(task.id()), false))
                 .toList();
         return ok(tasks);
     }
@@ -213,7 +220,22 @@ public class TaskController extends BaseController {
     public WebResult<TaskDTO> accept(@PathVariable("id") UUID id) {
         UUID clientId = currentUser.currentUserId();
         reviewAppService.accept(id, clientId);
-        return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
+        return ok(withItems(readAppService.getForClient(id, clientId)));
+    }
+
+    /** Accept one Item of a multi-Item Task (spec S3); the Task resolves once every Item has settled. */
+    @PostMapping("/{id}/items/{itemNo}/accept")
+    public WebResult<TaskDTO> acceptItem(@PathVariable("id") UUID id, @PathVariable("itemNo") int itemNo) {
+        UUID clientId = currentUser.currentUserId();
+        reviewAppService.acceptItem(id, clientId, itemNo);
+        return ok(withItems(readAppService.getForClient(id, clientId)));
+    }
+
+    private TaskDTO withItems(TaskModel task) {
+        // Same view as GET /{id}: the page replaces its task with this, so keep the review window.
+        return TaskModel2DTOConverter.toDTO(task, readAppService.findBookedAgentId(task).orElse(null),
+                readAppService.findReviewWindow(task).orElse(null),
+                rejectionAppService.findLatest(task.id()).orElse(null), null, readAppService.findItems(task), true);
     }
 
     @PostMapping("/{id}/reject")
