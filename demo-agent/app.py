@@ -46,13 +46,31 @@ FILE_URL_ENV = "HIREAI_AGENT_FILE_URL"
 _DELIVER_TAG = re.compile(r"#deliver:(\S+)")
 
 
+# A rework WorkOrder (it carries "rework": the checks the last result failed) delivers the
+# "#rework:<url>" link instead, so a demo can fail a check once and then pass it.
+_REWORK_TAG = re.compile(r"#rework:(\S+)")
+# "#anomaly:<CHECK>" self-reports an anomaly about that Check Library entry with every result.
+_ANOMALY_TAG = re.compile(r"#anomaly:([A-Z_]+)")
+
+
 def file_url_for(work_order: dict) -> str | None:
     """The resultUrl for a FILE WorkOrder (tag in the description, else the env), else None."""
     spec = work_order.get("outputSpec") or {}
     if spec.get("format") != "FILE":
         return None
-    tagged = _DELIVER_TAG.search(work_order.get("description") or "")
+    description = work_order.get("description") or ""
+    if work_order.get("rework"):
+        reworked = _REWORK_TAG.search(description)
+        if reworked:
+            return reworked.group(1)
+    tagged = _DELIVER_TAG.search(description)
     return tagged.group(1) if tagged else os.environ.get(FILE_URL_ENV)
+
+
+def anomalies_for(work_order: dict) -> list[dict]:
+    """The anomalies to self-report with the result: one per "#anomaly:<CHECK>" tag."""
+    return [{"check": check, "description": "The demo agent flags this: the brief makes it hard to meet as written."}
+            for check in _ANOMALY_TAG.findall(work_order.get("description") or "")]
 # Reject a signature whose timestamp is further than this from our clock (replay window).
 TOLERANCE_SECONDS = 300
 
@@ -152,12 +170,15 @@ async def run(request: Request, authorization: str = Header(default="")):
     )
 
     # Process asynchronously so the dispatch POST returns immediately (202-style).
-    asyncio.create_task(_complete(task_id, callback_url, token, secret, file_url_for(body)))
+    if body.get("rework"):
+        log.info("Rework %s/%s for %s; failed: %s", body["rework"].get("reworkNo"), body["rework"].get("maxReworks"),
+                 task_id, [c.get("rule") for c in body["rework"].get("failedChecks", [])])
+    asyncio.create_task(_complete(task_id, callback_url, token, secret, file_url_for(body), anomalies_for(body)))
     return {"accepted": True, "taskId": task_id}
 
 
 async def _complete(task_id: str, callback_url: str, token: str, secret: str | None = None,
-                    result_url: str | None = None):
+                    result_url: str | None = None, anomalies: list[dict] | None = None):
     # simulate execution; HIREAI_AGENT_WORK_SECONDS lengthens it for a staged demo
     await asyncio.sleep(float(os.environ.get("HIREAI_AGENT_WORK_SECONDS", "2")))
     result_payload = json.dumps({"summary": DEMO_SUMMARY})
@@ -169,6 +190,8 @@ async def _complete(task_id: str, callback_url: str, token: str, secret: str | N
         "resultUrl": result_url,
         "message": "stub agent completed",
     }
+    if anomalies:
+        callback_body["anomalies"] = anomalies
     # Serialise once and sign exactly these bytes: the platform verifies the raw body.
     raw = json.dumps(callback_body).encode()
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}

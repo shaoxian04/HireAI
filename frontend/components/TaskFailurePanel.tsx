@@ -117,6 +117,13 @@ export function TaskFailurePanel({ taskId, status, failureReason, budget, detail
         <div className="max-w-lg space-y-1.5">
           <h2 className={`text-lg font-bold ${HEAD_CLS[copy.tone]}`}>{copy.headline}</h2>
           <p className="text-sm leading-relaxed text-muted">{copy.why}</p>
+          {status === "SPEC_VIOLATION" && (detail?.rejectedAttempts ?? 0) > 1 && (
+            <p className="text-sm text-muted">
+              The agent was sent the failing checks and reworked it{" "}
+              {detail!.rejectedAttempts! - 1 === 1 ? "once" : `${detail!.rejectedAttempts! - 1} times`}; it still
+              failed, so the task ended here. A failed automatic check can&apos;t be disputed.
+            </p>
+          )}
           <p className="pt-2 text-sm font-semibold text-fg">{budget} cr refunded to your wallet</p>
         </div>
         <span aria-hidden style={{ animationDelay: "250ms" }} className="inspect-stamp stamp mr-2 text-fg">
