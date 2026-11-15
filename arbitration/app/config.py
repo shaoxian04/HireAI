@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     dispute_queue: str = "task.dispute.requested"
     fetch_max_bytes: int = 5_000_000
     fetch_timeout_seconds: float = 10.0
+    # Largest image/PDF snapshot attached to the model; matches the backend's inline limit.
+    media_max_bytes: int = 8_388_608
     callback_timeout_seconds: float = 10.0
 
 

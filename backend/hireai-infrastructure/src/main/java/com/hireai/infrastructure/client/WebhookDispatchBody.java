@@ -1,6 +1,9 @@
 package com.hireai.infrastructure.client;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.JsonNode;
+
+import java.util.List;
 
 import java.util.UUID;
 
@@ -18,5 +21,17 @@ public record WebhookDispatchBody(
         String category,
         JsonNode outputSpec,
         String executionDeadline,
-        String callbackUrl) {
+        String callbackUrl,
+        /** A multi-Item Task's Items (spec S3); left out entirely for a single-deliverable Task. */
+        @JsonInclude(JsonInclude.Include.NON_EMPTY) List<Item> items) {
+
+    public WebhookDispatchBody(UUID taskId, UUID agentVersionId, String title, String description,
+                               String category, JsonNode outputSpec, String executionDeadline, String callbackUrl) {
+        this(taskId, agentVersionId, title, description, category, outputSpec, executionDeadline, callbackUrl,
+                List.of());
+    }
+
+    /** One Item: answer it in the callback's {@code items} under the same {@code itemNo}. */
+    public record Item(int itemNo, String input) {
+    }
 }

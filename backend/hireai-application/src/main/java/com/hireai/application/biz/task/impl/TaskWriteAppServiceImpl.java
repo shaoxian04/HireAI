@@ -2,6 +2,8 @@ package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.acceptance.TemplateReadAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
+import com.hireai.application.biz.task.item.TaskItemAppService;
+import com.hireai.domain.shared.model.Money;
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
@@ -54,6 +56,8 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     private final Clock clock;
     /** Checks the frozen Contract against its Template before the Task is saved (ADR 0009). */
     private final TemplateReadAppService templateReadAppService;
+    /** Creates a multi-Item Task's Items in the submit transaction (spec S3). */
+    private final TaskItemAppService taskItemAppService;
     /** Reads the active Agents' Offers, to choose a routed task's Template version (spec D36). */
     private final AgentRepository agentRepository;
     private final OfferCoverageDomainService offerCoverageDomainService;
@@ -82,7 +86,8 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
             log.info("Routed task by client {} falls back: {}", info.clientId(), resolution.fallback().summary());
         }
         return new TaskSubmitInfo(info.clientId(), info.title(), info.description(), info.budget(),
-                info.outputSpec(), info.category(), info.deadlineSeconds(), resolution.terms().contract());
+                info.outputSpec(), info.category(), info.deadlineSeconds(), resolution.terms().contract(),
+                info.items());
     }
 
     private static <T> Supplier<T> memoize(Supplier<T> source) {
@@ -115,20 +120,25 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
      */
     private UUID doSubmit(TaskSubmitInfo taskSubmitInfo, UUID directAgentVersionId) {
         String correlationId = UUID.randomUUID().toString();
-        TaskModel task = taskSubmitDomainService.submit(taskSubmitInfo);
+        // A multi-Item Task's budget of record is what it freezes: the per-Item price × the Item count.
+        Money escrow = taskSubmitInfo.escrow();
+        TaskModel task = taskSubmitDomainService.submit(taskSubmitInfo.withEscrowAsBudget());
         templateReadAppService.requireValid(task.contract());
         UUID taskId = taskRepository.save(task).id();
+        if (taskSubmitInfo.hasItems()) {
+            taskItemAppService.createForSubmit(taskId, taskSubmitInfo.items(), taskSubmitInfo.budget());
+        }
         if (taskSubmitInfo.deadlineSeconds() != null) {
             // Fixed now, at submit: every later selection (re-match, failover) measures against it.
             taskRepository.stampClientDeadline(taskId,
                     ClientDeadline.after(clock.instant(), taskSubmitInfo.deadlineSeconds()).at());
         }
-        walletWriteAppService.freeze(taskSubmitInfo.clientId(), taskSubmitInfo.budget(), taskId, correlationId);
+        walletWriteAppService.freeze(taskSubmitInfo.clientId(), escrow, taskId, correlationId);
         eventPublisher.publishEvent(new TaskSubmittedDomainEvent(
-                taskId, taskSubmitInfo.clientId(), taskSubmitInfo.budget(), task.createdAt(),
+                taskId, taskSubmitInfo.clientId(), escrow, task.createdAt(),
                 directAgentVersionId));
-        log.info("Task {} submitted by client {}; budget {} frozen in escrow (directAgentVersionId={})",
-                taskId, taskSubmitInfo.clientId(), taskSubmitInfo.budget(), directAgentVersionId);
+        log.info("Task {} submitted by client {}; {} frozen in escrow ({} Items; directAgentVersionId={})",
+                taskId, taskSubmitInfo.clientId(), escrow, taskSubmitInfo.items().size(), directAgentVersionId);
         return taskId;
     }
 

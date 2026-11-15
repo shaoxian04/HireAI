@@ -111,7 +111,7 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
         TaskSubmitInfo submitInfo = new TaskSubmitInfo(
                 info.clientId(), info.title(), info.description(), info.budget(),
                 agent.currentVersion().outputSpec(), agent.currentVersion().taskCategoryFor(info.category()),
-                info.deadlineSeconds(), terms.contract());
+                info.deadlineSeconds(), terms.contract(), info.items());
 
         UUID taskId = taskWriteAppService.submitDirectlyBooked(submitInfo, agent.currentVersionId());
         log.info("Task {} direct-booked to agent {} (version {})",

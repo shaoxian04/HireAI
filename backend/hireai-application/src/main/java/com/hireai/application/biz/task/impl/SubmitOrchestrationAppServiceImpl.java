@@ -93,7 +93,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         String category = categoryRepository.load().requireKnown(submitted.category());
         TaskSubmitInfo info = new TaskSubmitInfo(submitted.clientId(), submitted.title(),
                 submitted.description(), submitted.budget(), submitted.outputSpec(), category,
-                submitted.deadlineSeconds());
+                submitted.deadlineSeconds(), submitted.contract(), submitted.items());
         try {
             return self().submitRoutedTx(ctx, info);
         } catch (IdempotencyRaceException e) {
@@ -108,7 +108,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
                 : new DirectBookingInfo(booked.clientId(), booked.title(), booked.description(),
                         booked.budget(), booked.agentId(),
                         categoryRepository.load().requireKnown(booked.category()), booked.deadlineSeconds(),
-                        booked.contract());
+                        booked.contract(), booked.items());
         try {
             return self().submitDirectTx(ctx, info);
         } catch (IdempotencyRaceException e) {
@@ -118,13 +118,14 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
 
     @Transactional
     public UUID submitRoutedTx(SubmitContext ctx, TaskSubmitInfo info) {
-        return orchestrate(ctx, fingerprint(info), info.budget().value(),
+        // Spend caps count what is frozen: for a multi-Item Task, the per-Item price × the Item count.
+        return orchestrate(ctx, fingerprint(info), info.escrow().value(),
                 () -> taskWriteAppService.submit(info));
     }
 
     @Transactional
     public UUID submitDirectTx(SubmitContext ctx, DirectBookingInfo info) {
-        return orchestrate(ctx, fingerprintDirect(info), info.budget().value(),
+        return orchestrate(ctx, fingerprintDirect(info), info.escrow().value(),
                 () -> directBookingAppService.book(info));
     }
 
@@ -186,7 +187,8 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
 
     private String fingerprint(TaskSubmitInfo info) {
         return SubmitFingerprint.of(info.title(), info.description(), info.category(),
-                info.budget().value(), specJson(info.outputSpec()) + deadlinePart(info.deadlineSeconds()));
+                info.budget().value(), specJson(info.outputSpec()) + deadlinePart(info.deadlineSeconds())
+                        + itemsPart(info.items()));
     }
 
     private String fingerprintDirect(DirectBookingInfo info) {
@@ -195,7 +197,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         String kind = info.category() == null ? "direct" : "direct|" + info.category();
         return SubmitFingerprint.of(info.title(), info.description(),
                 info.agentId().toString(), info.budget().value(), kind + deadlinePart(info.deadlineSeconds())
-                        + contractPart(info.contract()));
+                        + contractPart(info.contract()) + itemsPart(info.items()));
     }
 
     /**
@@ -209,6 +211,16 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
     /** A deadline joins the fingerprint (as relative seconds, so a retry matches); without one it stays as before. */
     private static String deadlinePart(Long deadlineSeconds) {
         return deadlineSeconds == null ? "" : "|deadline=" + deadlineSeconds;
+    }
+
+    /** A multi-Item Task's Items join the fingerprint (count, then each input); without Items it stays as before. */
+    private static String itemsPart(java.util.List<String> items) {
+        if (items.isEmpty()) {
+            return "";
+        }
+        StringBuilder part = new StringBuilder("|items=").append(items.size());
+        items.forEach(input -> part.append('|').append(input.length()).append(':').append(input));
+        return part.toString();
     }
 
     /** Stable canonical rendering of the spec for the fingerprint (must match the test helper). */

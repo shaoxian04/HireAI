@@ -10,7 +10,8 @@ from app.schemas import ArbitrationRequest, RulingResult
 def build_graph(llm, settings):
     g = StateGraph(ArbitrationState)
     g.add_node("gather_evidence", partial(gather_evidence,
-               max_bytes=settings.fetch_max_bytes, timeout=settings.fetch_timeout_seconds))
+               max_bytes=settings.fetch_max_bytes, timeout=settings.fetch_timeout_seconds,
+               media_max_bytes=settings.media_max_bytes))
     g.add_node("deliberate", partial(deliberate, llm=llm))
     g.add_node("classify", partial(classify, llm=llm))
     g.add_node("critique", partial(critique, llm=llm))

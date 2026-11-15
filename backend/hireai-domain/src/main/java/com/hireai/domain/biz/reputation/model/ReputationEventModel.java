@@ -49,7 +49,7 @@ public final class ReputationEventModel {
      * assert something the type does not mean.
      */
     public static ReputationEventModel outcome(UUID agentId, UUID taskId, ReputationEventType type) {
-        if (type == null || type.component() != ReputationComponent.RELIABILITY) {
+        if (type == null || type.component() != ReputationComponent.RELIABILITY || type.fixedQuality() == null) {
             throw new DomainException(ResultCode.VALIDATION_ERROR,
                     "Not a platform-witnessed outcome type: " + type);
         }
@@ -68,6 +68,20 @@ public final class ReputationEventModel {
         BigDecimal quality = BigDecimal.valueOf(stars - 1L)
                 .divide(BigDecimal.valueOf(4), QUALITY_SCALE, RoundingMode.HALF_UP);
         return create(agentId, taskId, ReputationEventType.RATING, quality, BigDecimal.ONE);
+    }
+
+    /**
+     * A finished multi-Item Task (D22, D27): one buyer, one vote, so weight 1 whatever the Item
+     * count, and quality is the fraction of its Items that were accepted.
+     */
+    public static ReputationEventModel itemsSettled(UUID agentId, UUID taskId, int acceptedItems, int totalItems) {
+        if (totalItems < 1 || acceptedItems < 0 || acceptedItems > totalItems) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "Accepted Items must be between 0 and " + totalItems + "; got " + acceptedItems);
+        }
+        BigDecimal quality = BigDecimal.valueOf(acceptedItems)
+                .divide(BigDecimal.valueOf(totalItems), QUALITY_SCALE, RoundingMode.HALF_UP);
+        return create(agentId, taskId, ReputationEventType.ITEMS_SETTLED, quality, BigDecimal.ONE);
     }
 
     /** Rehydration from persistence. */

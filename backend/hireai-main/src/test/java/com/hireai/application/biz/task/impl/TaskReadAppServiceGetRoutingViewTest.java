@@ -30,7 +30,8 @@ class TaskReadAppServiceGetRoutingViewTest {
     private final OutputSpecJsonMapper outputSpecJsonMapper = new OutputSpecJsonMapper(new ObjectMapper());
 
     private TaskReadAppServiceImpl service() {
-        return new TaskReadAppServiceImpl(taskRepository, outputSpecJsonMapper, null, null, null, null);
+        return new TaskReadAppServiceImpl(taskRepository, outputSpecJsonMapper, null, null,
+                org.mockito.Mockito.mock(com.hireai.domain.biz.task.item.repository.TaskItemRepository.class), null, null);
     }
 
     @Test

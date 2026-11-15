@@ -6,6 +6,7 @@ import com.hireai.controller.biz.acceptance.dto.VersionFallbackDTO;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /** Outbound HTTP DTO for a task. No domain types leak across the boundary. */
@@ -55,6 +56,14 @@ public record TaskDTO(
          */
         String failureDetail,
         /**
+         * A multi-Item Task (spec S3): how many Items, the price of one ({@code budget} is the
+         * escrow, price × count), and each Item with its outcome. All three are absent on a
+         * single-deliverable Task; {@code items} is also absent on list responses.
+         */
+        Integer itemCount,
+        BigDecimal itemPrice,
+        List<TaskItemDTO> items,
+        /**
          * Present while the task's Contract uses the previous Template version during its transition
          * (spec D36): no Agent's Offer covered the current version when it was submitted. Absent
          * otherwise and on list responses.
@@ -67,7 +76,7 @@ public record TaskDTO(
         return new TaskDTO(id, clientId, title, description, budget, status, outputSpec, contract, createdAt,
                 resolution, resolvedAt, rejectionReason, payoutAmount, commissionAmount, refundAmount,
                 failureReason, category, agentId, reviewDeadline, autoAccepted, rejection, failureDetail,
-                fallback);
+                itemCount, itemPrice, items, fallback);
     }
 
     public record OutputSpecDTO(String format, String schema, String acceptanceCriteria) {

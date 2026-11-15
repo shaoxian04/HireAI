@@ -21,6 +21,7 @@ import { ResultReviewBar } from "@/components/ResultReviewBar";
 import { RatingPrompt } from "@/components/RatingPrompt";
 import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
 import { ContractPanel } from "@/components/AcceptanceTerms";
+import { ItemsPanel } from "@/components/ItemsPanel";
 import { VersionFallbackNotice } from "@/components/VersionFallbackNotice";
 import { DispatchHistory } from "@/components/ContractDeclines";
 import { AgentResponsePending, ClientDecisionPanel, RevisedResultNotice } from "@/components/RejectionPanel";
@@ -179,8 +180,9 @@ function TaskDetail() {
         if (t.status === "PENDING_REVIEW" && lastStatus !== null && lastStatus !== "PENDING_REVIEW") {
           resultRef.current = null;
         }
-        // The validated agent result exists from RESULT_RECEIVED onward; fetch it once.
-        if (RESULT_READY.has(t.status) && !resultRef.current) {
+        // The validated agent result exists from RESULT_RECEIVED onward; fetch it once. A multi-Item
+        // task's results arrive per Item on the task itself, so there is no single result to fetch.
+        if (RESULT_READY.has(t.status) && !resultRef.current && !t.items?.length) {
           try {
             const r = await api<TaskResultDTO>(`/tasks/${id}/result`);
             if (cancelled) return;
@@ -200,7 +202,7 @@ function TaskDetail() {
         if (TERMINAL.has(t.status)) stop();
 
         // waiting on a result row that is about to land is not "nothing changing"
-        const awaitingResult = RESULT_READY.has(t.status) && !resultRef.current;
+        const awaitingResult = RESULT_READY.has(t.status) && !resultRef.current && !t.items?.length;
         if (t.status !== lastStatus || awaitingResult) {
           delay = POLL_MS;
           unchanged = 0;
@@ -250,8 +252,11 @@ function TaskDetail() {
     );
   }
 
+  const multiItem = !!task.items?.length;
+
   const inFlight =
     !result &&
+    !(multiItem && RESULT_READY.has(task.status)) &&
     !RESULT_READY.has(task.status) &&
     !TERMINAL.has(task.status) &&
     task.status !== "AWAITING_AGENT";
@@ -286,6 +291,14 @@ function TaskDetail() {
               <dt className="text-xs text-dim">Budget</dt>
               <dd className="tabular mt-0.5 text-base font-bold text-fg">{task.budget} credits</dd>
             </div>
+            {multiItem && (
+              <div>
+                <dt className="text-xs text-dim">Items</dt>
+                <dd className="tabular mt-0.5 text-base font-bold text-fg">
+                  {task.itemCount} × {Number(task.itemPrice).toFixed(2)} cr
+                </dd>
+              </div>
+            )}
             <div>
               <dt className="text-xs text-dim">Money</dt>
               <dd
@@ -362,7 +375,9 @@ function TaskDetail() {
 
       <DispatchHistory attempts={attempts} />
 
-      {!result && RESULT_READY.has(task.status) && (
+      {multiItem && <ItemsPanel task={task} onChange={setTask} />}
+
+      {!result && !multiItem && RESULT_READY.has(task.status) && (
         <section
           role="status"
           className="flex items-start gap-3 rounded-xl border border-dashed border-line-bright bg-surface px-5 py-4"
@@ -431,7 +446,43 @@ function TaskDetail() {
         </section>
       )}
 
-      {task.resolution && (
+      {task.resolution && multiItem && (
+        <section aria-live="polite" className="panel relative overflow-hidden p-6">
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="space-y-1">
+              <h2 className="eyebrow">Settlement</h2>
+              <p className="text-[0.9375rem] text-fg">
+                <span className="tabular font-bold text-green">{Number(task.payoutAmount ?? 0).toFixed(2)} cr</span>{" "}paid
+                to the builder for {task.items!.filter((i) => i.status === "ACCEPTED").length} of {task.itemCount} Items
+              </p>
+              {task.refundAmount ? (
+                <p className="text-sm text-muted">
+                  <span className="tabular font-semibold text-fg">{Number(task.refundAmount).toFixed(2)} cr</span>{" "}refunded
+                  to your wallet for the Items that weren&apos;t delivered as the contract asks.
+                </p>
+              ) : null}
+              {task.autoAccepted && (
+                <p className="text-sm text-muted">
+                  The Items you hadn&apos;t reviewed were accepted automatically when the review window closed.
+                </p>
+              )}
+            </div>
+            <span aria-hidden style={{ animationDelay: "250ms" }} className="inspect-stamp stamp mr-2 text-green">
+              PAID
+              <small>
+                {task.items!.filter((i) => i.status === "ACCEPTED").length} of {task.itemCount} accepted
+              </small>
+            </span>
+          </div>
+          {task.resolution === "ACCEPTED" && (
+            <div className="mt-5 border-t border-line pt-5">
+              <RatingPrompt taskId={task.id} />
+            </div>
+          )}
+        </section>
+      )}
+
+      {task.resolution && !multiItem && (
         <section aria-live="polite" className="panel relative overflow-hidden p-6">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div className="space-y-1">

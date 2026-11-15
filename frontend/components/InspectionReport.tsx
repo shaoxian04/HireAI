@@ -14,7 +14,8 @@ const RULE_TEXT: Record<string, string> = {
   FILE_MAX_BYTES: "The file is no larger than the contract allows",
 };
 
-function ruleText(rule: string): string {
+/** A check rule in plain words (unknown rules fall back to their name). */
+export function ruleText(rule: string): string {
   return RULE_TEXT[rule] ?? rule.toLowerCase().replace(/_/g, " ");
 }
 

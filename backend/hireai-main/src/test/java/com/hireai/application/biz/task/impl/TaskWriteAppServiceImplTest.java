@@ -51,6 +51,7 @@ class TaskWriteAppServiceImplTest {
                 walletWriteAppService, eventPublisher, settlementWriteAppService, webhookOutboxAppService,
                 dispatchAttemptRepository, java.time.Clock.systemUTC(),
                 templateReadAppService,
+                org.mockito.Mockito.mock(com.hireai.application.biz.task.item.TaskItemAppService.class),
                 org.mockito.Mockito.mock(com.hireai.domain.biz.offering.agent.repository.AgentRepository.class),
                 org.mockito.Mockito.mock(com.hireai.domain.biz.acceptance.coverage.service.OfferCoverageDomainService.class));
     }

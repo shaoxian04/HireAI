@@ -359,6 +359,15 @@ public final class TaskModel {
         }
     }
 
+    /**
+     * PENDING_REVIEW → RESOLVED once every Item of a multi-Item Task has settled (spec S3): ACCEPTED
+     * when every Item was accepted, else PARTIALLY_ACCEPTED (some were refunded).
+     */
+    public TaskModel resolveItems(boolean allItemsAccepted) {
+        requireStatus(TaskStatus.PENDING_REVIEW, "resolveItems");
+        return resolved(allItemsAccepted ? TaskResolution.ACCEPTED : TaskResolution.PARTIALLY_ACCEPTED, null);
+    }
+
     /** PENDING_REVIEW → RESOLVED (REJECTED): the client rejected the result. Reason optional, ≤500 chars. */
     public TaskModel reject(String reason) {
         requireStatus(TaskStatus.PENDING_REVIEW, "reject");

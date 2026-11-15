@@ -5,9 +5,11 @@ import com.hireai.domain.biz.adjudication.enums.DisputeParty;
 import com.hireai.domain.biz.ledger.settlement.enums.DisputeFeeType;
 import com.hireai.domain.biz.ledger.settlement.info.DisputeFeeCharge;
 import com.hireai.domain.biz.ledger.settlement.info.SettlementBreakdown;
+import com.hireai.domain.biz.ledger.settlement.model.ItemSettlementModel;
 import com.hireai.domain.biz.ledger.settlement.repository.DisputeFeeRepository;
 import com.hireai.domain.biz.ledger.settlement.service.DisputeFeeDomainService;
 import com.hireai.domain.biz.ledger.settlement.model.SettlementModel;
+import com.hireai.domain.biz.ledger.settlement.repository.ItemSettlementRepository;
 import com.hireai.domain.biz.ledger.settlement.repository.SettlementRepository;
 import com.hireai.domain.biz.ledger.settlement.service.SettlementDomainService;
 import com.hireai.domain.biz.ledger.wallet.model.WalletModel;
@@ -30,6 +32,7 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
     private final WalletRepository walletRepository;
     private final SettlementDomainService settlementDomainService;
     private final SettlementRepository settlementRepository;
+    private final ItemSettlementRepository itemSettlementRepository;
     private final DisputeFeeDomainService disputeFeeDomainService;
     private final DisputeFeeRepository disputeFeeRepository;
 
@@ -94,6 +97,38 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
         }
         disputeFeeRepository.append(disputeId, taskId, charge);
         return charge;
+    }
+
+    @Override
+    public SettlementBreakdown settleItemAccepted(UUID taskId, UUID itemId, int itemNo, UUID clientId,
+                                                  UUID builderId, Money price) {
+        WalletModel clientWallet = requireWallet(clientId);
+        boolean selfSettle = clientId.equals(builderId);
+        WalletModel builderWallet = selfSettle ? clientWallet : loadOrOpen(builderId);
+
+        SettlementBreakdown breakdown = settlementDomainService.settleAcceptance(
+                clientWallet, builderWallet, price, taskId, itemCorrelation(taskId, itemNo));
+
+        walletRepository.save(clientWallet);
+        if (!selfSettle) {
+            walletRepository.save(builderWallet);
+        }
+        itemSettlementRepository.append(ItemSettlementModel.accepted(taskId, itemId, itemNo,
+                breakdown.net(), breakdown.commission()));
+        return breakdown;
+    }
+
+    @Override
+    public void settleItemRefunded(UUID taskId, UUID itemId, int itemNo, UUID clientId, Money price) {
+        WalletModel clientWallet = requireWallet(clientId);
+        settlementDomainService.settleRejection(clientWallet, price, taskId, itemCorrelation(taskId, itemNo));
+        walletRepository.save(clientWallet);
+        itemSettlementRepository.append(ItemSettlementModel.refunded(taskId, itemId, itemNo, price));
+    }
+
+    /** Ties an Item's ledger entries to it, so each Item's settlement is reconstructable on its own. */
+    private static String itemCorrelation(UUID taskId, int itemNo) {
+        return "settle-" + taskId + "-item-" + itemNo;
     }
 
     private WalletModel requireWallet(UUID userId) {

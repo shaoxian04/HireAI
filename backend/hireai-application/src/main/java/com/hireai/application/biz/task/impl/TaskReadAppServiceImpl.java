@@ -26,7 +26,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import com.hireai.domain.biz.task.item.info.DispatchItem;
+import com.hireai.domain.biz.task.item.model.TaskItems;
+import com.hireai.domain.biz.task.item.repository.TaskItemRepository;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -40,6 +47,7 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     private final OutputSpecJsonMapper outputSpecJsonMapper;
     private final DispatchAttemptRepository dispatchAttemptRepository;
     private final AgentRepository agentRepository;
+    private final TaskItemRepository taskItemRepository;
     private final DeliverySnapshotAppService deliverySnapshotAppService;
     private final TemplateReadAppService templateReadAppService;
 
@@ -121,14 +129,36 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     }
 
     @Override
+    public List<DispatchItem> workOrderItems(UUID taskId) {
+        return taskItemRepository.findByTaskId(taskId).all().stream()
+                .map(item -> new DispatchItem(item.itemNo(), item.input()))
+                .toList();
+    }
+
+    @Override
+    public TaskItems findItems(TaskModel task) {
+        return taskItemRepository.findByTaskId(task.id());
+    }
+
+    @Override
+    public Map<UUID, TaskItems> findItems(Collection<UUID> taskIds) {
+        return taskIds.isEmpty() ? Map.of() : taskItemRepository.findByTaskIds(taskIds);
+    }
+
+    @Override
     public TaskRoutingView getRoutingView(UUID taskId) {
         TaskModel task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
         // Serialise the task's stored output_spec snapshot: this is the binding contract
         // (Hard Invariant #4) that must travel with the dispatch, not the agent version's live spec.
         String outputSpecJson = outputSpecJsonMapper.toJson(task.outputSpec());
+        // Matching compares an Agent's price with what one Item pays: a multi-Item Task's budget of
+        // record is the per-Item price × the Item count (spec S3), and an Offer's price is per Item.
+        int itemCount = taskItemRepository.countByTaskId(task.id());
+        BigDecimal budgetPerItem = itemCount == 0 ? task.budget().value()
+                : task.budget().value().divide(BigDecimal.valueOf(itemCount), 2, RoundingMode.UNNECESSARY);
         return new TaskRoutingView(task.id(), task.title(), task.description(), task.category(),
-                task.budget().value(), task.status().name(), outputSpecJson,
+                budgetPerItem, task.status().name(), outputSpecJson,
                 taskRepository.findClientDeadline(task.id()).map(ClientDeadline::new).orElse(null),
                 // A task from before V39 has no Contract: its output spec's equivalent (D39) is it.
                 task.contract() != null ? task.contract() : task.outputSpec().toContract());
