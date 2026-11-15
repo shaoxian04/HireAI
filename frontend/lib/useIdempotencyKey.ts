@@ -20,7 +20,11 @@ const SEP = "␞";
  */
 export function directBookSignature(body: DirectBookRequest | null): string {
   if (!body) return "";
-  return [body.title, body.description, body.budget, body.agentId, body.deadlineSeconds ?? ""].join(SEP);
+  const items = (body.items ?? [])
+    .map((i) => (typeof i === "string" ? i : `@${i.sourceId}:${i.input ?? ""}`))
+    .join(SEP);
+  return [body.title, body.description, body.budget, body.agentId, body.deadlineSeconds ?? "",
+    body.engagementId ?? "", items].join(SEP);
 }
 
 /**
