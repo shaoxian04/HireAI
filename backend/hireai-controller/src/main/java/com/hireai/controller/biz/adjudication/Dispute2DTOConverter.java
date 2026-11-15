@@ -28,7 +28,8 @@ public final class Dispute2DTOConverter {
                 .map(f -> new DisputeFeeDTO(f.type().name(), f.fullCost().value(), f.cappedAmount().value(),
                         f.clientCharged().value(), f.builderCharged().value(), f.platformCovered().value()))
                 .toList();
-        return new DisputeOutcomeDTO(dispute.id(), dispute.taskId(), dispute.status().name(),
+        return new DisputeOutcomeDTO(dispute.id(), dispute.taskId(), view.taskTitle(), view.price().value(),
+                dispute.status().name(),
                 dispute.reasonCategory().name(), effectiveCategory, rulings,
                 names(view.yourSides()), names(view.awaiting()),
                 dispute.appealedBy() == null ? null : dispute.appealedBy().name(),

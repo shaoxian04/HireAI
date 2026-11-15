@@ -102,7 +102,7 @@ public class DisputeReadAppServiceImpl implements DisputeReadAppService {
                 : null;
         // The round that led to arbitration: the Agent stood by its result (D20).
         Optional<RejectionModel> round = rejectionRepository.findLatestByTaskId(task.id());
-        return new DisputeOutcomeView(dispute, sides, dispute.partiesWhoMayAppeal(), appealDeadline,
+        return new DisputeOutcomeView(dispute, task.title(), task.budget(), sides, dispute.partiesWhoMayAppeal(), appealDeadline,
                 feeSchedule.arbitrationCostFor(task.budget()), feeSchedule.appealFeeFor(task.budget()),
                 disputeFeeRepository.findByDisputeId(dispute.id()),
                 round.map(RejectionModel::reason).orElse(task.rejectionReason()),

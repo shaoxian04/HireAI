@@ -132,7 +132,7 @@ class DisputeControllerTest {
 
     private static com.hireai.application.biz.adjudication.dispute.view.DisputeOutcomeView viewOf(
             com.hireai.domain.biz.adjudication.model.DisputeModel dispute) {
-        return new com.hireai.application.biz.adjudication.dispute.view.DisputeOutcomeView(dispute,
+        return new com.hireai.application.biz.adjudication.dispute.view.DisputeOutcomeView(dispute, "t", com.hireai.domain.shared.model.Money.of("10.00"),
                 java.util.Set.of(com.hireai.domain.biz.adjudication.enums.DisputeParty.CLIENT), java.util.Set.of(),
                 null, com.hireai.domain.shared.model.Money.of("3.00"), com.hireai.domain.shared.model.Money.of("5.00"),
                 java.util.List.of(), null, null, null, false);

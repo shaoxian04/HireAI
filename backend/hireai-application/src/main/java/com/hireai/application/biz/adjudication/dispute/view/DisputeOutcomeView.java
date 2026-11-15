@@ -13,6 +13,8 @@ import java.util.Set;
 /**
  * A dispute as one participant sees it (#96).
  *
+ * @param taskTitle       the disputed task's title
+ * @param price           the task's price (the Item price the fee caps are taken from)
  * @param yourSides       the viewer's side(s): CLIENT, BUILDER, or both on a self-booked task
  * @param awaiting        the sides that may still accept or appeal the proposed ruling
  * @param appealDeadline  while the ruling is proposed: when it is accepted on everyone's behalf
@@ -24,7 +26,7 @@ import java.util.Set;
  * @param agentReason     the reason the Agent gave for standing by, or null
  * @param agentSilent     true when the Agent stood by silently (its window lapsed)
  */
-public record DisputeOutcomeView(DisputeModel dispute, Set<DisputeParty> yourSides, Set<DisputeParty> awaiting,
+public record DisputeOutcomeView(DisputeModel dispute, String taskTitle, Money price, Set<DisputeParty> yourSides, Set<DisputeParty> awaiting,
                                  Instant appealDeadline, Money arbitrationCost, Money appealFee,
                                  List<DisputeFeeCharge> fees, String clientReason,
                                  AgentResponse agentResponse, String agentReason, boolean agentSilent) {

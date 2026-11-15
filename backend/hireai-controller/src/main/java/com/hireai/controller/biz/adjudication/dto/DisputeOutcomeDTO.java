@@ -10,7 +10,7 @@ import java.util.UUID;
  * sides that may still accept or appeal the proposed ruling (#96). {@code arbitrationCost} and
  * {@code appealFee} are the capped amounts a loser bears; {@code fees} how each was borne once settled.
  */
-public record DisputeOutcomeDTO(UUID disputeId, UUID taskId, String status, String reasonCategory,
+public record DisputeOutcomeDTO(UUID disputeId, UUID taskId, String taskTitle, BigDecimal price, String status, String reasonCategory,
                                 String effectiveCategory, List<RulingDTO> rulings,
                                 List<String> yourSides, List<String> awaiting, String appealedBy,
                                 Instant appealDeadline, BigDecimal arbitrationCost, BigDecimal appealFee,
