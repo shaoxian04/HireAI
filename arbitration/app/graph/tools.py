@@ -81,15 +81,42 @@ UNTRUSTED_BEGIN = "BEGIN UNTRUSTED EVIDENCE"
 UNTRUSTED_END = "END UNTRUSTED EVIDENCE"
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
-_ZERO_WIDTH = re.compile("[­᠎​-‏⁠-⁤﻿]")
-# Any spelling of a marker phrase: case, runs of whitespace and (after NFKC) full-width forms.
-_MARKER_PHRASE = re.compile(r"(?:BEGIN|END)\s+UNTRUSTED\s+EVIDENCE", re.IGNORECASE)
+# Invisible characters: zero-width/format characters and bidi controls.
+_INVISIBLE = frozenset(
+    "­؜᠎​‌‍‎‏⁠⁡⁢⁣⁤﻿"
+    "‪‫‬‭‮⁦⁧⁨⁩"
+)
+# A marker phrase on the normalised copy (NFKC, invisibles removed, case-folded).
+_MARKER_PHRASE = re.compile(r"(?:begin|end)\s+untrusted\s+evidence")
+
+
+def _marker_spans(text: str) -> list[tuple[int, int]]:
+    """Spans of the ORIGINAL text that read as a marker phrase once normalised."""
+    normalised: list[str] = []
+    origin: list[int] = []  # normalised index -> original index
+    for i, ch in enumerate(text):
+        if ch in _INVISIBLE:
+            continue
+        for n in unicodedata.normalize("NFKC", ch).casefold():
+            normalised.append(n)
+            origin.append(i)
+    return [(origin[m.start()], origin[m.end() - 1] + 1)
+            for m in _MARKER_PHRASE.finditer("".join(normalised))]
 
 
 def _defuse(text: str) -> str:
-    """Defence in depth behind the nonce: no spelling of a marker survives in Agent text."""
-    text = _ZERO_WIDTH.sub("", unicodedata.normalize("NFKC", text))
-    return _MARKER_PHRASE.sub("[marker removed]", text)
+    """Defence in depth behind the nonce: redact only the spans that spell a marker phrase.
+
+    Every other character is left exactly as the Agent delivered it (a brief may require exact
+    Unicode); invisible characters are kept and counted in a visible note instead.
+    """
+    invisible = sum(ch in _INVISIBLE for ch in text)
+    for start, end in reversed(_marker_spans(text)):
+        text = text[:start] + "[marker removed]" + text[end:]
+    if invisible:
+        text += (f"\n[note: {invisible} zero-width/bidi control characters present "
+                 "in this evidence]")
+    return text
 
 
 def begin_marker(kind: str, nonce: str, sha256: str | None = None) -> str:
