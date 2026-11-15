@@ -103,6 +103,11 @@ hireai:
     # PENDING_REVIEW, then the review-window sweeper accepts and settles it on the Client's behalf.
     window: ${REVIEW_WINDOW:PT24H}
     sweep-interval: ${REVIEW_SWEEP_INTERVAL:PT1M}
+  acceptance:
+    # Rework (spec D17, #98): a result a deterministic check rejects goes back to the same Agent with
+    # the failing checks this many times; failing after the last one ends the Task SPEC_VIOLATION
+    # with a refund. The rejection itself is not appealable.
+    max-reworks: ${ACCEPTANCE_MAX_REWORKS:2}
   rejection:
     # Rejection response path (#95): after an A/B/C rejection the Agent has agent-response-window
     # to revise once, concede or stand by (silence = standing by); after a stand-by the Client has

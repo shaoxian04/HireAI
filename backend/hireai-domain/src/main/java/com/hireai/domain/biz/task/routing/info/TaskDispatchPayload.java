@@ -8,9 +8,16 @@ import java.time.Instant;
  * the routing orchestration from the task (title, description and category are the client's
  * own) and serialised into the WorkOrder by the dispatch client. {@code executionDeadline} is
  * the instant stamped on the task at assignment; {@code callbackUrl} is where the agent posts
- * its result back. Nothing about the client (identity, budget) is carried.
+ * its result back. {@code rework} is set only on a rework WorkOrder (D17) and names the checks the
+ * previous result failed. Nothing about the client (identity, budget) is carried.
  */
 public record TaskDispatchPayload(String title, String description, String category,
                                   String outputSpecJson, Instant executionDeadline,
-                                  String callbackUrl) {
+                                  String callbackUrl, ReworkRequest rework) {
+
+    /** A first WorkOrder (not a rework). */
+    public TaskDispatchPayload(String title, String description, String category, String outputSpecJson,
+                               Instant executionDeadline, String callbackUrl) {
+        this(title, description, category, outputSpecJson, executionDeadline, callbackUrl, null);
+    }
 }

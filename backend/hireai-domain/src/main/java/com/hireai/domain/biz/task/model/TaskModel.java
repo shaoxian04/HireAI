@@ -190,6 +190,16 @@ public final class TaskModel {
         return endWithoutResult(TaskStatus.SPEC_VIOLATION, FailureReason.SPEC_VIOLATION);
     }
 
+    /**
+     * RESULT_RECEIVED → QUEUED for the same Agent: a deterministic check rejected the result and it
+     * goes back for rework (spec D17). The rejected result stays until the reworked one replaces it.
+     */
+    public TaskModel returnForRework() {
+        requireStatus(TaskStatus.RESULT_RECEIVED, "returnForRework");
+        requirePresent(agentVersionId, "agent version id");
+        return copyWith(TaskStatus.QUEUED, this.agentVersionId, this.result);
+    }
+
     /** SUBMITTED → AWAITING_AGENT (idempotent from AWAITING_AGENT for re-match no-match passes). */
     public TaskModel markAwaitingAgent() {
         requireStatusIn("markAwaitingAgent", TaskStatus.SUBMITTED, TaskStatus.AWAITING_AGENT);

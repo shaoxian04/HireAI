@@ -9,6 +9,7 @@ import com.hireai.controller.base.BaseController;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.agentcallback.dto.AgentRejectionResponseRequest;
+import com.hireai.domain.biz.acceptance.check.model.SelfReportedAnomaly;
 import com.hireai.controller.biz.agentcallback.dto.AgentResultCallbackRequest;
 import com.hireai.domain.biz.task.info.AgentRejectionResponseInfo;
 import com.hireai.domain.biz.task.info.AgentResultInfo;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -74,8 +76,10 @@ public class AgentCallbackController extends BaseController {
             throw new DispatchTokenInvalidException(
                     "Signed callback body is for task " + request.taskId() + ", not " + taskId);
         }
-        AgentResultInfo result = new AgentResultInfo(
-                request.agentStatus(), request.resultPayloadJson(), request.resultUrl(), request.message());
+        List<SelfReportedAnomaly> anomalies = request.anomalies() == null ? List.of()
+                : request.anomalies().stream().map(a -> new SelfReportedAnomaly(a.check(), a.description())).toList();
+        AgentResultInfo result = new AgentResultInfo(request.agentStatus(), request.resultPayloadJson(),
+                request.resultUrl(), request.message(), anomalies);
         agentCallbackAppService.recordResult(taskId, token, result);
         return ok();
     }

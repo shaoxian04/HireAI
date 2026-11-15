@@ -171,6 +171,16 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
+    public void returnForRework(UUID taskId, Instant executionDeadline) {
+        TaskModel task = loadForUpdate(taskId);
+        taskRepository.save(task.returnForRework());
+        taskRepository.stampExecutionDeadline(taskId, executionDeadline);
+        log.info("Task {} returned to agent version {} for rework (deadline {})",
+                taskId, task.agentVersionId(), executionDeadline);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
     public void reassign(UUID taskId, UUID newAgentVersionId, Instant executionDeadline) {
         TaskModel task = loadForUpdate(taskId);
         UUID previous = task.agentVersionId();

@@ -47,7 +47,7 @@ class AgentCallbackControllerTest {
 
     private String body(UUID taskId) throws Exception {
         return objectMapper.writeValueAsString(
-                new AgentResultCallbackRequest(taskId, "COMPLETED", "{\"k\":\"v\"}", "https://x/y", "done"));
+                new AgentResultCallbackRequest(taskId, "COMPLETED", "{\"k\":\"v\"}", "https://x/y", "done", null));
     }
 
     @Test

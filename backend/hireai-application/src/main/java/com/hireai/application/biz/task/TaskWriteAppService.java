@@ -65,6 +65,12 @@ public interface TaskWriteAppService {
      */
     void reassign(@NonNull UUID taskId, @NonNull UUID newAgentVersionId, @NonNull Instant executionDeadline);
 
+    /**
+     * Rework (D17): RESULT_RECEIVED -> QUEUED for the same Agent, with a new execution deadline.
+     * Joins the caller's row-locked transaction (MANDATORY).
+     */
+    void returnForRework(@NonNull UUID taskId, @NonNull Instant executionDeadline);
+
 
     /**
      * A dispatch failure before the Agent started ended the task (#58): QUEUED/EXECUTING -> FAILED

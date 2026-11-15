@@ -9,4 +9,8 @@ public interface ValidationReportJpaRepository extends JpaRepository<ValidationR
     Optional<ValidationReportDO> findByTaskIdAndAttemptNo(UUID taskId, int attemptNo);
 
     Optional<ValidationReportDO> findFirstByTaskIdOrderByAttemptNoDesc(UUID taskId);
+
+    java.util.List<ValidationReportDO> findByTaskIdOrderByAttemptNoAsc(UUID taskId);
+
+    int countByTaskIdAndVerdict(UUID taskId, String verdict);
 }

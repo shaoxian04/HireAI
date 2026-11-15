@@ -495,16 +495,20 @@ class TaskControllerTest {
         UUID taskId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
         when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(null);
-        when(validationReadAppService.latestForTask(eq(taskId)))
-                .thenReturn(Optional.of(ValidationReportModel.of(taskId, 1,
+        when(validationReadAppService.historyForTask(eq(taskId)))
+                .thenReturn(List.of(ValidationReportModel.of(taskId, 1,
                         List.of(new CheckResult("format", false, "expected FILE, got none")))));
+        when(validationReadAppService.maxReworks()).thenReturn(2);
 
         mockMvc.perform(get("/api/tasks/{id}/validation", taskId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.verdict").value("FAIL"))
                 .andExpect(jsonPath("$.data.checks[0].rule").value("format"))
                 .andExpect(jsonPath("$.data.checks[0].passed").value(false))
-                .andExpect(jsonPath("$.data.checks[0].detail").value("expected FILE, got none"));
+                .andExpect(jsonPath("$.data.checks[0].outcome").value("REJECT"))
+                .andExpect(jsonPath("$.data.checks[0].detail").value("expected FILE, got none"))
+                .andExpect(jsonPath("$.data.rejectedAttempts").value(1))
+                .andExpect(jsonPath("$.data.maxReworks").value(2));
     }
 
     @Test
@@ -513,7 +517,7 @@ class TaskControllerTest {
         UUID taskId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
         when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(null);
-        when(validationReadAppService.latestForTask(eq(taskId))).thenReturn(Optional.empty());
+        when(validationReadAppService.historyForTask(eq(taskId))).thenReturn(List.of());
 
         mockMvc.perform(get("/api/tasks/{id}/validation", taskId))
                 .andExpect(status().isNotFound())

@@ -1,5 +1,9 @@
 package com.hireai.domain.biz.adjudication.service.impl;
 
+import com.hireai.domain.biz.acceptance.check.model.AcceptanceEvidence;
+import com.hireai.domain.biz.acceptance.check.model.Finding;
+import com.hireai.domain.biz.acceptance.check.model.SelfReportedAnomaly;
+import com.hireai.domain.biz.acceptance.check.service.CheckLibrary;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.acceptance.contract.model.ParameterValue;
 import com.hireai.domain.biz.acceptance.delivery.model.DeliveryOutcome;
@@ -8,6 +12,7 @@ import com.hireai.domain.biz.acceptance.offer.model.Offer;
 import com.hireai.domain.biz.acceptance.offer.model.OfferTerm;
 import com.hireai.domain.biz.acceptance.offer.model.ParameterRange;
 import com.hireai.domain.biz.acceptance.template.model.GenericTemplates;
+import com.hireai.domain.biz.acceptance.template.model.ImageGenerationTemplate;
 import com.hireai.domain.biz.acceptance.template.model.TemplateRef;
 import com.hireai.domain.biz.adjudication.model.CheckResult;
 import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
@@ -36,7 +41,10 @@ import java.util.Set;
  *       live link), {@code FILE_FETCHED} (fetched, not empty, within the platform limit), then
  *       {@code FILE_MEDIA_TYPE} / {@code FILE_MAX_BYTES} when the Contract sets {@code media_types} /
  *       {@code max_bytes}. The media type is the one judged from the bytes ({@code DeliveredMediaType}).</li>
+ *   <li>{@code image_generation}: the same link and fetch checks, then its Check Library entries
+ *       ({@link CheckLibrary}) on the frozen copy's pixels, and its Findings.</li>
  * </ul>
+ * A self-reported anomaly turns a rejection into review on every Template (D7).
  */
 public class ValidationDomainServiceImpl implements ValidationDomainService {
 
@@ -46,6 +54,8 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
     static final String FILE_FETCHED = "FILE_FETCHED";
     static final String FILE_MEDIA_TYPE = "FILE_MEDIA_TYPE";
     static final String FILE_MAX_BYTES = "FILE_MAX_BYTES";
+    /** A review entry for an anomaly the Agent reported that no rejecting check explains. */
+    static final String SELF_REPORTED_ANOMALY = "SELF_REPORTED_ANOMALY";
 
     private final SchemaValidator schemaValidator;
 
@@ -54,10 +64,12 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
     }
 
     @Override
-    public ValidationReportModel validate(Contract contract, TaskResultModel result, DeliveryOutcome delivery,
-                                          int attemptNo) {
+    public ValidationReportModel judge(Contract contract, TaskResultModel result, AcceptanceEvidence evidence,
+                                       int attemptNo) {
         TemplateRef template = contract.template();
+        DeliveryOutcome delivery = evidence.delivery();
         List<CheckResult> checks = new ArrayList<>();
+        List<Finding> findings = new ArrayList<>();
         if (template.equals(GenericTemplates.TEXT_BASIC_V1)) {
             checks.addAll(checkText(result.resultPayloadJson(), contract));
         } else if (template.equals(GenericTemplates.CUSTOM_JSON_V1)) {
@@ -66,18 +78,81 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
             CheckResult link = checkFile(result.resultUrl());
             checks.add(link);
             if (link.passed()) {
-                if (delivery == null) {
-                    throw new IllegalStateException("A file_basic result with an HTTPS link is judged on its "
-                            + "DeliverySnapshot; fetch it first (needsDelivery)");
+                checks.addAll(checkDelivery(contract, requireDelivery(delivery)));
+            }
+        } else if (template.equals(ImageGenerationTemplate.IMAGE_GENERATION_V1)) {
+            CheckResult link = checkFile(result.resultUrl());
+            checks.add(link);
+            DeliverySnapshot snapshot = null;
+            if (link.passed()) {
+                List<CheckResult> fetched = checkDelivery(contract, requireDelivery(delivery));
+                checks.addAll(fetched);
+                if (fetched.stream().allMatch(CheckResult::passed)
+                        && delivery instanceof DeliveryOutcome.Captured captured) {
+                    snapshot = captured.snapshot();
                 }
-                checks.addAll(checkDelivery(contract, delivery));
+            }
+            CheckLibrary.Subject subject = new CheckLibrary.Subject(contract, snapshot, evidence.image());
+            for (String entry : ImageGenerationTemplate.CHECKS) {
+                if (CheckLibrary.isCheck(entry) && snapshot != null) {
+                    CheckLibrary.check(entry, subject).ifPresent(checks::add);
+                } else if (CheckLibrary.isFinding(entry)) {
+                    CheckLibrary.find(entry, subject, evidence.facts()).ifPresent(findings::add);
+                }
             }
         } else {
-            // Only the generic Templates exist; a Contract naming another one fails its Template
-            // check at submit, so reaching here means a Template shipped without its checks.
+            // A Contract naming another Template fails its Template check at submit, so reaching
+            // here means a Template shipped without its checks.
             throw new IllegalStateException("No checks implemented for Template " + template);
         }
-        return ValidationReportModel.of(result.taskId(), attemptNo, checks);
+        return ValidationReportModel.of(result.taskId(), attemptNo, applyAnomalies(checks, evidence.anomalies()),
+                findings, evidence.anomalies());
+    }
+
+    /**
+     * D7: an anomaly the Agent reported sends the result to review instead of a deterministic
+     * rejection. One naming a check that rejected turns that check into review; any other adds a
+     * review entry of its own, so every reported anomaly reaches the Client.
+     */
+    private static List<CheckResult> applyAnomalies(List<CheckResult> checks, List<SelfReportedAnomaly> anomalies) {
+        if (anomalies.isEmpty()) {
+            return checks;
+        }
+        List<CheckResult> out = new ArrayList<>(checks);
+        for (SelfReportedAnomaly anomaly : anomalies) {
+            boolean explained = false;
+            for (int i = 0; i < out.size(); i++) {
+                CheckResult c = out.get(i);
+                if (c.rejects() && c.rule().equals(anomaly.check())) {
+                    out.set(i, CheckResult.review(c.rule(), c.detail() + ". The Agent reported: "
+                            + anomaly.description()));
+                    explained = true;
+                }
+            }
+            if (!explained) {
+                out.add(CheckResult.review(SELF_REPORTED_ANOMALY, (anomaly.check() == null ? ""
+                        : "about " + anomaly.check() + ": ") + anomaly.description()));
+            }
+        }
+        return out;
+    }
+
+    private static DeliveryOutcome requireDelivery(DeliveryOutcome delivery) {
+        if (delivery == null) {
+            throw new IllegalStateException("A file result with an HTTPS link is judged on its "
+                    + "DeliverySnapshot; fetch it first (needsDelivery)");
+        }
+        return delivery;
+    }
+
+    @Override
+    public boolean needsPixels(Contract contract) {
+        return contract.template().equals(ImageGenerationTemplate.IMAGE_GENERATION_V1);
+    }
+
+    @Override
+    public boolean needsFindingFacts(Contract contract) {
+        return contract.template().equals(ImageGenerationTemplate.IMAGE_GENERATION_V1);
     }
 
     @Override
@@ -87,7 +162,10 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
 
     @Override
     public boolean needsDelivery(Contract contract, TaskResultModel result) {
-        return contract.template().equals(GenericTemplates.FILE_BASIC_V1) && checkFile(result.resultUrl()).passed();
+        TemplateRef template = contract.template();
+        return (template.equals(GenericTemplates.FILE_BASIC_V1)
+                || template.equals(ImageGenerationTemplate.IMAGE_GENERATION_V1))
+                && checkFile(result.resultUrl()).passed();
     }
 
     @Override
@@ -140,6 +218,12 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
         String schema = text(contract, GenericTemplates.SCHEMA);
         if (schema != null) {
             requireUsableSchema(schema);
+        }
+        String colour = text(contract, ImageGenerationTemplate.BACKGROUND_COLOUR);
+        if (contract.template().equals(ImageGenerationTemplate.IMAGE_GENERATION_V1) && colour != null
+                && !CheckLibrary.isHexColour(colour)) {
+            throw invalid(ImageGenerationTemplate.BACKGROUND_COLOUR + " must be a colour written as #rrggbb, "
+                    + "such as #ffffff; got " + colour);
         }
         BigDecimal min = number(contract, GenericTemplates.MIN_LENGTH);
         BigDecimal max = number(contract, GenericTemplates.MAX_LENGTH);

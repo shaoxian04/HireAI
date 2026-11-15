@@ -11,6 +11,7 @@ import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.offering.embedding.info.TextVector;
 import com.hireai.domain.biz.task.routing.info.DispatchMessage;
+import com.hireai.domain.biz.task.routing.info.ReworkRequest;
 import com.hireai.domain.biz.task.routing.info.TaskDispatchPayload;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
@@ -172,6 +173,36 @@ public class RoutingAppServiceImpl implements RoutingAppService {
         });
     }
 
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean redispatchForRework(UUID taskId, UUID agentVersionId, ReworkRequest rework) {
+        Optional<AgentCandidate> target = agentRepository.findCandidateByVersionId(agentVersionId);
+        if (target.isEmpty()) {
+            log.info("Task {}: agent version {} can no longer take work, so its result cannot be reworked",
+                    taskId, agentVersionId);
+            return false;
+        }
+        TaskRoutingView view = taskReadAppService.getRoutingView(taskId);
+        Instant executionDeadline = deadlineFor(target.get(), selectionInstant());
+        taskWriteAppService.returnForRework(taskId, executionDeadline);
+        DispatchMessage message = buildDispatchMessage(view, agentVersionId, target.get(), executionDeadline, rework);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    taskDispatchPublisher.publish(message);
+                    log.info("Task {} rework {}/{} published to agentVersion {} (correlationId={})", taskId,
+                            rework.reworkNo(), rework.maxReworks(), agentVersionId, message.correlationId());
+                } catch (RuntimeException e) {
+                    // As in failOver: the task stays QUEUED and its execution timeout refunds it.
+                    log.error("Task {} was returned for rework but publishing its WorkOrder failed "
+                            + "(the task stays QUEUED until its execution timeout)", taskId, e);
+                }
+            }
+        });
+        return true;
+    }
+
     /**
      * The moment a selection is made. Truncated to microseconds, the precision the task row stores, so
      * the WorkOrder carries exactly the stamped execution deadline. One instant serves both the
@@ -210,6 +241,12 @@ public class RoutingAppServiceImpl implements RoutingAppService {
 
     private DispatchMessage buildDispatchMessage(TaskRoutingView view, UUID agentVersionId,
                                                  AgentCandidate target, Instant executionDeadline) {
+        return buildDispatchMessage(view, agentVersionId, target, executionDeadline, null);
+    }
+
+    private DispatchMessage buildDispatchMessage(TaskRoutingView view, UUID agentVersionId,
+                                                 AgentCandidate target, Instant executionDeadline,
+                                                 ReworkRequest rework) {
         String correlationId = UUID.randomUUID().toString();
         String callbackUrl = publicBaseUrl + "/api/agent-callbacks/" + view.taskId() + "/result";
         TaskDispatchPayload payload = new TaskDispatchPayload(
@@ -220,7 +257,8 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                 // contract. The candidate supplies only webhookUrl/version identity — not the spec.
                 view.outputSpecJson(),
                 executionDeadline,
-                callbackUrl);
+                callbackUrl,
+                rework);
         return new DispatchMessage(view.taskId(), agentVersionId, target.webhookUrl(), correlationId, payload);
     }
 }

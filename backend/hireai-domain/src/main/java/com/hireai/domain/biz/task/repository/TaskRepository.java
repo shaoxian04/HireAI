@@ -37,6 +37,12 @@ public interface TaskRepository {
      */
     void stampReviewDeadline(UUID taskId, java.time.Instant deadline);
 
+    /**
+     * The same Client's other Tasks, submitted before {@code taskId}, with exactly this title and
+     * description: the outside data the duplicate-brief Finding reads (spec D7). Oldest first.
+     */
+    List<UUID> findEarlierTaskIdsWithSameBrief(UUID taskId, UUID clientId, String title, String description);
+
     /** Operational column write (unmapped on the entity): the platform accepted on the Client's behalf. */
     void markReviewAutoAccepted(UUID taskId);
 

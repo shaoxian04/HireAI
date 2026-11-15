@@ -183,7 +183,8 @@ public class AgentDispatchClient implements AgentNoticePort {
                 payload.category(),
                 readJson(payload.outputSpecJson()),
                 payload.executionDeadline() == null ? null : payload.executionDeadline().toString(),
-                payload.callbackUrl());
+                payload.callbackUrl(),
+                payload.rework());
     }
 
     private JsonNode readJson(String json) {
