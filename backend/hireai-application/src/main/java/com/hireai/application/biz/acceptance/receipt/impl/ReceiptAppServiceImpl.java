@@ -50,10 +50,10 @@ public class ReceiptAppServiceImpl implements ReceiptAppService {
 
     @Override
     @Transactional
-    public List<ReceiptModel> receiptsForTask(UUID taskId, UUID userId) {
+    public List<ReceiptModel> receiptsForTask(UUID taskId, Reader reader) {
         TaskModel task = taskRepository.findById(taskId).orElseThrow(() -> notFound("task", taskId));
         Optional<UUID> builderId = builderOf(task);
-        requireParty(task, builderId, userId, "task", taskId);
+        requireParty(task, builderId, reader, "task", taskId);
 
         TaskItems items = taskItemRepository.findByTaskId(taskId);
         settlementRepository.findByTaskId(taskId).ifPresent(s -> issueQuietly(task, builderId, items, s, null));
@@ -65,10 +65,10 @@ public class ReceiptAppServiceImpl implements ReceiptAppService {
 
     @Override
     @Transactional(readOnly = true)
-    public ReceiptModel receipt(UUID receiptId, UUID userId) {
+    public ReceiptModel receipt(UUID receiptId, Reader reader) {
         ReceiptModel receipt = receiptRepository.findById(receiptId).orElseThrow(() -> notFound("receipt", receiptId));
         TaskModel task = taskRepository.findById(receipt.taskId()).orElseThrow(() -> notFound("receipt", receiptId));
-        requireParty(task, builderOf(task), userId, "receipt", receiptId);
+        requireParty(task, builderOf(task), reader, "receipt", receiptId);
         return receipt;
     }
 
@@ -137,8 +137,9 @@ public class ReceiptAppServiceImpl implements ReceiptAppService {
                 : agentRepository.findOwnerByVersionId(task.agentVersionId());
     }
 
-    private static void requireParty(TaskModel task, Optional<UUID> builderId, UUID userId, String what, UUID id) {
-        boolean party = task.clientId().equals(userId) || builderId.map(userId::equals).orElse(false);
+    private static void requireParty(TaskModel task, Optional<UUID> builderId, Reader reader, String what, UUID id) {
+        boolean party = task.clientId().equals(reader.userId())
+                || (reader.asBuilder() && builderId.map(reader.userId()::equals).orElse(false));
         if (!party) {
             throw notFound(what, id);
         }

@@ -177,9 +177,9 @@ hireai:
     cost: ${ARBITRATION_COST:3.00}
     appeal-fee: ${APPEAL_FEE:5.00}
   receipts:
-    # Signed receipts (D40, docs/receipts.md). The Ed25519 private key, base64 PKCS#8 DER, from the
+    # Signed receipts (D40, docs/details/receipts.md). The Ed25519 private key, base64 PKCS#8 DER, from the
     # environment only: never commit one. Unset = a key generated per process (dev/tests only; its
-    # receipts stop verifying after a restart). Rotation: see docs/receipts.md.
+    # receipts stop verifying after a restart). Rotation: see docs/details/receipts.md.
     signing-key: ${RECEIPT_SIGNING_KEY:}
     # Optional override of the key id written into receipts (default: derived from the public key).
     key-id: ${RECEIPT_KEY_ID:}
@@ -187,6 +187,9 @@ hireai:
     # comma-separated base64 SubjectPublicKeyInfo DER, each optionally prefixed "keyId:".
     retired-public-keys: ${RECEIPT_RETIRED_PUBLIC_KEYS:}
     issue-interval: ${RECEIPT_ISSUE_INTERVAL:PT30S}
+    # HMAC key (>= 32 chars) for the pseudonymous party refs in receipts (clientRef, builderRef,
+    # agentVersionRef). Environment only, never committed; unset = a per-process key (dev/tests only).
+    party-key: ${RECEIPT_PARTY_KEY:}
   storage:
     # Supabase Storage (public-read bucket; uploads happen ONLY server-side with the service key).
     supabase-url: ${SUPABASE_URL:}

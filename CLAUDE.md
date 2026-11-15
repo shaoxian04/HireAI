@@ -102,6 +102,8 @@ Read the relevant file on demand — don't preload everything.
   **Read before changing the schema, an entity, or the settlement/reputation logic.**
 - **`docs/details/programmatic-channel.md`** — the API-key machine channel end to end: key auth, idempotency, the two spend caps, open/direct submit, deterministic auto-settlement, signed push webhooks (transactional outbox + sweeper + SSRF guard), and the **MCP server facade + OpenAPI** (§6a — stdio tools over the same REST surface).
   **Read before touching API keys, the programmatic submit path, auto-settlement, webhooks, or the MCP facade.**
+- **`docs/details/receipts.md`** — signed receipts: when one is issued, the `hireai.receipt.v1` format, pseudonymous parties, how to verify, signing-key config and rotation.
+  **Read before touching receipts, their keys, or anything a receipt cites.**
 - **`docs/details/demo-runbook.md`** — stand up the full local demo stack (Postgres + RabbitMQ + stub agent + HTTPS tunnel + backend + frontend) and the seed logins.
   **Read before running a live end-to-end demo.**
 - **`docs/details/frontend.md`** — Next.js app structure + conventions (the `/api/*` proxy, the `api()` client, the auth context + localStorage scheme, the UI kit, the route map).

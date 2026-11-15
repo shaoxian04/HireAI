@@ -65,6 +65,7 @@ class ReceiptIntegrationTest extends WholeAppIntegrationTest {
     static void receiptKeys(DynamicPropertyRegistry registry) {
         registry.add("hireai.receipts.signing-key",
                 () -> Base64.getEncoder().encodeToString(SIGNING_KEY.getPrivate().getEncoded()));
+        registry.add("hireai.receipts.party-key", () -> UUID.randomUUID() + "-" + UUID.randomUUID()); // test-only
         registry.add("hireai.receipts.retired-public-keys",
                 () -> "receipts-2025:" + Base64.getEncoder().encodeToString(RETIRED_KEY.getPublic().getEncoded()));
     }
@@ -121,8 +122,14 @@ class ReceiptIntegrationTest extends WholeAppIntegrationTest {
         assertThat(receipt.get("receiptId").asText()).isEqualTo(receiptId.toString());
         assertThat(receipt.get("task").get("id").asText()).isEqualTo(taskId.toString());
         assertThat(receipt.has("item")).isFalse();
-        assertThat(receipt.get("parties").get("client").asText()).isEqualTo(DEV_USER.toString());
-        assertThat(receipt.get("parties").get("builder").asText()).isEqualTo(seeded.ownerId().toString());
+        // Parties are per-task pseudonyms: the document a client hands an auditor names no user.
+        assertThat(receipt.get("parties").get("clientRef").asText()).matches("[0-9a-f]{64}");
+        assertThat(receipt.get("parties").get("builderRef").asText()).matches("[0-9a-f]{64}")
+                .isNotEqualTo(receipt.get("parties").get("clientRef").asText());
+        assertThat(receipt.get("parties").get("agentVersionRef").asText()).matches("[0-9a-f]{64}");
+        String versionId = jdbc.queryForObject("SELECT agent_version_id::text FROM tasks WHERE id = ?", String.class, taskId);
+        assertThat(download.getBody()).doesNotContain(DEV_USER.toString())
+                .doesNotContain(seeded.ownerId().toString()).doesNotContain(versionId);
         assertThat(receipt.get("contract").get("template").asText()).isEqualTo("text_basic@1");
         assertThat(receipt.get("contract").get("sha256").asText()).isEqualTo(storedContractHash(taskId));
         assertThat(receipt.get("input").get("sha256").asText()).isEqualTo(Sha256.hex("Extract the fields"));
@@ -260,8 +267,12 @@ class ReceiptIntegrationTest extends WholeAppIntegrationTest {
 
         assertThat(getData("/api/tasks/" + taskId + "/receipts")).isEmpty();
         // The Builder of the assigned Agent may read them; anyone else is told nothing exists.
-        assertThat(receiptAppService.receiptsForTask(taskId, seeded.ownerId())).isEmpty();
-        assertThatThrownBy(() -> receiptAppService.receiptsForTask(taskId, UUID.randomUUID()))
+        assertThat(receiptAppService.receiptsForTask(taskId, ReceiptAppService.Reader.signedIn(seeded.ownerId(), true))).isEmpty();
+        assertThatThrownBy(() -> receiptAppService.receiptsForTask(taskId, ReceiptAppService.Reader.apiKey(seeded.ownerId())))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.resultCode()).isEqualTo(ResultCode.NOT_FOUND));
+        assertThatThrownBy(() -> receiptAppService.receiptsForTask(taskId,
+                ReceiptAppService.Reader.signedIn(UUID.randomUUID(), true)))
                 .isInstanceOfSatisfying(DomainException.class,
                         e -> assertThat(e.resultCode()).isEqualTo(ResultCode.NOT_FOUND));
     }
@@ -282,7 +293,7 @@ class ReceiptIntegrationTest extends WholeAppIntegrationTest {
                 .isEqualTo(Ed25519.raw(RETIRED_KEY.getPublic()));
     }
 
-    // --- verification, as an outsider does it (docs/receipts.md) ---
+    // --- verification, as an outsider does it (docs/details/receipts.md) ---
 
     private boolean verify(JsonNode envelope) throws Exception {
         JsonNode keys = JSON.readTree(http.getForObject(platformUrl("/api/receipt-keys"), String.class)).get("keys");

@@ -23,7 +23,7 @@ import java.util.List;
  * process and warns: receipts it signs stop verifying once the process ends, which is acceptable
  * in development and tests only. Retired public keys ({@code hireai.receipts.retired-public-keys},
  * comma-separated base64 SubjectPublicKeyInfo, each optionally prefixed {@code keyId:}) stay
- * published so receipts signed before a rotation still verify. See docs/receipts.md.
+ * published so receipts signed before a rotation still verify. See docs/details/receipts.md.
  */
 @Slf4j
 @Service

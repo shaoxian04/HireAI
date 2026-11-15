@@ -48,7 +48,7 @@ import java.util.UUID;
 
 /**
  * Gathers what a receipt states about one settled subject and lays it out in format
- * {@value ReceiptModel#FORMAT} (docs/receipts.md). Absent facts are left out, never written as
+ * {@value ReceiptModel#FORMAT} (docs/details/receipts.md). Absent facts are left out, never written as
  * null, so later fields (the sample of #105, SourceSnapshot hashes of #104) are added as new
  * optional members without changing the receipts already signed.
  */
@@ -65,6 +65,7 @@ class ReceiptBodyAssembler {
     private final DisputeRepository disputeRepository;
     private final DisputeFeeRepository disputeFeeRepository;
     private final ReceiptEvidenceQueryPort evidence;
+    private final ReceiptPartyRefs partyRefs;
 
     /** The facts about the subject that the caller has already loaded. */
     record Subject(TaskModel task, UUID builderId, TaskItemModel item, int itemCount,
@@ -84,8 +85,11 @@ class ReceiptBodyAssembler {
         } else if (s.itemCount() > 0) {
             body.put("itemCount", s.itemCount());
         }
-        body.put("parties", map("client", task.clientId().toString(),
-                "agentVersion", str(task.agentVersionId()), "builder", str(s.builderId())));
+        // Pseudonymous, per task: a receipt leaves HireAI, so it never carries an internal user id.
+        body.put("parties", map(
+                "clientRef", partyRefs.ref(task.id(), ReceiptPartyRefs.CLIENT, task.clientId()),
+                "builderRef", partyRefs.ref(task.id(), ReceiptPartyRefs.BUILDER, s.builderId()),
+                "agentVersionRef", partyRefs.ref(task.id(), ReceiptPartyRefs.AGENT_VERSION, task.agentVersionId())));
         body.put("contract", contract(task));
         body.put("input", map("sha256", Sha256.hex(s.item() != null ? s.item().input() : task.description())));
 
@@ -281,10 +285,6 @@ class ReceiptBodyAssembler {
 
     static String time(Instant t) {
         return t == null ? null : t.truncatedTo(ChronoUnit.MILLIS).toString();
-    }
-
-    private static String str(UUID id) {
-        return id == null ? null : id.toString();
     }
 
     private static void putIfPresent(Map<String, Object> body, String key, Object value) {

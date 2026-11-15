@@ -10,7 +10,7 @@ import java.util.UUID;
 /**
  * A signed receipt for one settled Item (spec S11, D40): the RFC 8785 text of its body, signed with
  * the platform's Ed25519 key {@code keyId}. {@code itemNo} is null for a single-deliverable Task.
- * Immutable and append-only; a receipt gates nothing inside HireAI. Its format is docs/receipts.md.
+ * Immutable and append-only; a receipt gates nothing inside HireAI. Its format is docs/details/receipts.md.
  */
 public record ReceiptModel(UUID id, UUID taskId, Integer itemNo, String keyId, String body, String signature,
                            Instant issuedAt) {

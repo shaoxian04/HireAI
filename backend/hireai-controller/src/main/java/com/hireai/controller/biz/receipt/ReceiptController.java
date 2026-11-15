@@ -7,6 +7,7 @@ import com.hireai.application.port.receipt.ReceiptSigner;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.receipt.dto.ReceiptDTO;
+import com.hireai.controller.config.CurrentApiKeyProvider;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.domain.biz.acceptance.receipt.model.ReceiptModel;
 import org.springframework.http.CacheControl;
@@ -14,6 +15,8 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,7 +31,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Signed receipts (spec S11, D40; format in docs/receipts.md). The list and the download are for
+ * Signed receipts (spec S11, D40; format in docs/details/receipts.md). The list and the download are for
  * the Task's Client and the assigned Agent's Builder; the public keys are public, so anyone holding
  * a receipt can verify it without trusting HireAI's database.
  */
@@ -37,12 +40,14 @@ public class ReceiptController extends BaseController {
 
     private final ReceiptAppService receiptAppService;
     private final CurrentUserProvider currentUser;
+    private final CurrentApiKeyProvider currentApiKey;
     private final ObjectMapper objectMapper;
 
     public ReceiptController(ReceiptAppService receiptAppService, CurrentUserProvider currentUser,
-                             ObjectMapper objectMapper) {
+                             CurrentApiKeyProvider currentApiKey, ObjectMapper objectMapper) {
         this.receiptAppService = receiptAppService;
         this.currentUser = currentUser;
+        this.currentApiKey = currentApiKey;
         this.objectMapper = objectMapper;
     }
 
@@ -50,7 +55,7 @@ public class ReceiptController extends BaseController {
     @GetMapping("/api/tasks/{taskId}/receipts")
     public WebResult<List<ReceiptDTO>> listForTask(@PathVariable("taskId") UUID taskId) {
         List<ReceiptDTO> receipts = new ArrayList<>();
-        for (ReceiptModel receipt : receiptAppService.receiptsForTask(taskId, currentUser.currentUserId())) {
+        for (ReceiptModel receipt : receiptAppService.receiptsForTask(taskId, reader())) {
             receipts.add(toDTO(receipt));
         }
         return ok(receipts);
@@ -59,7 +64,7 @@ public class ReceiptController extends BaseController {
     /** The receipt document exactly as signed: {@code {"receipt": …, "signature": …}}, as a download. */
     @GetMapping("/api/receipts/{receiptId}")
     public ResponseEntity<byte[]> download(@PathVariable("receiptId") UUID receiptId) {
-        ReceiptModel receipt = receiptAppService.receipt(receiptId, currentUser.currentUserId());
+        ReceiptModel receipt = receiptAppService.receipt(receiptId, reader());
         String filename = receipt.itemNo() == null
                 ? "hireai-receipt-" + receipt.taskId() + ".json"
                 : "hireai-receipt-" + receipt.taskId() + "-item-" + receipt.itemNo() + ".json";
@@ -88,6 +93,21 @@ public class ReceiptController extends BaseController {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(Duration.ofMinutes(10)).cachePublic())
                 .body(Map.of("keys", keys));
+    }
+
+    /**
+     * The caller, from the server-side identity only (Invariant #5). An API key reads as its owner in
+     * the Client channel; a signed-in user reads as a Builder only while holding ROLE_BUILDER.
+     */
+    private ReceiptAppService.Reader reader() {
+        UUID userId = currentUser.currentUserId();
+        if (currentApiKey.current().isPresent()) {
+            return ReceiptAppService.Reader.apiKey(userId);
+        }
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean builder = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_BUILDER".equals(a.getAuthority()));
+        return ReceiptAppService.Reader.signedIn(userId, builder);
     }
 
     private ReceiptDTO toDTO(ReceiptModel receipt) {

@@ -828,3 +828,26 @@ export type AgentReputationDTO = {
   unproven: boolean;
   recentEvents: ReputationEventDTO[];
 };
+
+/** The settlement a receipt records (format hireai.receipt.v1, docs/details/receipts.md); amounts are strings. */
+export interface ReceiptSettlement {
+  outcome: "ACCEPT" | "REJECT" | "SPLIT";
+  price: string;
+  paid: string;
+  commission: string;
+  refunded: string;
+  settledAt: string;
+  failureReason?: string;
+}
+
+/** One signed receipt in `GET /tasks/{id}/receipts`; the signed bytes come from `GET /receipts/{id}`. */
+export interface ReceiptDTO {
+  id: string;
+  taskId: string;
+  /** Null for a single-deliverable task. */
+  itemNo: number | null;
+  keyId: string;
+  issuedAt: string;
+  receipt: { settlement: ReceiptSettlement; [field: string]: unknown };
+  signature: string;
+}
