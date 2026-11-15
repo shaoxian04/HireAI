@@ -192,8 +192,7 @@ export function OfferPanel({ offer }: { offer: OfferDTO | undefined }) {
     <div className="space-y-4">
       {templates.status === "error" && <TemplatesUnavailable />}
       <p className="text-sm text-muted">
-        Price <span className="tabular font-bold text-fg">{offer.price} credits</span> per task. Only tasks whose
-        contract falls inside these terms are held to them.
+        Price <span className="tabular font-bold text-fg">{offer.price} credits</span> per task.
       </p>
       <ul className="space-y-4">
         {offer.terms.map((term) => {
