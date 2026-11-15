@@ -31,6 +31,9 @@ public interface TaskRepository {
     /** Operational column write (unmapped on the entity — see plan Global Constraints). */
     void stampExecutionDeadline(UUID taskId, java.time.Instant deadline);
 
+    /** The execution deadline stamped at the latest assignment, failover or rework; empty if none. */
+    Optional<java.time.Instant> findExecutionDeadline(UUID taskId);
+
     /**
      * Operational column write (unmapped on the entity): when the Client's review window closes,
      * set once as the task enters PENDING_REVIEW (#94).

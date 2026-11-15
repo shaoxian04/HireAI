@@ -105,6 +105,11 @@ public class TaskRepositoryImpl implements TaskRepository {
     }
 
     @Override
+    public Optional<Instant> findExecutionDeadline(UUID taskId) {
+        return taskJpa.findExecutionDeadline(taskId);
+    }
+
+    @Override
     public void stampReviewReason(UUID taskId, String reason) {
         taskJpa.stampReviewReason(taskId, reason);
     }

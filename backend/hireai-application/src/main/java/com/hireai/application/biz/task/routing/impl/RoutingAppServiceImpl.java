@@ -183,8 +183,8 @@ public class RoutingAppServiceImpl implements RoutingAppService {
             return false;
         }
         TaskRoutingView view = taskReadAppService.getRoutingView(taskId);
-        Instant executionDeadline = deadlineFor(target.get(), selectionInstant());
-        taskWriteAppService.returnForRework(taskId, executionDeadline);
+        Instant executionDeadline = taskWriteAppService.returnForRework(taskId,
+                deadlineFor(target.get(), selectionInstant()));
         DispatchMessage message = buildDispatchMessage(view, agentVersionId, target.get(), executionDeadline, rework);
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override

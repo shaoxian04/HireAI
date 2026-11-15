@@ -171,12 +171,17 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
-    public void returnForRework(UUID taskId, Instant executionDeadline) {
+    public Instant returnForRework(UUID taskId, Instant executionDeadline) {
         TaskModel task = loadForUpdate(taskId);
+        Instant deadline = taskRepository.findExecutionDeadline(taskId)
+                .filter(previous -> !executionDeadline.isAfter(previous))
+                .map(previous -> previous.plus(1, java.time.temporal.ChronoUnit.MICROS))
+                .orElse(executionDeadline);
         taskRepository.save(task.returnForRework());
-        taskRepository.stampExecutionDeadline(taskId, executionDeadline);
+        taskRepository.stampExecutionDeadline(taskId, deadline);
         log.info("Task {} returned to agent version {} for rework (deadline {})",
-                taskId, task.agentVersionId(), executionDeadline);
+                taskId, task.agentVersionId(), deadline);
+        return deadline;
     }
 
     @Override

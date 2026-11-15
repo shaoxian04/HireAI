@@ -37,6 +37,14 @@ public interface TaskExecutionPort {
     /** QUEUED → EXECUTING under a row lock; a no-op once the task has moved past QUEUED. */
     void markExecuting(UUID taskId);
 
+    /**
+     * As {@link #markExecuting(UUID)} for the WorkOrder whose execution deadline is
+     * {@code executionDeadline}: also a no-op when the task now carries another deadline, i.e. it was
+     * re-queued for a newer dispatch (a rework, #98) after this WorkOrder was sent, so the late step
+     * of an earlier send never marks the newer, still-unsent one EXECUTING.
+     */
+    void markExecuting(UUID taskId, java.time.Instant executionDeadline);
+
     void markTimedOut(UUID taskId);
 
     /**
