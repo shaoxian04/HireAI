@@ -22,7 +22,7 @@ export type ParamDraft =
   | { mode: "oneOf"; values: string[] }
   | { mode: "flag" };
 
-/** Accepted Template refs (`key@version`) â†’ the parameters given a range. */
+/** Accepted Template refs (`key@version`) → the parameters given a range. */
 export type OfferDraft = Record<string, Record<string, ParamDraft>>;
 
 /** What a direct booking of this Agent freezes: the Template and the values it sets. */
@@ -111,7 +111,7 @@ function problemOf(parameter: TemplateParameterDTO, p: ParamDraft): string | nul
   return null;
 }
 
-/** `ref:param` â†’ what is wrong, for the ranges the Template's bounds would refuse. */
+/** `ref:param` → what is wrong, for the ranges the Template's bounds would refuse. */
 export function offerDraftProblems(draft: OfferDraft, templates: TemplateDTO[]): Record<string, string> {
   const problems: Record<string, string> = {};
   for (const t of templates) {
@@ -127,7 +127,7 @@ export function offerDraftProblems(draft: OfferDraft, templates: TemplateDTO[]):
   return problems;
 }
 
-// â”€â”€ UI â”€â”€
+// ── UI ──
 
 function Choice({ name, checked, onChange, label }: { name: string; checked: boolean; onChange: () => void; label: string }) {
   return (
@@ -299,7 +299,7 @@ function ParameterEditor({
           {label}
         </p>
         <p className="font-mono text-[0.75rem] text-dim">
-          {name} Â· {comparison}
+          {name} · {comparison}
         </p>
       </div>
       <div className="min-w-0 space-y-2">
