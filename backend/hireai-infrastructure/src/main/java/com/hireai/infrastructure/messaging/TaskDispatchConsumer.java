@@ -6,6 +6,7 @@ import com.hireai.application.port.task.TaskExecutionPort;
 import com.hireai.domain.biz.task.dispatchattempt.enums.DispatchOutcome;
 import com.hireai.domain.biz.task.routing.info.DispatchMessage;
 import com.hireai.infrastructure.client.AgentBusyException;
+import com.hireai.infrastructure.client.AgentContractDeclinedException;
 import com.hireai.infrastructure.client.AgentDispatchClient;
 import com.hireai.infrastructure.client.AgentSendFailedException;
 import lombok.extern.slf4j.Slf4j;
@@ -33,7 +34,9 @@ import java.util.Optional;
  * <p>A busy reply ({@link AgentBusyException}: 429/503) consumes no attempt and is never retried:
  * it goes to {@link TaskExecutionPort#declineAsBusy}, which records a {@code BUSY} dispatch attempt
  * (no reputation event) and fails a routed task over to another Agent, or ends a pinned one FAILED
- * with {@code AGENT_BUSY} and a refund.
+ * with {@code AGENT_BUSY} and a refund. A contract decline ({@link AgentContractDeclinedException}:
+ * 422 with {@code {"decline":"CONTRACT"}}, #93) is handled the same way through
+ * {@link TaskExecutionPort#declineContract} ({@code CONTRACT_DECLINED}).
  *
  * <p>Only an Agent-attributable send failure ({@link AgentSendFailedException}: unreachable,
  * read timeout, any other non-2xx) consumes an attempt. A platform-side failure before or around
@@ -115,6 +118,9 @@ public class TaskDispatchConsumer {
         } catch (AgentBusyException e) {
             declineAsBusy(message, delivery, e);
             return;
+        } catch (AgentContractDeclinedException e) {
+            declineContract(message, delivery, e);
+            return;
         } catch (AgentSendFailedException e) {
             retryOrDeadLetter(message, delivery, e);
             return;
@@ -168,6 +174,21 @@ public class TaskDispatchConsumer {
             taskExecutionPort.declineAsBusy(message.taskId(), message.agentVersionId());
         } catch (RuntimeException e) {
             reschedulePlatformFailure(message, delivery, "ending the busy-declined task", e);
+        }
+    }
+
+    /**
+     * A contract decline (422 + {@code {"decline":"CONTRACT"}}, #93) is final for this Agent, exactly
+     * like a busy reply: never retried, never dead-lettered. The task fails over or ends through
+     * {@link TaskExecutionPort#declineContract}; a failure there is re-scheduled as platform-side.
+     */
+    private void declineContract(DispatchMessage message, Delivery delivery, AgentContractDeclinedException cause) {
+        log.info("Dispatch attempt {} for task {}: the Agent declined the contract; not retrying",
+                delivery.attempt(), message.taskId());
+        try {
+            taskExecutionPort.declineContract(message.taskId(), message.agentVersionId(), cause.reason());
+        } catch (RuntimeException e) {
+            reschedulePlatformFailure(message, delivery, "ending the contract-declined task", e);
         }
     }
 

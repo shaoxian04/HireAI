@@ -36,6 +36,8 @@ describe("agent storefront", () => {
     expect(screen.getByText(/example output/i)).toBeInTheDocument(); // sample output block
     expect(screen.getByText(/valid json/i)).toBeInTheDocument(); // output contract
     expect(screen.getByText(/output matched the spec exactly/i)).toBeInTheDocument(); // review
+    // The public contract-decline rate (#93), in the track record.
+    expect(screen.getByText(/declined terms on/i)).toHaveTextContent("Declined terms on 1 of 6 tasks (17%)");
     expect(screen.getAllByRole("link", { name: /book this agent/i })[0]).toHaveAttribute(
       "href",
       "/client/agents/ag-1/book",

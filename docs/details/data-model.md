@@ -63,13 +63,15 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 - `idempotency_keys`: `UNIQUE (owner_id, idempotency_key)`, `request_fingerprint`, `task_id`.
 - `api_key_task`: one row per key-submitted task; soft task reference and the read source for spend caps.
 - `webhook_deliveries`: the outbox. `id` is also the client-facing event id; `payload` is TEXT because the signed body is sent byte for byte; `attempts`, `next_attempt_at`, `status`.
-- <a id="dispatch-attempts"></a>`dispatch_attempts`: the task's dispatch history, one row per Agent version the platform tried to hand the task to. Soft `task_id` and `agent_version_id` (no FK), `attempt_number` (1-based, `UNIQUE (task_id, attempt_number)`, numbered under the task row lock), `outcome`, `occurred_at` (when the outcome was known), `gmt_create`. **Append-only by trigger.** Outcomes (`DispatchOutcome`, CHECK since `V33`):
+- <a id="dispatch-attempts"></a>`dispatch_attempts`: the task's dispatch history, one row per Agent version the platform tried to hand the task to. Soft `task_id` and `agent_version_id` (no FK), `attempt_number` (1-based, `UNIQUE (task_id, attempt_number)`, numbered under the task row lock), `outcome`, `occurred_at` (when the outcome was known), `decline_reason` (only on `CONTRACT_DECLINED`, optional, at most 500 characters, since `V43`), `gmt_create`. **Append-only by trigger.** Outcomes (`DispatchOutcome`, CHECK since `V33`, last widened in `V43`):
   - `ACCEPTED`: the Agent replied 2xx to the WorkOrder (recorded by the dispatch consumer after the send).
   - `UNREACHABLE`: every send in the retry schedule failed (recorded in the DLQ transaction that fails the task over or ends it `FAILED`).
   - `BUSY`: the Agent replied 429/503 to the WorkOrder (recorded in the same transaction that fails the task over or ends it `FAILED` with `AGENT_BUSY`).
+  - `CONTRACT_DECLINED`: the Agent replied 422 with `{"decline":"CONTRACT","reason":…}` (#93; recorded in the same transaction that fails the task over or ends it `FAILED` with `CONTRACT_DECLINED`). The reason is the Agent's text, trimmed, control characters turned to spaces, cut to 500 characters.
   - A routed task's history is also its failover exclusion list: no Agent in it is picked again ([routed failover](matching.md#routed-failover)).
   - `UNAVAILABLE`: the agent was not `ACTIVE`, or its version was superseded, at dispatch (recorded in the same transaction that ends a pinned task `CANCELLED` with `AGENT_UNAVAILABLE`, or that fails a routed task over).
-  - Read-only to the task owner (JWT or API key) at `GET /api/tasks/{id}/attempts`: attempt number, `agentId` (joined from the version), `agentVersionId`, outcome, `occurredAt`. Another client gets 404.
+  - Read-only to the task owner (JWT or API key) at `GET /api/tasks/{id}/attempts`: attempt number, `agentId` and `agentName` (joined from the version), `agentVersionId`, outcome, `occurredAt`, `declineReason`. Another client gets 404.
+  - The **public contract-decline rate** is read from it (`DispatchAttemptRepository.declineRatesByAgentId`, `ContractDeclineRate`): per Agent over all its versions, `declined` = `CONTRACT_DECLINED` rows, `answered` = `ACCEPTED` + `CONTRACT_DECLINED` rows (busy, unreachable and unavailable say nothing about the Contract), `rate` null when `answered` is 0. Shown as `contractDeclines` on match-preview options and in the catalogue profile `stats`; it is not a reputation event and not a ranking input.
 
 **Adjudication**
 - `validation_reports`: soft task reference, `attempt_no`, `verdict`, `checks`.
@@ -99,7 +101,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
     - **stand by**, or silence until `response_deadline` (`response_silent`): `→ AWAITING_CLIENT_DECISION`. The Client then accepts (`→ RESOLVED`, 85/15, `TASK_ACCEPTED`), requests arbitration (`→ DISPUTED`, the dispute opens with the round's reason; no deposit), or stays silent until `decision_deadline`, which accepts (`decision_silent`).
     Every transition takes the task row lock; a response or decision after its window closed is refused (409).
 - **Task resolution:** `ACCEPTED`, `REJECTED`, `PARTIALLY_ACCEPTED`.
-- <a id="failure-reason"></a>**Failure reason** (`tasks.failure_reason`, `FailureReason`; CHECK since `V32`): why a task ended without a delivered result. The terminal transition sets it, and `TaskModel` refuses to set it a second time. `NULL` on live and successful tasks, and on tasks that ended before `V32`. Where each value comes from today:
+- <a id="failure-reason"></a>**Failure reason** (`tasks.failure_reason`, `FailureReason`; CHECK since `V32`, last widened in `V43`): why a task ended without a delivered result. The terminal transition sets it, and `TaskModel` refuses to set it a second time. `NULL` on live and successful tasks, and on tasks that ended before `V32`. Where each value comes from today:
   - `AGENT_UNREACHABLE`: every dispatch send attempt to a direct booking's Agent failed (DLQ) → `FAILED`.
   - `AGENT_REPORTED_FAILURE`: the Agent's callback reported a non-`COMPLETED` status → `FAILED`.
   - `SPEC_VIOLATION`: the result failed validation → `SPEC_VIOLATION`.
@@ -108,7 +110,8 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
   - `NO_ELIGIBLE_AGENT`: a routed task's re-match attempts ran out → `CANCELLED`; or a failover hop found untried Agents but the client deadline ruled them all out → `FAILED`.
   - `AGENT_UNAVAILABLE`: at dispatch (routing, or the check before any send), a direct booking's agent is not `ACTIVE` or its pinned version was superseded → `CANCELLED` at once, no reputation event.
   - `AGENT_BUSY`: a direct booking's Agent declined the WorkOrder with 429/503 → `FAILED`, no reputation event.
-  - `NO_ALTERNATIVE_AGENT`: a routed task's Agent was busy or unreachable and no untried eligible Agent was left, or 3 Agents had been tried ([routed failover](matching.md#routed-failover)) → `FAILED`.
+  - `CONTRACT_DECLINED`: a direct booking's Agent declined the task's Contract (422 with `{"decline":"CONTRACT"}`) → `FAILED`, no reputation event.
+  - `NO_ALTERNATIVE_AGENT`: a routed task's Agent was busy, declined the Contract or was unreachable and no untried eligible Agent was left, or 3 Agents had been tried ([routed failover](matching.md#routed-failover)) → `FAILED`.
 - **Agent:** `PENDING_VERIFICATION → ACTIVE ⇄ SUSPENDED`; `ACTIVE` or `SUSPENDED → DEACTIVATED`.
 - **Agent version:** `DRAFT`, `ACTIVE`, `DEPRECATED`.
 - **Reject reason:** `A_MISMATCH`, `B_FACTUAL`, `C_INCOMPLETE` start the [rejection response path](#rejection-response) (arbitration only if the Agent stands by and the Client asks for it); `D_CHANGED_MIND` charges in full with no dispute.

@@ -10,7 +10,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.UUID;
 
-/** {@code dispute_fees} (V43): append-only, guarded by DB triggers. */
+/** {@code dispute_fees} (V44): append-only, guarded by DB triggers. */
 @Repository
 public class JdbcDisputeFeeRepository implements DisputeFeeRepository {
 

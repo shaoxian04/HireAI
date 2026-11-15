@@ -209,6 +209,8 @@ export const handlers = [
   // Default: a task has no validation report unless a test overrides this (only fetched on
   // SPEC_VIOLATION). Keeps onUnhandledRequest:"error" happy for the failure-panel path.
   http.get("*/api/tasks/:id/validation", () => fail("NOT_FOUND", "No validation report", 404)),
+  // The hand-off history (#93): empty by default, so the task page shows no Hand-offs section.
+  http.get("*/api/tasks/:id/attempts", () => ok([])),
 
   // Default: no webhook deliveries for this task (WEB task / no API subscription) — the
   // WebhookDeliveryStatus indicator mounts unconditionally on the task-detail page, so every
@@ -311,7 +313,8 @@ export const handlers = [
               },
             ],
           },
-          stats: { requestCount: 7, completedCount: 6, successRate: 0.857, avgTurnaroundSeconds: 42 },
+          stats: { requestCount: 7, completedCount: 6, successRate: 0.857, avgTurnaroundSeconds: 42,
+            contractDeclines: { declined: 1, answered: 6, rate: 1 / 6 } },
           reviews: [
             {
               id: "rev-1",
