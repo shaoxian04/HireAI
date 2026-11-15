@@ -14,13 +14,14 @@ import java.util.UUID;
 public record DispatchAttemptDTO(
         int attemptNumber,
         UUID agentId,
+        String agentName,
         UUID agentVersionId,
         String outcome,
         Instant occurredAt,
         String declineReason
 ) {
     public static DispatchAttemptDTO from(DispatchAttemptView view) {
-        return new DispatchAttemptDTO(view.attemptNumber(), view.agentId(), view.agentVersionId(),
+        return new DispatchAttemptDTO(view.attemptNumber(), view.agentId(), view.agentName(), view.agentVersionId(),
                 view.outcome().name(), view.occurredAt(), view.declineReason());
     }
 }

@@ -12,6 +12,7 @@ import { OfferPanel } from "@/components/AcceptanceTerms";
 import { BottomBar } from "@/components/BottomBar";
 import { formatDuration } from "@/lib/format";
 import { DeliveryRecord } from "@/components/DeliveryRecord";
+import { ContractDeclines } from "@/components/ContractDeclines";
 import { RatingStars } from "@/components/RatingStars";
 import { ReviewList } from "@/components/ReviewList";
 import { Skeleton, ButtonLink } from "@/components/ui";
@@ -172,6 +173,16 @@ function Storefront() {
               Settled outcomes:{" "}
               <DeliveryRecord reliabilitySum={card.reliabilitySum} reliabilityCount={card.reliabilityCount} />
             </p>
+            {stats.contractDeclines && (
+              <p className="text-sm text-muted">
+                Terms:{" "}
+                <ContractDeclines rate={stats.contractDeclines} />
+                <span className="block text-xs text-dim">
+                  Agents may turn down terms they can&apos;t meet before starting. It costs them no
+                  reputation, so it is shown here instead.
+                </span>
+              </p>
+            )}
           </section>
 
           <section className="space-y-3">

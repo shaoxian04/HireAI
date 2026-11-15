@@ -34,7 +34,7 @@ class RoutedFailoverDomainServiceTest {
     }
 
     private static DispatchAttemptView tried(AgentCandidate c, int n, DispatchOutcome outcome) {
-        return new DispatchAttemptView(n, c.agentId(), c.agentVersionId(), outcome, Instant.now(), null);
+        return new DispatchAttemptView(n, c.agentId(), "Agent", c.agentVersionId(), outcome, Instant.now(), null);
     }
 
     @Test
@@ -63,7 +63,7 @@ class RoutedFailoverDomainServiceTest {
     @Test
     void neverPicksAVersionAlreadyTriedWhenItsAgentIsUnknown() {
         AgentCandidate c = candidate(UUID.randomUUID(), "10.00");
-        DispatchAttemptView orphan = new DispatchAttemptView(1, null, c.agentVersionId(),
+        DispatchAttemptView orphan = new DispatchAttemptView(1, null, null, c.agentVersionId(),
                 DispatchOutcome.BUSY, Instant.now(), null);
 
         assertThat(service.selectNext(CRITERIA, List.of(orphan), List.of(c))).isEmpty();

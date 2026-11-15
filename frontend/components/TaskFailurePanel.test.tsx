@@ -31,6 +31,7 @@ describe("TaskFailurePanel", () => {
     ["TIMED_OUT", "EXECUTION_TIMEOUT", /ran out of time/i],
     ["FAILED", "AGENT_REPORTED_FAILURE", /agent couldn't complete/i],
     ["SPEC_VIOLATION", "SPEC_VIOLATION", /didn't meet the spec/i],
+    ["FAILED", "CONTRACT_DECLINED", /agent declined your terms/i],
   ] as const)("explains %s with reason %s in plain words", (status, failureReason, headline) => {
     render(<TaskFailurePanel taskId="t-1" status={status} failureReason={failureReason} budget={8} />);
     expect(screen.getByRole("heading", { name: headline })).toBeTruthy();

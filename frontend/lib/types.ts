@@ -222,7 +222,8 @@ export type FailureReason =
   | "DISPATCH_ABANDONED"
   | "EXECUTION_TIMEOUT"
   | "AGENT_REPORTED_FAILURE"
-  | "SPEC_VIOLATION";
+  | "SPEC_VIOLATION"
+  | "CONTRACT_DECLINED";
 
 export interface CreateTaskRequest {
   title: string;
@@ -277,6 +278,8 @@ export interface CatalogueStatsDTO {
   completedCount: number;
   successRate: number | null;
   avgTurnaroundSeconds: number | null;
+  /** Public contract-decline rate (#93). */
+  contractDeclines?: ContractDeclineRateDTO;
 }
 
 export interface AgentProfileDTO {
@@ -528,6 +531,33 @@ export interface AgentOptionDTO {
   availability: "AVAILABLE" | "BUSY";
   outputFormat: string | null;
   capabilityCategories: string[];
+  /** Public contract-decline rate (#93). */
+  contractDeclines?: ContractDeclineRateDTO;
+}
+
+/**
+ * An agent's public contract-decline rate: `declined` of the `answered` work orders whose terms it
+ * took or turned down (busy or unreachable replies don't count). `rate` is null when it answered none.
+ */
+export interface ContractDeclineRateDTO {
+  declined: number;
+  answered: number;
+  rate: number | null;
+}
+
+/** Mirrors the backend DispatchOutcome enum. */
+export type DispatchOutcome = "ACCEPTED" | "UNREACHABLE" | "BUSY" | "UNAVAILABLE" | "CONTRACT_DECLINED";
+
+/** One row of `GET /tasks/{id}/attempts`: which agent the task was handed to, and how that ended. */
+export interface DispatchAttemptDTO {
+  attemptNumber: number;
+  agentId: string | null;
+  agentName: string | null;
+  agentVersionId: string;
+  outcome: DispatchOutcome;
+  occurredAt: string;
+  /** The agent's own reason on a CONTRACT_DECLINED row. */
+  declineReason: string | null;
 }
 
 /**

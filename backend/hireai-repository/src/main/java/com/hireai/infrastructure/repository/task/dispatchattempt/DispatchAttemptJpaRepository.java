@@ -13,13 +13,15 @@ public interface DispatchAttemptJpaRepository extends JpaRepository<DispatchAtte
 
     int countByTaskId(UUID taskId);
 
-    /** The task's attempts in order, with the owning Agent (LEFT JOIN: soft reference, no FK). */
+    /** The task's attempts in order, with the owning Agent and its name (LEFT JOIN: soft reference, no FK). */
     @Query("""
             SELECT new com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView(
-                       d.attemptNumber, v.agentId, d.agentVersionId, d.outcome, d.occurredAt, d.declineReason)
+                       d.attemptNumber, v.agentId, a.name, d.agentVersionId, d.outcome, d.occurredAt, d.declineReason)
             FROM DispatchAttemptDO d
             LEFT JOIN com.hireai.infrastructure.repository.offering.agent.AgentVersionDO v
                    ON v.id = d.agentVersionId
+            LEFT JOIN com.hireai.infrastructure.repository.offering.agent.AgentDO a
+                   ON a.id = v.agentId
             WHERE d.taskId = :taskId
             ORDER BY d.attemptNumber
             """)

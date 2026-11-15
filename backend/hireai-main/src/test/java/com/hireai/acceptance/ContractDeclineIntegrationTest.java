@@ -85,6 +85,7 @@ class ContractDeclineIntegrationTest extends WholeAppIntegrationTest {
         assertThat(attempts).hasSize(1);
         assertThat(attempts.get(0).get("outcome").asText()).isEqualTo("CONTRACT_DECLINED");
         assertThat(attempts.get(0).get("declineReason").asText()).isEqualTo("I only summarise English text");
+        assertThat(attempts.get(0).get("agentName").asText()).isEqualTo("Decline Agent");
     }
 
     @Test
