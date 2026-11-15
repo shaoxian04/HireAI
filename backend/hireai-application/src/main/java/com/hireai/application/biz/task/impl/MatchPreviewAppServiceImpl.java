@@ -7,6 +7,8 @@ import com.hireai.application.port.query.MatchPreviewQueryPort.ShortlistCandidat
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
 import com.hireai.domain.biz.offering.category.repository.CategoryRepository;
 import com.hireai.domain.biz.offering.embedding.info.TextVector;
+import com.hireai.domain.biz.task.dispatchattempt.info.ContractDeclineRate;
+import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
 import com.hireai.domain.biz.task.info.PreviewCriteria;
 import com.hireai.domain.biz.task.model.ClientDeadline;
 import com.hireai.domain.biz.task.model.ExecutionGrace;
@@ -41,6 +43,7 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
     private final Clock clock;
     /** Added to an Agent's max execution time, as routing stamps it (ExecutionConfig). */
     private final ExecutionGrace executionGrace;
+    private final DispatchAttemptRepository dispatchAttemptRepository;
 
     /**
      * Not transactional: the task text's embedding (cache or provider, up to its timeout) is resolved
@@ -88,7 +91,20 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
                 .map(this::toOption)
                 .toList();
 
-        return new MatchPreview(shortlist, nearMisses, matcher.noCloseMatch(criteria, candidates));
+        return new MatchPreview(withContractDeclines(shortlist), withContractDeclines(nearMisses),
+                matcher.noCloseMatch(criteria, candidates));
+    }
+
+    /** Adds each Agent's public contract-decline rate (#93): shown to the Client, never ranked on. */
+    private List<AgentOption> withContractDeclines(List<AgentOption> options) {
+        if (options.isEmpty()) {
+            return options;
+        }
+        Map<UUID, ContractDeclineRate> rates = dispatchAttemptRepository.declineRatesByAgentId(
+                options.stream().map(AgentOption::agentId).collect(Collectors.toSet()));
+        return options.stream()
+                .map(o -> o.withContractDeclines(rates.getOrDefault(o.agentId(), ContractDeclineRate.NONE)))
+                .toList();
     }
 
     private AgentCandidate toCandidate(ShortlistCandidateRow r) {
@@ -101,6 +117,6 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
         boolean available = r.inFlight() < r.maxConcurrent();
         return new AgentOption(r.agentId(), r.agentVersionId(), r.agentName(), r.tagline(),
                 r.logoUrl(), r.price(), r.reputationScore(), available, r.outputFormat(),
-                r.capabilityCategories(), r.reliabilitySum(), r.reliabilityCount());
+                r.capabilityCategories(), r.reliabilitySum(), r.reliabilityCount(), ContractDeclineRate.NONE);
     }
 }

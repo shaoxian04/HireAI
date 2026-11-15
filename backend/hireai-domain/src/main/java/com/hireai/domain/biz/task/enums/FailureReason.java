@@ -3,7 +3,7 @@ package com.hireai.domain.biz.task.enums;
 /**
  * Why a task ended without a delivered result (#74). The status says HOW it ended; this says WHY.
  * Set once, by the terminal transition, and shown to the client (task API, {@code task.failed}
- * webhook, MCP, web failure panel). Closed set: must stay in sync with the V32 CHECK constraint.
+ * webhook, MCP, web failure panel). Closed set: must stay in sync with the V42 CHECK constraint.
  */
 public enum FailureReason {
     /** Every send attempt in the retry schedule failed (dispatch DLQ). */
@@ -23,7 +23,9 @@ public enum FailureReason {
     /** The Agent's callback reported a non-COMPLETED status. */
     AGENT_REPORTED_FAILURE,
     /** The delivered result broke the task's frozen output spec. */
-    SPEC_VIOLATION;
+    SPEC_VIOLATION,
+    /** A direct booking's Agent declined the task's Contract (HTTP 422, #93). */
+    CONTRACT_DECLINED;
 
     /**
      * Reason for cancelling a task the re-match sweeper could not place: a direct booking's pinned

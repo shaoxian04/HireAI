@@ -39,17 +39,22 @@ public class DispatchAttemptDO {
     @Column(name = "occurred_at", nullable = false)
     private Instant occurredAt;
 
+    /** V42: the Agent's reason on a CONTRACT_DECLINED attempt (#93); null otherwise. */
+    @Column(name = "decline_reason")
+    private String declineReason;
+
     protected DispatchAttemptDO() {
     }
 
     public DispatchAttemptDO(UUID id, UUID taskId, UUID agentVersionId, int attemptNumber,
-                             DispatchOutcome outcome, Instant occurredAt) {
+                             DispatchOutcome outcome, Instant occurredAt, String declineReason) {
         this.id = id;
         this.taskId = taskId;
         this.agentVersionId = agentVersionId;
         this.attemptNumber = attemptNumber;
         this.outcome = outcome;
         this.occurredAt = occurredAt;
+        this.declineReason = declineReason;
     }
 
     public UUID getId() { return id; }
@@ -58,4 +63,5 @@ public class DispatchAttemptDO {
     public int getAttemptNumber() { return attemptNumber; }
     public DispatchOutcome getOutcome() { return outcome; }
     public Instant getOccurredAt() { return occurredAt; }
+    public String getDeclineReason() { return declineReason; }
 }

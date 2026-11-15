@@ -87,4 +87,10 @@ public interface TaskWriteAppService {
      * lock serialises every writer of the history, so the numbering cannot race.
      */
     void appendDispatchAttempt(@NonNull UUID taskId, @NonNull UUID agentVersionId, @NonNull DispatchOutcome outcome);
+
+    /**
+     * As {@link #appendDispatchAttempt}, for a {@code CONTRACT_DECLINED} attempt (#93) carrying the
+     * Agent's {@code reason} (nullable, untrusted; normalised by the domain model).
+     */
+    void appendContractDecline(@NonNull UUID taskId, @NonNull UUID agentVersionId, String reason);
 }
