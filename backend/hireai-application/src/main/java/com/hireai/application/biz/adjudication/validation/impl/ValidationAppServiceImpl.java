@@ -10,6 +10,7 @@ import com.hireai.domain.biz.adjudication.repository.ValidationReportRepository;
 import com.hireai.domain.biz.adjudication.service.ValidationDomainService;
 import com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
+import com.hireai.domain.biz.task.model.ReviewWindow;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.utility.exception.DomainException;
@@ -19,6 +20,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.UUID;
 
 @Slf4j
@@ -35,6 +38,9 @@ public class ValidationAppServiceImpl implements ValidationAppService {
     private final ApiKeyTaskRepository apiKeyTaskRepository;
     private final WebhookOutboxAppService webhookOutboxAppService;
     private final ReputationWriteAppService reputationWriteAppService;
+    private final ReviewWindow reviewWindow;
+    /** The app's Clock bean (ClockConfig): the review window opens at this instant. */
+    private final Clock clock;
 
     private static final int FIRST_ATTEMPT = 1; // retry attempts arrive in Plan 2
 
@@ -72,7 +78,11 @@ public class ValidationAppServiceImpl implements ValidationAppService {
                 return resolved;
             }
             taskRepository.save(gated);
-            log.info("Task {} passed validation -> PENDING_REVIEW", task.id());
+            // Web channel: the Client reviews within the window, or silence counts as acceptance (#94).
+            Instant reviewDeadline = reviewWindow.closesAt(clock.instant());
+            taskRepository.stampReviewDeadline(task.id(), reviewDeadline);
+            log.info("Task {} passed validation -> PENDING_REVIEW (review window closes {})",
+                    task.id(), reviewDeadline);
             return gated;
         }
         TaskModel gated = task.failValidation();

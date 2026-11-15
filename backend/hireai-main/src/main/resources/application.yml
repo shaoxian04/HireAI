@@ -98,6 +98,11 @@ hireai:
     # must cover the dispatch path's worst case (see dispatch.retry-delays), or startup fails.
     sweep-interval: ${EXECUTION_SWEEP_INTERVAL:PT30S}
     grace-seconds: ${EXECUTION_GRACE_SECONDS:120}
+  review:
+    # Client review window (#94): a web-channel result that passed validation waits this long in
+    # PENDING_REVIEW, then the review-window sweeper accepts and settles it on the Client's behalf.
+    window: ${REVIEW_WINDOW:PT24H}
+    sweep-interval: ${REVIEW_SWEEP_INTERVAL:PT1M}
   dispatch:
     # HMAC secret for dispatch tokens. MUST be overridden in real deploys. A token expires at
     # the task's execution deadline + 5 minutes (DispatchTokenService.CALLBACK_MARGIN).

@@ -27,6 +27,27 @@ public interface TaskJpaRepository extends JpaRepository<TaskDO, UUID> {
     void stampExecutionDeadline(@Param("id") UUID id, @Param("deadline") Instant deadline);
 
     @Modifying
+    @Query(value = "UPDATE tasks SET review_deadline = :deadline WHERE id = :id", nativeQuery = true)
+    void stampReviewDeadline(@Param("id") UUID id, @Param("deadline") Instant deadline);
+
+    @Modifying
+    @Query(value = "UPDATE tasks SET review_auto_accepted = TRUE WHERE id = :id", nativeQuery = true)
+    void markReviewAutoAccepted(@Param("id") UUID id);
+
+    @Query(value = "SELECT review_deadline FROM tasks WHERE id = :id AND review_deadline IS NOT NULL",
+            nativeQuery = true)
+    Optional<Instant> findReviewDeadline(@Param("id") UUID id);
+
+    @Query(value = "SELECT review_auto_accepted FROM tasks WHERE id = :id", nativeQuery = true)
+    boolean isReviewAutoAccepted(@Param("id") UUID id);
+
+    @Query(value = """
+            SELECT id FROM tasks WHERE status = 'PENDING_REVIEW'
+              AND review_deadline IS NOT NULL AND review_deadline <= :now
+            """, nativeQuery = true)
+    List<UUID> findIdsReviewExpired(@Param("now") Instant now);
+
+    @Modifying
     @Query(value = "UPDATE tasks SET client_deadline = :deadline WHERE id = :id", nativeQuery = true)
     void stampClientDeadline(@Param("id") UUID id, @Param("deadline") Instant deadline);
 

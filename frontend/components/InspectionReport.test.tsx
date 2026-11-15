@@ -39,4 +39,17 @@ describe("InspectionReport", () => {
     expect(screen.getByText(/judged by you when you reviewed it/i)).toBeInTheDocument();
     expect(screen.getByText(/sets no acceptance criteria/i)).toBeInTheDocument();
   });
+
+  it("does not claim the client judged a result that was accepted automatically", () => {
+    render(
+      <InspectionReport
+        report={{ verdict: "PASS", checks: [] }}
+        spec={spec as never}
+        awaitingYou={false}
+        autoAccepted
+      />,
+    );
+    expect(screen.queryByText(/judged by you/i)).toBeNull();
+    expect(screen.getByText(/not judged: the review window closed/i)).toBeInTheDocument();
+  });
 });

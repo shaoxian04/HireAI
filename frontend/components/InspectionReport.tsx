@@ -52,11 +52,14 @@ export function InspectionReport({
   report,
   spec,
   awaitingYou,
+  autoAccepted = false,
 }: {
   report: ValidationReportDTO;
   spec: OutputSpecDTO;
   /** True while the client still has to accept or dispute; the last line then asks them. */
   awaitingYou: boolean;
+  /** The review window closed unreviewed (#94), so nobody judged the acceptance criteria. */
+  autoAccepted?: boolean;
 }) {
   const passed = report.verdict === "PASS";
   return (
@@ -97,10 +100,14 @@ export function InspectionReport({
           <Mark state="yours" />
           <div className="min-w-0 pt-0.5">
             <p className="text-[0.9375rem] font-medium text-fg">
-              <span className="sr-only">{awaitingYou ? "For you to check: " : "Checked by you: "}</span>
+              <span className="sr-only">
+                {awaitingYou ? "For you to check: " : autoAccepted ? "Not checked: " : "Checked by you: "}
+              </span>
               {awaitingYou
                 ? "Does it meet the acceptance criteria? That one is yours to judge."
-                : "Acceptance criteria, judged by you when you reviewed it"}
+                : autoAccepted
+                  ? "Acceptance criteria not judged: the review window closed first"
+                  : "Acceptance criteria, judged by you when you reviewed it"}
             </p>
             <p className="mt-0.5 text-sm text-muted">
               {spec.acceptanceCriteria
