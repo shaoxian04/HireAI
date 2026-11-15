@@ -6,6 +6,8 @@ import com.hireai.domain.biz.acceptance.template.enums.ParameterComparison;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 
+import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -54,18 +56,40 @@ public record TemplateParameter(String name, String label, String description,
         }
     }
 
-    /** An Offer's range for this parameter must be of the comparison's kind and inside the bounds. */
-    public void requireValid(ParameterRange range) {
-        boolean ok = switch (comparison) {
-            case MAX, MIN -> range instanceof ParameterRange.Bound b && bounds.inNumericRange(b.value());
-            case SUBSET, ENUM -> range instanceof ParameterRange.AnyValue
-                    || range instanceof ParameterRange.OneOf o && o.values().stream().allMatch(this::allowed);
-            case FLAG -> range instanceof ParameterRange.Flag;
+    /**
+     * Why an Offer's range for this parameter does not fit its comparison or bounds, in words a
+     * Builder can act on (empty when it fits). The caller names the Template.
+     */
+    public Optional<String> offerRangeProblem(ParameterRange range) {
+        String who = label + " (" + name + ")";
+        return switch (comparison) {
+            case MAX, MIN -> {
+                if (!(range instanceof ParameterRange.Bound b)) {
+                    yield Optional.of(who + " needs a single number");
+                }
+                yield bounds.inNumericRange(b.value()) ? Optional.empty()
+                        : Optional.of(who + " must be between " + bounds.minimum().toPlainString() + " and "
+                                + bounds.maximum().toPlainString() + "; got " + b.value().toPlainString());
+            }
+            case SUBSET, ENUM -> {
+                if (range instanceof ParameterRange.AnyValue) {
+                    yield Optional.empty();
+                }
+                if (!(range instanceof ParameterRange.OneOf o)) {
+                    yield Optional.of(who + " needs any value or a list of values");
+                }
+                List<String> outside = o.values().stream().filter(v -> !allowed(v)).toList();
+                if (outside.isEmpty()) {
+                    yield Optional.empty();
+                }
+                yield Optional.of(bounds.allowedValues() != null
+                        ? who + " accepts only " + String.join(", ", bounds.allowedValues()) + "; got "
+                                + String.join(", ", outside)
+                        : who + " values must each be at most " + bounds.maxLength() + " characters");
+            }
+            case FLAG -> range instanceof ParameterRange.Flag ? Optional.empty()
+                    : Optional.of(who + " needs yes or no");
         };
-        if (!ok) {
-            throw invalid("Offer range for parameter " + name + " is outside the Template's bounds ("
-                    + comparison.wireName() + ")");
-        }
     }
 
     private boolean allowed(Set<String> values) {

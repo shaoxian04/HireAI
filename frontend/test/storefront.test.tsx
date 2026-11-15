@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { server } from "./msw/handlers";
 import { AuthProvider } from "@/lib/auth";
 import StorefrontPage from "@/app/client/agents/[id]/page";
@@ -40,5 +40,15 @@ describe("agent storefront", () => {
       "href",
       "/client/agents/ag-1/book",
     );
+  });
+
+  it("shows the Offer: the Templates the agent accepts and the range of each parameter", async () => {
+    renderWithClientAuth();
+    const offer = await screen.findByRole("region", { name: /what this agent accepts/i });
+    expect(await within(offer).findByText("File")).toBeInTheDocument();
+    expect(within(offer).getByText("file_basic@1")).toBeInTheDocument();
+    expect(within(offer).getByText("10 MB or more")).toBeInTheDocument();
+    expect(within(offer).getByText(/only this value/i)).toBeInTheDocument();
+    expect(within(offer).getByText("application/pdf")).toBeInTheDocument();
   });
 });

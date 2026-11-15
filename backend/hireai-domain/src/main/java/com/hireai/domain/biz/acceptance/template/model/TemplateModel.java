@@ -109,14 +109,17 @@ public final class TemplateModel {
             throw invalid("Offer term names " + term.template() + ", not " + ref);
         }
         for (Map.Entry<String, ParameterRange> entry : term.params().entrySet()) {
-            parameter(entry.getKey()).requireValid(entry.getValue());
+            parameter(entry.getKey()).offerRangeProblem(entry.getValue()).ifPresent(problem -> {
+                throw invalid("Offer for " + ref + ": " + problem);
+            });
         }
     }
 
     private TemplateParameter parameter(String name) {
         TemplateParameter parameter = parameters.get(name);
         if (parameter == null) {
-            throw invalid("Template " + ref + " has no parameter " + name);
+            throw invalid("Template " + ref + " has no parameter " + name
+                    + (parameters.isEmpty() ? " (it has none)" : " (it has: " + String.join(", ", parameters.keySet()) + ")"));
         }
         return parameter;
     }

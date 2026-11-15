@@ -8,6 +8,7 @@ import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.agent.converter.AgentModel2DTOConverter;
 import com.hireai.application.port.query.BuilderStatsQueryPort;
+import com.hireai.controller.biz.acceptance.converter.OfferRequest2ModelConverter;
 import com.hireai.controller.biz.agent.dto.AgentDTO;
 import com.hireai.controller.biz.agent.dto.AgentProfileViewDTO;
 import com.hireai.controller.biz.agent.dto.AgentReputationDTO;
@@ -143,7 +144,8 @@ public class AgentController extends BaseController {
         UUID ownerId = currentUser.currentUserId();
         AgentModel updated = writeAppService.publishNewVersion(agentId, ownerId,
                 new PublishVersionInfo(request.price(), request.maxExecutionSeconds(),
-                        request.capabilityCategories(), request.suggestedCategory()));
+                        request.capabilityCategories(), request.suggestedCategory(),
+                        OfferRequest2ModelConverter.toModel(request.offer())));
         return ok(toDTO(updated));
     }
 
