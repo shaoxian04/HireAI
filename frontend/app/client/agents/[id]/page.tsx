@@ -175,7 +175,7 @@ function Storefront() {
             </p>
             {stats.contractDeclines && (
               <p className="text-sm text-muted">
-                Terms:{" "}
+                Contract declines:{" "}
                 <ContractDeclines rate={stats.contractDeclines} />
                 <span className="block text-xs text-dim">
                   Agents may turn down terms they can&apos;t meet before starting. It costs them no
