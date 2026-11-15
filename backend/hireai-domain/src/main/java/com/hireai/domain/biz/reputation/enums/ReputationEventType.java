@@ -36,6 +36,12 @@ public enum ReputationEventType {
     DISPUTE_LOST(ReputationComponent.RELIABILITY, BigDecimal.ZERO),
 
     /**
+     * The Agent conceded a Client's A/B/C rejection and the Client was refunded (#95, spec D22):
+     * quality 0, like a lost dispute, but without an arbitration.
+     */
+    REJECTION_CONCEDED(ReputationComponent.RELIABILITY, BigDecimal.ZERO),
+
+    /**
      * A client rating. Quality is carried per-event rather than by the constant, because it is
      * derived from the stars: (stars − 1) / 4.
      */

@@ -72,6 +72,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 
 **Adjudication**
 - `validation_reports`: soft task reference, `attempt_no`, `verdict`, `checks`.
+- `task_rejections` (`V42`): one row per A/B/C rejection round, UNIQUE (`task_id`, `round`): `reason_category`, `reason`, `rejected_at`, `response_deadline`, `revision_allowed`, `response` (`REVISE`/`CONCEDE`/`STAND_BY`), `response_reason`, `response_silent`, `responded_at`, `decision_deadline`, `decision` (`ACCEPT`/`ARBITRATE`), `decision_silent`, `decided_at`; `replaced_result_*` (what a revision replaced); `notice_sent_at`/`notice_attempts` (notice delivery, retried up to 5 times while the window is open).
 - `disputes`: `task_id` UNIQUE (soft reference), `raised_by`, `reason_category`, `status`, `correlation_id`, `resolved_at`.
 - `dispute_rulings`: `tier`, `decided_by` (`ARBITRATOR`, `ADMINISTRATOR`, `FALLBACK`), `category`, `rationale`. **Append-only by trigger.**
 
@@ -83,7 +84,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 
 ## Status enums
 
-- **Task:** `SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED → PENDING_REVIEW → RESOLVED`, with `DISPUTED` between review and resolved. Off-path: `AWAITING_AGENT`, `TIMED_OUT`, `SPEC_VIOLATION`, `FAILED`, `CANCELLED`.
+- **Task:** `SUBMITTED → QUEUED → EXECUTING → RESULT_RECEIVED → PENDING_REVIEW → RESOLVED`, with the rejection response path (`AWAITING_AGENT_RESPONSE`, `AWAITING_CLIENT_DECISION`, since `V42`) and `DISPUTED` between review and resolved. Off-path: `AWAITING_AGENT`, `TIMED_OUT`, `SPEC_VIOLATION`, `FAILED`, `CANCELLED`.
   - `AWAITING_AGENT`: no eligible agent for a routed task. Retried by a sweeper, then `CANCELLED` with a refund. Named `AWAITING_CAPACITY` before `V29`, which rewrote existing rows and the status CHECK.
   - `QUEUED → RESULT_RECEIVED`: a result is accepted from `QUEUED` as well as `EXECUTING`, because a fast agent can call back before the dispatch consumer marks the task `EXECUTING`.
   - Marking `EXECUTING` is idempotent: `QUEUED → EXECUTING`, and a no-op from any later state. It is illegal only from `SUBMITTED` or `AWAITING_AGENT`.
@@ -91,6 +92,11 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
   - `TIMED_OUT`: past `execution_deadline`, with a refund.
   - API-key tasks skip review: PASS goes to `RESOLVED`, FAIL to `SPEC_VIOLATION`.
   - `PENDING_REVIEW → RESOLVED` (`ACCEPTED`) without the Client: once `review_deadline` passes by the app's Clock, `ReviewWindowSweeper` settles the task exactly as a Client's accept would (85/15, `TASK_ACCEPTED`), under the task row lock, so it settles once. A reject after the deadline is refused (409).
+  - <a id="rejection-response"></a>Rejection response path (#95, spec D20). An A/B/C reject moves `PENDING_REVIEW → AWAITING_AGENT_RESPONSE` and opens a `task_rejections` round; the Agent is sent a signed notice ([shape](matching.md#rejection-notice)). Within the Agent's window:
+    - **revise** (once per task): the revision replaces the `task_results` row (the replaced one is kept on the round) and goes `RESULT_RECEIVED →` validation again (attempt 2), so back to `PENDING_REVIEW` with a fresh review window, or `SPEC_VIOLATION`. A later A/B/C reject opens round 2 with `revision_allowed = false`.
+    - **concede**: `→ RESOLVED` (`REJECTED`), full refund, `REJECTION_CONCEDED` (quality 0).
+    - **stand by**, or silence until `response_deadline` (`response_silent`): `→ AWAITING_CLIENT_DECISION`. The Client then accepts (`→ RESOLVED`, 85/15, `TASK_ACCEPTED`), requests arbitration (`→ DISPUTED`, the dispute opens with the round's reason; no deposit), or stays silent until `decision_deadline`, which accepts (`decision_silent`).
+    Every transition takes the task row lock; a response or decision after its window closed is refused (409).
 - **Task resolution:** `ACCEPTED`, `REJECTED`, `PARTIALLY_ACCEPTED`.
 - <a id="failure-reason"></a>**Failure reason** (`tasks.failure_reason`, `FailureReason`; CHECK since `V32`): why a task ended without a delivered result. The terminal transition sets it, and `TaskModel` refuses to set it a second time. `NULL` on live and successful tasks, and on tasks that ended before `V32`. Where each value comes from today:
   - `AGENT_UNREACHABLE`: every dispatch send attempt to a direct booking's Agent failed (DLQ) → `FAILED`.
@@ -104,7 +110,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
   - `NO_ALTERNATIVE_AGENT`: a routed task's Agent was busy or unreachable and no untried eligible Agent was left, or 3 Agents had been tried ([routed failover](matching.md#routed-failover)) → `FAILED`.
 - **Agent:** `PENDING_VERIFICATION → ACTIVE ⇄ SUSPENDED`; `ACTIVE` or `SUSPENDED → DEACTIVATED`.
 - **Agent version:** `DRAFT`, `ACTIVE`, `DEPRECATED`.
-- **Reject reason:** `A_MISMATCH`, `B_FACTUAL`, `C_INCOMPLETE` open a dispute; `D_CHANGED_MIND` charges in full with no dispute.
+- **Reject reason:** `A_MISMATCH`, `B_FACTUAL`, `C_INCOMPLETE` start the [rejection response path](#rejection-response) (arbitration only if the Agent stands by and the Client asks for it); `D_CHANGED_MIND` charges in full with no dispute.
 - **Dispute:** `OPEN → ARBITRATING → RULED → RESOLVED`, plus `ESCALATED` (appeal, DLQ or timeout). The effective ruling is the highest tier.
 - **Ruling:** `FULFILLED`, `PARTIALLY_FULFILLED`, `NOT_FULFILLED`.
 
@@ -118,7 +124,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 | Ruling `PARTIALLY_FULFILLED` | 50% refunded | 42.5% | 7.5% |
 | Ruling `NOT_FULFILLED`, `SPEC_VIOLATION`, `FAILED`, `TIMED_OUT`, `CANCELLED` | 100% refunded | 0 | 0 |
 
-- **Rejecting does not refund by itself.** A/B/C opens a dispute and moves no money until a ruling is final.
+- **Rejecting does not refund by itself.** A/B/C moves no money until the Agent concedes, the Client accepts, or a ruling is final.
 - **Disputes settle late.** The arbitrator's ruling is a proposal, and escrow holds at `RULED` until the client accepts or appeals, or a sweeper auto-accepts. `settleFromEffective` then moves money once, under the task row lock. The arbitrator callback never settles.
 - **There is no retry after a spec violation.** It is an immediate full refund.
 - The builder's wallet opens on first payout. Escrow is reconstructable from `ledger_entries`.

@@ -34,7 +34,7 @@ describe("ResultReviewBar", () => {
     expect((resolved as TaskDTO | null)!.resolution).toBe("ACCEPTED");
   });
 
-  it("reject button opens the dispute form with a reason-category picker", async () => {
+  it("reject button opens the rejection form with a reason-category picker", async () => {
     const user = userEvent.setup();
     renderBar(() => {});
 
@@ -46,13 +46,13 @@ describe("ResultReviewBar", () => {
     expect(screen.getByRole("radio", { name: /incomplete/i })).toBeInTheDocument();
   });
 
-  it("submit dispute button is disabled until a reason category is chosen", async () => {
+  it("send rejection button is disabled until a reason category is chosen", async () => {
     const user = userEvent.setup();
     renderBar(() => {});
 
     await user.click(screen.getByRole("button", { name: /^reject$/i }));
 
-    const submitBtn = screen.getByRole("button", { name: /submit dispute/i });
+    const submitBtn = screen.getByRole("button", { name: /send rejection/i });
     expect(submitBtn).toBeDisabled();
 
     // Selecting a category enables the button
@@ -77,7 +77,7 @@ describe("ResultReviewBar", () => {
             title: "Summarise Q2 report",
             description: "Summarise it",
             budget: 30,
-            status: "DISPUTED",
+            status: "AWAITING_AGENT_RESPONSE",
             outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
             createdAt: "2026-06-06T10:00:00Z",
             resolution: null,
@@ -93,10 +93,10 @@ describe("ResultReviewBar", () => {
     await user.click(screen.getByRole("button", { name: /^reject$/i }));
     await user.click(screen.getByRole("radio", { name: /doesn't match the spec/i }));
     await user.type(screen.getByLabelText(/additional detail/i), "wrong spec");
-    await user.click(screen.getByRole("button", { name: /submit dispute/i }));
+    await user.click(screen.getByRole("button", { name: /send rejection/i }));
 
     await waitFor(() => expect(resolved).not.toBeNull());
-    expect((resolved as TaskDTO | null)!.status).toBe("DISPUTED");
+    expect((resolved as TaskDTO | null)!.status).toBe("AWAITING_AGENT_RESPONSE");
 
     // Verify the REAL contract: reasonCategory is sent alongside the optional reason
     expect(capturedBody).toMatchObject({ reasonCategory: "A_MISMATCH", reason: "wrong spec" });
@@ -119,7 +119,7 @@ describe("ResultReviewBar", () => {
             title: "Summarise Q2 report",
             description: "Summarise it",
             budget: 30,
-            status: "DISPUTED",
+            status: "AWAITING_AGENT_RESPONSE",
             outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
             createdAt: "2026-06-06T10:00:00Z",
             resolution: null,
@@ -135,7 +135,7 @@ describe("ResultReviewBar", () => {
     await user.click(screen.getByRole("button", { name: /^reject$/i }));
     await user.click(screen.getByRole("radio", { name: /contains factual errors/i }));
     // Leave detail blank
-    await user.click(screen.getByRole("button", { name: /submit dispute/i }));
+    await user.click(screen.getByRole("button", { name: /send rejection/i }));
 
     await waitFor(() => expect(resolved).not.toBeNull());
     expect(capturedBody).toEqual({ reasonCategory: "B_FACTUAL" });

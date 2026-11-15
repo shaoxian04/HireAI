@@ -41,7 +41,12 @@ public record TaskDTO(
          */
         Instant reviewDeadline,
         /** True when the window closed unreviewed and the platform accepted on the Client's behalf. */
-        Boolean autoAccepted
+        Boolean autoAccepted,
+        /**
+         * The latest round of the rejection response path (#95), once the Client rejected for reason
+         * A/B/C; kept after it is settled. Absent otherwise and on list/command responses.
+         */
+        RejectionDTO rejection
 ) {
 
     public record OutputSpecDTO(String format, String schema, String acceptanceCriteria) {

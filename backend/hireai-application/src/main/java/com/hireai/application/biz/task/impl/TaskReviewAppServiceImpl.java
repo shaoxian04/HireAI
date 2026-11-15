@@ -1,22 +1,25 @@
 package com.hireai.application.biz.task.impl;
 
-import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
-import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
-import com.hireai.domain.biz.reputation.enums.ReputationEventType;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskStatus;
+import com.hireai.domain.biz.task.event.TaskRejectedDomainEvent;
 import com.hireai.domain.biz.task.info.ReviewWindowState;
 import com.hireai.domain.biz.task.model.ReviewWindow;
 import com.hireai.domain.biz.task.model.TaskModel;
+import com.hireai.domain.biz.task.rejection.enums.AgentResponse;
+import com.hireai.domain.biz.task.rejection.enums.ClientDecision;
+import com.hireai.domain.biz.task.rejection.model.RejectionModel;
+import com.hireai.domain.biz.task.rejection.model.RejectionWindows;
+import com.hireai.domain.biz.task.rejection.repository.RejectionRepository;
 import com.hireai.domain.biz.task.repository.TaskRepository;
-import com.hireai.domain.biz.ledger.settlement.info.SettlementBreakdown;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,15 +37,26 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
     private final TaskRepository taskRepository;
     private final AgentRepository agentRepository;
     private final SettlementWriteAppService settlementWriteAppService;
-    private final DisputeAppService disputeAppService;
-    private final ReputationWriteAppService reputationWriteAppService;
-    /** The app's Clock bean (ClockConfig); tests set it to pick the moment a review window closes. */
+    private final AcceptedSettlement acceptedSettlement;
+    private final RejectionRepository rejectionRepository;
+    private final RejectionWindows rejectionWindows;
+    private final ApplicationEventPublisher eventPublisher;
+    /** The app's Clock bean (ClockConfig); tests set it to pick the moment a window closes. */
     private final Clock clock;
 
     @Override
     public UUID accept(UUID taskId, UUID clientId) {
         TaskModel task = loadOwned(taskId, clientId);
-        settleAccepted(task); // state guard: PENDING_REVIEW (caller passed the validation gate); exactly-once
+        if (task.status() == TaskStatus.AWAITING_CLIENT_DECISION) {
+            // Accepting a result the Agent stood by (#95). Once the decision window has closed the
+            // outcome is the same acceptance, recorded as the silence it already was.
+            RejectionModel rejection = requireLatestRejection(taskId);
+            Instant now = clock.instant();
+            rejectionRepository.save(rejection.decisionWindowClosed(now)
+                    ? rejection.acceptSilently(now)
+                    : rejection.decide(ClientDecision.ACCEPT, now));
+        }
+        acceptedSettlement.settle(task); // state guard: PENDING_REVIEW or AWAITING_CLIENT_DECISION; exactly-once
         log.info("Task {} accepted by client {}", taskId, clientId);
         return taskId;
     }
@@ -66,29 +80,9 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
             return;
         }
         // The Client's silence counts as acceptance (spec D10): the same settlement as their click.
-        settleAccepted(task);
+        acceptedSettlement.settle(task);
         taskRepository.markReviewAutoAccepted(taskId);
         log.info("Task {} auto-accepted: review window closed at {} without a review", taskId, deadline);
-    }
-
-    private void settleAccepted(TaskModel task) {
-        TaskModel resolved = task.accept();
-
-        UUID builderId = agentRepository.findOwnerByVersionId(task.agentVersionId())
-                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
-                        "No agent owner for version " + task.agentVersionId()));
-
-        SettlementBreakdown breakdown =
-                settlementWriteAppService.settleAccepted(task.id(), task.clientId(), builderId, task.budget());
-
-        // Same transaction as the settlement: the score is never stale, so routing cannot act on a
-        // number that predates the outcome. No sweeper, no cache invalidation (ADR 0003).
-        reputationWriteAppService.recordOutcome(task.id(), task.agentVersionId(), task.clientId(),
-                ReputationEventType.TASK_ACCEPTED);
-
-        taskRepository.save(resolved);
-        log.info("Task {} settled as accepted; payout {} to builder {}, commission {}",
-                task.id(), breakdown.net(), builderId, breakdown.commission());
     }
 
     private Instant reviewDeadline(UUID taskId) {
@@ -121,11 +115,26 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
             return taskId;
         }
 
-        // A/B/C → open a dispute; settlement happens when the ruling lands.
-        TaskModel disputed = task.dispute(reasonCategory, reason);
-        taskRepository.save(disputed);
-        disputeAppService.openDispute(disputed, clientId, reasonCategory);
+        // A/B/C → the Agent's turn (#95, D20): revise once, concede or stand by. Nothing is
+        // arbitrated and no money moves until that is settled.
+        TaskModel awaiting = task.awaitAgentResponse(reasonCategory, reason);
+        List<RejectionModel> earlier = rejectionRepository.findByTaskId(taskId);
+        boolean revisedBefore = earlier.stream().anyMatch(r -> r.response() == AgentResponse.REVISE);
+        RejectionModel round = RejectionModel.open(taskId, earlier.size() + 1, reasonCategory, reason,
+                !revisedBefore, clock.instant(), rejectionWindows);
+        taskRepository.save(awaiting);
+        rejectionRepository.save(round);
+        // The notice goes out after commit, so an Agent never hears of a rejection that rolled back.
+        eventPublisher.publishEvent(new TaskRejectedDomainEvent(taskId));
+        log.info("Task {} rejected ({}), round {}: awaiting the Agent's response until {}",
+                taskId, reasonCategory, round.round(), round.responseDeadline());
         return taskId;
+    }
+
+    private RejectionModel requireLatestRejection(UUID taskId) {
+        return rejectionRepository.findLatestByTaskId(taskId)
+                .orElseThrow(() -> new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                        "Task " + taskId + " has no rejection to decide on"));
     }
 
     /**

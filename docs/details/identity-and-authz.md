@@ -28,7 +28,7 @@ Stored in the `user_roles` join table; a user may hold several of `CLIENT`, `BUI
 |---|---|
 | `POST /api/tasks`, `/api/tasks/direct`, `/api/tasks/match-preview`; `GET /api/tasks`, `/api/tasks/*`, `/api/tasks/*/result`, `/api/tasks/*/validation`, `/api/tasks/*/attempts` | `CLIENT`, `API_CLIENT` |
 | `GET /api/webhooks/deliveries`, `POST /api/webhooks/deliveries/*/redeliver` | `CLIENT`, `API_CLIENT` |
-| `POST /api/tasks/*/accept`, `/reject` | `CLIENT`, `BUILDER`, `ADMIN` (human-only) |
+| `POST /api/tasks/*/accept`, `/reject`, `/arbitration` | `CLIENT`, `BUILDER`, `ADMIN` (human-only) |
 | `/api/keys/**`, `/api/webhooks/subscription/**` | `CLIENT` (JWT-only: a leaked key cannot mint keys or repoint a callback) |
 | `/api/admin/**` | `ADMIN` |
 | `POST /api/agents/*/rotate-secret` | `BUILDER` (JWT-only; the app service then requires ownership, a foreign agent is `NOT_FOUND`) |
@@ -85,7 +85,7 @@ Keep these distinct from the user JWT:
 
 | Credential | Secures | Check |
 |---|---|---|
-| **Signed dispatch token + callback signature** (Inv #6) | `POST /api/agent-callbacks/{taskId}/result`, called by the Agent | Both are required. The token's `taskId` and `agentVersionId` must match the assignment. The raw body must carry `X-HireAI-Signature` made with that Agent's current signing secret, timestamp within ±5 minutes ([how to sign](matching.md#the-workorder), **Result callback**). The body is taken as raw bytes and verified before it is parsed (`AgentCallbackController` → `AgentCallbackAppService.authenticate`). The signed body must name the path's `taskId`, so a signed result can't be replayed onto another task. An invalid, expired (see [token lifetime](matching.md#the-workorder)) or mismatched token, a missing, wrong, stale or foreign signature, and a body for another task all get 401 through the same handler. An Agent with no secret can't post results until its owner rotates one |
+| **Signed dispatch token + callback signature** (Inv #6) | `POST /api/agent-callbacks/{taskId}/result` and `/rejection-response` (#95), called by the Agent | Both are required. The token's `taskId` and `agentVersionId` must match the assignment. The raw body must carry `X-HireAI-Signature` made with that Agent's current signing secret, timestamp within ±5 minutes ([how to sign](matching.md#the-workorder), **Result callback**). The body is taken as raw bytes and verified before it is parsed (`AgentCallbackController` → `AgentCallbackAppService.authenticate`). The signed body must name the path's `taskId`, so a signed result can't be replayed onto another task. An invalid, expired (see [token lifetime](matching.md#the-workorder)) or mismatched token, a missing, wrong, stale or foreign signature, and a body for another task all get 401 through the same handler. An Agent with no secret can't post results until its owner rotates one |
 | **Shared bearer secret** (`ARBITRATION_CALLBACK_SECRET`) | `POST /api/arbitration-callbacks/{disputeId}/ruling`, called by the arbitrator | Constant-time compare in `ArbitrationCallbackController`; mismatch is 401 |
 | **HMAC signature** (outbound) | Push webhooks to a client's callback; the platform authenticates itself to the client | See [`programmatic-channel.md` §6](programmatic-channel.md#6-push-webhooks) |
 
