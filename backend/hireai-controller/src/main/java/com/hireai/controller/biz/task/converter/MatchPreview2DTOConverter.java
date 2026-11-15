@@ -2,6 +2,7 @@ package com.hireai.controller.biz.task.converter;
 
 import com.hireai.application.biz.task.MatchPreviewAppService.AgentOption;
 import com.hireai.application.biz.task.MatchPreviewAppService.MatchPreview;
+import com.hireai.controller.biz.acceptance.converter.Acceptance2DTOConverter;
 import com.hireai.controller.biz.task.dto.AgentOptionDTO;
 import com.hireai.controller.biz.task.dto.ContractDeclineRateDTO;
 import com.hireai.controller.biz.task.dto.MatchPreviewDTO;
@@ -18,7 +19,8 @@ public final class MatchPreview2DTOConverter {
                 preview.shortlist().stream().map(MatchPreview2DTOConverter::option).toList(),
                 preview.nearMisses().stream().map(MatchPreview2DTOConverter::option).toList(),
                 preview.noCloseMatch(),
-                noMatch(preview.noMatch()));
+                noMatch(preview.noMatch()),
+                Acceptance2DTOConverter.toDTO(preview.fallback()));
     }
 
     private static MatchPreviewDTO.NoMatchDTO noMatch(NoMatchExplanation e) {

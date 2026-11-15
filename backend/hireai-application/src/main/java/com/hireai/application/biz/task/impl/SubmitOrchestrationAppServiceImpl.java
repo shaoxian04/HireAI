@@ -107,7 +107,8 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         DirectBookingInfo info = booked.category() == null ? booked
                 : new DirectBookingInfo(booked.clientId(), booked.title(), booked.description(),
                         booked.budget(), booked.agentId(),
-                        categoryRepository.load().requireKnown(booked.category()), booked.deadlineSeconds());
+                        categoryRepository.load().requireKnown(booked.category()), booked.deadlineSeconds(),
+                        booked.contract());
         try {
             return self().submitDirectTx(ctx, info);
         } catch (IdempotencyRaceException e) {

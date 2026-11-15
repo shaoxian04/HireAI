@@ -44,11 +44,26 @@ class TaskWriteAppServiceImplTest {
     @Mock WebhookOutboxAppService webhookOutboxAppService;
     @Mock com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository dispatchAttemptRepository;
 
+    @Mock com.hireai.application.biz.acceptance.TemplateReadAppService templateReadAppService;
+
     private TaskWriteAppServiceImpl service() {
         return new TaskWriteAppServiceImpl(taskRepository, taskSubmitDomainService,
                 walletWriteAppService, eventPublisher, settlementWriteAppService, webhookOutboxAppService,
                 dispatchAttemptRepository, java.time.Clock.systemUTC(),
-                org.mockito.Mockito.mock(com.hireai.application.biz.acceptance.TemplateReadAppService.class));
+                templateReadAppService,
+                org.mockito.Mockito.mock(com.hireai.domain.biz.offering.agent.repository.AgentRepository.class),
+                org.mockito.Mockito.mock(com.hireai.domain.biz.acceptance.coverage.service.OfferCoverageDomainService.class));
+    }
+
+    private static com.hireai.domain.biz.acceptance.template.model.TemplateModel textBasic() {
+        return new com.hireai.domain.biz.acceptance.template.model.TemplateModel(
+                com.hireai.domain.biz.acceptance.template.model.GenericTemplates.TEXT_BASIC_V1, "Text", null,
+                com.hireai.domain.biz.acceptance.template.enums.OutputShape.TEXT, java.util.List.of(),
+                java.util.List.of(), com.hireai.domain.biz.acceptance.template.enums.ExpectationMode.NONE,
+                java.util.Map.of("FULFILLED", java.math.BigDecimal.ONE,
+                        "PARTIALLY_FULFILLED", new java.math.BigDecimal("0.5"),
+                        "NOT_FULFILLED", java.math.BigDecimal.ZERO),
+                com.hireai.domain.biz.acceptance.template.enums.TemplateStatus.ACTIVE, Instant.now());
     }
 
     private TaskModel submittedTask() {
@@ -116,8 +131,14 @@ class TaskWriteAppServiceImplTest {
         UUID taskId = UUID.randomUUID();
         TaskModel submittedTask = TaskModel.submit(taskId, "title", "desc", Money.of("10.00"),
                 new OutputSpec(OutputFormat.TEXT, null, "summary"), "general");
-        when(taskSubmitDomainService.submit(submitInfo)).thenReturn(submittedTask);
+        when(taskSubmitDomainService.submit(any())).thenReturn(submittedTask);
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        com.hireai.domain.biz.acceptance.contract.model.Contract own = submitInfo.outputSpec().toContract();
+        when(templateReadAppService.resolveNew(eq(own), any())).thenReturn(
+                new com.hireai.domain.biz.acceptance.template.info.ContractResolution(
+                        new com.hireai.domain.biz.acceptance.coverage.info.ContractTerms(
+                                textBasic(), own),
+                        null));
 
         service().submit(submitInfo);
 

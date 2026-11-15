@@ -2,6 +2,7 @@ package com.hireai.controller.biz.task.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.hireai.controller.biz.acceptance.dto.ContractDTO;
+import com.hireai.controller.biz.acceptance.dto.VersionFallbackDTO;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -52,8 +53,22 @@ public record TaskDTO(
          * relevance floor, with Agent counts. Present while it waits AWAITING_AGENT and after it ends
          * NO_ELIGIBLE_AGENT; absent otherwise and on list/command responses.
          */
-        String failureDetail
+        String failureDetail,
+        /**
+         * Present while the task's Contract uses the previous Template version during its transition
+         * (spec D36): no Agent's Offer covered the current version when it was submitted. Absent
+         * otherwise and on list responses.
+         */
+        VersionFallbackDTO templateFallback
 ) {
+
+    /** This task with its version-fallback notice (null leaves it out). */
+    public TaskDTO withTemplateFallback(VersionFallbackDTO fallback) {
+        return new TaskDTO(id, clientId, title, description, budget, status, outputSpec, contract, createdAt,
+                resolution, resolvedAt, rejectionReason, payoutAmount, commissionAmount, refundAmount,
+                failureReason, category, agentId, reviewDeadline, autoAccepted, rejection, failureDetail,
+                fallback);
+    }
 
     public record OutputSpecDTO(String format, String schema, String acceptanceCriteria) {
     }

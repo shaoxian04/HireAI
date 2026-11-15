@@ -2,6 +2,8 @@ package com.hireai.controller.biz.task.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import com.hireai.controller.biz.acceptance.dto.VersionFallbackDTO;
+
 import java.util.List;
 
 /**
@@ -13,10 +15,14 @@ import java.util.List;
  * ({@code PARAMETER} with its name, {@code RELEVANCE_FLOOR}, or {@code TEMPLATE}) with the number of
  * in-budget Agents it excluded, and for each Contract parameter how many Agents leaving it unset would
  * make eligible. The platform never relaxes a Contract itself.
+ *
+ * <p>{@code fallback} (spec D36) is present when the Contract was matched under the previous Template
+ * version because no Agent's Offer covers the current one yet: booking now freezes that version.
  */
 public record MatchPreviewDTO(List<AgentOptionDTO> shortlist, List<AgentOptionDTO> nearMisses,
                               boolean noCloseMatch,
-                              @JsonInclude(JsonInclude.Include.NON_NULL) NoMatchDTO noMatch) {
+                              @JsonInclude(JsonInclude.Include.NON_NULL) NoMatchDTO noMatch,
+                              @JsonInclude(JsonInclude.Include.NON_NULL) VersionFallbackDTO fallback) {
 
     public record NoMatchDTO(String summary, List<ExclusionDTO> exclusions, List<SuggestionDTO> suggestions) {
     }

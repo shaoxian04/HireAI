@@ -98,6 +98,11 @@ hireai:
     # must cover the dispatch path's worst case (see dispatch.retry-delays), or startup fails.
     sweep-interval: ${EXECUTION_SWEEP_INTERVAL:PT30S}
     grace-seconds: ${EXECUTION_GRACE_SECONDS:120}
+  acceptance:
+    # Template version transition (spec D36): after a new Template version is published, the previous
+    # one keeps taking new Contracts for this long, and a Contract falls back to it when no Offer covers
+    # the new one. After it, the previous version takes no new Contracts (or Offer terms).
+    template-transition: ${TEMPLATE_TRANSITION:P30D}
   review:
     # Client review window (#94): a web-channel result that passed validation waits this long in
     # PENDING_REVIEW, then the review-window sweeper accepts and settles it on the Client's behalf.

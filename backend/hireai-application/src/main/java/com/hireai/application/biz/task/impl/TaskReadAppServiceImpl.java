@@ -1,8 +1,10 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.application.biz.acceptance.TemplateReadAppService;
 import com.hireai.application.biz.acceptance.delivery.DeliverySnapshotAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.domain.biz.acceptance.delivery.model.DeliverySnapshot;
+import com.hireai.domain.biz.acceptance.template.info.VersionFallback;
 import com.hireai.domain.biz.offering.agent.info.AgentReputationTarget;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.utility.result.ResultCode;
@@ -39,12 +41,18 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     private final DispatchAttemptRepository dispatchAttemptRepository;
     private final AgentRepository agentRepository;
     private final DeliverySnapshotAppService deliverySnapshotAppService;
+    private final TemplateReadAppService templateReadAppService;
 
     @Override
     public Optional<String> findFailureDetail(TaskModel task) {
         boolean noMatch = task.status() == TaskStatus.AWAITING_AGENT
                 || task.failureReason() == FailureReason.NO_ELIGIBLE_AGENT;
         return noMatch ? taskRepository.findFailureDetail(task.id()) : Optional.empty();
+    }
+
+    @Override
+    public Optional<VersionFallback> findTemplateFallback(TaskModel task) {
+        return task.contract() == null ? Optional.empty() : templateReadAppService.fallbackOf(task.contract());
     }
 
     @Override

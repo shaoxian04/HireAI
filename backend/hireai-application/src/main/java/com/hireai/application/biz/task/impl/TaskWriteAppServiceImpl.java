@@ -25,7 +25,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.acceptance.coverage.service.OfferCoverageDomainService;
+import com.hireai.domain.biz.acceptance.template.info.ContractResolution;
+import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
+import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
+
 import java.time.Clock;
+import java.util.List;
+import java.util.function.Supplier;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -46,10 +54,49 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     private final Clock clock;
     /** Checks the frozen Contract against its Template before the Task is saved (ADR 0009). */
     private final TemplateReadAppService templateReadAppService;
+    /** Reads the active Agents' Offers, to choose a routed task's Template version (spec D36). */
+    private final AgentRepository agentRepository;
+    private final OfferCoverageDomainService offerCoverageDomainService;
 
     @Override
     public UUID submit(TaskSubmitInfo taskSubmitInfo) {
-        return doSubmit(taskSubmitInfo, null);
+        return doSubmit(withNewContract(taskSubmitInfo), null);
+    }
+
+    /**
+     * A routed task's Contract (its own, else the output spec's equivalent) uses the current Template
+     * version, or during a transition the previous one when no active Agent in the category and budget
+     * has an Offer covering the current one (spec D36). The task response then says so.
+     */
+    private TaskSubmitInfo withNewContract(TaskSubmitInfo info) {
+        if (info.contract() == null && info.outputSpec() == null) {
+            return info; // the domain submit refuses it ("output spec is required")
+        }
+        Contract requested = info.contract() != null ? info.contract() : info.outputSpec().toContract();
+        Supplier<List<AgentCandidate>> candidates = memoize(() -> agentRepository.findActiveCandidates(
+                info.category() == null ? null : info.category().trim().toLowerCase(), info.budget().value()));
+        ContractResolution resolution = templateReadAppService.resolveNew(requested, terms ->
+                candidates.get().stream().anyMatch(c -> offerCoverageDomainService
+                        .coverage(terms.template(), terms.contract(), c.offer()).covered()));
+        if (resolution.fallback() != null) {
+            log.info("Routed task by client {} falls back: {}", info.clientId(), resolution.fallback().summary());
+        }
+        return new TaskSubmitInfo(info.clientId(), info.title(), info.description(), info.budget(),
+                info.outputSpec(), info.category(), info.deadlineSeconds(), resolution.terms().contract());
+    }
+
+    private static <T> Supplier<T> memoize(Supplier<T> source) {
+        return new Supplier<>() {
+            private T value;
+
+            @Override
+            public T get() {
+                if (value == null) {
+                    value = source.get();
+                }
+                return value;
+            }
+        };
     }
 
     @Override

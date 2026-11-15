@@ -83,6 +83,7 @@ public final class TaskModel2DTOConverter {
                 reviewWindow == null ? null : reviewWindow.deadline(),
                 reviewWindow != null && reviewWindow.autoAccepted() ? Boolean.TRUE : null,
                 RejectionDTO.from(rejection),
-                failureDetail);
+                failureDetail,
+                null);
     }
 }
