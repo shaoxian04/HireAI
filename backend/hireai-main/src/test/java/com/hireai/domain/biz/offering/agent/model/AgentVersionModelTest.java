@@ -1,5 +1,9 @@
 package com.hireai.domain.biz.offering.agent.model;
 
+import com.hireai.domain.biz.acceptance.offer.model.Offer;
+import com.hireai.domain.biz.acceptance.offer.model.OfferTerm;
+import com.hireai.domain.biz.acceptance.offer.model.ParameterRange;
+import com.hireai.domain.biz.acceptance.template.model.GenericTemplates;
 import com.hireai.domain.biz.offering.agent.enums.AgentVersionStatus;
 import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -9,6 +13,8 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -158,6 +164,62 @@ class AgentVersionModelTest {
                 List.of("summarisation"), "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5);
         assertThatThrownBy(() -> v.supersededBy(Pricing.of(BigDecimal.ONE), 60, List.of()))
                 .isInstanceOf(DomainException.class);
+    }
+
+    // ---- supersededBy with an edited Offer (#89) ----
+
+    @Test
+    void supersededByWithAnOfferCarriesTheNewOfferAndKeepsTheOutputSpec() {
+        AgentVersionModel v = version();
+        Offer edited = Offer.of(
+                new OfferTerm(GenericTemplates.CUSTOM_JSON_V1, Map.of(GenericTemplates.SCHEMA, new ParameterRange.AnyValue())),
+                new OfferTerm(GenericTemplates.TEXT_BASIC_V1, Map.of()));
+
+        AgentVersionModel next = v.supersededBy(Pricing.of(BigDecimal.TEN), 60, List.of("summarisation"), edited);
+
+        assertThat(next.offer()).isEqualTo(edited);
+        assertThat(next.outputSpec()).isEqualTo(v.outputSpec());
+        assertThat(next.versionNumber()).isEqualTo(2);
+    }
+
+    @Test
+    void supersededByWithoutAnOfferKeepsTheCurrentOne() {
+        AgentVersionModel v = version();
+        assertThat(v.supersededBy(Pricing.of(BigDecimal.TEN), 60, List.of("summarisation"), null).offer())
+                .isEqualTo(v.offer());
+    }
+
+    @Test
+    void anOfferMustKeepTheTemplateOfTheAgentsOwnOutputContract() {
+        AgentVersionModel v = version();
+        Offer textOnly = Offer.of(new OfferTerm(GenericTemplates.TEXT_BASIC_V1, Map.of()));
+
+        assertThatThrownBy(() -> v.supersededBy(Pricing.of(BigDecimal.TEN), 60, List.of("summarisation"), textOnly))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("custom_json@1")
+                .hasMessageContaining("direct bookings");
+    }
+
+    @Test
+    void anOfferMustStillAcceptTheAgentsOwnSchema() {
+        AgentVersionModel v = version();
+        Offer otherSchema = Offer.of(new OfferTerm(GenericTemplates.CUSTOM_JSON_V1,
+                Map.of(GenericTemplates.SCHEMA, new ParameterRange.OneOf(Set.of("{\"type\":\"array\"}")))));
+        Offer ownAndAnother = Offer.of(new OfferTerm(GenericTemplates.CUSTOM_JSON_V1,
+                Map.of(GenericTemplates.SCHEMA, new ParameterRange.OneOf(Set.of("{\"type\":\"array\"}", OWN_SCHEMA)))));
+
+        assertThatThrownBy(() -> v.supersededBy(Pricing.of(BigDecimal.TEN), 60, List.of("summarisation"), otherSchema))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("own schema");
+        assertThat(v.supersededBy(Pricing.of(BigDecimal.TEN), 60, List.of("summarisation"), ownAndAnother).offer())
+                .isEqualTo(ownAndAnother);
+    }
+
+    private static final String OWN_SCHEMA = "{\"type\":\"object\"}";
+
+    private AgentVersionModel version() {
+        return AgentVersionModel.create(UUID.randomUUID(), 1, spec(), List.of("summarisation"),
+                "https://a.example.com", 60, Pricing.of(BigDecimal.ONE), 5);
     }
 
     // ---- assertAffordable (pricing rule) ----

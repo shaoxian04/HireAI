@@ -285,6 +285,7 @@ export const handlers = [
     if (category && !CARD.categories.includes(category)) return ok([]);
     return ok([CARD]);
   }),
+  http.get("*/api/catalogue/templates", () => ok(TEMPLATES)),
   http.get("*/api/catalogue/categories", () =>
     ok([
       { category: "summarisation", label: "Summarisation", agentCount: 1 },
@@ -300,6 +301,16 @@ export const handlers = [
           sampleOutput: '{"summary":"Example output"}',
           galleryUrls: [],
           outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
+          offer: {
+            price: 12,
+            terms: [
+              {
+                template: "file_basic",
+                version: 1,
+                params: { max_bytes: { bound: 10485760 }, media_types: { oneOf: ["application/pdf"] } },
+              },
+            ],
+          },
           stats: { requestCount: 7, completedCount: 6, successRate: 0.857, avgTurnaroundSeconds: 42 },
           reviews: [
             {
@@ -626,3 +637,25 @@ export const manageHandlers = [
 
 export const server = setupServer(...handlers, ...manageHandlers);
 export { ok, fail };
+
+/** Two published Templates for forms that offer output terms (#91). */
+export const TEMPLATES = [
+  {
+    key: "text_basic", version: 1, title: "Text", description: "A plain-text result.", outputShape: "TEXT",
+    checks: [], parameters: [], expectationMode: "NONE",
+    rulingSettlement: { FULFILLED: 1, PARTIALLY_FULFILLED: 0.5, NOT_FULFILLED: 0 },
+    status: "ACTIVE", publishedAt: "2026-11-15T00:00:00Z",
+  },
+  {
+    key: "file_basic", version: 1, title: "File", description: "A delivered file.", outputShape: "FILE",
+    checks: [], expectationMode: "NONE",
+    parameters: [
+      { name: "max_bytes", label: "Largest file accepted", description: null, comparison: "min",
+        bounds: { minimum: 1, maximum: 104857600 } },
+      { name: "media_types", label: "Accepted file types", description: null, comparison: "subset",
+        bounds: { allowedValues: ["application/pdf", "image/png"] } },
+    ],
+    rulingSettlement: { FULFILLED: 1, PARTIALLY_FULFILLED: 0.5, NOT_FULFILLED: 0 },
+    status: "ACTIVE", publishedAt: "2026-11-15T00:00:00Z",
+  },
+];

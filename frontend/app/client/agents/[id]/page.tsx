@@ -8,6 +8,7 @@ import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { Monogram } from "@/components/AgentCard";
 import { ContractTerms } from "@/components/ContractTerms";
+import { OfferPanel } from "@/components/AcceptanceTerms";
 import { BottomBar } from "@/components/BottomBar";
 import { formatDuration } from "@/lib/format";
 import { DeliveryRecord } from "@/components/DeliveryRecord";
@@ -106,6 +107,22 @@ function Storefront() {
             <div className="docket-tear" />
             <ContractTerms spec={spec} />
           </section>
+
+          {profile.offer && (
+            <section aria-labelledby="offer-h" className="docket overflow-hidden">
+              <div className="px-5 py-4">
+                <h2 id="offer-h" className="eyebrow">What this agent accepts</h2>
+                <p className="mt-1 text-sm text-muted">
+                  The agent&apos;s Offer: the kinds of work it takes and how strictly it can be held to each. A routed
+                  task reaches it only when its terms fall inside this Offer.
+                </p>
+              </div>
+              <div className="docket-tear" />
+              <div className="px-5 py-4">
+                <OfferPanel offer={profile.offer} />
+              </div>
+            </section>
+          )}
 
           {profile.sampleOutput && (
             <section className="space-y-2">
