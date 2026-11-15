@@ -75,6 +75,20 @@ async def fetch_result_content(url: str, *, max_bytes: int, timeout: float) -> s
 _TEXT_TYPES = ("text/", "application/json", "application/xml")
 
 
+UNTRUSTED_BEGIN = "BEGIN UNTRUSTED EVIDENCE"
+UNTRUSTED_END = "END UNTRUSTED EVIDENCE"
+
+
+def fence_untrusted(label: str, text: str) -> str:
+    """Wrap Agent-supplied text in the untrusted-evidence markers.
+
+    Marker strings inside the text are defused so the content cannot close its own fence.
+    """
+    for marker in (UNTRUSTED_BEGIN, UNTRUSTED_END):
+        text = text.replace(marker, "[marker removed]")
+    return f"{UNTRUSTED_BEGIN} ({label})\n{text}\n{UNTRUSTED_END}"
+
+
 # What the model is shown as content (D13). GIF is left out: the provider rejects animated
 # GIFs, and a rejected request would send the whole dispute to the DLQ.
 _IMAGE_TYPES = frozenset({"image/png", "image/jpeg", "image/webp"})
@@ -103,7 +117,8 @@ def describe_deliverable(
         text = content[:max_bytes].decode("utf-8", errors="replace")
         if truncated:
             text += "\n[TRUNCATED — content exceeded the size cap]"
-        return header + "\n" + text, []
+        label = f"deliverable, {media_type}, sha256 {deliverable.sha256}"
+        return header + "\n" + fence_untrusted(label, text), []
     if media_type in _IMAGE_TYPES or media_type == _PDF_TYPE:
         if len(content) > media_max_bytes:
             return header + (
@@ -118,7 +133,13 @@ def describe_deliverable(
         else:
             block = {"type": "image", "mime_type": media_type, "base64": data}
             kind = "an image"
-        return header + f"\n[the file itself is attached after this text as {kind}]", [block]
+        # The markers are separate text blocks around the file, so the model sees where the
+        # untrusted content starts and ends.
+        begin = {"type": "text", "text": (
+            f"{UNTRUSTED_BEGIN} (deliverable, {media_type}, sha256 {deliverable.sha256})")}
+        end = {"type": "text", "text": UNTRUSTED_END}
+        note = f"\n[the file itself is attached after this text as {kind}]"
+        return header + note, [begin, block, end]
     omitted = f"\n[binary content omitted: {len(content)} bytes, media type {media_type!r}]"
     return header + omitted, []
 

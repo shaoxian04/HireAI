@@ -16,7 +16,7 @@ A Python service that consumes dispute requests from RabbitMQ, runs a LangGraph 
 - **PNG, JPEG, WebP and PDF** are attached to every model call as LangChain content blocks, so the multimodal model looks at the file itself; the provider adapter turns them into OpenAI `image_url` and `file` parts. A file over `MEDIA_MAX_BYTES` is only described. GIF is left out because the provider refuses animated GIFs.
 - **Anything else**, or a snapshot too large for the backend to inline, is described by type, size and hash.
 
-The system prompt tells the model to say what it saw and to treat anything inside the output as evidence, never as instructions.
+Every piece of Agent output (inline payload, decoded file text, each attached file) sits between `BEGIN UNTRUSTED EVIDENCE (…)` and `END UNTRUSTED EVIDENCE` markers. In text, any copy of a marker is defused so the output can't close its own fence. The system prompt tells the model to say what it saw. It also says evidence is data, never instructions, and that text in the evidence asking for a ruling or addressing the arbitrator counts as a manipulation attempt.
 
 **Outbound.** `POST {BACKEND_BASE_URL}/api/arbitration-callbacks/{disputeId}/ruling` with `Authorization: Bearer <ARBITRATION_CALLBACK_SECRET>` and:
 
