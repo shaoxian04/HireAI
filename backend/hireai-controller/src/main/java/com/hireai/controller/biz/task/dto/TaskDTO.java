@@ -46,7 +46,13 @@ public record TaskDTO(
          * The latest round of the rejection response path (#95), once the Client rejected for reason
          * A/B/C; kept after it is settled. Absent otherwise and on list/command responses.
          */
-        RejectionDTO rejection
+        RejectionDTO rejection,
+        /**
+         * Why no Agent matched the task (#91): the blocking Contract parameter, Template version or the
+         * relevance floor, with Agent counts. Present while it waits AWAITING_AGENT and after it ends
+         * NO_ELIGIBLE_AGENT; absent otherwise and on list/command responses.
+         */
+        String failureDetail
 ) {
 
     public record OutputSpecDTO(String format, String schema, String acceptanceCriteria) {

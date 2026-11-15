@@ -94,6 +94,16 @@ public final class TaskModel {
      */
     public static TaskModel submit(UUID clientId, String title, String description,
                                    Money budget, OutputSpec outputSpec, String category) {
+        return submit(clientId, title, description, budget, outputSpec, category, null);
+    }
+
+    /**
+     * The SUBMIT transition freezing an explicit {@code contract} (#91: a direct booking under the
+     * Client's terms, which the Agent's Offer covers). Null freezes the output spec's equivalent. The
+     * caller checks the Contract against its Template before saving.
+     */
+    public static TaskModel submit(UUID clientId, String title, String description,
+                                   Money budget, OutputSpec outputSpec, String category, Contract contract) {
         requirePresent(clientId, "client id");
         requireText(title, "title");
         requireText(description, "description");
@@ -103,7 +113,8 @@ public final class TaskModel {
         // Lowercase to match AgentVersionModel.normaliseCategories' .trim().toLowerCase() idiom,
         // so the routing re-filter's case-sensitive containment check (coversCategory) actually matches.
         return new TaskModel(UUID.randomUUID(), clientId, title.trim(), description.trim(),
-                budget, outputSpec, outputSpec.toContract(), category.trim().toLowerCase(), TaskStatus.SUBMITTED,
+                budget, outputSpec, contract != null ? contract : outputSpec.toContract(),
+                category.trim().toLowerCase(), TaskStatus.SUBMITTED,
                 null, null, Instant.now(), null, null, null, null, null);
     }
 

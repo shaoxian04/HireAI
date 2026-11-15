@@ -2,6 +2,7 @@ package com.hireai.application.biz.acceptance.impl;
 
 import com.hireai.application.biz.acceptance.TemplateReadAppService;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.acceptance.coverage.info.ContractTerms;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
 import com.hireai.domain.biz.acceptance.offer.model.OfferTerm;
 import com.hireai.domain.biz.acceptance.template.model.TemplateModel;
@@ -52,6 +53,11 @@ public class TemplateReadAppServiceImpl implements TemplateReadAppService {
             known(term.template()).requireValid(term);
         }
         validationDomainService.requireCheckable(offer);
+    }
+
+    @Override
+    public ContractTerms termsFor(Contract contract) {
+        return new ContractTerms(known(contract.template()), contract);
     }
 
     private TemplateModel known(TemplateRef ref) {

@@ -79,7 +79,7 @@ class TaskWriteAppServiceImplTest {
         when(taskRepository.findById(task.id())).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        service().markAwaitingAgent(task.id());
+        service().markAwaitingAgent(task.id(), null);
 
         ArgumentCaptor<TaskModel> captor = ArgumentCaptor.forClass(TaskModel.class);
         verify(taskRepository).save(captor.capture());

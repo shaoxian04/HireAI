@@ -10,6 +10,8 @@ import com.hireai.domain.biz.task.dispatchattempt.info.DispatchAttemptView;
 import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
 import com.hireai.domain.biz.task.info.ReviewWindowState;
 import com.hireai.domain.biz.task.info.TaskRoutingView;
+import com.hireai.domain.biz.task.enums.FailureReason;
+import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.ClientDeadline;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
@@ -37,6 +39,13 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     private final DispatchAttemptRepository dispatchAttemptRepository;
     private final AgentRepository agentRepository;
     private final DeliverySnapshotAppService deliverySnapshotAppService;
+
+    @Override
+    public Optional<String> findFailureDetail(TaskModel task) {
+        boolean noMatch = task.status() == TaskStatus.AWAITING_AGENT
+                || task.failureReason() == FailureReason.NO_ELIGIBLE_AGENT;
+        return noMatch ? taskRepository.findFailureDetail(task.id()) : Optional.empty();
+    }
 
     @Override
     public Optional<UUID> findBookedAgentId(TaskModel task) {
@@ -112,6 +121,8 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
         String outputSpecJson = outputSpecJsonMapper.toJson(task.outputSpec());
         return new TaskRoutingView(task.id(), task.title(), task.description(), task.category(),
                 task.budget().value(), task.status().name(), outputSpecJson,
-                taskRepository.findClientDeadline(task.id()).map(ClientDeadline::new).orElse(null));
+                taskRepository.findClientDeadline(task.id()).map(ClientDeadline::new).orElse(null),
+                // A task from before V39 has no Contract: its output spec's equivalent (D39) is it.
+                task.contract() != null ? task.contract() : task.outputSpec().toContract());
     }
 }

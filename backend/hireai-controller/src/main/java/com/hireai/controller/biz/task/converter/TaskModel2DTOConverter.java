@@ -31,17 +31,20 @@ public final class TaskModel2DTOConverter {
 
     /** {@code agentId} is the Agent the task was booked with, resolved by the caller (nullable). */
     public static TaskDTO toDTO(TaskModel task, UUID agentId) {
-        return toDTO(task, agentId, null);
+        return toDTO(task, agentId, null, null, null);
     }
 
     /** Also carries the task's review window (#94), resolved by the caller (nullable). */
     public static TaskDTO toDTO(TaskModel task, UUID agentId, ReviewWindowState reviewWindow) {
-        return toDTO(task, agentId, reviewWindow, null);
+        return toDTO(task, agentId, reviewWindow, null, null);
     }
 
-    /** Also carries the task's latest rejection round (#95), resolved by the caller (nullable). */
+    /**
+     * Also carries the task's latest rejection round (#95) and its failure detail (#91), both resolved
+     * by the caller (nullable).
+     */
     public static TaskDTO toDTO(TaskModel task, UUID agentId, ReviewWindowState reviewWindow,
-                                RejectionModel rejection) {
+                                RejectionModel rejection, String failureDetail) {
         OutputSpec spec = task.outputSpec();
         BigDecimal payout = null;
         BigDecimal commission = null;
@@ -79,6 +82,7 @@ public final class TaskModel2DTOConverter {
                 agentId,
                 reviewWindow == null ? null : reviewWindow.deadline(),
                 reviewWindow != null && reviewWindow.autoAccepted() ? Boolean.TRUE : null,
-                RejectionDTO.from(rejection));
+                RejectionDTO.from(rejection),
+                failureDetail);
     }
 }

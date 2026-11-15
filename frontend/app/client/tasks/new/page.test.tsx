@@ -430,3 +430,93 @@ describe("submit task — deadline", () => {
     expect(searched).toBe(false);
   });
 });
+
+describe("submit task — output terms (#91)", () => {
+  async function chooseFileTerms() {
+    const terms = await screen.findByLabelText(/output terms/i);
+    await screen.findByRole("option", { name: "File" });
+    fireEvent.change(terms, { target: { value: "file_basic@1" } });
+    fireEvent.change(await screen.findByLabelText(/largest file accepted/i), { target: { value: "5000" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "image/png" }));
+  }
+
+  it("sends the chosen terms with the preview and freezes them on the booking", async () => {
+    let previewSent: Record<string, unknown> | null = null;
+    let booked: Record<string, unknown> | null = null;
+    server.use(
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        previewSent = (await request.json()) as Record<string, unknown>;
+        return ok(previewBody);
+      }),
+      http.post("*/api/tasks/direct", async ({ request }) => {
+        booked = (await request.json()) as Record<string, unknown>;
+        return ok({ id: "t-9", status: "SUBMITTED" });
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    await chooseFileTerms();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    await screen.findByRole("dialog", { name: /pick your agent/i });
+    const terms = { template: "file_basic", version: 1, params: { max_bytes: 5000, media_types: ["image/png"] } };
+    expect(previewSent!.contract).toEqual(terms);
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    expect(await screen.findByText(/held to your output terms: file/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /confirm & book/i }));
+    await waitFor(() => expect(booked).not.toBeNull());
+    expect(booked!.contract).toEqual(terms);
+  });
+
+  it("explains a no-match and searches again only when the Client drops a term", async () => {
+    const sent: Record<string, unknown>[] = [];
+    server.use(
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        sent.push(body);
+        if (sent.length === 1) {
+          return ok({
+            shortlist: [], nearMisses: [], noCloseMatch: false,
+            noMatch: {
+              summary: "No eligible Agent: parameter media_types excluded 2 Agents.",
+              exclusions: [{ blocker: "PARAMETER", parameter: "media_types", agents: 2 }],
+              suggestions: [{ parameter: "media_types", agents: 2 }],
+            },
+          });
+        }
+        return ok(previewBody);
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    await chooseFileTerms();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+
+    expect(await screen.findByText(/no agent accepts these terms/i)).toBeInTheDocument();
+    expect(sent).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /drop accepted file types → 2 agents/i }));
+    await waitFor(() => expect(sent).toHaveLength(2));
+    expect(sent[1].contract).toEqual({ template: "file_basic", version: 1, params: { max_bytes: 5000 } });
+    expect(await screen.findByText("Alpha")).toBeInTheDocument();
+  });
+
+  it("searches without terms when the Client keeps the agent's own", async () => {
+    let sent: Record<string, unknown> | null = null;
+    server.use(
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>;
+        return ok(previewBody);
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    expect(await screen.findByLabelText(/output terms/i)).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    await waitFor(() => expect(sent).not.toBeNull());
+    expect(sent).not.toHaveProperty("contract");
+  });
+});

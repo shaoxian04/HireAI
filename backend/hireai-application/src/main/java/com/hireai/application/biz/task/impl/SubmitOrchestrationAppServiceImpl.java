@@ -1,5 +1,7 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
+
 import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.SubmitContext;
 import com.hireai.application.biz.task.SubmitFingerprint;
@@ -191,7 +193,16 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         // A chosen category joins the fingerprint; without one it stays as before.
         String kind = info.category() == null ? "direct" : "direct|" + info.category();
         return SubmitFingerprint.of(info.title(), info.description(),
-                info.agentId().toString(), info.budget().value(), kind + deadlinePart(info.deadlineSeconds()));
+                info.agentId().toString(), info.budget().value(), kind + deadlinePart(info.deadlineSeconds())
+                        + contractPart(info.contract()));
+    }
+
+    /**
+     * A Contract joins the fingerprint (#91; params are held sorted, so equal Contracts render alike);
+     * without one it stays as before.
+     */
+    private static String contractPart(Contract contract) {
+        return contract == null ? "" : "|contract=" + contract.template() + contract.params();
     }
 
     /** A deadline joins the fingerprint (as relative seconds, so a retry matches); without one it stays as before. */

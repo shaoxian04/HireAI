@@ -17,6 +17,8 @@ import com.hireai.domain.biz.reputation.service.ReputationScoringDomainService;
 import com.hireai.domain.biz.reputation.service.impl.ReputationScoringDomainServiceImpl;
 import com.hireai.domain.biz.task.routing.service.MatchingPolicy;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
+import com.hireai.domain.biz.acceptance.coverage.service.OfferCoverageDomainService;
+import com.hireai.domain.biz.acceptance.coverage.service.impl.OfferCoverageDomainServiceImpl;
 import com.hireai.domain.biz.task.routing.service.impl.RoutingMatchDomainServiceImpl;
 import com.hireai.domain.biz.task.routing.service.RoutedFailoverDomainService;
 import com.hireai.domain.biz.task.routing.service.impl.RoutedFailoverDomainServiceImpl;
@@ -83,8 +85,14 @@ public class DomainServiceConfig {
     }
 
     @Bean
-    public RoutingMatchDomainService routingMatchDomainService(MatchingPolicy matchingPolicy) {
-        return new RoutingMatchDomainServiceImpl(matchingPolicy, new SecureRandom());
+    public OfferCoverageDomainService offerCoverageDomainService() {
+        return new OfferCoverageDomainServiceImpl();
+    }
+
+    @Bean
+    public RoutingMatchDomainService routingMatchDomainService(MatchingPolicy matchingPolicy,
+                                                               OfferCoverageDomainService offerCoverageDomainService) {
+        return new RoutingMatchDomainServiceImpl(matchingPolicy, new SecureRandom(), offerCoverageDomainService);
     }
 
     @Bean

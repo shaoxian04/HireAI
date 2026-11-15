@@ -120,6 +120,20 @@ public abstract class WholeAppIntegrationTest {
      * where matching must see only their own Agents. Submit, booking, preview and registration
      * accept only listed slugs (#80); production changes the list only by migration.
      */
+    /** A custom_json@1 Offer that accepts any schema (#91). */
+    protected static final String ANY_JSON_SCHEMA_OFFER =
+            "{\"terms\":[{\"template\":\"custom_json\",\"version\":1,\"params\":{\"schema\":{\"any\":true}}}]}";
+
+    /**
+     * Gives a seeded agent version an Offer accepting any JSON schema. A version seeded by SQL gets its
+     * output spec's equivalent, which covers only its own schema (spec D39), while matching now keeps
+     * only Agents whose Offer covers the task's Contract (#91). Tests about dispatch, not coverage, use
+     * this so a routed task with any schema can reach their agent.
+     */
+    protected void acceptAnyJsonSchema(UUID versionId) {
+        jdbc.update("UPDATE agent_versions SET offer = ?::jsonb WHERE id = ?", ANY_JSON_SCHEMA_OFFER, versionId);
+    }
+
     protected String uniqueCategory() {
         String slug = "x-" + UUID.randomUUID();
         jdbc.update("INSERT INTO categories (slug, label, sort_order) VALUES (?, ?, 5000)", slug, "Test " + slug);
