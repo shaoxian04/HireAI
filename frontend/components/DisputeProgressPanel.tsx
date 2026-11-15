@@ -112,7 +112,8 @@ export function DisputeProgressPanel({
   const s = outcome.status;
   const sides: DisputeSide[] = outcome.yourSides?.length ? outcome.yourSides : ["CLIENT"];
   const builderView = !sides.includes("CLIENT");
-  const awaiting = outcome.awaiting ?? [];
+  // An outcome without `awaiting` (older API) reads as before #96: the client decides a proposed ruling.
+  const awaiting = outcome.awaiting ?? (s === "RULED" ? sides : []);
   const mayAct = sides.some((side) => awaiting.includes(side));
   const arb = outcome.rulings.find((r) => r.decidedBy === "ARBITRATOR");
   const admin = outcome.rulings.find((r) => r.decidedBy === "ADMINISTRATOR");
