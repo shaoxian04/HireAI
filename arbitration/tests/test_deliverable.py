@@ -37,22 +37,22 @@ def test_the_request_carries_the_snapshot_in_camel_case():
 
 def test_text_snapshots_are_shown_as_text():
     snapshot = Deliverable.model_validate(_snapshot(b"a,b\n1,2\n", "text/csv"))
-    text = describe_deliverable(snapshot, max_bytes=100)
+    text, _ = describe_deliverable(snapshot, max_bytes=100, media_max_bytes=1000)
     assert "a,b\n1,2" in text
     assert "text/csv" in text
     assert "ab" * 32 in text
 
 
-def test_binary_snapshots_are_described_not_decoded():
-    snapshot = Deliverable.model_validate(_snapshot(b"\x89PNG\r\n\x1a\n1234", "image/png"))
-    text = describe_deliverable(snapshot, max_bytes=100)
-    assert "image/png" in text
+def test_non_visual_binary_snapshots_are_described_not_decoded():
+    snapshot = Deliverable.model_validate(_snapshot(b"PK\x03\x04rest", "application/zip"))
+    text, _ = describe_deliverable(snapshot, max_bytes=100, media_max_bytes=1000)
+    assert "application/zip" in text
     assert "binary content omitted" in text
 
 
 def test_a_snapshot_too_large_to_inline_says_so():
     snapshot = Deliverable.model_validate(_snapshot(None, "application/pdf"))
-    text = describe_deliverable(snapshot, max_bytes=100)
+    text, _ = describe_deliverable(snapshot, max_bytes=100, media_max_bytes=1000)
     assert "not included" in text
 
 
@@ -63,7 +63,8 @@ async def test_with_a_snapshot_the_agents_link_is_never_fetched(monkeypatch):
     monkeypatch.setattr(nodes, "fetch_result_content", must_not_fetch)
     req = _request(deliverable=_snapshot(b"total,42\n", "text/csv"))
 
-    out = await nodes.gather_evidence({"request": req}, max_bytes=1000, timeout=1)
+    out = await nodes.gather_evidence({"request": req}, max_bytes=1000, timeout=1,
+                                      media_max_bytes=1000)
 
     assert "total,42" in out["evidence"]
     assert "frozen" in out["evidence"].lower()
@@ -75,6 +76,7 @@ async def test_without_a_snapshot_a_legacy_file_task_still_falls_back_to_the_lin
 
     monkeypatch.setattr(nodes, "fetch_result_content", fake_fetch)
 
-    out = await nodes.gather_evidence({"request": _request()}, max_bytes=1000, timeout=1)
+    out = await nodes.gather_evidence({"request": _request()}, max_bytes=1000, timeout=1,
+                                      media_max_bytes=1000)
 
     assert "fetched https://agent.example/out.csv" in out["evidence"]

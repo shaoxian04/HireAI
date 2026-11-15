@@ -1,3 +1,4 @@
+import base64
 import ipaddress
 import json
 import socket
@@ -74,10 +75,20 @@ async def fetch_result_content(url: str, *, max_bytes: int, timeout: float) -> s
 _TEXT_TYPES = ("text/", "application/json", "application/xml")
 
 
-def describe_deliverable(deliverable, *, max_bytes: int) -> str:
-    """Render the frozen DeliverySnapshot as evidence: text decoded, binary described.
+# What the model is shown as content (D13). GIF is left out: the provider rejects animated
+# GIFs, and a rejected request would send the whole dispute to the DLQ.
+_IMAGE_TYPES = frozenset({"image/png", "image/jpeg", "image/webp"})
+_PDF_TYPE = "application/pdf"
 
-    Multimodal arbitration (#99) replaces the binary placeholder with the image/PDF itself.
+
+def describe_deliverable(
+    deliverable, *, max_bytes: int, media_max_bytes: int
+) -> tuple[str, list[dict]]:
+    """Render the frozen DeliverySnapshot as evidence.
+
+    Returns the evidence text and the content blocks to attach (LangChain standard blocks, so
+    the provider adapter formats them): text is decoded inline, an image or PDF is attached for
+    a multimodal model to look at, and any other binary is only described.
     """
     media_type = deliverable.media_type
     header = (
@@ -86,14 +97,30 @@ def describe_deliverable(deliverable, *, max_bytes: int) -> str:
     )
     content = deliverable.content()
     if content is None:
-        return header + "\n[content not included: the file is larger than the inline limit]"
+        return header + "\n[content not included: the file is larger than the inline limit]", []
     if media_type.startswith(_TEXT_TYPES) or media_type.endswith(("+json", "+xml")):
         truncated = len(content) > max_bytes
         text = content[:max_bytes].decode("utf-8", errors="replace")
         if truncated:
             text += "\n[TRUNCATED — content exceeded the size cap]"
-        return header + "\n" + text
-    return header + f"\n[binary content omitted: {len(content)} bytes, media type {media_type!r}]"
+        return header + "\n" + text, []
+    if media_type in _IMAGE_TYPES or media_type == _PDF_TYPE:
+        if len(content) > media_max_bytes:
+            return header + (
+                f"\n[file not attached: {len(content)} bytes is over the "
+                f"{media_max_bytes}-byte attachment limit]"
+            ), []
+        data = base64.b64encode(content).decode("ascii")
+        if media_type == _PDF_TYPE:
+            block = {"type": "file", "mime_type": _PDF_TYPE, "base64": data,
+                     "filename": "deliverable.pdf"}
+            kind = "a PDF document"
+        else:
+            block = {"type": "image", "mime_type": media_type, "base64": data}
+            kind = "an image"
+        return header + f"\n[the file itself is attached after this text as {kind}]", [block]
+    omitted = f"\n[binary content omitted: {len(content)} bytes, media type {media_type!r}]"
+    return header + omitted, []
 
 
 def validate_against_schema(payload: str, schema: str | None) -> dict:

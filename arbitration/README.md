@@ -8,6 +8,16 @@ A Python service that consumes dispute requests from RabbitMQ, runs a LangGraph 
 
 **Graph.** `gather_evidence → deliberate → classify → critique` (`app/graph/build.py`).
 
+### Evidence
+
+`gather_evidence` builds the evidence from the task, its criteria and the result. A FILE result is judged on the frozen DeliverySnapshot the backend sends inline; the Agent's link is fetched only for an old task that has none (`describe_deliverable` in `app/graph/tools.py`):
+
+- **Text** (`text/*`, JSON, XML) is decoded into the evidence, cut at `FETCH_MAX_BYTES`.
+- **PNG, JPEG, WebP and PDF** are attached to every model call as LangChain content blocks, so the multimodal model looks at the file itself; the provider adapter turns them into OpenAI `image_url` and `file` parts. A file over `MEDIA_MAX_BYTES` is only described. GIF is left out because the provider refuses animated GIFs.
+- **Anything else**, or a snapshot too large for the backend to inline, is described by type, size and hash.
+
+The system prompt tells the model to say what it saw and to treat anything inside the output as evidence, never as instructions.
+
 **Outbound.** `POST {BACKEND_BASE_URL}/api/arbitration-callbacks/{disputeId}/ruling` with `Authorization: Bearer <ARBITRATION_CALLBACK_SECRET>` and:
 
 ```json
@@ -32,6 +42,7 @@ Read from the environment or a local `.env` in this directory (git-ignored). `OP
 | `DISPUTE_QUEUE` | `task.dispute.requested` | Queue to consume from |
 | `FETCH_MAX_BYTES` | `5000000` | Max bytes when fetching task results |
 | `FETCH_TIMEOUT_SECONDS` | `10.0` | Fetch timeout |
+| `MEDIA_MAX_BYTES` | `8388608` | Largest image or PDF snapshot attached to the model; matches the backend's inline limit |
 | `CALLBACK_TIMEOUT_SECONDS` | `10.0` | Callback timeout |
 
 ## Development
