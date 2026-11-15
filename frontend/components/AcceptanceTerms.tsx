@@ -19,13 +19,14 @@ import type {
  * `GET /catalogue/templates`; if that fails the terms still show, by their machine names.
  */
 
-type TemplatesState = { status: "loading" } | { status: "ready"; byRef: Map<string, TemplateDTO> } | { status: "error" };
+export type TemplatesState = { status: "loading" } | { status: "ready"; byRef: Map<string, TemplateDTO> } | { status: "error" };
 
-function refOf(key: string, version: number) {
+export function refOf(key: string, version: number) {
   return `${key}@${version}`;
 }
 
-function useTemplates(enabled: boolean): TemplatesState {
+/** The published Templates by `key@version`, fetched once `enabled`. */
+export function useTemplates(enabled: boolean): TemplatesState {
   const [state, setState] = useState<TemplatesState>({ status: "loading" });
   useEffect(() => {
     if (!enabled) return;
@@ -58,7 +59,7 @@ function formatBytes(n: number) {
   return `${Number.isInteger(value) ? value : value.toFixed(1)} ${units[unit]}`;
 }
 
-function formatNumber(name: string, n: number) {
+export function formatNumber(name: string, n: number) {
   return name.endsWith("_bytes") ? formatBytes(n) : n.toLocaleString("en-US");
 }
 
