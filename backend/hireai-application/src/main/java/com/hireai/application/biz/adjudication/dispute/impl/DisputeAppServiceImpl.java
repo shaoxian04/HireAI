@@ -3,17 +3,20 @@ package com.hireai.application.biz.adjudication.dispute.impl;
 import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.acceptance.delivery.DeliverySnapshotAppService;
 import com.hireai.application.biz.adjudication.port.ArbitrationDeliverable;
+import com.hireai.application.biz.adjudication.dispute.DisputeFeeSchedule;
 import com.hireai.application.biz.adjudication.port.ArbitrationGateway;
 import com.hireai.application.biz.adjudication.port.RulingInfo;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.domain.biz.reputation.enums.ReputationEventType;
+import com.hireai.domain.biz.adjudication.enums.DisputeParty;
 import com.hireai.domain.biz.adjudication.enums.DisputeStatus;
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
 import com.hireai.domain.biz.adjudication.enums.RulingDecidedBy;
 import com.hireai.domain.biz.adjudication.model.DisputeModel;
 import com.hireai.domain.biz.adjudication.model.Ruling;
 import com.hireai.domain.biz.adjudication.repository.DisputeRepository;
+import com.hireai.domain.biz.ledger.settlement.enums.DisputeFeeType;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskResolution;
@@ -26,9 +29,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -47,6 +53,8 @@ public class DisputeAppServiceImpl implements DisputeAppService {
     private final ArbitrationGateway arbitrationGateway;
     private final DeliverySnapshotAppService deliverySnapshotAppService;
     private final ReputationWriteAppService reputationWriteAppService;
+    private final DisputeFeeSchedule feeSchedule;
+    private final Clock clock;
 
     @Override
     public UUID openDispute(TaskModel disputedTask, UUID raisedBy, RejectReason reasonCategory) {
@@ -103,16 +111,33 @@ public class DisputeAppServiceImpl implements DisputeAppService {
     }
 
     @Override
-    public void acceptRuling(UUID disputeId, UUID clientId) {
-        DisputeModel dispute = lockAndRevalidateRuled(disputeId, clientId);
-        settleFromEffective(dispute);
+    public void acceptRuling(UUID disputeId, UUID userId) {
+        DisputeModel dispute = lockAndRevalidateRuled(disputeId);
+        Set<DisputeParty> sides = requireSides(dispute, userId);
+        Instant now = clock.instant();
+        DisputeModel next = dispute;
+        Set<DisputeParty> acting = actingSides(dispute, sides);
+        for (DisputeParty side : acting) {
+            next = next.accept(side, now);
+        }
+        if (acting.isEmpty()) {
+            dispute.accept(sides.iterator().next(), now); // throws: nothing for this side to accept
+        }
+        disputeRepository.save(next);
+        log.info("{} accepted the proposed ruling on dispute {}", acting, disputeId);
+        if (next.acceptedByEverySideThatMayAppeal()) {
+            settleFromEffective(next);
+        }
     }
 
     @Override
-    public void appeal(UUID disputeId, UUID clientId) {
-        DisputeModel dispute = lockAndRevalidateRuled(disputeId, clientId);
-        disputeRepository.save(dispute.appeal());
-        log.info("Client {} appealed dispute {} to admin backstop", clientId, disputeId);
+    public void appeal(UUID disputeId, UUID userId) {
+        DisputeModel dispute = lockAndRevalidateRuled(disputeId);
+        Set<DisputeParty> sides = requireSides(dispute, userId);
+        Set<DisputeParty> acting = actingSides(dispute, sides);
+        DisputeParty side = acting.isEmpty() ? sides.iterator().next() : acting.iterator().next();
+        disputeRepository.save(dispute.appeal(side, clock.instant()));
+        log.info("{} appealed dispute {} to the admin backstop", side, disputeId);
     }
 
     @Override
@@ -141,13 +166,10 @@ public class DisputeAppServiceImpl implements DisputeAppService {
     /**
      * Serializes the RULED→{RESOLVED|ESCALATED} transitions: takes the task pessimistic lock (the
      * same lock settlement uses) so accept/appeal/auto-accept can't both win, then re-reads and
-     * re-validates the dispute under the lock. Ownership (Inv #5) is checked here too.
+     * re-validates the dispute under the lock. Ownership (Inv #5) is checked by {@link #requireSides}.
      */
-    private DisputeModel lockAndRevalidateRuled(UUID disputeId, UUID clientId) {
+    private DisputeModel lockAndRevalidateRuled(UUID disputeId) {
         DisputeModel dispute = requireDispute(disputeId);
-        if (!dispute.raisedBy().equals(clientId)) {
-            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION, "not your dispute: " + disputeId);
-        }
         lockTask(dispute.taskId()); // serialization point
         DisputeModel fresh = requireDispute(disputeId); // re-read under lock
         if (fresh.status() != DisputeStatus.RULED) {
@@ -155,6 +177,34 @@ public class DisputeAppServiceImpl implements DisputeAppService {
                     "Dispute " + disputeId + " is " + fresh.status() + "; no proposed ruling to act on");
         }
         return fresh;
+    }
+
+    /**
+     * The side(s) {@code userId} takes in this dispute (Inv #5): the task's Client, the Builder who
+     * owns the Agent that ran it, or both on a self-booked task. Anyone else is refused.
+     */
+    private Set<DisputeParty> requireSides(DisputeModel dispute, UUID userId) {
+        TaskModel task = taskRepository.findById(dispute.taskId())
+                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + dispute.taskId()));
+        Set<DisputeParty> sides = EnumSet.noneOf(DisputeParty.class);
+        if (task.clientId().equals(userId)) {
+            sides.add(DisputeParty.CLIENT);
+        }
+        if (agentRepository.findOwnerByVersionId(task.agentVersionId()).map(userId::equals).orElse(false)) {
+            sides.add(DisputeParty.BUILDER);
+        }
+        if (sides.isEmpty()) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION, "not your dispute: " + dispute.id());
+        }
+        return sides;
+    }
+
+    /** The user's sides that may still accept or appeal the proposed ruling. */
+    private static Set<DisputeParty> actingSides(DisputeModel dispute, Set<DisputeParty> sides) {
+        Set<DisputeParty> acting = EnumSet.noneOf(DisputeParty.class);
+        acting.addAll(sides);
+        acting.retainAll(dispute.partiesWhoMayAppeal());
+        return acting;
     }
 
     /** Records a ruling and moves the dispute to RULED. No money moves. */
@@ -174,6 +224,7 @@ public class DisputeAppServiceImpl implements DisputeAppService {
                         "Dispute " + dispute.id() + " has no ruling to settle"))
                 .category();
         TaskModel task = lockTask(dispute.taskId());
+        Optional<UUID> builder = agentRepository.findOwnerByVersionId(task.agentVersionId());
         switch (category) {
             case FULFILLED -> {
                 UUID builderId = requireBuilder(task);
@@ -196,7 +247,29 @@ public class DisputeAppServiceImpl implements DisputeAppService {
         // records full quality and loses nothing for having been disputed (#38).
         reputationWriteAppService.recordOutcome(task.id(), task.agentVersionId(), task.clientId(),
                 reputationEventFor(category));
+        chargeFees(dispute, task, builder, category);
         disputeRepository.save(dispute.resolve());
+    }
+
+    /**
+     * Loser pays (D43): after the settlement, the side(s) the effective ruling goes against bear the
+     * arbitration cost and, if the ruling was appealed, the Appeal Fee (D42). Each is capped at 20% of
+     * the Item price; the platform covers the excess. Deterministic, from the category alone (Inv #3).
+     */
+    private void chargeFees(DisputeModel dispute, TaskModel task, Optional<UUID> builder, RulingCategory category) {
+        Set<DisputeParty> payers = EnumSet.copyOf(category.partiesItGoesAgainst());
+        if (builder.isEmpty()) {
+            payers.remove(DisputeParty.BUILDER); // no earnings wallet to charge: the platform covers it
+        }
+        UUID builderId = builder.orElse(task.clientId());
+        if (feeSchedule.arbitrationCost().isPositive()) {
+            settlementWriteAppService.chargeDisputeFee(dispute.id(), task.id(), task.clientId(), builderId,
+                    DisputeFeeType.ARBITRATION_COST, feeSchedule.arbitrationCost(), task.budget(), payers);
+        }
+        if (dispute.appealedBy() != null && feeSchedule.appealFee().isPositive()) {
+            settlementWriteAppService.chargeDisputeFee(dispute.id(), task.id(), task.clientId(), builderId,
+                    DisputeFeeType.APPEAL_FEE, feeSchedule.appealFee(), task.budget(), payers);
+        }
     }
 
     /**

@@ -7,7 +7,9 @@ import com.hireai.application.biz.adjudication.port.ArbitrationGateway;
 import com.hireai.application.biz.adjudication.port.RulingInfo;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
+import com.hireai.domain.biz.adjudication.enums.DisputeParty;
 import com.hireai.domain.biz.adjudication.enums.DisputeStatus;
+import com.hireai.domain.biz.ledger.settlement.enums.DisputeFeeType;
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
 import com.hireai.domain.biz.adjudication.enums.RulingDecidedBy;
 import com.hireai.domain.biz.adjudication.model.DisputeModel;
@@ -27,9 +29,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,7 +71,9 @@ class DisputeAppServiceImplTest {
         snapshots = mock(DeliverySnapshotAppService.class);
         when(snapshots.forArbitration(any())).thenReturn(Optional.empty());
         service = new DisputeAppServiceImpl(disputeRepository, taskRepository, agentRepository,
-                settlement, gateway, snapshots, reputationWriteAppService);
+                settlement, gateway, snapshots, reputationWriteAppService,
+                new DisputeFeeSchedule(new BigDecimal("3.00"), new BigDecimal("5.00"), Duration.ofHours(24)),
+                Clock.systemUTC());
 
         when(disputeRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -78,6 +86,7 @@ class DisputeAppServiceImplTest {
                 .passValidation()
                 .dispute(RejectReason.A_MISMATCH, "mismatch");
         when(taskRepository.findByIdForUpdate(disputedTask.id())).thenReturn(Optional.of(disputedTask));
+        when(taskRepository.findById(disputedTask.id())).thenReturn(Optional.of(disputedTask));
     }
 
     @Test
@@ -302,6 +311,38 @@ class DisputeAppServiceImplTest {
     }
 
     @Test
+    void aRulingAgainstTheBuilderWaitsForTheBuilder_whoseAcceptanceSettlesAndChargesItTheCost() {
+        DisputeModel ruled = ruledDispute(RulingCategory.NOT_FULFILLED);
+        when(disputeRepository.findById(ruled.id())).thenReturn(Optional.of(ruled));
+
+        assertThatThrownBy(() -> service.acceptRuling(ruled.id(), clientId))
+                .isInstanceOf(DomainException.class).hasMessageContaining("in your favour");
+        verifyNoInteractions(settlement);
+
+        service.acceptRuling(ruled.id(), builderId);
+
+        verify(settlement).settleRejected(disputedTask.id(), clientId, Money.of("100.00"));
+        verify(settlement).chargeDisputeFee(eq(ruled.id()), eq(disputedTask.id()), eq(clientId), eq(builderId),
+                eq(DisputeFeeType.ARBITRATION_COST), eq(Money.of("3.00")), eq(Money.of("100.00")),
+                eq(Set.of(DisputeParty.BUILDER)));
+        verify(settlement, never()).chargeDisputeFee(any(), any(), any(), any(),
+                eq(DisputeFeeType.APPEAL_FEE), any(), any(), any());
+    }
+
+    @Test
+    void theBuilderMayAppealARulingAgainstIt() {
+        DisputeModel ruled = ruledDispute(RulingCategory.NOT_FULFILLED);
+        when(disputeRepository.findById(ruled.id())).thenReturn(Optional.of(ruled));
+
+        service.appeal(ruled.id(), builderId);
+
+        ArgumentCaptor<DisputeModel> saved = ArgumentCaptor.forClass(DisputeModel.class);
+        verify(disputeRepository).save(saved.capture());
+        assertThat(saved.getValue().appealedBy()).isEqualTo(DisputeParty.BUILDER);
+        assertThat(saved.getValue().status()).isEqualTo(DisputeStatus.ESCALATED);
+    }
+
+    @Test
     void autoAcceptOne_settlesFromProposal() {
         DisputeModel ruled = ruledDispute(RulingCategory.FULFILLED);
         when(disputeRepository.findById(ruled.id())).thenReturn(Optional.of(ruled));
@@ -316,7 +357,7 @@ class DisputeAppServiceImplTest {
 
     @Test
     void autoAcceptOne_skipsWhenNoLongerRuled() {
-        DisputeModel escalated = ruledDispute(RulingCategory.FULFILLED).appeal();
+        DisputeModel escalated = ruledDispute(RulingCategory.FULFILLED).appeal(DisputeParty.CLIENT, Instant.now());
         when(disputeRepository.findById(escalated.id())).thenReturn(Optional.of(escalated));
 
         service.autoAcceptOne(escalated.id());

@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.repository.adjudication;
 
+import com.hireai.domain.biz.adjudication.enums.DisputeParty;
 import com.hireai.domain.biz.adjudication.enums.DisputeStatus;
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
 import com.hireai.domain.biz.adjudication.enums.RulingDecidedBy;
@@ -28,7 +29,9 @@ public class DisputeRepositoryImpl implements DisputeRepository {
     @Override
     public DisputeModel save(DisputeModel d) {
         jpa.save(new DisputeDO(d.id(), d.taskId(), d.raisedBy(), d.reasonCategory().name(),
-                d.status().name(), d.correlationId(), d.resolvedAt(), d.createdAt()));
+                d.status().name(), d.correlationId(), d.resolvedAt(), d.createdAt(),
+                d.clientAcceptedAt(), d.builderAcceptedAt(),
+                d.appealedBy() == null ? null : d.appealedBy().name(), d.appealedAt()));
 
         // Append-only: insert only the ruling rows not yet persisted (the tail beyond the
         // persisted count). Idempotent under re-save; safe because dispute settlement is
@@ -72,6 +75,9 @@ public class DisputeRepositoryImpl implements DisputeRepository {
         return DisputeModel.rehydrate(e.getId(), e.getTaskId(), e.getRaisedBy(),
                 RejectReason.valueOf(e.getReasonCategory()),
                 DisputeStatus.valueOf(e.getStatus()), rulings, e.getCorrelationId(),
-                e.getGmtCreate(), e.getResolvedAt());
+                e.getGmtCreate(), e.getResolvedAt(),
+                new DisputeModel.Acceptance(e.getClientAcceptedAt(), e.getBuilderAcceptedAt(),
+                        e.getAppealedBy() == null ? null : DisputeParty.valueOf(e.getAppealedBy()),
+                        e.getAppealedAt()));
     }
 }

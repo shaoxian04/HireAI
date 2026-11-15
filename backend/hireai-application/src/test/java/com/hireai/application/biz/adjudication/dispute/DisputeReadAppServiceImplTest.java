@@ -1,6 +1,8 @@
 package com.hireai.application.biz.adjudication.dispute;
 
 import com.hireai.application.biz.adjudication.dispute.impl.DisputeReadAppServiceImpl;
+import com.hireai.domain.biz.ledger.settlement.repository.DisputeFeeRepository;
+import com.hireai.domain.biz.task.rejection.repository.RejectionRepository;
 import com.hireai.application.biz.adjudication.dispute.view.DisputeMineRow;
 import com.hireai.application.biz.adjudication.port.DisputeQueryPort;
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
@@ -21,6 +23,8 @@ import com.hireai.utility.result.ResultCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -53,7 +57,9 @@ class DisputeReadAppServiceImplTest {
         taskRepository = mock(TaskRepository.class);
         agentRepository = mock(AgentRepository.class);
         disputeQueryPort = mock(DisputeQueryPort.class);
-        service = new DisputeReadAppServiceImpl(disputeRepository, taskRepository, agentRepository, disputeQueryPort);
+        service = new DisputeReadAppServiceImpl(disputeRepository, taskRepository, agentRepository, disputeQueryPort,
+                mock(DisputeFeeRepository.class), mock(RejectionRepository.class),
+                new DisputeFeeSchedule(new BigDecimal("3.00"), new BigDecimal("5.00"), Duration.ofHours(24)));
 
         // Build a task owned by clientId with a known agentVersionId
         TaskModel base = TaskModel.submit(clientId, "t", "d", Money.of("100.00"),
@@ -78,13 +84,13 @@ class DisputeReadAppServiceImplTest {
 
     @Test
     void clientCanReadDisputeOutcome() {
-        DisputeModel result = service.getOutcomeForUser(task.id(), clientId);
+        DisputeModel result = service.getOutcomeForUser(task.id(), clientId).dispute();
         assertThat(result).isEqualTo(dispute);
     }
 
     @Test
     void owningBuilderCanReadDisputeOutcome() {
-        DisputeModel result = service.getOutcomeForUser(task.id(), builderId);
+        DisputeModel result = service.getOutcomeForUser(task.id(), builderId).dispute();
         assertThat(result).isEqualTo(dispute);
     }
 
@@ -120,7 +126,7 @@ class DisputeReadAppServiceImplTest {
     void clientCanReadDisputeOutcomeByDisputeId() {
         when(disputeRepository.findById(dispute.id())).thenReturn(Optional.of(dispute));
 
-        DisputeModel result = service.getOutcomeByDispute(dispute.id(), clientId);
+        DisputeModel result = service.getOutcomeByDispute(dispute.id(), clientId).dispute();
 
         assertThat(result).isEqualTo(dispute);
     }
@@ -129,7 +135,7 @@ class DisputeReadAppServiceImplTest {
     void owningBuilderCanReadDisputeOutcomeByDisputeId() {
         when(disputeRepository.findById(dispute.id())).thenReturn(Optional.of(dispute));
 
-        DisputeModel result = service.getOutcomeByDispute(dispute.id(), builderId);
+        DisputeModel result = service.getOutcomeByDispute(dispute.id(), builderId).dispute();
 
         assertThat(result).isEqualTo(dispute);
     }
@@ -156,9 +162,20 @@ class DisputeReadAppServiceImplTest {
     }
 
     @Test
+    void theViewSaysWhichSideTheViewerIsAndQuotesTheCappedFees() {
+        var view = service.getOutcomeForUser(task.id(), builderId);
+
+        assertThat(view.yourSides()).containsExactly(com.hireai.domain.biz.adjudication.enums.DisputeParty.BUILDER);
+        assertThat(view.awaiting()).isEmpty(); // resolved
+        assertThat(view.arbitrationCost()).isEqualTo(Money.of("3.00"));
+        assertThat(view.appealFee()).isEqualTo(Money.of("5.00"));
+        assertThat(view.clientReason()).isEqualTo("mismatch");
+    }
+
+    @Test
     void myDisputesDelegatesToDisputeQueryPort() {
         List<DisputeMineRow> rows = List.of(new DisputeMineRow(
-                UUID.randomUUID(), task.id(), "t", "RULED", "FULFILLED", Instant.now()));
+                UUID.randomUUID(), task.id(), "t", "RULED", "FULFILLED", Instant.now(), true));
         when(disputeQueryPort.findDisputesForClient(clientId)).thenReturn(rows);
 
         List<DisputeMineRow> result = service.myDisputes(clientId);

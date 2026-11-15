@@ -2,6 +2,7 @@ package com.hireai.controller.biz.adjudication;
 
 import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.adjudication.dispute.DisputeReadAppService;
+import com.hireai.application.biz.adjudication.dispute.view.DisputeMineRow;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.adjudication.dto.DisputeMineRowDTO;
@@ -54,12 +55,22 @@ public class DisputeController extends BaseController {
         return ok(Dispute2DTOConverter.toDTO(disputeReadAppService.getOutcomeByDispute(id, userId)));
     }
 
+    /** Disputes the current user raised as a Client. */
     @GetMapping("/mine")
     public WebResult<List<DisputeMineRowDTO>> mine() {
-        List<DisputeMineRowDTO> rows = disputeReadAppService.myDisputes(currentUser.currentUserId()).stream()
+        return ok(rows(disputeReadAppService.myDisputes(currentUser.currentUserId())));
+    }
+
+    /** Disputes on tasks run by the current user's Agents, as a Builder (#96). */
+    @GetMapping("/builder")
+    public WebResult<List<DisputeMineRowDTO>> builder() {
+        return ok(rows(disputeReadAppService.builderDisputes(currentUser.currentUserId())));
+    }
+
+    private static List<DisputeMineRowDTO> rows(List<DisputeMineRow> rows) {
+        return rows.stream()
                 .map(r -> new DisputeMineRowDTO(r.disputeId(), r.taskId(), r.taskTitle(), r.status(),
-                        r.proposedCategory(), r.updatedAt()))
+                        r.proposedCategory(), r.updatedAt(), r.awaitingYou()))
                 .toList();
-        return ok(rows);
     }
 }

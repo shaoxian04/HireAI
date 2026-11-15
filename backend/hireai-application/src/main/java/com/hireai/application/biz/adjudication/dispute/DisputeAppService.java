@@ -25,11 +25,17 @@ public interface DisputeAppService {
     void adminRule(@NonNull UUID disputeId, @NonNull RulingCategory category,
                    String rationale, @NonNull UUID adminId);
 
-    /** Client accepts the arbitrator's PROPOSED ruling → settle once by category, resolve. */
-    void acceptRuling(@NonNull UUID disputeId, @NonNull UUID clientId);
+    /**
+     * A side the PROPOSED ruling goes against (the Client, or the Builder who owns the Agent) accepts
+     * it. Once every such side has accepted, settle once by category (plus the loser-pays fees) and resolve.
+     */
+    void acceptRuling(@NonNull UUID disputeId, @NonNull UUID userId);
 
-    /** Client appeals the PROPOSED ruling to the human admin (RULED → ESCALATED). */
-    void appeal(@NonNull UUID disputeId, @NonNull UUID clientId);
+    /**
+     * A side the PROPOSED ruling goes against appeals it, once, to the human admin (RULED → ESCALATED,
+     * D42). The loser of the admin's ruling bears the Appeal Fee.
+     */
+    void appeal(@NonNull UUID disputeId, @NonNull UUID userId);
 
     /** Ids of disputes stuck in ARBITRATING since before {@code cutoff} (for the sweeper). */
     List<UUID> staleArbitratingDisputeIds(@NonNull Instant cutoff);
