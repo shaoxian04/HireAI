@@ -6,6 +6,7 @@ import org.springframework.boot.web.client.RestClientCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
 import java.time.Duration;
 
@@ -30,7 +31,11 @@ public class DispatchRestClientConfig {
         ClientHttpRequestFactorySettings settings = ClientHttpRequestFactorySettings.DEFAULTS
                 .withConnectTimeout(CONNECT_TIMEOUT)
                 .withReadTimeout(READ_TIMEOUT);
-        ClientHttpRequestFactory requestFactory = ClientHttpRequestFactories.get(settings);
+        // Pinned to the JDK's HttpURLConnection, the factory production always had: since #97 Apache
+        // HttpClient 5 is on the runtime classpath (DeliverableFetchClient), and auto-detection would
+        // otherwise switch this shared client to it, with its automatic retries.
+        ClientHttpRequestFactory requestFactory =
+                ClientHttpRequestFactories.get(SimpleClientHttpRequestFactory.class, settings);
         return builder -> builder.requestFactory(requestFactory);
     }
 }

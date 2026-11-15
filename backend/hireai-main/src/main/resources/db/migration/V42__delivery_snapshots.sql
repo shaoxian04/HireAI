@@ -55,3 +55,16 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_delivery_snapshots_block_mutation
     BEFORE UPDATE OR DELETE ON delivery_snapshots
     FOR EACH ROW EXECUTE FUNCTION delivery_snapshots_block_mutation();
+
+-- file_basic@1 now really fetches and freezes the file, so its description and check list say so.
+-- In place, as V41 did for text_basic: the change is wording plus the new FILE_FETCHED check every
+-- delivery needs; no parameter changes, so no frozen Contract or Offer changes meaning.
+ALTER TABLE contract_templates DISABLE TRIGGER trg_contract_templates_immutable;
+
+UPDATE contract_templates
+SET definition = definition
+        || '{"description": "A file delivered by HTTPS link. The platform fetches it once, keeps a frozen copy, and accepts it automatically when the copy is within the accepted file types and size, if those are set.",
+             "checks": ["FORMAT_FILE_HTTPS_URL", "FILE_FETCHED", "FILE_MEDIA_TYPE", "FILE_MAX_BYTES"]}'::jsonb
+WHERE template_key = 'file_basic' AND version = 1;
+
+ALTER TABLE contract_templates ENABLE TRIGGER trg_contract_templates_immutable;
