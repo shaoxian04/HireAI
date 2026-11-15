@@ -69,7 +69,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 
 **What the gate actually checks** (`ValidationDomainServiceImpl`) is the task's frozen [Contract](data-model.md#acceptance): format, optional text length, and JSON Schema only:
 - `text_basic` (TEXT) passes on any non-blank payload, within `min_length`/`max_length` when the Contract sets them (characters of the payload).
-- `custom_json` (JSON) must parse and, when the Contract has a `schema`, match it. A non-blank `schema` that is not a valid JSON Schema 2020-12 object is a **400 at submit** (nothing frozen), so a schema is never silently skipped. Only a task from before Contracts (no `contract`) still skips a prose schema, under its `output_spec`.
+- `custom_json` (JSON) must parse and, when the Contract has a `schema`, match it. A non-blank `schema` that is not a valid JSON Schema 2020-12 object is a **400 at submit** (nothing frozen), so a schema is never silently skipped. A schema is one self-contained document: only local `#...` references, no `$id`, and `$schema` (if given) must be 2020-12. The validator never fetches a URL or file a schema names (`NetworkntSchemaValidator`). Only a task from before Contracts (no `contract`) still skips a prose schema, under its `output_spec`.
 - `file_basic` (FILE) needs a valid HTTPS URL.
 - `acceptanceCriteria` is **never evaluated** here. It is only arbitration evidence, and API tasks don't reach arbitration.
 

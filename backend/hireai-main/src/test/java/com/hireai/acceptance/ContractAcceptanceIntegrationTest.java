@@ -66,6 +66,37 @@ class ContractAcceptanceIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
+    void aSchemaReferringToAnotherDocumentIs400AndTheBackendFetchesNothing() throws Exception {
+        try (java.net.ServerSocket listener = new java.net.ServerSocket(0, 50,
+                java.net.InetAddress.getLoopbackAddress())) {
+            java.util.concurrent.atomic.AtomicBoolean connected = new java.util.concurrent.atomic.AtomicBoolean();
+            Thread acceptor = new Thread(() -> {
+                try (java.net.Socket ignored = listener.accept()) {
+                    connected.set(true);
+                } catch (java.io.IOException closed) {
+                    // closed below: nothing connected
+                }
+            });
+            acceptor.start();
+            String remote = "{\"$ref\":\"http://127.0.0.1:" + listener.getLocalPort() + "/x\"}";
+
+            HttpResponse<String> http = send("POST", "/api/tasks", routedJson(remote));
+            HttpResponse<String> file = send("POST", "/api/tasks", routedJson("{\"$ref\":\"file:///etc/passwd\"}"));
+            HttpResponse<String> draft = send("POST", "/api/tasks", routedJson(
+                    "{\"$schema\":\"http://127.0.0.1:" + listener.getLocalPort() + "/meta\"}"));
+
+            Thread.sleep(300);
+            listener.close();
+            acceptor.join(2000);
+            assertThat(http.statusCode()).as(http.body()).isEqualTo(400);
+            assertThat(message(http)).contains("only local references");
+            assertThat(file.statusCode()).as(file.body()).isEqualTo(400);
+            assertThat(draft.statusCode()).as(draft.body()).isEqualTo(400);
+            assertThat(connected).isFalse();
+        }
+    }
+
+    @Test
     void aRoutedSubmitWithAValidOrBlankSchemaIsAccepted() throws Exception {
         assertThat(send("POST", "/api/tasks", routedJson(TOTAL_SCHEMA)).statusCode()).isEqualTo(200);
         assertThat(send("POST", "/api/tasks", routedJson("")).statusCode()).isEqualTo(200);
