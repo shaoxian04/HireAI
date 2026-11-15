@@ -1,11 +1,25 @@
 package com.hireai.infrastructure.client;
 
 import com.hireai.application.port.delivery.DeliverableFetchPort;
-import com.hireai.application.port.webhook.WebhookUrlValidatorPort;
 import com.hireai.domain.biz.acceptance.delivery.model.DeliveryFetch;
 import com.hireai.domain.biz.acceptance.delivery.model.DeliveryOutcome;
+import com.hireai.infrastructure.webhook.WebhookUrlValidator;
 import com.hireai.utility.exception.DomainException;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.hc.client5.http.DnsResolver;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactoryBuilder;
+import org.apache.hc.core5.http.ClassicHttpResponse;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.util.Timeout;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -15,16 +29,16 @@ import javax.net.ssl.TrustManagerFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
+import java.net.InetAddress;
+import java.net.SocketTimeoutException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.net.http.HttpTimeoutException;
+import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyStore;
 import java.time.Duration;
-import java.util.OptionalLong;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -33,18 +47,23 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Fetches an Agent's deliverable link once, for the DeliverySnapshot (D24), under the same Hard
- * Invariant #6 rules as every other Agent-facing request:
+ * Fetches an Agent's deliverable link once, for the DeliverySnapshot (D24), under Hard Invariant #6:
  * <ul>
- *   <li>HTTPS only; {@code http://localhost} only under {@code hireai.dispatch.allow-insecure-localhost};</li>
- *   <li>the shared SSRF guard ({@link WebhookUrlValidatorPort#assertAgentFileFetchable}) right before
- *       connecting, so a name that now resolves somewhere internal is never contacted;</li>
- *   <li>redirects are never followed (a 3xx is a failed fetch), as in {@link AgentDispatchRestClientConfig};</li>
- *   <li>bounded: connect timeout, a total time limit covering headers and body, and a byte limit
- *       (one byte past it and reading stops: {@link DeliveryOutcome.TooLarge}).</li>
+ *   <li><b>Pinned DNS.</b> The host is resolved once, by the SSRF guard
+ *       ({@link WebhookUrlValidator#vetAgentFileHost}), and the connection goes to exactly those
+ *       vetted addresses through Apache HttpClient's {@link DnsResolver} hook: there is no second
+ *       lookup an attacker could rebind to an internal address. TLS still uses the original host
+ *       name for SNI and certificate hostname verification. (The Agent picks this URL and the bytes
+ *       are stored and shown, so this is a full-read SSRF surface, unlike the webhook sends, whose
+ *       rebinding gap is documented on {@code WebhookUrlValidatorPort}.)</li>
+ *   <li>HTTPS only; {@code localhost} only under {@code hireai.dispatch.allow-insecure-localhost}.</li>
+ *   <li>Redirects are never followed (a 3xx is a failed fetch), no automatic retries, and no
+ *       content decompression (the bytes kept are the bytes sent; no decompression bombs).</li>
+ *   <li>Bounded: connect timeout, a total time limit over headers and body, and a byte limit (one
+ *       byte past it and reading stops: {@link DeliveryOutcome.TooLarge}).</li>
  * </ul>
- * It never throws for a bad link; the reason goes to the Client as the {@code FILE_FETCHED} detail,
- * so it names what the link did, never internal addresses.
+ * It never throws for a bad link; the reason becomes the Client-visible {@code FILE_FETCHED}
+ * detail, so it describes what the link did and never names internal addresses.
  *
  * <p>{@code hireai.delivery.trust-store} (optional, PKCS12) replaces the JDK's trust anchors; it
  * exists for local HTTPS file servers (tests) and private CAs, and is unset in production.
@@ -53,29 +72,23 @@ import java.util.concurrent.TimeoutException;
 @Component
 public class DeliverableFetchClient implements DeliverableFetchPort, DisposableBean {
 
-    private final HttpClient http;
-    private final WebhookUrlValidatorPort urlValidator;
-    private final boolean allowInsecureLocalhost;
+    private final WebhookUrlValidator guard;
+    private final Duration connectTimeout;
     private final Duration totalTimeout;
+    private final SSLContext sslContext;
     private final ExecutorService readers = Executors.newVirtualThreadPerTaskExecutor();
 
-    public DeliverableFetchClient(WebhookUrlValidatorPort urlValidator,
-                                  @Value("${hireai.dispatch.allow-insecure-localhost:false}") boolean allowInsecureLocalhost,
+    public DeliverableFetchClient(WebhookUrlValidator guard,
                                   @Value("${hireai.delivery.connect-timeout:PT5S}") Duration connectTimeout,
                                   @Value("${hireai.delivery.timeout:PT30S}") Duration totalTimeout,
                                   @Value("${hireai.delivery.trust-store:}") String trustStore,
                                   @Value("${hireai.delivery.trust-store-password:}") String trustStorePassword) {
-        this.urlValidator = urlValidator;
-        this.allowInsecureLocalhost = allowInsecureLocalhost;
+        this.guard = guard;
+        this.connectTimeout = connectTimeout;
         this.totalTimeout = totalTimeout;
-        HttpClient.Builder builder = HttpClient.newBuilder()
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .version(HttpClient.Version.HTTP_1_1)
-                .connectTimeout(connectTimeout);
-        if (trustStore != null && !trustStore.isBlank()) {
-            builder.sslContext(sslContextTrusting(Path.of(trustStore), trustStorePassword));
-        }
-        this.http = builder.build();
+        this.sslContext = trustStore == null || trustStore.isBlank()
+                ? defaultSslContext()
+                : sslContextTrusting(Path.of(trustStore), trustStorePassword);
     }
 
     @Override
@@ -86,71 +99,108 @@ public class DeliverableFetchClient implements DeliverableFetchPort, DisposableB
         } catch (Exception e) {
             return unavailable("the link is not a valid URL");
         }
-        if (!"https".equalsIgnoreCase(uri.getScheme()) && !(allowInsecureLocalhost && isHttpLocalhost(uri))) {
-            return unavailable("the link is not HTTPS");
-        }
+        List<InetAddress> vetted;
         try {
-            urlValidator.assertAgentFileFetchable(url);
+            vetted = guard.vetAgentFileHost(uri);
         } catch (DomainException e) {
             log.info("Deliverable link refused by the SSRF guard: {}", e.getMessage());
-            return unavailable("the link does not resolve to a public address the platform fetches from");
+            return unavailable("https".equalsIgnoreCase(uri.getScheme())
+                    ? "the link does not resolve to a public address the platform fetches from"
+                    : "the link is not HTTPS");
         }
 
         long deadline = System.nanoTime() + totalTimeout.toNanos();
-        HttpRequest request = HttpRequest.newBuilder(uri).GET().timeout(totalTimeout)
-                .header("Accept", "*/*").build();
-        HttpResponse<InputStream> response;
-        try {
-            response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
-        } catch (HttpTimeoutException e) {
-            return unavailable("the link did not answer within " + totalTimeout.toSeconds() + " seconds");
-        } catch (IOException e) {
-            return unavailable("the link could not be reached");
+        HttpGet get = new HttpGet(uri);
+        get.setHeader("Accept", "*/*");
+        try (CloseableHttpClient http = pinnedClient(uri.getHost(), vetted)) {
+            Future<DeliveryFetch> exchange = readers.submit(() -> exchange(http, uri, get, maxBytes));
+            try {
+                return exchange.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            } catch (TimeoutException e) {
+                get.cancel();
+                exchange.cancel(true);
+                return unavailable("the file did not finish downloading within " + totalTimeout.toSeconds() + " seconds");
+            } catch (ExecutionException e) {
+                return unavailable(describe(e.getCause()));
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return unavailable("the fetch was interrupted");
+        } catch (IOException e) {
+            return unavailable("the link could not be reached");
         }
+    }
 
-        InputStream body = response.body();
-        try (body) {
-            int status = response.statusCode();
+    private DeliveryFetch exchange(CloseableHttpClient http, URI uri, HttpGet get, long maxBytes) throws IOException {
+        HttpHost target = new HttpHost(uri.getScheme(), uri.getHost(), uri.getPort());
+        try (ClassicHttpResponse response = http.executeOpen(target, get, null)) {
+            int status = response.getCode();
             if (status >= 300 && status < 400) {
                 return unavailable("the link answered a redirect (" + status + "), which the platform never follows");
             }
             if (status < 200 || status >= 300) {
                 return unavailable("the link answered " + status);
             }
-            OptionalLong declaredLength = response.headers().firstValueAsLong("Content-Length");
-            if (declaredLength.isPresent() && declaredLength.getAsLong() > maxBytes) {
+            HttpEntity entity = response.getEntity();
+            if (entity == null) {
+                return new DeliveryFetch.Fetched(new byte[0], null);
+            }
+            if (entity.getContentLength() > maxBytes) {
                 return new DeliveryOutcome.TooLarge(maxBytes);
             }
-            byte[] content = readWithin(body, maxBytes, deadline);
+            byte[] content;
+            try (InputStream in = entity.getContent()) {
+                content = readCapped(in, maxBytes);
+            }
             if (content == null) {
                 return new DeliveryOutcome.TooLarge(maxBytes);
             }
-            String contentType = response.headers().firstValue("Content-Type").orElse(null);
-            return new DeliveryFetch.Fetched(content, contentType);
-        } catch (TimeoutException e) {
-            return unavailable("the file did not finish downloading within " + totalTimeout.toSeconds() + " seconds");
-        } catch (IOException | ExecutionException e) {
-            return unavailable("the download broke off");
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return unavailable("the fetch was interrupted");
+            Header type = response.getFirstHeader("Content-Type");
+            return new DeliveryFetch.Fetched(content, type == null ? null : type.getValue());
         }
     }
 
-    /** The whole body, or null when it runs past {@code maxBytes}. Bounded by {@code deadline} (nanoTime). */
-    private byte[] readWithin(InputStream body, long maxBytes, long deadline)
-            throws InterruptedException, ExecutionException, TimeoutException, IOException {
-        Future<byte[]> read = readers.submit(() -> readCapped(body, maxBytes));
-        try {
-            return read.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
-        } catch (TimeoutException e) {
-            read.cancel(true);
-            body.close();
-            throw e;
+    /** A one-off client whose only DNS answer is {@code vetted}, for {@code host} alone. */
+    private CloseableHttpClient pinnedClient(String host, List<InetAddress> vetted) {
+        InetAddress[] pinned = vetted.toArray(InetAddress[]::new);
+        DnsResolver pinnedDns = new DnsResolver() {
+            @Override
+            public InetAddress[] resolve(String name) throws UnknownHostException {
+                if (!host.equalsIgnoreCase(name)) {
+                    throw new UnknownHostException("Only the vetted host may be contacted: " + name);
+                }
+                return pinned.clone();
+            }
+
+            @Override
+            public String resolveCanonicalHostname(String name) {
+                return name;
+            }
+        };
+        PoolingHttpClientConnectionManager connections = PoolingHttpClientConnectionManagerBuilder.create()
+                .setDnsResolver(pinnedDns)
+                .setSSLSocketFactory(SSLConnectionSocketFactoryBuilder.create().setSslContext(sslContext).build())
+                .setDefaultConnectionConfig(ConnectionConfig.custom()
+                        .setConnectTimeout(Timeout.of(connectTimeout))
+                        .setSocketTimeout(Timeout.of(totalTimeout))
+                        .build())
+                .build();
+        return HttpClients.custom()
+                .setConnectionManager(connections)
+                .disableRedirectHandling()
+                .disableAutomaticRetries()
+                .disableContentCompression()
+                .disableCookieManagement()
+                .disableAuthCaching()
+                .setDefaultRequestConfig(RequestConfig.custom().setResponseTimeout(Timeout.of(totalTimeout)).build())
+                .build();
+    }
+
+    private static String describe(Throwable cause) {
+        if (cause instanceof SocketTimeoutException || cause instanceof InterruptedIOException) {
+            return "the link did not answer in time";
         }
+        return cause instanceof IOException ? "the link could not be reached" : "the download failed";
     }
 
     private static byte[] readCapped(InputStream in, long maxBytes) throws IOException {
@@ -172,9 +222,12 @@ public class DeliverableFetchClient implements DeliverableFetchPort, DisposableB
         return new DeliveryOutcome.Unavailable(reason);
     }
 
-    private static boolean isHttpLocalhost(URI uri) {
-        return "http".equalsIgnoreCase(uri.getScheme())
-                && ("localhost".equals(uri.getHost()) || "127.0.0.1".equals(uri.getHost()));
+    private static SSLContext defaultSslContext() {
+        try {
+            return SSLContext.getDefault();
+        } catch (Exception e) {
+            throw new IllegalStateException("No default TLS context", e);
+        }
     }
 
     private static SSLContext sslContextTrusting(Path trustStore, String password) {
@@ -194,6 +247,5 @@ public class DeliverableFetchClient implements DeliverableFetchPort, DisposableB
     @Override
     public void destroy() {
         readers.shutdownNow();
-        http.close();
     }
 }

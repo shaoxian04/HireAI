@@ -50,8 +50,8 @@ describe("task detail polling", () => {
     expect(await screen.findByText(/the agent reported/i)).toHaveTextContent(/completed/);
     // Pretty-printed payload is present.
     expect(screen.getByText(/"summary": "all good"/)).toBeInTheDocument();
-    // Result URL link rendered.
-    expect(screen.getByRole("link", { name: /open deliverable/i })).toHaveAttribute(
+    // No frozen copy (delivered before DeliverySnapshots): the agent's link, labelled as such.
+    expect(screen.getByRole("link", { name: /open the agent's link/i })).toHaveAttribute(
       "href",
       "https://example.com/out.json",
     );

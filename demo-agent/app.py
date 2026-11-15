@@ -15,6 +15,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import time
 
 import httpx
@@ -39,6 +40,19 @@ DEMO_SUMMARY = (
 
 SIGNATURE_HEADER = "X-HireAI-Signature"
 SECRET_ENV = "HIREAI_AGENT_SIGNING_SECRET"
+# FILE tasks: the https link the stub delivers. A "#deliver:<url>" tag in the task description wins,
+# so one running stub can deliver a passing file and a wrong-type one in the same demo.
+FILE_URL_ENV = "HIREAI_AGENT_FILE_URL"
+_DELIVER_TAG = re.compile(r"#deliver:(\S+)")
+
+
+def file_url_for(work_order: dict) -> str | None:
+    """The resultUrl for a FILE WorkOrder (tag in the description, else the env), else None."""
+    spec = work_order.get("outputSpec") or {}
+    if spec.get("format") != "FILE":
+        return None
+    tagged = _DELIVER_TAG.search(work_order.get("description") or "")
+    return tagged.group(1) if tagged else os.environ.get(FILE_URL_ENV)
 # Reject a signature whose timestamp is further than this from our clock (replay window).
 TOLERANCE_SECONDS = 300
 
@@ -87,11 +101,12 @@ async def run(request: Request, authorization: str = Header(default="")):
     )
 
     # Process asynchronously so the dispatch POST returns immediately (202-style).
-    asyncio.create_task(_complete(task_id, callback_url, token, secret))
+    asyncio.create_task(_complete(task_id, callback_url, token, secret, file_url_for(body)))
     return {"accepted": True, "taskId": task_id}
 
 
-async def _complete(task_id: str, callback_url: str, token: str, secret: str | None = None):
+async def _complete(task_id: str, callback_url: str, token: str, secret: str | None = None,
+                    result_url: str | None = None):
     await asyncio.sleep(2)  # simulate execution
     result_payload = json.dumps({"summary": DEMO_SUMMARY})
     callback_body = {
@@ -99,7 +114,7 @@ async def _complete(task_id: str, callback_url: str, token: str, secret: str | N
         "taskId": task_id,
         "agentStatus": "COMPLETED",
         "resultPayloadJson": result_payload,
-        "resultUrl": None,
+        "resultUrl": result_url,
         "message": "stub agent completed",
     }
     # Serialise once and sign exactly these bytes: the platform verifies the raw body.

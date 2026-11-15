@@ -9,6 +9,9 @@ const RULE_TEXT: Record<string, string> = {
   SCHEMA_MATCH: "It matches the schema in the contract",
   SCHEMA_SKIPPED: "No schema in the contract, so there was no shape to check",
   FORMAT_FILE_HTTPS_URL: "The deliverable is a file at a secure (https) link",
+  FILE_FETCHED: "The platform fetched the file and froze a copy of it",
+  FILE_MEDIA_TYPE: "The file is a type the contract accepts",
+  FILE_MAX_BYTES: "The file is no larger than the contract allows",
 };
 
 function ruleText(rule: string): string {

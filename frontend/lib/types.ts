@@ -236,8 +236,22 @@ export interface TaskResultDTO {
   taskId: string;
   agentStatus: string;
   resultPayloadJson: string;
+  /** Where a FILE result was fetched from. Never followed again once a `deliverable` exists. */
   resultUrl: string | null;
   receivedAt: string;
+  /** The frozen copy of a FILE result (DeliverySnapshot, #97); absent when none was kept. */
+  deliverable?: DeliverableDTO;
+}
+
+/** A DeliverySnapshot's metadata; the bytes come from `GET /tasks/{id}/deliverable`. */
+export interface DeliverableDTO {
+  /** What the platform judged the bytes to be, e.g. `image/png`. */
+  mediaType: string;
+  /** The agent's Content-Type, when it sent one. */
+  declaredMediaType: string | null;
+  sizeBytes: number;
+  sha256: string;
+  fetchedAt: string;
 }
 
 // ── Catalogue (public discovery) ──
@@ -480,6 +494,8 @@ export interface AdminDisputeDetailDTO {
   resultPayloadJson: string | null;
   resultUrl: string | null;
   agentStatus: string | null;
+  /** The disputed result's frozen file (#97); null when none was kept. */
+  deliverable: DeliverableDTO | null;
   actionable: boolean;
   settlementPreview: AdminSettlementPreviewDTO | null;
   rulings: RulingDTO[];

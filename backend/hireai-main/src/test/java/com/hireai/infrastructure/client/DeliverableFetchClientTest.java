@@ -29,7 +29,7 @@ class DeliverableFetchClientTest {
 
     /** The dev opt-in on, as in the whole-app harness: https://localhost skips the DNS check. */
     private DeliverableFetchClient client(boolean devLocalhost, HostResolver dns) {
-        return new DeliverableFetchClient(new WebhookUrlValidator(false, devLocalhost, dns), devLocalhost,
+        return new DeliverableFetchClient(new WebhookUrlValidator(false, devLocalhost, dns),
                 Duration.ofSeconds(2), Duration.ofSeconds(5), TestTls.trustStore().toString(), TestTls.PASSWORD);
     }
 
@@ -95,6 +95,34 @@ class DeliverableFetchClientTest {
 
         assertThat(fetch).isInstanceOfSatisfying(DeliveryOutcome.Unavailable.class,
                 u -> assertThat(u.reason()).contains("public address").doesNotContain("10.0.0.7"));
+    }
+
+    @Test
+    void theConnectionGoesToTheVettedAddressSoARebindingDnsAnswerIsNeverUsed() throws Exception {
+        // A rebinding name: public for the guard's lookup, loopback for any lookup after it.
+        java.util.concurrent.atomic.AtomicInteger lookups = new java.util.concurrent.atomic.AtomicInteger();
+        HostResolver rebinding = name -> new InetAddress[]{InetAddress.getByName(
+                lookups.getAndIncrement() == 0 ? "203.0.113.10" : "127.0.0.1")};
+        try (java.net.ServerSocket local = new java.net.ServerSocket(0, 50, InetAddress.getLoopbackAddress())) {
+            java.util.concurrent.atomic.AtomicBoolean reached = new java.util.concurrent.atomic.AtomicBoolean();
+            Thread acceptor = new Thread(() -> {
+                try (java.net.Socket ignored = local.accept()) {
+                    reached.set(true);
+                } catch (java.io.IOException closed) {
+                    // closed below with nothing connected
+                }
+            });
+            acceptor.start();
+
+            DeliveryFetch fetch = client(false, rebinding)
+                    .fetch("https://rebind.agent.example:" + local.getLocalPort() + "/a.png", 1000);
+
+            local.close();
+            acceptor.join(2000);
+            assertThat(fetch).isInstanceOf(DeliveryOutcome.Unavailable.class); // 203.0.113.10 is unreachable
+            assertThat(reached).as("nothing may connect to the loopback socket").isFalse();
+            assertThat(lookups).hasValue(1);
+        }
     }
 
     @Test
