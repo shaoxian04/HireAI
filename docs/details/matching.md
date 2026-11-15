@@ -61,10 +61,25 @@ eligible when:
   by the term is not. A routed task's Contract is its frozen one (an output spec's equivalent for a task from
   before `V39`); match-preview and direct booking take an optional `contract`, and without one the preview
   filters no Offer. A direct booking under a Contract its Agent's Offer doesn't cover is a 400, and the Contract
-  is frozen on the task. The above-budget near-misses must be covered too;
+  is frozen on the task. The above-budget near-misses must be covered too. Which Template version a new
+  Contract uses is decided first, by the [version transition](#template-version-transition);
 - <a id="relevance-floor"></a>its profile is not clearly irrelevant: the **raw** cosine similarity between
   the task text's vector and the Agent's profile vector is at least τ (`hireai.matching.relevance-floor`,
   provisional; checked in `rank`). See [relevance](#relevance) for the vectors and the fallbacks.
+
+<a id="template-version-transition"></a>**Template version transition** (spec D36, `TemplateVersions`). An Offer
+covers only the versions it names. Before a new Contract is matched or frozen, its version is chosen: the
+**current** version (the newest ACTIVE one of its key), with the requested Contract's parameter values carried
+over. While the **previous** version is in transition (`hireai.acceptance.template-transition`, counted from the
+current version's `published_at`), a Contract falls back to it when no Offer covers the current one, or when its
+values fit only the previous version's bounds. The Client is told: match-preview returns `fallback`, and the task
+returns `templateFallback` while its frozen version is still in transition. "No Offer covers" is asked of the
+listed candidates on match-preview, of the booked Agent's Offer on a direct booking, and of the active Agents in
+the task's category and budget on a routed submit. After the transition the previous version takes no new
+Contracts, and no Offer term may name it, nor a RETIRED version (400). A frozen Contract is always judged, and
+re-matched on failover, under its own version. `GET /api/catalogue/templates` reports each version's `current`,
+`takesNewContracts` and `takesNewContractsUntil`; the web offers Clients only current versions and Builders only
+versions that take new Contracts.
 
 ## Relevance
 

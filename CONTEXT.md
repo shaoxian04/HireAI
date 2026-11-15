@@ -55,7 +55,7 @@ The single binding agreement a Task is judged against, frozen at submission. It 
 _Avoid_: output spec (the old, narrower name, which covered only the shape), agreement, terms
 
 **Template**:
-The platform-authored, versioned definition of one kind of work: which Acceptance Checks it may use, the bounds on each parameter, and how each ruling settles. Every Contract is built from exactly one Template version.
+The platform-authored, versioned definition of one kind of work: which Acceptance Checks it may use, the bounds on each parameter, and how each ruling settles. Every Contract is built from exactly one Template version. New Contracts use the current version; for a transition period after a new version is published, the previous one is used when no Offer covers the new one yet, and the Client is told.
 _Avoid_: category (a category is how work is found; a Template is how it is judged), schema
 
 **Offer**:
