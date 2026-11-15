@@ -143,7 +143,8 @@ public class TaskController extends BaseController {
         UUID clientId = currentUser.currentUserId();
         TaskModel task = readAppService.getForClient(id, clientId);
         UUID agentId = readAppService.findBookedAgentId(task).orElse(null);
-        return ok(TaskModel2DTOConverter.toDTO(task, agentId));
+        return ok(TaskModel2DTOConverter.toDTO(task, agentId,
+                readAppService.findReviewWindow(task).orElse(null)));
     }
 
     @GetMapping("/{taskId}/result")
