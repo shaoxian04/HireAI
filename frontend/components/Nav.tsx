@@ -65,7 +65,7 @@ function navLinkClass(active: boolean): string {
 
 type NavLink = { href: string; label: string; badge?: "disputes" };
 
-/** Section links per surface. The client "Disputes" link carries the awaiting-decision count. */
+/** Section links per surface. Each "Disputes" link carries the awaiting-decision (or needs-ruling) count. */
 const LINKS: Record<string, NavLink[]> = {
   CLIENT: [
     { href: "/client", label: "Marketplace" },
@@ -77,6 +77,7 @@ const LINKS: Record<string, NavLink[]> = {
   BUILDER: [
     { href: "/builder", label: "My agents" },
     { href: "/builder/earnings", label: "Earnings" },
+    { href: "/builder/disputes", label: "Disputes", badge: "disputes" },
   ],
   ADMIN: [
     { href: "/admin", label: "Overview" },
@@ -133,9 +134,7 @@ export function Nav() {
       : activeSurface === "ADMIN"
         ? "/admin"
         : "/client";
-  const disputeCount = useDisputeCount(
-    activeSurface === "CLIENT" || activeSurface === "ADMIN" ? activeSurface : null,
-  );
+  const disputeCount = useDisputeCount(activeSurface ?? null);
   const links = role ? (LINKS[activeSurface ?? "CLIENT"] ?? []) : [];
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLElement>(null);

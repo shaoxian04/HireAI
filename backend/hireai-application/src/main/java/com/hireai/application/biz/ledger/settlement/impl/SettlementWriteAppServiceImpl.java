@@ -1,8 +1,13 @@
 package com.hireai.application.biz.ledger.settlement.impl;
 
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
+import com.hireai.domain.biz.adjudication.enums.DisputeParty;
+import com.hireai.domain.biz.ledger.settlement.enums.DisputeFeeType;
+import com.hireai.domain.biz.ledger.settlement.info.DisputeFeeCharge;
 import com.hireai.domain.biz.ledger.settlement.info.SettlementBreakdown;
 import com.hireai.domain.biz.ledger.settlement.model.ItemSettlementModel;
+import com.hireai.domain.biz.ledger.settlement.repository.DisputeFeeRepository;
+import com.hireai.domain.biz.ledger.settlement.service.DisputeFeeDomainService;
 import com.hireai.domain.biz.ledger.settlement.model.SettlementModel;
 import com.hireai.domain.biz.ledger.settlement.repository.ItemSettlementRepository;
 import com.hireai.domain.biz.ledger.settlement.repository.SettlementRepository;
@@ -16,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -27,6 +33,8 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
     private final SettlementDomainService settlementDomainService;
     private final SettlementRepository settlementRepository;
     private final ItemSettlementRepository itemSettlementRepository;
+    private final DisputeFeeDomainService disputeFeeDomainService;
+    private final DisputeFeeRepository disputeFeeRepository;
 
     @Override
     public SettlementBreakdown settleAccepted(UUID taskId, UUID clientId, UUID builderId, Money budget) {
@@ -70,6 +78,25 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
         }
         settlementRepository.save(SettlementModel.split(taskId, breakdown.net(), breakdown.commission()));
         return breakdown;
+    }
+
+    @Override
+    public DisputeFeeCharge chargeDisputeFee(UUID disputeId, UUID taskId, UUID clientId, UUID builderId,
+                                             DisputeFeeType type, Money fullCost, Money itemPrice,
+                                             Set<DisputeParty> payers) {
+        WalletModel clientWallet = requireWallet(clientId);
+        boolean selfSettle = clientId.equals(builderId);
+        WalletModel builderWallet = selfSettle ? clientWallet : loadOrOpen(builderId);
+
+        DisputeFeeCharge charge = disputeFeeDomainService.charge(type, fullCost, itemPrice, payers,
+                clientWallet, builderWallet, taskId, "dispute-fee-" + disputeId);
+
+        walletRepository.save(clientWallet);
+        if (!selfSettle) {
+            walletRepository.save(builderWallet);
+        }
+        disputeFeeRepository.append(disputeId, taskId, charge);
+        return charge;
     }
 
     @Override

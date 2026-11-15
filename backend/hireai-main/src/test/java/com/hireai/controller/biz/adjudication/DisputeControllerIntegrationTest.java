@@ -62,7 +62,7 @@ class DisputeControllerIntegrationTest {
     void returns200WithOutcomeAndRulingForParticipant() throws Exception {
         when(currentUserProvider.currentUserId()).thenReturn(CLIENT_ID);
         when(disputeReadAppService.getOutcomeForUser(eq(TASK_ID), eq(CLIENT_ID)))
-                .thenReturn(resolvedDisputeWithOneRuling());
+                .thenReturn(viewOf(resolvedDisputeWithOneRuling()));
 
         mockMvc.perform(get("/api/disputes/by-task/{taskId}", TASK_ID))
                 .andExpect(status().isOk())
@@ -103,5 +103,13 @@ class DisputeControllerIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
+
+    private static com.hireai.application.biz.adjudication.dispute.view.DisputeOutcomeView viewOf(
+            com.hireai.domain.biz.adjudication.model.DisputeModel dispute) {
+        return new com.hireai.application.biz.adjudication.dispute.view.DisputeOutcomeView(dispute, "t", com.hireai.domain.shared.model.Money.of("10.00"),
+                java.util.Set.of(com.hireai.domain.biz.adjudication.enums.DisputeParty.CLIENT), java.util.Set.of(),
+                null, com.hireai.domain.shared.model.Money.of("3.00"), com.hireai.domain.shared.model.Money.of("5.00"),
+                java.util.List.of(), null, null, null, false);
     }
 }

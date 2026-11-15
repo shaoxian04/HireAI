@@ -45,7 +45,7 @@ describe("DisputeProgressPanel (dispute timeline)", () => {
   it("RULED: arbitrator 'proposed' with accept/appeal actions; admin pending", () => {
     renderPanel(ruled);
     expect(screen.getByText(/arbitrator proposed/i)).toBeInTheDocument();
-    expect(screen.getByText(/only if you appeal/i)).toBeInTheDocument();
+    expect(screen.getByText(/only if the side the ruling goes against appeals it/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /accept ruling/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /appeal to a human/i })).toBeInTheDocument();
   });
@@ -105,6 +105,7 @@ describe("DisputeProgressPanel (dispute timeline)", () => {
     const onChange = vi.fn();
     renderPanel(ruled, onChange);
     fireEvent.click(screen.getByRole("button", { name: /appeal to a human/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^appeal$/i })); // the confirmation (#96)
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
     const next = onChange.mock.calls[0][0] as DisputeOutcomeDTO;
     expect(next.status).toBe("ESCALATED");

@@ -31,6 +31,8 @@ import com.hireai.domain.biz.offering.agent.service.AgentSigningSecretGenerator;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentSigningSecretGeneratorImpl;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
 import com.hireai.domain.biz.task.service.impl.TaskSubmitDomainServiceImpl;
+import com.hireai.domain.biz.ledger.settlement.service.DisputeFeeDomainService;
+import com.hireai.domain.biz.ledger.settlement.service.impl.DisputeFeeDomainServiceImpl;
 import com.hireai.domain.biz.ledger.settlement.service.SettlementDomainService;
 import com.hireai.domain.biz.ledger.wallet.service.WalletFreezeDomainService;
 import com.hireai.domain.biz.ledger.wallet.service.WalletTopUpDomainService;
@@ -133,6 +135,11 @@ public class DomainServiceConfig {
     @Bean
     public SettlementDomainService settlementDomainService() {
         return new SettlementDomainServiceImpl();
+    }
+
+    @Bean
+    public DisputeFeeDomainService disputeFeeDomainService() {
+        return new DisputeFeeDomainServiceImpl();
     }
 
     @Bean

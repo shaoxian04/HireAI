@@ -119,8 +119,9 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   it renders a `TaskFailurePanel` (plain-English cause from the task's `failureReason`, falling back to per-status copy when it is absent, + `{budget} cr refunded` line; the spec-violation panel
   fetches the real failing-check reason from `GET /api/tasks/{id}/validation`). Every failure panel's action is
   **Choose another agent**, the rebook flow below. **Once the task is in a dispute** the execution pipeline is replaced by a
-  `DisputeProgressPanel` — a reject→arbitrator→admin **timeline** with Accept-ruling / Appeal actions while a
-  proposed ruling awaits; it persists after `RESOLVED`. `client/disputes` — the client's dispute list ("awaiting
+  `DisputeProgressPanel` — a reject→agent stood by→arbitrator→admin **timeline**; while a proposed ruling awaits,
+  the side it goes against gets Accept ruling / Appeal (confirmed, naming the capped fees) and a countdown, the
+  other side a "waiting for…" line; after `RESOLVED` it lists who bore each fee. It persists after `RESOLVED`. `client/disputes` — the client's dispute list ("awaiting
   your decision" `RULED` rows first); `client/keys` — API-key management (create, with a reveal-once `Modal`
   showing the raw key + copy button + a "won't see it again" warning; list; revoke); `client/webhooks` —
   webhooks console (register/replace an HTTPS callback per API key, reveal/rotate the signing secret, a
@@ -148,8 +149,10 @@ option is a `<Link>` (routes to that surface's home) that also calls `setActiveS
 role users see no switcher; the nav links shown depend on `activeSurface`:
 
 - **CLIENT:** Marketplace · My tasks · API keys · Webhooks · Disputes. Disputes carries a count badge of
-  disputes awaiting the client's decision (`RULED`), from `lib/useDisputeCount.ts` (`GET /api/disputes/mine`).
-- **BUILDER:** My agents · Earnings.
+  disputes awaiting the client's decision (`awaitingYou`: a `RULED` ruling against the client), from `lib/useDisputeCount.ts` (`GET /api/disputes/mine`).
+- **BUILDER:** My agents · Earnings · Disputes. Disputes carries the count of rulings awaiting the builder's
+  accept-or-appeal (`awaitingYou`, `GET /api/disputes/builder`); `builder/disputes/[taskId]` shows the same
+  `DisputeProgressPanel` from the builder's side.
 - **ADMIN:** Overview · Disputes.
 
 ## Role guards

@@ -43,7 +43,8 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 
 **Ledger**
 - `wallets`: `available_balance`, `escrow_balance`, `version` (optimistic lock).
-- `ledger_entries`: `entry_type`, `amount`, `balance_after`, `related_task_id`, `correlation_id`. **Append-only by trigger.**
+- `ledger_entries`: `entry_type`, `amount`, `balance_after`, `related_task_id`, `correlation_id`. **Append-only by trigger.** `ARBITRATION_FEE` and `APPEAL_FEE` rows are a loser's fee debit, recorded negated like `ESCROW_FREEZE` (the per-type rules are on `LedgerEntryModel`).
+- `dispute_fees`: one row per dispute and fee type (`ARBITRATION_COST`, `APPEAL_FEE`): full cost, the 20%-of-price cap, what the Client and the Builder were charged and what the platform covered (they sum to the full cost). **Append-only by trigger.**
 - `settlements`: `task_id` UNIQUE, `type`, `net`, `commission`. This UNIQUE is the backstop against double settlement.
 
 **Offering**
@@ -121,7 +122,7 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 - **Agent:** `PENDING_VERIFICATION → ACTIVE ⇄ SUSPENDED`; `ACTIVE` or `SUSPENDED → DEACTIVATED`.
 - **Agent version:** `DRAFT`, `ACTIVE`, `DEPRECATED`.
 - **Reject reason:** `A_MISMATCH`, `B_FACTUAL`, `C_INCOMPLETE` start the [rejection response path](#rejection-response) (arbitration only if the Agent stands by and the Client asks for it); `D_CHANGED_MIND` charges in full with no dispute.
-- **Dispute:** `OPEN → ARBITRATING → RULED → RESOLVED`, plus `ESCALATED` (appeal, DLQ or timeout). The effective ruling is the highest tier.
+- **Dispute:** `OPEN → ARBITRATING → RULED → RESOLVED`, plus `ESCALATED` (appeal, DLQ or timeout). The effective ruling is the highest tier. At `RULED` only the side(s) the ruling goes against may act (`RulingCategory.partiesItGoesAgainst`: `FULFILLED` → Client, `NOT_FULFILLED` → Builder, a split → both): each accepts (`client_accepted_at` / `builder_accepted_at`) or one appeals (`appealed_by`, once). It settles when all of them have accepted.
 - **Ruling:** `FULFILLED`, `PARTIALLY_FULFILLED`, `NOT_FULFILLED`.
 
 ## Settlement rules
@@ -135,7 +136,8 @@ Money columns are `NUMERIC`, never float. Timestamp columns vary by table: older
 | Ruling `NOT_FULFILLED`, `SPEC_VIOLATION`, `FAILED`, `TIMED_OUT`, `CANCELLED` | 100% refunded | 0 | 0 |
 
 - **Rejecting does not refund by itself.** A/B/C moves no money until the Agent concedes, the Client accepts, or a ruling is final.
-- **Disputes settle late.** The arbitrator's ruling is a proposal, and escrow holds at `RULED` until the client accepts or appeals, or a sweeper auto-accepts. `settleFromEffective` then moves money once, under the task row lock. The arbitrator callback never settles.
+- **Disputes settle late.** The arbitrator's ruling is a proposal, and escrow holds at `RULED` until every side it goes against accepts it, one of them appeals, or a sweeper auto-accepts (`hireai.arbitration.ruling-accept-after`). `settleFromEffective` then moves money once, under the task row lock. The arbitrator callback never settles.
+- **Loser pays (#96, spec D43).** After a dispute settles, the side(s) the effective ruling goes against bear the arbitration cost (`hireai.arbitration.cost`) and, if it was appealed, the Appeal Fee (`hireai.arbitration.appeal-fee`); a split shares each half and half. Each is capped at 20% of the price (`SettlementPolicy.disputeFeeCap`) and debited from the loser's available balance as far as it goes; the platform covers the excess and any shortfall. `DisputeFeeDomainService` computes it from the category alone (Inv #3).
 - **There is no retry after a spec violation.** It is an immediate full refund.
 - The builder's wallet opens on first payout. Escrow is reconstructable from `ledger_entries`.
 

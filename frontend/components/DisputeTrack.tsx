@@ -4,7 +4,7 @@ import type { RulingDTO } from "@/lib/types";
 type Step = { label: string; state: "done" | "active" | "wait" | "skipped" | "todo" };
 
 /**
- * Where a dispute is in its tiers: raised → arbitrator ruling → client's response → administrator
+ * Where a dispute is in its tiers: raised → arbitrator ruling → the losing side's response → administrator
  * review → settled. The administrator step is shown as skipped when a case settles without
  * escalation. Same visual language as the task StatusTrack.
  */
@@ -19,7 +19,7 @@ export function disputeSteps(status: string, rulings: RulingDTO[]): Step[] {
       state: arbRuled || ["RULED", "ESCALATED", "RESOLVED"].includes(status) ? "done" : "active",
     },
     {
-      label: "Client responds",
+      label: "Sides respond",
       state: status === "RULED" ? "wait" : status === "ESCALATED" || resolved ? "done" : "todo",
     },
     {

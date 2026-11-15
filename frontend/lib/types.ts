@@ -480,6 +480,19 @@ export interface RulingDTO {
   decidedAt: string; // ISO-8601
 }
 
+/** The two sides of a dispute (#96). */
+export type DisputeSide = "CLIENT" | "BUILDER";
+
+/** How one dispute fee was borne: fullCost = clientCharged + builderCharged + platformCovered. */
+export interface DisputeFeeDTO {
+  type: "ARBITRATION_COST" | "APPEAL_FEE";
+  fullCost: number;
+  cappedAmount: number;
+  clientCharged: number;
+  builderCharged: number;
+  platformCovered: number;
+}
+
 export interface DisputeOutcomeDTO {
   disputeId: string;
   taskId: string;
@@ -487,9 +500,28 @@ export interface DisputeOutcomeDTO {
   reasonCategory: RejectReason | null;
   effectiveCategory: RulingCategory | null;
   rulings: RulingDTO[];
+  taskTitle?: string;
+  /** The task's price, in credits (the fee caps are 20% of it). */
+  price?: number;
+  /** The viewer's side(s): CLIENT, BUILDER, or both on a self-booked task. */
+  yourSides?: DisputeSide[];
+  /** Sides the proposed ruling goes against that may still accept or appeal it. */
+  awaiting?: DisputeSide[];
+  appealedBy?: DisputeSide | null;
+  /** While RULED: when the proposed ruling is accepted on everyone's behalf. */
+  appealDeadline?: string | null;
+  /** Capped amounts the loser bears (credits). */
+  arbitrationCost?: number;
+  appealFee?: number;
+  /** How each fee was borne, once settled. */
+  fees?: DisputeFeeDTO[];
+  clientReason?: string | null;
+  agentResponse?: "REVISE" | "CONCEDE" | "STAND_BY" | null;
+  agentReason?: string | null;
+  agentSilent?: boolean;
 }
 
-/** Row shape for a client's own dispute list (future "my disputes" view). */
+/** Row shape for a user's own dispute list (/client/disputes, /builder/disputes). */
 export interface DisputeMineRowDTO {
   disputeId: string;
   taskId: string;
@@ -497,6 +529,8 @@ export interface DisputeMineRowDTO {
   status: string; // OPEN | ARBITRATING | RULED | ESCALATED | RESOLVED
   proposedCategory: RulingCategory | null;
   updatedAt: string;
+  /** The proposed ruling goes against the viewer's side, which has not accepted or appealed it yet. */
+  awaitingYou?: boolean;
 }
 
 // ── Admin surface ───────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 // DisputeModelTest.java
 package com.hireai.domain.biz.adjudication.model;
 
+import com.hireai.domain.biz.adjudication.enums.DisputeParty;
 import com.hireai.domain.biz.adjudication.enums.DisputeStatus;
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
 import com.hireai.domain.biz.adjudication.enums.RulingDecidedBy;
@@ -137,24 +138,84 @@ class DisputeModelTest {
         assertThat(resolved.effectiveRuling().get().tier()).isEqualTo(2);
     }
 
-    @Test
-    void appeal_movesRuledToEscalated() {
-        DisputeModel ruled = DisputeModel
-                .open(UUID.randomUUID(), UUID.randomUUID(), RejectReason.B_FACTUAL, "corr")
-                .recordRuling(new Ruling(1, RulingCategory.FULFILLED, "ok", RulingDecidedBy.ARBITRATOR, Instant.now()));
-        assertThat(ruled.status()).isEqualTo(DisputeStatus.RULED);
+    private static DisputeModel ruledAs(RulingCategory category) {
+        return DisputeModel.open(UUID.randomUUID(), UUID.randomUUID(), RejectReason.B_FACTUAL, "corr")
+                .recordRuling(new Ruling(1, category, "r", RulingDecidedBy.ARBITRATOR, FIXED));
+    }
 
-        DisputeModel appealed = ruled.appeal();
+    @Test
+    void theSideARulingGoesAgainstIsTheOneThatMayAppealIt() {
+        assertThat(ruledAs(RulingCategory.FULFILLED).partiesWhoMayAppeal()).containsExactly(DisputeParty.CLIENT);
+        assertThat(ruledAs(RulingCategory.NOT_FULFILLED).partiesWhoMayAppeal()).containsExactly(DisputeParty.BUILDER);
+        assertThat(ruledAs(RulingCategory.PARTIALLY_FULFILLED).partiesWhoMayAppeal())
+                .containsExactlyInAnyOrder(DisputeParty.CLIENT, DisputeParty.BUILDER);
+    }
+
+    @Test
+    void appealByTheLosingSideEscalatesAndRecordsWhoAppealed() {
+        DisputeModel appealed = ruledAs(RulingCategory.NOT_FULFILLED).appeal(DisputeParty.BUILDER, FIXED);
 
         assertThat(appealed.status()).isEqualTo(DisputeStatus.ESCALATED);
+        assertThat(appealed.appealedBy()).isEqualTo(DisputeParty.BUILDER);
+        assertThat(appealed.appealedAt()).isEqualTo(FIXED);
         assertThat(appealed.rulings()).hasSize(1); // arbitrator proposal preserved as admin context
+    }
+
+    @Test
+    void theSideARulingFavoursCannotAppealIt() {
+        assertThatThrownBy(() -> ruledAs(RulingCategory.NOT_FULFILLED).appeal(DisputeParty.CLIENT, FIXED))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("in your favour");
     }
 
     @Test
     void appeal_fromNonRuled_throws() {
         DisputeModel open = DisputeModel.open(UUID.randomUUID(), UUID.randomUUID(), RejectReason.A_MISMATCH, "corr");
-        assertThatThrownBy(open::appeal)
+        assertThatThrownBy(() -> open.appeal(DisputeParty.CLIENT, FIXED))
                 .isInstanceOf(DomainException.class)
                 .hasMessageContaining("appeal requires RULED");
+    }
+
+    @Test
+    void aRulingIsFinalOnlyOnceEverySideThatMayAppealItHasAccepted() {
+        DisputeModel ruled = ruledAs(RulingCategory.PARTIALLY_FULFILLED);
+
+        DisputeModel clientAccepted = ruled.accept(DisputeParty.CLIENT, FIXED);
+        assertThat(clientAccepted.clientAcceptedAt()).isEqualTo(FIXED);
+        assertThat(clientAccepted.acceptedByEverySideThatMayAppeal()).isFalse();
+        assertThat(clientAccepted.status()).isEqualTo(DisputeStatus.RULED);
+
+        DisputeModel both = clientAccepted.accept(DisputeParty.BUILDER, FIXED.plusSeconds(5));
+        assertThat(both.builderAcceptedAt()).isEqualTo(FIXED.plusSeconds(5));
+        assertThat(both.acceptedByEverySideThatMayAppeal()).isTrue();
+    }
+
+    @Test
+    void aSideCannotAppealAfterAcceptingNorAcceptTwice() {
+        DisputeModel accepted = ruledAs(RulingCategory.PARTIALLY_FULFILLED).accept(DisputeParty.CLIENT, FIXED);
+
+        assertThatThrownBy(() -> accepted.appeal(DisputeParty.CLIENT, FIXED))
+                .isInstanceOf(DomainException.class).hasMessageContaining("already accepted");
+        assertThatThrownBy(() -> accepted.accept(DisputeParty.CLIENT, FIXED))
+                .isInstanceOf(DomainException.class).hasMessageContaining("already accepted");
+        // The other side keeps its own right to appeal.
+        assertThat(accepted.appeal(DisputeParty.BUILDER, FIXED).status()).isEqualTo(DisputeStatus.ESCALATED);
+    }
+
+    @Test
+    void theFavouredSideHasNothingToAccept() {
+        assertThatThrownBy(() -> ruledAs(RulingCategory.FULFILLED).accept(DisputeParty.BUILDER, FIXED))
+                .isInstanceOf(DomainException.class).hasMessageContaining("in your favour");
+    }
+
+    @Test
+    void aRulingCanBeAppealedOnlyOnce() {
+        DisputeModel appealed = ruledAs(RulingCategory.PARTIALLY_FULFILLED).appeal(DisputeParty.CLIENT, FIXED);
+        DisputeModel adminRuled = appealed.recordRuling(
+                new Ruling(2, RulingCategory.FULFILLED, "admin", RulingDecidedBy.ADMINISTRATOR, FIXED));
+
+        assertThatThrownBy(() -> adminRuled.appeal(DisputeParty.CLIENT, FIXED))
+                .isInstanceOf(DomainException.class).hasMessageContaining("once");
+        assertThat(adminRuled.partiesWhoMayAppeal()).isEmpty();
     }
 }

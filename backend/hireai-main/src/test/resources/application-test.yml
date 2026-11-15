@@ -1,0 +1,7 @@
+# Test-profile overrides, layered over src/main/resources/application.yml.
+hireai:
+  arbitration:
+    # Dispute fees (#96) are off by default in tests, so settlement assertions elsewhere stay exact;
+    # DisputeFeesAndAppealsIntegrationTest turns them on with its own values.
+    cost: 0
+    appeal-fee: 0

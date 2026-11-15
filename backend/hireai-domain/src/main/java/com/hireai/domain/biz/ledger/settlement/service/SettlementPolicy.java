@@ -32,4 +32,13 @@ public final class SettlementPolicy {
     public static Money builderShareOnSplit(Money budget) {
         return budget.percentage(PARTIAL_BUILDER_FRACTION);
     }
+
+    /** A dispute fee (arbitration cost or Appeal Fee) is capped at 20% of the Item price (D43). */
+    public static final BigDecimal DISPUTE_FEE_CAP_RATE = new BigDecimal("0.20");
+
+    /** What a loser can be asked to bear of a dispute fee: the fee, or 20% of the Item price if less. */
+    public static Money disputeFeeCap(Money fee, Money itemPrice) {
+        Money cap = itemPrice.percentage(DISPUTE_FEE_CAP_RATE);
+        return fee.isGreaterThan(cap) ? cap : fee;
+    }
 }
