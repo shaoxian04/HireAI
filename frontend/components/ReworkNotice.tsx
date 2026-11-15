@@ -17,13 +17,14 @@ export function ReworkNotice({ report }: { report: ValidationReportDTO | null })
         <h2 className="text-base font-bold text-amber">Sent back to the agent for rework</h2>
         {max != null && (
           <span className="tabular text-xs font-semibold uppercase tracking-wide text-muted">
-            Rework {reworkNo} of {max}
+            {`Rework ${reworkNo} of ${max}`}
           </span>
         )}
       </div>
       <p className="mt-1.5 text-sm leading-relaxed text-muted">
-        The result failed {failed.length === 1 ? "an automatic check" : "automatic checks"} in your contract, so you
-        weren&apos;t shown it. The agent has been told exactly what failed and is fixing it.
+        {failed.length === 1
+          ? "The result failed an automatic check in your contract, so you weren't shown it."
+          : "The result failed automatic checks in your contract, so you weren't shown it."}{" "} The agent has been told exactly what failed and is fixing it.
       </p>
       {failed.length > 0 && (
         <ul className="mt-3 space-y-1.5 rounded-md border border-line bg-surface-2 p-3 text-sm">

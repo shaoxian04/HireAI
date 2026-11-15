@@ -121,9 +121,9 @@ export function TaskFailurePanel({ taskId, status, failureReason, budget, detail
           <p className="text-sm leading-relaxed text-muted">{copy.why}</p>
           {status === "SPEC_VIOLATION" && (detail?.rejectedAttempts ?? 0) > 1 && (
             <p className="text-sm text-muted">
-              The agent was sent the failing checks and reworked it{" "}
-              {detail!.rejectedAttempts! - 1 === 1 ? "once" : `${detail!.rejectedAttempts! - 1} times`}; it still
-              failed, so the task ended here. A failed automatic check can&apos;t be disputed.
+              {`The agent was sent the failing checks and reworked it ${
+                detail!.rejectedAttempts! - 1 === 1 ? "once" : `${detail!.rejectedAttempts! - 1} times`
+              }; it still failed, so the task ended here. A failed automatic check can't be disputed.`}
             </p>
           )}
           {failureReason === "NO_ELIGIBLE_AGENT" && failureDetail && (

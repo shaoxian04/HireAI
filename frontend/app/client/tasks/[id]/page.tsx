@@ -111,10 +111,15 @@ function TaskDetail() {
   useEffect(() => {
     if (task?.status !== "SPEC_VIOLATION" && !hasResult && !reworkable) return;
     let cancelled = false;
-    api<ValidationReportDTO>(`/tasks/${id}/validation`)
-      .then((v) => { if (!cancelled) setValidation(v); })
-      .catch(() => { /* no report — panel still renders without the drawer */ });
-    return () => { cancelled = true; };
+    const fetchReport = () =>
+      api<ValidationReportDTO>(`/tasks/${id}/validation`)
+        .then((v) => { if (!cancelled) setValidation(v); })
+        .catch(() => { /* no report — panel still renders without the drawer */ });
+    fetchReport();
+    // A rework can happen without the status the poller sees ever changing (EXECUTING → a result
+    // the checks reject → EXECUTING again), so the report is re-read while the task is with its agent.
+    const t = reworkable ? setInterval(fetchReport, POLL_MS) : undefined;
+    return () => { cancelled = true; if (t) clearInterval(t); };
   }, [task?.status, id, hasResult, reworkable]);
 
   // The hand-off history (#75, #93): re-read whenever the status moves, so a failover or a declined

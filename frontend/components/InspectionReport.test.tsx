@@ -111,6 +111,6 @@ describe("InspectionReport", () => {
       />,
     );
     expect(screen.getByText(/reworked once/i)).toBeInTheDocument();
-    expect(screen.getByText(/attempt 1 failed the background is the colour the contract asks/i)).toBeInTheDocument();
+    expect(screen.getByText(/Result 1 failed the background colour check/i)).toBeInTheDocument();
   });
 });

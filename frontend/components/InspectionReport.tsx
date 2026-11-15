@@ -23,6 +23,26 @@ const FINDING_TEXT: Record<string, string> = {
   DUPLICATE_BRIEF: "You have sent this exact brief before",
 };
 
+/** A check's short name, for "failed the … check". */
+const CHECK_NAME: Record<string, string> = {
+  FORMAT_TEXT_NON_EMPTY: "non-empty text",
+  TEXT_MIN_LENGTH: "minimum length",
+  TEXT_MAX_LENGTH: "maximum length",
+  FORMAT_JSON_PARSEABLE: "valid JSON",
+  SCHEMA_MATCH: "schema",
+  FORMAT_FILE_HTTPS_URL: "secure link",
+  FILE_FETCHED: "file fetch",
+  FILE_MEDIA_TYPE: "file type",
+  FILE_MAX_BYTES: "file size",
+  IMAGE_FORMAT: "image format",
+  IMAGE_DIMENSIONS: "image size",
+  IMAGE_BACKGROUND_COLOUR: "background colour",
+};
+
+export function checkName(rule: string): string {
+  return CHECK_NAME[rule] ?? rule.toLowerCase().replace(/_/g, " ");
+}
+
 export function ruleText(rule: string): string {
   return RULE_TEXT[rule] ?? rule.toLowerCase().replace(/_/g, " ");
 }
@@ -125,14 +145,15 @@ export function InspectionReport({
           <span className="font-semibold text-fg">
             Reworked {previous.length === 1 ? "once" : `${previous.length} times`}.
           </span>{" "}
-          {previous.map((a, i) => (
-            <span key={a.attemptNo}>
-              {i > 0 && "; "}
-              attempt {a.attemptNo} failed{" "}
-              {a.failedChecks.map((c) => ruleText(c.rule).toLowerCase()).join(", ") || "a check"}
-            </span>
-          ))}
-          . The agent fixed it before you saw it.
+          {previous
+            .map(
+              (a) =>
+                `${a.attemptNo === previous[0].attemptNo ? "Result" : "result"} ${a.attemptNo} failed the ${a.failedChecks.map((c) => checkName(c.rule)).join(" and ") || "automatic"} ${
+                  a.failedChecks.length > 1 ? "checks" : "check"
+                }`,
+            )
+            .join("; ")}
+          {". The agent was sent what failed and fixed it before you saw it."}
         </p>
       )}
       <div className="docket-tear" />
