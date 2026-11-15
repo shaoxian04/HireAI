@@ -22,7 +22,7 @@ class StubArbitrationClientTest {
 
     @Test
     void mismatchRulesNotFulfilled() {
-        Optional<RulingInfo> r = client.requestRuling(disputeWith(RejectReason.A_MISMATCH), null);
+        Optional<RulingInfo> r = client.requestRuling(disputeWith(RejectReason.A_MISMATCH), null, null);
         assertThat(r).isPresent();
         assertThat(r.get().category()).isEqualTo(RulingCategory.NOT_FULFILLED);
         assertThat(r.get().rationale()).isNotBlank();
@@ -30,13 +30,13 @@ class StubArbitrationClientTest {
 
     @Test
     void factualRulesPartiallyFulfilled() {
-        assertThat(client.requestRuling(disputeWith(RejectReason.B_FACTUAL), null).orElseThrow().category())
+        assertThat(client.requestRuling(disputeWith(RejectReason.B_FACTUAL), null, null).orElseThrow().category())
                 .isEqualTo(RulingCategory.PARTIALLY_FULFILLED);
     }
 
     @Test
     void incompleteRulesFulfilled() {
-        assertThat(client.requestRuling(disputeWith(RejectReason.C_INCOMPLETE), null).orElseThrow().category())
+        assertThat(client.requestRuling(disputeWith(RejectReason.C_INCOMPLETE), null, null).orElseThrow().category())
                 .isEqualTo(RulingCategory.FULFILLED);
     }
 }

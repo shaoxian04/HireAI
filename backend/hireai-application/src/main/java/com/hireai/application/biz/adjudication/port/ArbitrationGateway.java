@@ -13,5 +13,11 @@ import java.util.Optional;
  * via the arbitration ruling callback.
  */
 public interface ArbitrationGateway {
-    Optional<RulingInfo> requestRuling(DisputeModel dispute, TaskModel task);
+
+    /**
+     * @param deliverable the task result's frozen DeliverySnapshot (D24), or null when the result has
+     *                    none (not a file, or a Task from before snapshots). The arbitrator judges these
+     *                    bytes, never the Agent's link.
+     */
+    Optional<RulingInfo> requestRuling(DisputeModel dispute, TaskModel task, ArbitrationDeliverable deliverable);
 }

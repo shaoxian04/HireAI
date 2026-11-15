@@ -17,4 +17,13 @@ public interface WebhookUrlValidatorPort {
      * {@code http://localhost} is {@code hireai.dispatch.allow-insecure-localhost}.
      */
     void assertAgentWebhookDeliverable(String url);
+
+    /**
+     * A deliverable link from an Agent's result, checked right before the platform fetches it to
+     * take the DeliverySnapshot (D24). Same rules as {@link #assertAgentWebhookDeliverable},
+     * including its dev opt-in, which here also lets {@code https://localhost} skip the DNS check.
+     */
+    default void assertAgentFileFetchable(String url) {
+        assertAgentWebhookDeliverable(url);
+    }
 }

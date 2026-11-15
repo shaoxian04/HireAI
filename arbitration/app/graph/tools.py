@@ -71,6 +71,31 @@ async def fetch_result_content(url: str, *, max_bytes: int, timeout: float) -> s
     return text
 
 
+_TEXT_TYPES = ("text/", "application/json", "application/xml")
+
+
+def describe_deliverable(deliverable, *, max_bytes: int) -> str:
+    """Render the frozen DeliverySnapshot as evidence: text decoded, binary described.
+
+    Multimodal arbitration (#99) replaces the binary placeholder with the image/PDF itself.
+    """
+    media_type = deliverable.media_type
+    header = (
+        f"[frozen copy taken by the platform when the result arrived: {media_type}, "
+        f"{deliverable.size_bytes} bytes, sha256 {deliverable.sha256}]"
+    )
+    content = deliverable.content()
+    if content is None:
+        return header + "\n[content not included: the file is larger than the inline limit]"
+    if media_type.startswith(_TEXT_TYPES) or media_type.endswith(("+json", "+xml")):
+        truncated = len(content) > max_bytes
+        text = content[:max_bytes].decode("utf-8", errors="replace")
+        if truncated:
+            text += "\n[TRUNCATED — content exceeded the size cap]"
+        return header + "\n" + text
+    return header + f"\n[binary content omitted: {len(content)} bytes, media type {media_type!r}]"
+
+
 def validate_against_schema(payload: str, schema: str | None) -> dict:
     """Re-run the JSON-Schema check as citable grounding evidence (not a gate)."""
     if not schema:

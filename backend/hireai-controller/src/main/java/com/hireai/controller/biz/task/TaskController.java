@@ -32,6 +32,8 @@ import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
+import com.hireai.domain.biz.task.model.TaskResultModel;
+import org.springframework.http.ResponseEntity;
 import com.hireai.domain.biz.task.repository.TaskQuery;
 import com.hireai.domain.shared.model.Money;
 import com.hireai.utility.exception.DomainException;
@@ -150,8 +152,22 @@ public class TaskController extends BaseController {
     @GetMapping("/{taskId}/result")
     public WebResult<TaskResultDTO> getResult(@PathVariable("taskId") UUID taskId) {
         UUID clientId = currentUser.currentUserId();
-        TaskResultDTO dto = TaskResult2DTOConverter.toDTO(readAppService.getResult(taskId, clientId));
+        TaskResultModel result = readAppService.getResult(taskId, clientId);
+        TaskResultDTO dto = TaskResult2DTOConverter.toDTO(result,
+                readAppService.findDeliverySnapshot(result).orElse(null));
         return ok(dto);
+    }
+
+    /**
+     * The frozen file of a FILE result (D24), owner-only: the DeliverySnapshot's bytes, never the
+     * Agent's link. The bytes are Agent-supplied, so they are always sent as an attachment with
+     * {@code nosniff} and a sandbox CSP, and as {@code application/octet-stream} unless the platform
+     * recognised them as one of the file_basic types ({@link DeliverableResponse}).
+     */
+    @GetMapping("/{taskId}/deliverable")
+    public ResponseEntity<byte[]> getDeliverable(@PathVariable("taskId") UUID taskId) {
+        UUID clientId = currentUser.currentUserId();
+        return DeliverableResponse.of(taskId, readAppService.getDeliverable(taskId, clientId));
     }
 
     @GetMapping("/{id}/validation")

@@ -49,6 +49,24 @@ public class WebhookUrlValidator implements WebhookUrlValidatorPort {
         check(url, allowInsecureLocalhostAgents);
     }
 
+    @Override
+    public void assertAgentFileFetchable(String url) {
+        if (allowInsecureLocalhostAgents && isHttpsLocalhost(url)) {
+            return; // the dispatch dev opt-in: a local file server (tests, the local demo stack)
+        }
+        check(url, allowInsecureLocalhostAgents);
+    }
+
+    private static boolean isHttpsLocalhost(String url) {
+        try {
+            URI uri = URI.create(url);
+            return "https".equalsIgnoreCase(uri.getScheme())
+                    && ("localhost".equals(uri.getHost()) || "127.0.0.1".equals(uri.getHost()));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private void check(String url, boolean allowInsecureLocalhost) {
         URI uri;
         try {

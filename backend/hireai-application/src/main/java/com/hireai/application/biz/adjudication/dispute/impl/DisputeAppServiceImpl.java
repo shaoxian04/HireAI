@@ -1,6 +1,8 @@
 package com.hireai.application.biz.adjudication.dispute.impl;
 
 import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
+import com.hireai.application.biz.acceptance.delivery.DeliverySnapshotAppService;
+import com.hireai.application.biz.adjudication.port.ArbitrationDeliverable;
 import com.hireai.application.biz.adjudication.port.ArbitrationGateway;
 import com.hireai.application.biz.adjudication.port.RulingInfo;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
@@ -43,6 +45,7 @@ public class DisputeAppServiceImpl implements DisputeAppService {
     private final AgentRepository agentRepository;
     private final SettlementWriteAppService settlementWriteAppService;
     private final ArbitrationGateway arbitrationGateway;
+    private final DeliverySnapshotAppService deliverySnapshotAppService;
     private final ReputationWriteAppService reputationWriteAppService;
 
     @Override
@@ -51,7 +54,9 @@ public class DisputeAppServiceImpl implements DisputeAppService {
         DisputeModel dispute = DisputeModel.open(disputedTask.id(), raisedBy, reasonCategory, correlationId);
         disputeRepository.save(dispute);
 
-        Optional<RulingInfo> immediate = arbitrationGateway.requestRuling(dispute, disputedTask);
+        // The arbitrator judges the frozen DeliverySnapshot, never the Agent's link (D24).
+        ArbitrationDeliverable deliverable = deliverySnapshotAppService.forArbitration(disputedTask.result()).orElse(null);
+        Optional<RulingInfo> immediate = arbitrationGateway.requestRuling(dispute, disputedTask, deliverable);
         if (immediate.isPresent()) {
             // Delayed settlement: an immediate (stub/sync) ruling is a PROPOSAL, not a settlement.
             recordProposedRuling(dispute, toRuling(immediate.get(), TIER_1, RulingDecidedBy.ARBITRATOR));

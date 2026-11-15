@@ -79,7 +79,7 @@ class AdminControllerTest {
                 new java.math.BigDecimal("40.00"), "summarisation", "TEXT",
                 java.time.Instant.parse("2026-07-02T00:00:00Z"), java.time.Instant.parse("2026-07-02T00:01:00Z"),
                 "Demo Agent", "builder", new java.math.BigDecimal("50.00"), new java.math.BigDecimal("10.00"),
-                null, null, null, null,
+                null, null, null, null, null,
                 false, null, List.of()));
 
         mockMvc.perform(post("/api/admin/disputes/{id}/rule", disputeId)

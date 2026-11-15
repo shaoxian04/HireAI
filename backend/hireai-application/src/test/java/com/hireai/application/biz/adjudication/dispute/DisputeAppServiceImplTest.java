@@ -1,6 +1,8 @@
 package com.hireai.application.biz.adjudication.dispute;
 
 import com.hireai.application.biz.adjudication.dispute.impl.DisputeAppServiceImpl;
+import com.hireai.application.biz.acceptance.delivery.DeliverySnapshotAppService;
+import com.hireai.application.biz.adjudication.port.ArbitrationDeliverable;
 import com.hireai.application.biz.adjudication.port.ArbitrationGateway;
 import com.hireai.application.biz.adjudication.port.RulingInfo;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
@@ -43,6 +45,7 @@ class DisputeAppServiceImplTest {
     AgentRepository agentRepository;
     SettlementWriteAppService settlement;
     ArbitrationGateway gateway;
+    DeliverySnapshotAppService snapshots;
     ReputationWriteAppService reputationWriteAppService;
     DisputeAppServiceImpl service;
 
@@ -59,8 +62,10 @@ class DisputeAppServiceImplTest {
         settlement = mock(SettlementWriteAppService.class);
         gateway = mock(ArbitrationGateway.class);
         reputationWriteAppService = mock(ReputationWriteAppService.class);
+        snapshots = mock(DeliverySnapshotAppService.class);
+        when(snapshots.forArbitration(any())).thenReturn(Optional.empty());
         service = new DisputeAppServiceImpl(disputeRepository, taskRepository, agentRepository,
-                settlement, gateway, reputationWriteAppService);
+                settlement, gateway, snapshots, reputationWriteAppService);
 
         when(disputeRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -77,7 +82,7 @@ class DisputeAppServiceImplTest {
 
     @Test
     void openWithSynchronousNotFulfilledRulingRecordsProposal_doesNotSettle() {
-        when(gateway.requestRuling(any(), any()))
+        when(gateway.requestRuling(any(), any(), any()))
                 .thenReturn(Optional.of(new RulingInfo(RulingCategory.NOT_FULFILLED, "no")));
 
         UUID disputeId = service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
@@ -97,7 +102,7 @@ class DisputeAppServiceImplTest {
 
     @Test
     void synchronousPartialRulingRecordsProposal_doesNotSettle() {
-        when(gateway.requestRuling(any(), any()))
+        when(gateway.requestRuling(any(), any(), any()))
                 .thenReturn(Optional.of(new RulingInfo(RulingCategory.PARTIALLY_FULFILLED, "half")));
         service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
         verifyNoInteractions(settlement);
@@ -110,7 +115,7 @@ class DisputeAppServiceImplTest {
 
     @Test
     void synchronousFulfilledRulingRecordsProposal_doesNotSettle() {
-        when(gateway.requestRuling(any(), any()))
+        when(gateway.requestRuling(any(), any(), any()))
                 .thenReturn(Optional.of(new RulingInfo(RulingCategory.FULFILLED, "ok")));
         service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
         verifyNoInteractions(settlement);
@@ -122,7 +127,7 @@ class DisputeAppServiceImplTest {
 
     @Test
     void emptyGatewayResponseLeavesDisputeArbitrating() {
-        when(gateway.requestRuling(any(), any())).thenReturn(Optional.empty());
+        when(gateway.requestRuling(any(), any(), any())).thenReturn(Optional.empty());
         service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
         verifyNoInteractions(settlement);
         ArgumentCaptor<DisputeModel> cap = ArgumentCaptor.forClass(DisputeModel.class);
@@ -317,5 +322,16 @@ class DisputeAppServiceImplTest {
         service.autoAcceptOne(escalated.id());
 
         verifyNoInteractions(settlement);
+    }
+
+    @Test
+    void theArbitratorIsHandedTheFrozenDeliverableNotTheAgentsLink() {
+        ArbitrationDeliverable frozen = new ArbitrationDeliverable("ab12", "image/png", 3, "AQID");
+        when(snapshots.forArbitration(disputedTask.result())).thenReturn(Optional.of(frozen));
+        when(gateway.requestRuling(any(), any(), any())).thenReturn(Optional.empty());
+
+        service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
+
+        verify(gateway).requestRuling(any(), eq(disputedTask), eq(frozen));
     }
 }

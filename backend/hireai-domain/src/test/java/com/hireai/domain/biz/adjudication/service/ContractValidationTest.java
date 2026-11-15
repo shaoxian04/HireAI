@@ -2,6 +2,9 @@ package com.hireai.domain.biz.adjudication.service;
 
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.acceptance.contract.model.ParameterValue;
+import com.hireai.domain.biz.acceptance.delivery.model.DeliveryFetch;
+import com.hireai.domain.biz.acceptance.delivery.model.DeliveryOutcome;
+import com.hireai.domain.biz.acceptance.delivery.model.DeliverySnapshot;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
 import com.hireai.domain.biz.acceptance.offer.model.OfferTerm;
 import com.hireai.domain.biz.acceptance.offer.model.ParameterRange;
@@ -112,11 +115,92 @@ class ContractValidationTest {
         assertThat(validate(json(null), "nope", null).verdict()).isEqualTo(Verdict.FAIL);
     }
 
+    private static final String LINK = "https://cdn.example.com/x.png";
+    private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13};
+
+    private static Contract file(Map<String, ParameterValue> params) {
+        return new Contract(GenericTemplates.FILE_BASIC_V1, params);
+    }
+
+    private DeliveryOutcome captured(byte[] content, String contentType) {
+        return new DeliveryOutcome.Captured(DeliverySnapshot.capture(taskId, UUID.randomUUID(), LINK,
+                new DeliveryFetch.Fetched(content, contentType), java.time.Instant.parse("2026-11-15T10:00:00Z")));
+    }
+
+    private ValidationReportModel validateFile(Contract contract, String url, DeliveryOutcome delivery) {
+        return svc.validate(contract, TaskResultModel.record(taskId, "COMPLETED", "{}", url), delivery, 1);
+    }
+
     @Test
-    void fileBasicNeedsAnHttpsLink() {
-        Contract file = new Contract(GenericTemplates.FILE_BASIC_V1, Map.of());
-        assertThat(validate(file, "{}", "https://cdn.example.com/x.pdf").verdict()).isEqualTo(Verdict.PASS);
-        assertThat(validate(file, "{}", "http://cdn.example.com/x.pdf").verdict()).isEqualTo(Verdict.FAIL);
+    void fileBasicNeedsAnHttpsLinkToAFetchedFile() {
+        assertThat(validateFile(file(Map.of()), LINK, captured(PNG, "image/png")).checks())
+                .extracting(CheckResult::rule, CheckResult::passed)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("FORMAT_FILE_HTTPS_URL", true),
+                        org.assertj.core.groups.Tuple.tuple("FILE_FETCHED", true));
+        assertThat(validateFile(file(Map.of()), "http://cdn.example.com/x.pdf",
+                new DeliveryOutcome.Unavailable("not fetched")).checks())
+                .extracting(CheckResult::rule).containsExactly("FORMAT_FILE_HTTPS_URL");
+    }
+
+    @Test
+    void aFileThatCouldNotBeFetchedFailsWithTheReason() {
+        ValidationReportModel report = validateFile(file(Map.of()), LINK,
+                new DeliveryOutcome.Unavailable("the link answered 404"));
+        assertThat(report.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(report.checks()).filteredOn(c -> c.rule().equals("FILE_FETCHED"))
+                .singleElement().satisfies(c -> assertThat(c.detail()).contains("404"));
+    }
+
+    @Test
+    void anEmptyFileIsNotADelivery() {
+        assertThat(validateFile(file(Map.of()), LINK, captured(new byte[0], "image/png")).verdict())
+                .isEqualTo(Verdict.FAIL);
+    }
+
+    @Test
+    void theMediaTypeCheckRunsOnlyWhenTheContractNamesTypesAndJudgesTheBytes() {
+        Contract pngOnly = file(Map.of(GenericTemplates.MEDIA_TYPES, new ParameterValue.TextSet(Set.of("image/png"))));
+        assertThat(validateFile(pngOnly, LINK, captured(PNG, "application/octet-stream")).verdict())
+                .isEqualTo(Verdict.PASS);
+        ValidationReportModel html = validateFile(pngOnly, LINK,
+                captured("<!doctype html><p>hi</p>".getBytes(java.nio.charset.StandardCharsets.UTF_8), "image/png"));
+        assertThat(html.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(html.checks()).filteredOn(c -> c.rule().equals("FILE_MEDIA_TYPE")).singleElement()
+                .satisfies(c -> assertThat(c.detail()).contains("text/html").contains("image/png"));
+        assertThat(validateFile(file(Map.of()), LINK, captured(PNG, "image/png")).checks())
+                .extracting(CheckResult::rule).doesNotContain("FILE_MEDIA_TYPE", "FILE_MAX_BYTES");
+    }
+
+    @Test
+    void theSizeCheckHoldsTheFileToTheContractsLimit() {
+        Contract small = file(Map.of(GenericTemplates.MAX_BYTES, n(12)));
+        assertThat(validateFile(small, LINK, captured(PNG, "image/png")).verdict()).isEqualTo(Verdict.PASS);
+        ValidationReportModel tooBig = validateFile(small, LINK, new DeliveryOutcome.TooLarge(12));
+        assertThat(tooBig.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(tooBig.checks()).extracting(CheckResult::rule, CheckResult::passed)
+                .contains(org.assertj.core.groups.Tuple.tuple("FILE_MAX_BYTES", false));
+    }
+
+    @Test
+    void aFileOverThePlatformLimitFailsTheFetchWhenTheContractSetsNoLimit() {
+        ValidationReportModel report = validateFile(file(Map.of()), LINK, new DeliveryOutcome.TooLarge(1000));
+        assertThat(report.checks()).extracting(CheckResult::rule, CheckResult::passed)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("FORMAT_FILE_HTTPS_URL", true),
+                        org.assertj.core.groups.Tuple.tuple("FILE_FETCHED", false));
+    }
+
+    @Test
+    void theFetchLimitIsTheContractsLimitCappedByThePlatforms() {
+        assertThat(svc.deliveryByteLimit(file(Map.of(GenericTemplates.MAX_BYTES, n(12))), 1000)).isEqualTo(12);
+        assertThat(svc.deliveryByteLimit(file(Map.of(GenericTemplates.MAX_BYTES, n(5000))), 1000)).isEqualTo(1000);
+        assertThat(svc.deliveryByteLimit(file(Map.of()), 1000)).isEqualTo(1000);
+    }
+
+    @Test
+    void onlyAFileContractWithAnHttpsLinkNeedsTheDeliverableFetched() {
+        assertThat(svc.needsDelivery(file(Map.of()), TaskResultModel.record(taskId, "COMPLETED", "{}", LINK))).isTrue();
+        assertThat(svc.needsDelivery(file(Map.of()), TaskResultModel.record(taskId, "COMPLETED", "{}", "http://x.example/a"))).isFalse();
+        assertThat(svc.needsDelivery(text(Map.of()), TaskResultModel.record(taskId, "COMPLETED", "hi", LINK))).isFalse();
     }
 
     @Test

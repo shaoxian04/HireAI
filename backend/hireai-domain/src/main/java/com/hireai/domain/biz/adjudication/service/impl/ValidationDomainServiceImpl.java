@@ -2,6 +2,8 @@ package com.hireai.domain.biz.adjudication.service.impl;
 
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.acceptance.contract.model.ParameterValue;
+import com.hireai.domain.biz.acceptance.delivery.model.DeliveryOutcome;
+import com.hireai.domain.biz.acceptance.delivery.model.DeliverySnapshot;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
 import com.hireai.domain.biz.acceptance.offer.model.OfferTerm;
 import com.hireai.domain.biz.acceptance.offer.model.ParameterRange;
@@ -22,6 +24,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Runs the checks of the generic Templates (D39) on a result:
@@ -29,14 +32,20 @@ import java.util.Optional;
  *   <li>{@code text_basic}: non-blank text, then {@code min_length}/{@code max_length} when set,
  *       counted in characters (Unicode code points) of the payload as delivered;</li>
  *   <li>{@code custom_json}: the payload parses, then matches the {@code schema} when set;</li>
- *   <li>{@code file_basic}: the result link is HTTPS ({@code FILE_MEDIA_TYPE}/{@code FILE_MAX_BYTES}
- *       wait for the DeliverySnapshot, #97).</li>
+ *   <li>{@code file_basic}: the result link is HTTPS, then, on its DeliverySnapshot (D24, never the
+ *       live link), {@code FILE_FETCHED} (fetched, not empty, within the platform limit), then
+ *       {@code FILE_MEDIA_TYPE} / {@code FILE_MAX_BYTES} when the Contract sets {@code media_types} /
+ *       {@code max_bytes}. The media type is the one judged from the bytes ({@code DeliveredMediaType}).</li>
  * </ul>
  */
 public class ValidationDomainServiceImpl implements ValidationDomainService {
 
     /** Errors name the request field, so a form can show them under it ({@code lib/formErrors}). */
     private static final String SCHEMA_FIELD = "outputSpec.schema: ";
+
+    static final String FILE_FETCHED = "FILE_FETCHED";
+    static final String FILE_MEDIA_TYPE = "FILE_MEDIA_TYPE";
+    static final String FILE_MAX_BYTES = "FILE_MAX_BYTES";
 
     private final SchemaValidator schemaValidator;
 
@@ -45,7 +54,8 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
     }
 
     @Override
-    public ValidationReportModel validate(Contract contract, TaskResultModel result, int attemptNo) {
+    public ValidationReportModel validate(Contract contract, TaskResultModel result, DeliveryOutcome delivery,
+                                          int attemptNo) {
         TemplateRef template = contract.template();
         List<CheckResult> checks = new ArrayList<>();
         if (template.equals(GenericTemplates.TEXT_BASIC_V1)) {
@@ -53,7 +63,15 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
         } else if (template.equals(GenericTemplates.CUSTOM_JSON_V1)) {
             checks.addAll(checkJson(result.resultPayloadJson(), text(contract, GenericTemplates.SCHEMA)));
         } else if (template.equals(GenericTemplates.FILE_BASIC_V1)) {
-            checks.add(checkFile(result.resultUrl()));
+            CheckResult link = checkFile(result.resultUrl());
+            checks.add(link);
+            if (link.passed()) {
+                if (delivery == null) {
+                    throw new IllegalStateException("A file_basic result with an HTTPS link is judged on its "
+                            + "DeliverySnapshot; fetch it first (needsDelivery)");
+                }
+                checks.addAll(checkDelivery(contract, delivery));
+            }
         } else {
             // Only the generic Templates exist; a Contract naming another one fails its Template
             // check at submit, so reaching here means a Template shipped without its checks.
@@ -65,6 +83,56 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
     @Override
     public ValidationReportModel validate(OutputSpec legacySpec, TaskResultModel result, int attemptNo) {
         return validate(legacySpec.toContract(), result, attemptNo);
+    }
+
+    @Override
+    public boolean needsDelivery(Contract contract, TaskResultModel result) {
+        return contract.template().equals(GenericTemplates.FILE_BASIC_V1) && checkFile(result.resultUrl()).passed();
+    }
+
+    @Override
+    public long deliveryByteLimit(Contract contract, long platformLimit) {
+        BigDecimal max = number(contract, GenericTemplates.MAX_BYTES);
+        return max == null ? platformLimit : Math.min(max.longValueExact(), platformLimit);
+    }
+
+    private List<CheckResult> checkDelivery(Contract contract, DeliveryOutcome delivery) {
+        BigDecimal maxBytes = number(contract, GenericTemplates.MAX_BYTES);
+        List<CheckResult> out = new ArrayList<>();
+        switch (delivery) {
+            case DeliveryOutcome.Unavailable u ->
+                    out.add(new CheckResult(FILE_FETCHED, false, "could not fetch the file: " + u.reason()));
+            case DeliveryOutcome.TooLarge t -> {
+                if (maxBytes != null && maxBytes.longValueExact() <= t.limitBytes()) {
+                    out.add(new CheckResult(FILE_MAX_BYTES, false,
+                            "larger than " + maxBytes.toPlainString() + " bytes, the most allowed"));
+                } else {
+                    out.add(new CheckResult(FILE_FETCHED, false, "larger than " + t.limitBytes()
+                            + " bytes, the most the platform keeps; reading stopped there"));
+                }
+            }
+            case DeliveryOutcome.Captured c -> {
+                DeliverySnapshot snapshot = c.snapshot();
+                boolean nonEmpty = snapshot.sizeBytes() > 0;
+                out.add(new CheckResult(FILE_FETCHED, nonEmpty, nonEmpty
+                        ? "fetched and frozen: " + snapshot.sizeBytes() + " bytes, sha256 " + snapshot.sha256()
+                        : "the file is empty"));
+                Set<String> accepted = textSet(contract, GenericTemplates.MEDIA_TYPES);
+                if (accepted != null) {
+                    String type = snapshot.mediaType();
+                    String declared = snapshot.declaredMediaType() != null && !snapshot.declaredMediaType().equals(type)
+                            ? " (the Agent declared " + snapshot.declaredMediaType() + ")" : "";
+                    out.add(new CheckResult(FILE_MEDIA_TYPE, accepted.contains(type),
+                            "the file is " + type + declared + "; accepted: " + String.join(", ", accepted)));
+                }
+                if (maxBytes != null) {
+                    out.add(new CheckResult(FILE_MAX_BYTES,
+                            BigDecimal.valueOf(snapshot.sizeBytes()).compareTo(maxBytes) <= 0,
+                            snapshot.sizeBytes() + " bytes; at most " + maxBytes.toPlainString() + " allowed"));
+                }
+            }
+        }
+        return out;
     }
 
     @Override
@@ -152,6 +220,10 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
     private static String text(Contract contract, String name) {
         return contract.params().get(name) instanceof ParameterValue.Text t && !t.value().isBlank()
                 ? t.value() : null;
+    }
+
+    private static Set<String> textSet(Contract contract, String name) {
+        return contract.params().get(name) instanceof ParameterValue.TextSet t ? t.values() : null;
     }
 
     private static BigDecimal number(Contract contract, String name) {

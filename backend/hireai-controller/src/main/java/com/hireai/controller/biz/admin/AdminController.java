@@ -55,6 +55,14 @@ public class AdminController extends BaseController {
         return ok(adminReadAppService.disputeDetail(id));
     }
 
+    /** The disputed result's frozen file, served like the Client's download (attachment, nosniff, sandbox). */
+    @GetMapping("/disputes/{id}/deliverable")
+    public org.springframework.http.ResponseEntity<byte[]> disputeDeliverable(@PathVariable("id") UUID id) {
+        com.hireai.application.biz.task.TaskReadAppService.FrozenDeliverable deliverable =
+                adminReadAppService.disputeDeliverable(id);
+        return com.hireai.controller.biz.task.DeliverableResponse.of(deliverable.snapshot().taskId(), deliverable);
+    }
+
     @PostMapping("/disputes/{id}/rule")
     public WebResult<AdminViews.DisputeDetail> rule(@PathVariable("id") UUID id,
                                                     @Valid @RequestBody AdminRuleRequest request) {
