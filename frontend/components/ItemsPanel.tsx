@@ -20,6 +20,16 @@ interface Props {
 /** Task statuses after which an Item still awaiting its result will never get one. */
 const ENDED: ReadonlySet<TaskStatus> = new Set<TaskStatus>(["TIMED_OUT", "FAILED", "CANCELLED", "SPEC_VIOLATION", "RESOLVED"]);
 
+/** Whether a link from an Agent is safe to make clickable: absolute https only (never javascript: etc.). */
+export function isHttpsUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try {
+    return new URL(url).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function cr(amount: number | null | undefined): string {
   return `${Number(amount ?? 0).toFixed(2)} cr`;
 }
@@ -87,12 +97,14 @@ function ItemRow({ item, task, canDecide, busy, onAccept }: {
             <ResultView payload={item.resultPayload as string} />
           </details>
         )}
-        {item.resultUrl && (
-          <a href={item.resultUrl} target="_blank" rel="noreferrer"
+        {item.resultUrl && (isHttpsUrl(item.resultUrl) ? (
+          <a href={item.resultUrl} target="_blank" rel="noopener noreferrer"
             className="inline-flex text-sm font-medium text-accent underline-offset-4 hover:underline">
             Open deliverable ↗
           </a>
-        )}
+        ) : (
+          <p className="break-all font-mono text-xs text-dim">{item.resultUrl}</p>
+        ))}
       </div>
       <div className="col-span-2 flex items-center justify-between gap-3 sm:col-span-1 sm:flex-col sm:items-end sm:justify-start">
         <Money item={item} />

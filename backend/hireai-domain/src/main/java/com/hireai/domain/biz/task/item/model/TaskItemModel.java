@@ -5,6 +5,8 @@ import com.hireai.domain.shared.model.Money;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,10 +34,32 @@ public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Mone
      */
     public TaskItemModel recordResult(String agentStatus, String payload, String url, List<ItemCheck> checks) {
         requireStatus(ItemStatus.AWAITING_RESULT, "recordResult");
+        requireHttpsResultUrl(itemNo, url);
         boolean passed = checks != null && !checks.isEmpty() && checks.stream().allMatch(ItemCheck::passed);
         return new TaskItemModel(id, taskId, itemNo, input, price,
                 passed ? ItemStatus.PENDING_REVIEW : ItemStatus.SPEC_VIOLATION,
                 agentStatus, payload, url, checks, false);
+    }
+
+    /**
+     * Refuses (VALIDATION_ERROR) an Item result link that is not an absolute https URL: the link is
+     * shown to the Client, so a {@code javascript:} or plain-http link must never be stored.
+     */
+    public static void requireHttpsResultUrl(int itemNo, String url) {
+        if (url == null) {
+            return;
+        }
+        boolean ok;
+        try {
+            URI uri = new URI(url.trim());
+            ok = "https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null && !uri.getHost().isBlank();
+        } catch (URISyntaxException e) {
+            ok = false;
+        }
+        if (!ok) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "items: Item " + itemNo + "'s resultUrl must be an absolute https URL");
+        }
     }
 
     /** AWAITING_RESULT → FAILED: the Agent reported this Item failed, or delivered nothing for it. */

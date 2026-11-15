@@ -214,6 +214,8 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
             if (r.itemNo() < 1 || r.itemNo() > items.count()) {
                 unknown.add(r.itemNo());
             }
+            // Before anything is recorded, so a bad link refuses the whole callback (400) and it can be resent.
+            TaskItemModel.requireHttpsResultUrl(r.itemNo(), r.resultUrl());
         }
         if (!unknown.isEmpty()) {
             throw new DomainException(ResultCode.VALIDATION_ERROR,

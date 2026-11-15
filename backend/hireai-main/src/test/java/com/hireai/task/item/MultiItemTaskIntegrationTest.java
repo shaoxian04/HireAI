@@ -281,6 +281,48 @@ class MultiItemTaskIntegrationTest extends WholeAppIntegrationTest {
         assertThat(escrow()).isEqualByComparingTo(before);
     }
 
+    @Test
+    void aPerItemPriceTooSmallToEarnACommissionIsRefusedAndFreezesNothing() throws Exception {
+        FakeAgent agent = itemAgent();
+        UUID agentId = seedTextAgent(agent, "0.01");
+        BigDecimal before = escrow();
+
+        // 0.03 × 15% rounds to 0.00 per Item: 500 such Items would pay the platform nothing.
+        assertThatThrownBy(() -> book(agentId, "0.03", java.util.Collections.nCopies(500, "invoice")))
+                .isInstanceOfSatisfying(HttpClientErrorException.class, e -> {
+                    assertThat(e.getStatusCode().value()).isEqualTo(400);
+                    assertThat(e.getResponseBodyAsString()).contains("at least 0.04");
+                });
+        assertThat(escrow()).isEqualByComparingTo(before);
+        // A single-deliverable booking keeps today's minimum.
+        assertThat(book(agentId, "0.03", null)).isNotNull();
+    }
+
+    @Test
+    void anItemResultLinkThatIsNotHttpsRefusesTheCallbackAndRecordsNothing() throws Exception {
+        FakeAgent agent = itemAgent();
+        UUID agentId = seedTextAgent(agent, "2.00");
+        UUID taskId = book(agentId, "2.00", List.of("a #link", "b #jslink"));
+
+        assertThat(agent.awaitCallbacks(1, Duration.ofSeconds(20)).get(0).status()).isEqualTo(400);
+        assertThat(status(taskId)).isIn("QUEUED", "EXECUTING");
+        assertThat(getTask(taskId).get("items")).extracting(i -> i.get("status").asText())
+                .containsExactly("AWAITING_RESULT", "AWAITING_RESULT");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM task_item_settlements WHERE task_id = ?",
+                Integer.class, taskId)).isZero();
+    }
+
+    @Test
+    void anHttpsItemResultLinkIsKept() throws Exception {
+        FakeAgent agent = itemAgent();
+        UUID agentId = seedTextAgent(agent, "2.00");
+        UUID taskId = book(agentId, "2.00", List.of("a #link", "b"));
+        awaitStatus(taskId, "PENDING_REVIEW");
+
+        assertThat(getTask(taskId).get("items").get(0).get("resultUrl").asText())
+                .isEqualTo("https://files.example/item-1");
+    }
+
     // --- helpers ---
 
     private FakeAgent itemAgent() {
@@ -314,6 +356,11 @@ class MultiItemTaskIntegrationTest extends WholeAppIntegrationTest {
             } else {
                 result.put("agentStatus", "COMPLETED");
                 result.put("resultPayloadJson", input.contains("#empty") ? "" : "done: " + input);
+                if (input.contains("#jslink")) {
+                    result.put("resultUrl", "javascript:alert(document.cookie)");
+                } else if (input.contains("#link")) {
+                    result.put("resultUrl", "https://files.example/item-" + item.get("itemNo").asInt());
+                }
             }
         }
         return body.toString();

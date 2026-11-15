@@ -132,6 +132,22 @@ describe("ItemsPanel", () => {
     expect(screen.getAllByText(/not delivered/i)).toHaveLength(3);
   });
 
+  it("links only https deliverables and shows any other link as plain text", () => {
+    render(<ItemsPanel now={NOW} onChange={() => {}} task={task({
+      items: [
+        { ...ITEMS[0], resultUrl: "https://files.example/1.pdf" },
+        { ...ITEMS[1], resultUrl: "javascript:alert(1)" },
+        { ...ITEMS[2], resultUrl: "http://files.example/3.pdf" },
+      ],
+    })} />);
+
+    const links = screen.getAllByRole("link", { name: /open deliverable/i });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "https://files.example/1.pdf");
+    expect(screen.getByText("javascript:alert(1)").tagName).toBe("P");
+    expect(screen.getByText("http://files.example/3.pdf").closest("a")).toBeNull();
+  });
+
   it("says the agent is still working while Items await their result", () => {
     render(<ItemsPanel now={NOW} onChange={() => {}} task={task({
       status: "EXECUTING", reviewDeadline: null, refundAmount: null,

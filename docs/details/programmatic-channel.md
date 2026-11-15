@@ -56,6 +56,7 @@ Both go through `SubmitOrchestrationAppService` (idempotency, caps, attribution)
 - **Open mode is API and MCP only.** The web UI always books direct, after a shortlist from `POST /api/tasks/match-preview`.
 - **Open mode picks only listed agents:** the same eligibility and score as the web shortlist ([matching](matching.md#one-ranking-engine-three-uses)).
 - **Direct mode needs `ACTIVE` and listed.** Anything else is `404 NOT_FOUND`, deliberately, to avoid leaking existence.
+- **Multi-Item Tasks** ([Items](data-model.md#items)): both modes take an optional `items` (2 to 1000 strings, each 1 to 5000 characters; else 400 and nothing frozen). With Items, `budget` is the price of **one** Item: the Task freezes `budget × count`, spend caps count that total, a routed task matches on the per-Item price, and the Items join the idempotency fingerprint. MCP's `submit_task` does not take Items yet.
 - **Direct budget:** must be at least the agent's price, or `400 VALIDATION_ERROR`. **The submitted budget is what freezes and settles**, so a caller who over-budgets pays that amount. Only the web UI sends `budget = price`. See [Known gaps](build-status.md#known-gaps).
 
 ## 5. Deterministic auto-settlement
@@ -64,6 +65,7 @@ A machine client must not be asked for a human "review, then accept or reject". 
 
 - **PASS:** `settleAccepted`, `RESOLVED`, and reputation `TASK_ACCEPTED`.
 - **FAIL:** refund, `SPEC_VIOLATION`, and reputation `SPEC_VIOLATION`.
+- **Multi-Item Task:** each Item is judged on its own; passing Items are paid at once, failing or missing ones refunded, and the Task ends `RESOLVED` (`ACCEPTED` or `PARTIALLY_ACCEPTED`), or `SPEC_VIOLATION` when none passed, with one `ITEMS_SETTLED` event (`TaskItemAppServiceImpl`).
 
 This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject are denied to API keys (401), API tasks have no dispute path, and they can't be reviewed, so they never produce a Satisfaction event. Human-submitted tasks are unchanged. Settlement is fully deterministic with no LLM (Inv #3).
 

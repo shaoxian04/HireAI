@@ -25,6 +25,12 @@ public record TaskItems(List<TaskItemModel> all) {
     /** Same limit as a Task description, which is what an Item's input stands in for. */
     public static final int MAX_INPUT_LENGTH = 5000;
     private static final int QUALITY_SCALE = 3;
+    /**
+     * The lowest per-Item price that still earns a commission: each Item settles on its own and the
+     * 15% is rounded per Item, so below 0.04 it rounds to 0.00 and a many-Item Task would pay none.
+     * Single-deliverable Tasks keep their own minimum (see build-status Known gaps).
+     */
+    public static final Money MIN_ITEM_PRICE = Money.of("0.04");
 
     public TaskItems {
         all = all.stream().sorted(Comparator.comparingInt(TaskItemModel::itemNo)).toList();
@@ -40,6 +46,11 @@ public record TaskItems(List<TaskItemModel> all) {
         if (inputs.size() > MAX_ITEMS) {
             throw new DomainException(ResultCode.VALIDATION_ERROR,
                     "items: a Task can hold at most " + MAX_ITEMS + " Items; got " + inputs.size());
+        }
+        if (price == null || MIN_ITEM_PRICE.isGreaterThan(price)) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "budget: with Items, the budget is the price of one Item and must be at least "
+                            + MIN_ITEM_PRICE.value() + " credits; got " + (price == null ? null : price.value()));
         }
         List<TaskItemModel> items = new ArrayList<>(inputs.size());
         for (int i = 0; i < inputs.size(); i++) {

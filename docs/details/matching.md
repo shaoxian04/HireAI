@@ -222,6 +222,7 @@ Agent has an AgentSigningSecret, `X-HireAI-Signature` (see **Signature** below).
 | `outputSpec` | The task's frozen output spec (Hard Invariant #4) as a JSON object: `format`, `schema`, `acceptanceCriteria`. Your result is validated, and any dispute judged, against it |
 | `executionDeadline` | ISO-8601 instant: the `execution_deadline` stamped at assignment. After it the task times out |
 | `callbackUrl` | Where to POST the result, with the same bearer token and your own signature (see **Result callback** below) |
+| `items` | Only on a multi-Item Task ([Items](data-model.md#items)): `[{itemNo, input}]`, one entry per Item, numbered from 1. Absent otherwise, so a single-deliverable WorkOrder is unchanged |
 
 Nothing else is sent: no Client identity and no budget.
 
@@ -271,6 +272,13 @@ with your **current** signing secret and the current time. Body:
 `{ taskId, agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }`. `taskId` is
 required and must be the WorkOrder's `taskId`: the signature covers only the timestamp and body, so the body
 naming its task is what stops a signed result from being replayed onto another task's callback.
+
+For a multi-Item Task, send `items: [{itemNo, agentStatus, resultPayloadJson, resultUrl}]`, one per Item of the
+WorkOrder; the top-level `resultPayloadJson` may then be left out. Each Item is checked against the Task's
+Contract and settled on its own. An Item reported `FAILED` or left out is refunded; an `itemNo` the Task does not
+have, or one named twice, or an Item `resultUrl` that is not an absolute https URL, makes the whole callback a
+400 (nothing recorded, so it can be resent). A top-level
+`agentStatus` other than `COMPLETED` fails the whole Task, as for a single deliverable.
 
 The platform reads the raw bytes, verifies the token, then verifies the signature with the secret of the
 token's Agent version (which must be the task's assigned one), and only then parses the JSON. It answers

@@ -61,6 +61,19 @@ class TaskItemsTest {
     }
 
     @Test
+    void anItemResultLinkMustBeAnAbsoluteHttpsUrl() {
+        TaskItemModel item = TaskItems.submit(taskId, List.of("a", "b"), Money.of("1.00")).all().get(0);
+
+        for (String bad : List.of("javascript:alert(1)", "http://files.example/x", "/relative/x", "https://", "data:text/html,x")) {
+            assertThatThrownBy(() -> item.recordResult("COMPLETED", "{}", bad, PASSED))
+                    .as(bad).isInstanceOf(DomainException.class).hasMessageContaining("https");
+        }
+        assertThat(item.recordResult("COMPLETED", "{}", "HTTPS://files.example/x", PASSED).resultUrl())
+                .isEqualTo("HTTPS://files.example/x");
+        assertThat(item.recordResult("COMPLETED", "{}", null, PASSED).resultUrl()).isNull();
+    }
+
+    @Test
     void theAcceptedFractionIsAcceptedItemsOverAllItems() {
         TaskItems items = TaskItems.submit(taskId, List.of("a", "b", "c"), Money.of("1.00"));
         List<TaskItemModel> all = items.all();
