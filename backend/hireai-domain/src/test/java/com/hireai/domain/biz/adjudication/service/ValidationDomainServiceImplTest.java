@@ -12,12 +12,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ValidationDomainServiceImplTest {
 
     // Fake SchemaValidator: parses with a trivial brace check, honours a "SCHEMA_OK"/"SCHEMA_BAD" marker.
-    private final SchemaValidator fake = (payload, schema) -> {
-        boolean valid = payload != null && payload.trim().startsWith("{") && payload.trim().endsWith("}");
-        if (!valid) return new JsonCheckResult(false, false, false, "bad json");
-        if (schema == null || schema.isBlank()) return new JsonCheckResult(true, false, false, "no schema");
-        if ("SCHEMA_BAD".equals(schema)) return new JsonCheckResult(true, true, false, "mismatch");
-        return new JsonCheckResult(true, true, true, "ok");
+    private final SchemaValidator fake = new SchemaValidator() {
+        @Override
+        public JsonCheckResult check(String payload, String schema) {
+            boolean valid = payload != null && payload.trim().startsWith("{") && payload.trim().endsWith("}");
+            if (!valid) return new JsonCheckResult(false, false, false, "bad json");
+            if (schema == null || schema.isBlank()) return new JsonCheckResult(true, false, false, "no schema");
+            if ("SCHEMA_BAD".equals(schema)) return new JsonCheckResult(true, true, false, "mismatch");
+            return new JsonCheckResult(true, true, true, "ok");
+        }
+
+        @Override
+        public java.util.Optional<String> problemWith(String schema) {
+            return java.util.Optional.empty();
+        }
     };
     private final ValidationDomainService svc = new ValidationDomainServiceImpl(fake);
     private final UUID taskId = UUID.randomUUID();

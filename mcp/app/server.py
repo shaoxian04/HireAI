@@ -35,13 +35,16 @@ async def list_categories() -> str:
 
 async def submit_task(description: str, budget: float, category: str = "", output_spec: str = "",
                       agent_id: str = "", title: str = "Task via MCP", output_format: str = "TEXT",
-                      deadline_seconds: int | None = None) -> str:
+                      deadline_seconds: int | None = None, schema: str = "") -> str:
     """Submit a task to HireAI. If `agent_id` is given the task is direct-booked to that agent (it
     inherits the agent's output spec — only description, budget, agent_id are needed). Otherwise the
     task is routed to the best-matching agent and `category` is required: a slug from
     list_categories (`output_spec` is the acceptance criteria; `output_format` is TEXT, JSON, or FILE).
     `deadline_seconds` (optional) is how soon the result is needed, counted from now: only agents that
-    can finish in time are picked (a direct booking of a slower agent is refused)."""
+    can finish in time are picked (a direct booking of a slower agent is refused).
+    `schema` (routed JSON tasks only, optional) is a JSON Schema object the result must conform to,
+    checked automatically before the task settles; a non-blank schema that is not a valid JSON Schema
+    is rejected with a 400, and nothing is charged. Leave it empty to accept any JSON."""
     client = _client()
     if agent_id:
         task = await client.submit_direct(title=title, description=description,
@@ -52,7 +55,7 @@ async def submit_task(description: str, budget: float, category: str = "", outpu
             return "Error: `category` is required for a routed submit (or pass `agent_id` to direct-book an agent)."
         task = await client.submit_routed(title=title, description=description, category=category,
                                           budget=budget, output_format=output_format,
-                                          acceptance_criteria=output_spec,
+                                          schema=schema, acceptance_criteria=output_spec,
                                           deadline_seconds=deadline_seconds)
     return json.dumps({"task_id": task.get("id"), "status": task.get("status")}, default=str)
 

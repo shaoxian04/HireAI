@@ -49,7 +49,8 @@ class DirectBookingAppServiceTest {
             mock(com.hireai.application.biz.acceptance.TemplateReadAppService.class),
             new com.hireai.domain.biz.acceptance.coverage.service.impl.OfferCoverageDomainServiceImpl(),
             java.time.Clock.systemUTC(),
-            new com.hireai.domain.biz.task.model.ExecutionGrace(60));
+            new com.hireai.domain.biz.task.model.ExecutionGrace(60),
+            mock(com.hireai.domain.biz.adjudication.service.ValidationDomainService.class));
 
     // ---- helpers ----
 
