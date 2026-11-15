@@ -107,7 +107,8 @@ async def run(request: Request, authorization: str = Header(default="")):
 
 async def _complete(task_id: str, callback_url: str, token: str, secret: str | None = None,
                     result_url: str | None = None):
-    await asyncio.sleep(2)  # simulate execution
+    # simulate execution; HIREAI_AGENT_WORK_SECONDS lengthens it for a staged demo
+    await asyncio.sleep(float(os.environ.get("HIREAI_AGENT_WORK_SECONDS", "2")))
     result_payload = json.dumps({"summary": DEMO_SUMMARY})
     callback_body = {
         # Names the task this result answers; the platform rejects a signed body for another task.
