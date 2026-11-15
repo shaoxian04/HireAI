@@ -44,7 +44,7 @@ class SettlementWriteAppServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new SettlementWriteAppServiceImpl(
-                walletRepository, settlementDomainService, settlementRepository);
+                walletRepository, settlementDomainService, settlementRepository, org.mockito.Mockito.mock(com.hireai.domain.biz.ledger.settlement.repository.ItemSettlementRepository.class));
     }
 
     @Test

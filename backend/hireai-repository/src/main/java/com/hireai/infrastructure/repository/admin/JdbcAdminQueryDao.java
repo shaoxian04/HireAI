@@ -37,7 +37,8 @@ public class JdbcAdminQueryDao implements AdminQueryPort {
                   (SELECT COUNT(*) FROM users)                                 AS users_total,
                   (SELECT COUNT(*) FROM agents)                                AS agents_total,
                   (SELECT COALESCE(SUM(escrow_balance), 0) FROM wallets)       AS escrow_held,
-                  (SELECT COALESCE(SUM(commission), 0) FROM settlements)       AS commission_earned
+                  ((SELECT COALESCE(SUM(commission), 0) FROM settlements)
+                   + (SELECT COALESCE(SUM(commission), 0) FROM task_item_settlements)) AS commission_earned
                 """;
         return jdbc.queryForObject(sql, Map.of(), (rs, i) -> new AdminViews.Overview(
                 rs.getLong("disputes_open"), rs.getLong("disputes_arbitrating"),

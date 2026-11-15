@@ -53,7 +53,7 @@ class TaskReviewAppServiceImplTest {
     void setUp() {
         service = new TaskReviewAppServiceImpl(taskRepository, agentRepository,
                 settlementWriteAppService, disputeAppService, reputationWriteAppService,
-                java.time.Clock.systemUTC());
+                java.time.Clock.systemUTC(), org.mockito.Mockito.mock(com.hireai.application.biz.task.item.TaskItemAppService.class));
     }
 
     /** Build a task in PENDING_REVIEW (passed the validation gate) so accept/reject are legal. */

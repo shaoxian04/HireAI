@@ -5,6 +5,7 @@ import com.hireai.application.biz.offering.agent.AgentReadAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.callback.AgentCallbackAppService;
+import com.hireai.application.biz.task.item.TaskItemAppService;
 import com.hireai.domain.biz.reputation.enums.ReputationEventType;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
 import com.hireai.application.port.security.DispatchTokenClaims;
@@ -50,6 +51,7 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
     private final ReputationWriteAppService reputationWriteAppService;
     private final AgentReadAppService agentReadAppService;
     private final Clock clock;
+    private final TaskItemAppService taskItemAppService;
 
     @Override
     @Transactional(readOnly = true)
@@ -99,6 +101,11 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
                     failed.clientId(), ReputationEventType.EXECUTION_FAILED);
             webhookOutboxAppService.enqueueFailed(failed, failed.status().name());
             log.info("Task {} agent reported {} -> FAILED (refunded)", taskId, result.agentStatus());
+            return;
+        }
+        if (taskItemAppService.hasItems(taskId)) {
+            // A multi-Item Task: each Item is judged and settled on its own (spec S3).
+            taskItemAppService.recordItemResults(task, result);
             return;
         }
         TaskResultModel resultModel = TaskResultModel.record(

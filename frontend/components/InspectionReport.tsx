@@ -11,7 +11,8 @@ const RULE_TEXT: Record<string, string> = {
   FORMAT_FILE_HTTPS_URL: "The deliverable is a file at a secure (https) link",
 };
 
-function ruleText(rule: string): string {
+/** A check rule in plain words (unknown rules fall back to their name). */
+export function ruleText(rule: string): string {
   return RULE_TEXT[rule] ?? rule.toLowerCase().replace(/_/g, " ");
 }
 

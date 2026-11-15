@@ -4,6 +4,7 @@ import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
+import com.hireai.application.biz.task.item.TaskItemAppService;
 import com.hireai.domain.biz.reputation.enums.ReputationEventType;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.RejectReason;
@@ -38,13 +39,26 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
     private final ReputationWriteAppService reputationWriteAppService;
     /** The app's Clock bean (ClockConfig); tests set it to pick the moment a review window closes. */
     private final Clock clock;
+    /** A multi-Item Task is accepted Item by Item (spec S3). */
+    private final TaskItemAppService taskItemAppService;
 
     @Override
     public UUID accept(UUID taskId, UUID clientId) {
         TaskModel task = loadOwned(taskId, clientId);
+        if (taskItemAppService.hasItems(taskId)) {
+            requirePendingReview(task);
+            taskItemAppService.acceptAllAwaitingReview(task, false); // every Item still awaiting review
+            log.info("Task {}: all Items awaiting review accepted by client {}", taskId, clientId);
+            return taskId;
+        }
         settleAccepted(task); // state guard: PENDING_REVIEW (caller passed the validation gate); exactly-once
         log.info("Task {} accepted by client {}", taskId, clientId);
         return taskId;
+    }
+
+    @Override
+    public void acceptItem(UUID taskId, UUID clientId, int itemNo) {
+        taskItemAppService.acceptItem(taskId, clientId, itemNo);
     }
 
     @Override
@@ -66,7 +80,11 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
             return;
         }
         // The Client's silence counts as acceptance (spec D10): the same settlement as their click.
-        settleAccepted(task);
+        if (taskItemAppService.hasItems(taskId)) {
+            taskItemAppService.acceptAllAwaitingReview(task, true);
+        } else {
+            settleAccepted(task);
+        }
         taskRepository.markReviewAutoAccepted(taskId);
         log.info("Task {} auto-accepted: review window closed at {} without a review", taskId, deadline);
     }
@@ -101,6 +119,13 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "A reject reason category is required");
         }
         TaskModel task = loadOwned(taskId, clientId);
+        if (taskItemAppService.hasItems(taskId)) {
+            // Rejecting single Items comes with the reviewer flow (spec S8, D17'); until then a
+            // multi-Item Task's Items are accepted, or accepted automatically when the window closes.
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Task " + taskId + " has several Items; accept them one by one or all at once. "
+                            + "Rejecting Items of a multi-Item Task is not available yet");
+        }
         if (task.status() == TaskStatus.PENDING_REVIEW) {
             Instant deadline = reviewDeadline(taskId);
             if (ReviewWindow.hasClosed(deadline, clock.instant())) {
@@ -126,6 +151,13 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
         taskRepository.save(disputed);
         disputeAppService.openDispute(disputed, clientId, reasonCategory);
         return taskId;
+    }
+
+    private static void requirePendingReview(TaskModel task) {
+        if (task.status() != TaskStatus.PENDING_REVIEW) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Illegal transition accept from " + task.status() + "; expected PENDING_REVIEW");
+        }
     }
 
     /**

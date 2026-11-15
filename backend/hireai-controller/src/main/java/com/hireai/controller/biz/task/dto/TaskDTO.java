@@ -5,6 +5,7 @@ import com.hireai.controller.biz.acceptance.dto.ContractDTO;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /** Outbound HTTP DTO for a task. No domain types leak across the boundary. */
@@ -41,7 +42,15 @@ public record TaskDTO(
          */
         Instant reviewDeadline,
         /** True when the window closed unreviewed and the platform accepted on the Client's behalf. */
-        Boolean autoAccepted
+        Boolean autoAccepted,
+        /**
+         * A multi-Item Task (spec S3): how many Items, the price of one ({@code budget} is the
+         * escrow, price × count), and each Item with its outcome. All three are absent on a
+         * single-deliverable Task; {@code items} is also absent on list responses.
+         */
+        Integer itemCount,
+        BigDecimal itemPrice,
+        List<TaskItemDTO> items
 ) {
 
     public record OutputSpecDTO(String format, String schema, String acceptanceCriteria) {

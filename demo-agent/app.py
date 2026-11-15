@@ -87,21 +87,44 @@ async def run(request: Request, authorization: str = Header(default="")):
     )
 
     # Process asynchronously so the dispatch POST returns immediately (202-style).
-    asyncio.create_task(_complete(task_id, callback_url, token, secret))
+    items = body.get("items")
+    extra = {"items": items} if items else {}  # only multi-Item WorkOrders carry items
+    asyncio.create_task(_complete(task_id, callback_url, token, secret, **extra))
     return {"accepted": True, "taskId": task_id}
 
 
-async def _complete(task_id: str, callback_url: str, token: str, secret: str | None = None):
+def item_results(items: list[dict]) -> list[dict]:
+    """One result per Item of a multi-Item WorkOrder. Tags in an Item's input stage the outcome:
+    #fail -> the Item is reported FAILED, #empty -> an empty result (fails a text Contract),
+    #skip -> left out of the callback (the platform counts it as failed); otherwise a staged text."""
+    results = []
+    for item in items:
+        text = item.get("input", "")
+        if "#skip" in text:
+            continue
+        if "#fail" in text:
+            results.append({"itemNo": item["itemNo"], "agentStatus": "FAILED"})
+            continue
+        payload = "" if "#empty" in text else f"Extracted from item {item['itemNo']}: {text}"
+        results.append({"itemNo": item["itemNo"], "agentStatus": "COMPLETED", "resultPayloadJson": payload})
+    return results
+
+
+async def _complete(task_id: str, callback_url: str, token: str, secret: str | None = None,
+                    items: list[dict] | None = None):
     await asyncio.sleep(2)  # simulate execution
-    result_payload = json.dumps({"summary": DEMO_SUMMARY})
     callback_body = {
         # Names the task this result answers; the platform rejects a signed body for another task.
         "taskId": task_id,
         "agentStatus": "COMPLETED",
-        "resultPayloadJson": result_payload,
         "resultUrl": None,
         "message": "stub agent completed",
     }
+    if items:
+        # A multi-Item Task: answer every Item under its itemNo.
+        callback_body["items"] = item_results(items)
+    else:
+        callback_body["resultPayloadJson"] = json.dumps({"summary": DEMO_SUMMARY})
     # Serialise once and sign exactly these bytes: the platform verifies the raw body.
     raw = json.dumps(callback_body).encode()
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}

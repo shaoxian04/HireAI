@@ -210,6 +210,32 @@ export interface TaskDTO {
   reviewDeadline?: string | null;
   /** True when the window closed unreviewed and the result was accepted automatically. */
   autoAccepted?: boolean | null;
+  /**
+   * A multi-Item Task (#103): how many Items, the price of one (`budget` is the escrow, price × count),
+   * and each Item with its outcome (`GET /tasks/{id}` and review responses only). All absent on a
+   * single-deliverable task.
+   */
+  itemCount?: number | null;
+  itemPrice?: number | null;
+  items?: TaskItemDTO[] | null;
+}
+
+/** An Item's own state inside a multi-Item Task. */
+export type ItemStatus = "AWAITING_RESULT" | "PENDING_REVIEW" | "ACCEPTED" | "SPEC_VIOLATION" | "FAILED";
+
+/** One Item of a multi-Item Task and its outcome; amounts appear once it settled. */
+export interface TaskItemDTO {
+  itemNo: number;
+  input: string;
+  status: ItemStatus;
+  price: number;
+  resultPayload?: string | null;
+  resultUrl?: string | null;
+  checks?: { rule: string; passed: boolean; detail?: string | null }[] | null;
+  autoAccepted?: boolean | null;
+  payoutAmount?: number | null;
+  commissionAmount?: number | null;
+  refundAmount?: number | null;
 }
 
 /** Mirrors the backend FailureReason enum (set once when a task ends without a result). */

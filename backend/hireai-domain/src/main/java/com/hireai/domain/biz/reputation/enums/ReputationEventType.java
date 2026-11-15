@@ -36,6 +36,12 @@ public enum ReputationEventType {
     DISPUTE_LOST(ReputationComponent.RELIABILITY, BigDecimal.ZERO),
 
     /**
+     * A finished multi-Item Task (spec D22, D27): one event per Task, weight 1, whose quality is the
+     * fraction of its Items that were accepted. Quality is carried per event, like {@link #RATING}.
+     */
+    ITEMS_SETTLED(ReputationComponent.RELIABILITY, null),
+
+    /**
      * A client rating. Quality is carried per-event rather than by the constant, because it is
      * derived from the stars: (stars − 1) / 4.
      */

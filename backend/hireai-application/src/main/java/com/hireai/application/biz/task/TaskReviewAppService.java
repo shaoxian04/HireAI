@@ -23,6 +23,12 @@ public interface TaskReviewAppService {
      * Rejects a result awaiting review. Refused with DOMAIN_RULE_VIOLATION once the review window
      * has closed: the Client's silence already counted as acceptance (#94).
      */
+    /**
+     * The Client accepts one Item of a multi-Item Task awaiting review (spec S3). Settles that Item
+     * 85/15; the Task resolves once its last Item settles. NOT_FOUND for another client's Task.
+     */
+    void acceptItem(UUID taskId, UUID clientId, int itemNo);
+
     UUID reject(@NonNull UUID taskId, @NonNull UUID clientId, RejectReason reasonCategory, String reason);
 
     /** Ids still PENDING_REVIEW whose review window has closed by the app's Clock (the sweeper's read). */

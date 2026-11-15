@@ -12,6 +12,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /** Inbound HTTP DTO for submitting a task. Bean Validation at the boundary. */
 public record SubmitTaskRequest(
@@ -26,7 +27,14 @@ public record SubmitTaskRequest(
         /** Optional: how many seconds from submit the Client needs the result (#83). */
         @Positive(message = "deadlineSeconds must be positive")
         @Max(value = ClientDeadline.MAX_SECONDS, message = "deadlineSeconds must be at most 2592000 (30 days)")
-        Long deadlineSeconds
+        Long deadlineSeconds,
+        /**
+         * Optional: the inputs of a multi-Item Task (spec S3), one per Item, 2 to 1000. With Items,
+         * {@code budget} is the price of ONE Item and the Task freezes budget × the Item count.
+         */
+        @Size(max = 1000, message = "items: a Task can hold at most 1000 Items")
+        List<@NotBlank(message = "items: an Item must not be blank")
+             @Size(max = 5000, message = "items: an Item must have at most 5000 characters") String> items
 ) {
 
     public record OutputSpecRequest(

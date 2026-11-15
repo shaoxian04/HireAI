@@ -48,7 +48,7 @@ class TaskReviewRejectGateTest {
         disputeAppService = mock(DisputeAppService.class);
         reputationWriteAppService = mock(ReputationWriteAppService.class);
         service = new TaskReviewAppServiceImpl(taskRepository, agentRepository, settlement,
-                disputeAppService, reputationWriteAppService, java.time.Clock.systemUTC());
+                disputeAppService, reputationWriteAppService, java.time.Clock.systemUTC(), org.mockito.Mockito.mock(com.hireai.application.biz.task.item.TaskItemAppService.class));
 
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         when(agentRepository.findOwnerByVersionId(agentVersionId)).thenReturn(Optional.of(builderId));
