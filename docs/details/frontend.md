@@ -91,7 +91,7 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   `/builder`; `builder/agents/[id]` — manage console. Above the tabs, `components/manage/SigningSecretPanel.tsx`
   shows whether a signing secret is set (`AgentDTO.hasSigningSecret`; the value is never readable) and
   offers rotation behind a confirm dialog, `POST /agents/{id}/rotate-secret`, revealing the new value
-  once in a modal. An agent without a secret gets an amber prompt to get one instead. Tabs: Storefront · Pricing (the output contract plus the version's Offer, `OfferPanel`) · Stats ·
+  once in a modal. An agent without a secret gets an amber prompt to get one instead. Tabs: Storefront · Pricing (the output contract plus the version's Offer, `OfferPanel`, with "Edit offer" opening `OfferEditor`: a Template per card, a range per parameter, published as `offer` with the new version) · Stats ·
   **Reputation** · Reviews; image uploader via `apiUpload`). **Reputation** renders the owner-only
   breakdown from `GET /api/agents/{id}/reputation`: the score on a marked 0–100 scale (50 = the
   neutral start), Reliability and Satisfaction as separate meters, and the event stream with each
@@ -126,7 +126,7 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   showing the raw key + copy button + a "won't see it again" warning; list; revoke); `client/webhooks` —
   webhooks console (register/replace an HTTPS callback per API key, reveal/rotate the signing secret, a
   delivery log with `DELIVERED`/`PENDING`/`DEAD` badges + an account-scoped `DEAD`-failure banner, manual
-  resend); `client/agents/[id]` — agent storefront; `client/agents/[id]/book` — direct-booking form (adopts
+  resend); `client/agents/[id]` — agent storefront (output contract and the Offer, "What this agent accepts"); `client/agents/[id]/book` — direct-booking form (adopts
   agent's `output_spec`). The `client/tasks/[id]` view also shows a per-task `WebhookDeliveryStatus`
   indicator with a resend action.
 - **Rebook a failed task.** "Choose another agent" links to `/client/tasks/new?rebook=<taskId>` (`rebookHref`); only

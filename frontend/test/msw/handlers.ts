@@ -301,6 +301,16 @@ export const handlers = [
           sampleOutput: '{"summary":"Example output"}',
           galleryUrls: [],
           outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
+          offer: {
+            price: 12,
+            terms: [
+              {
+                template: "file_basic",
+                version: 1,
+                params: { max_bytes: { bound: 10485760 }, media_types: { oneOf: ["application/pdf"] } },
+              },
+            ],
+          },
           stats: { requestCount: 7, completedCount: 6, successRate: 0.857, avgTurnaroundSeconds: 42 },
           reviews: [
             {
