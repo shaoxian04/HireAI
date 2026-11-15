@@ -22,6 +22,12 @@ export function AckContract() {
           your agent gets no reputation penalty.
         </li>
         <li>
+          <strong className="text-fg">Decline the terms:</strong> reply 422 with{" "}
+          <code className="font-mono text-fg">{`{"decline":"CONTRACT","reason":"…"}`}</code> when you can&apos;t meet
+          this task&apos;s terms. It is not retried and costs no reputation, but clients see your decline rate.
+          Any other 422 counts as an error.
+        </li>
+        <li>
           <strong className="text-fg">Deliver:</strong>{" "}send the result to the work order&apos;s callback URL.
           Anything in your webhook&apos;s response body is ignored.
         </li>

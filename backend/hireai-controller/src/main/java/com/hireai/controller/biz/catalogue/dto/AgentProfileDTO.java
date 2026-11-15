@@ -1,6 +1,7 @@
 package com.hireai.controller.biz.catalogue.dto;
 
 import com.hireai.controller.biz.acceptance.dto.OfferDTO;
+import com.hireai.controller.biz.task.dto.ContractDeclineRateDTO;
 
 import java.time.Instant;
 import java.util.List;
@@ -30,12 +31,16 @@ public record AgentProfileDTO(
     ) {
     }
 
-    /** Derived execution statistics computed from completed tasks. */
+    /**
+     * Derived execution statistics computed from completed tasks, plus the public contract-decline
+     * rate (#93) from the dispatch history.
+     */
     public record StatsDTO(
             int requestCount,
             int completedCount,
             Double successRate,
-            Double avgTurnaroundSeconds
+            Double avgTurnaroundSeconds,
+            ContractDeclineRateDTO contractDeclines
     ) {
     }
 

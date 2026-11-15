@@ -153,6 +153,27 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
                 agentVersionId);
     }
 
+    @Override
+    public void declineContract(UUID taskId, UUID agentVersionId, String reason) {
+        // Same lock order and guard as declineAsBusy.
+        TaskModel task = loadForUpdate(taskId);
+        if (!task.isAwaitingDispatchTo(agentVersionId)) {
+            log.info("Task {} is {} (version {}); ignoring contract decline from version {}", taskId,
+                    task.status(), task.agentVersionId(), agentVersionId);
+            return;
+        }
+        // Refusing a Contract is honest, not a fault: no reputation event (D2). It is counted in the
+        // Agent's public decline rate, which reads this history row.
+        taskWriteAppService.appendContractDecline(taskId, agentVersionId, reason);
+        if (failsOver(task)) {
+            routingAppService.failOver(taskId);
+            return;
+        }
+        taskWriteAppService.failWithRefund(taskId, FailureReason.CONTRACT_DECLINED);
+        log.info("Task {} contract declined by version {}: FAILED (CONTRACT_DECLINED), escrow refunded", taskId,
+                agentVersionId);
+    }
+
     /** Routed failover (#78) or the end of the task: the rule is the task's own. */
     private boolean failsOver(TaskModel task) {
         return task.failsOverOnDispatchFailure(taskRepository.findPinnedAgentVersionId(task.id()).isPresent());

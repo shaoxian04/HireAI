@@ -1,5 +1,6 @@
 package com.hireai.application.biz.task;
 
+import com.hireai.domain.biz.task.dispatchattempt.info.ContractDeclineRate;
 import com.hireai.domain.shared.model.Money;
 
 import java.math.BigDecimal;
@@ -41,10 +42,16 @@ public interface MatchPreviewAppService {
      * {@code reliabilitySum}/{@code reliabilityCount} are the platform-witnessed delivery record.
      * The shortlist renders those rather than {@code reputationScore}, which is retained only as
      * the matcher's own input — it must never be drawn as if it were a client star rating.
+     * {@code contractDeclines} is the Agent's public contract-decline rate (#93); shown, never ranked on.
      */
     record AgentOption(UUID agentId, UUID agentVersionId, String agentName, String tagline,
                        String logoUrl, BigDecimal price, BigDecimal reputationScore, boolean available,
                        String outputFormat, List<String> capabilityCategories,
-                       BigDecimal reliabilitySum, long reliabilityCount) {
+                       BigDecimal reliabilitySum, long reliabilityCount, ContractDeclineRate contractDeclines) {
+
+        public AgentOption withContractDeclines(ContractDeclineRate rate) {
+            return new AgentOption(agentId, agentVersionId, agentName, tagline, logoUrl, price, reputationScore,
+                    available, outputFormat, capabilityCategories, reliabilitySum, reliabilityCount, rate);
+        }
     }
 }

@@ -12,13 +12,16 @@ import { InspectionReport } from "@/components/InspectionReport";
 import { TaskFailurePanel } from "@/components/TaskFailurePanel";
 import { DeliverablePanel, LegacyDeliverableLink } from "@/components/DeliverablePanel";
 import WebhookDeliveryStatus from "@/components/WebhookDeliveryStatus";
-import type { TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO, ValidationReportDTO } from "@/lib/types";
+import type {
+  TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO, ValidationReportDTO, DispatchAttemptDTO,
+} from "@/lib/types";
 import { Badge, Skeleton } from "@/components/ui";
 import { ResultView } from "@/components/ResultView";
 import { ResultReviewBar } from "@/components/ResultReviewBar";
 import { RatingPrompt } from "@/components/RatingPrompt";
 import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
 import { ContractPanel } from "@/components/AcceptanceTerms";
+import { DispatchHistory } from "@/components/ContractDeclines";
 import { AgentResponsePending, ClientDecisionPanel, RevisedResultNotice } from "@/components/RejectionPanel";
 
 const POLL_MS = 2000;
@@ -71,6 +74,7 @@ function TaskDetail() {
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<DisputeOutcomeDTO | null>(null);
   const [validation, setValidation] = useState<ValidationReportDTO | null>(null);
+  const [attempts, setAttempts] = useState<DispatchAttemptDTO[]>([]);
 
   // Keep the latest result in a ref so the interval closure can read it without re-subscribing.
   const resultRef = useRef<TaskResultDTO | null>(null);
@@ -108,6 +112,17 @@ function TaskDetail() {
       .catch(() => { /* no report — panel still renders without the drawer */ });
     return () => { cancelled = true; };
   }, [task?.status, id, hasResult]);
+
+  // The hand-off history (#75, #93): re-read whenever the status moves, so a failover or a declined
+  // contract shows up. Best-effort: on any error the section just stays off.
+  useEffect(() => {
+    if (!task?.status) return;
+    let cancelled = false;
+    api<DispatchAttemptDTO[]>(`/tasks/${id}/attempts`)
+      .then((a) => { if (!cancelled) setAttempts(a ?? []); })
+      .catch(() => { /* no history shown */ });
+    return () => { cancelled = true; };
+  }, [task?.status, id]);
 
   // While the task is under dispute, poll the outcome so the client sees it move live through
   // ARBITRATING -> RULED (accept/appeal) -> ESCALATED -> RESOLVED.
@@ -336,6 +351,8 @@ function TaskDetail() {
           detail={validation}
         />
       )}
+
+      <DispatchHistory attempts={attempts} />
 
       {!result && RESULT_READY.has(task.status) && (
         <section
