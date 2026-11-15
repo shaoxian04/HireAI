@@ -39,7 +39,7 @@ public class DispatchAttemptDO {
     @Column(name = "occurred_at", nullable = false)
     private Instant occurredAt;
 
-    /** V42: the Agent's reason on a CONTRACT_DECLINED attempt (#93); null otherwise. */
+    /** V43: the Agent's reason on a CONTRACT_DECLINED attempt (#93); null otherwise. */
     @Column(name = "decline_reason")
     private String declineReason;
 

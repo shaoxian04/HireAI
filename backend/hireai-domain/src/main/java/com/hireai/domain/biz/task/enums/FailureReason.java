@@ -3,7 +3,7 @@ package com.hireai.domain.biz.task.enums;
 /**
  * Why a task ended without a delivered result (#74). The status says HOW it ended; this says WHY.
  * Set once, by the terminal transition, and shown to the client (task API, {@code task.failed}
- * webhook, MCP, web failure panel). Closed set: must stay in sync with the V42 CHECK constraint.
+ * webhook, MCP, web failure panel). Closed set: must stay in sync with the V43 CHECK constraint.
  */
 public enum FailureReason {
     /** Every send attempt in the retry schedule failed (dispatch DLQ). */

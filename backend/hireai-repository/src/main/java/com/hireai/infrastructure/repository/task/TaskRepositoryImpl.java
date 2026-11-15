@@ -55,10 +55,17 @@ public class TaskRepositoryImpl implements TaskRepository {
                 task.failureReason() == null ? null : task.failureReason().name()));
 
         TaskResultModel result = task.result();
-        if (result != null && taskResultJpa.findByTaskId(result.taskId()).isEmpty()) {
-            taskResultJpa.save(new TaskResultDO(
-                    result.id(), result.taskId(), result.resultPayloadJson(),
-                    result.resultUrl(), result.agentStatus(), result.receivedAt()));
+        if (result != null) {
+            Optional<TaskResultDO> stored = taskResultJpa.findByTaskId(result.taskId());
+            if (stored.isEmpty()) {
+                taskResultJpa.save(new TaskResultDO(
+                        result.id(), result.taskId(), result.resultPayloadJson(),
+                        result.resultUrl(), result.agentStatus(), result.receivedAt()));
+            } else if (!stored.get().getId().equals(result.id())) {
+                // A revision (#95) is a new result for a task that already has one: it replaces it.
+                taskResultJpa.replaceResult(result.taskId(), result.resultPayloadJson(), result.resultUrl(),
+                        result.agentStatus(), result.receivedAt());
+            }
         }
         return task;
     }

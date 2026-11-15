@@ -27,7 +27,7 @@ public final class DispatchAttemptModel {
     /** The Agent's own words on a {@code CONTRACT_DECLINED} attempt; null otherwise (and optional then). */
     private final String declineReason;
 
-    /** Longest decline reason kept (V42 CHECK); the rest of a longer one is dropped. */
+    /** Longest decline reason kept (V43 CHECK); the rest of a longer one is dropped. */
     public static final int MAX_DECLINE_REASON_LENGTH = 500;
 
     private DispatchAttemptModel(UUID id, UUID taskId, UUID agentVersionId, int attemptNumber,

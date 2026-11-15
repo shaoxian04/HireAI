@@ -2,7 +2,7 @@ package com.hireai.domain.biz.task.dispatchattempt.enums;
 
 /**
  * How one dispatch attempt (one Agent version the platform tried to hand a task to) ended. Closed
- * set: must stay in sync with the V42 CHECK constraint on {@code dispatch_attempts.outcome}.
+ * set: must stay in sync with the V43 CHECK constraint on {@code dispatch_attempts.outcome}.
  */
 public enum DispatchOutcome {
     /** The Agent acknowledged the WorkOrder with a 2xx. */

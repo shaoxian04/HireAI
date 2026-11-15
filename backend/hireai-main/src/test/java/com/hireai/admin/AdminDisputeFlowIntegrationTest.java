@@ -24,6 +24,8 @@ import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import com.hireai.support.rejection.RejectionSteps;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -79,6 +81,7 @@ class AdminDisputeFlowIntegrationTest {
     @Autowired DisputeAppService disputeAppService;
     @Autowired AdminReadAppService adminReadAppService;
     @Autowired TaskReviewAppService reviewAppService;
+    @Autowired ApplicationContext context;
     @Autowired TaskRepository taskRepository;
     @Autowired DisputeRepository disputeRepository;
     @Autowired WalletRepository walletRepository;
@@ -221,7 +224,7 @@ class AdminDisputeFlowIntegrationTest {
         UUID taskId = seedReviewableTask(clientId, Money.of("100.00"));
 
         // client rejects (B_FACTUAL) -> dispute opens; stub proposes a ruling synchronously -> RULED
-        reviewAppService.reject(taskId, clientId, RejectReason.B_FACTUAL, "off-topic");
+        RejectionSteps.rejectThenArbitrate(context, taskId, clientId, RejectReason.B_FACTUAL, "off-topic");
         UUID disputeId = disputeRepository.findByTaskId(taskId).orElseThrow().id();
         assertThat(disputeRepository.findById(disputeId).orElseThrow().status()).isEqualTo(DisputeStatus.RULED);
         assertThat(walletRepository.findByUserId(clientId).orElseThrow().escrow())

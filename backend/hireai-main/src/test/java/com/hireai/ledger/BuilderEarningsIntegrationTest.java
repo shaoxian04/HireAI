@@ -15,6 +15,8 @@ import com.hireai.domain.shared.model.Money;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import com.hireai.support.rejection.RejectionSteps;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -62,6 +64,7 @@ class BuilderEarningsIntegrationTest {
 
     @Autowired BuilderEarningsReadAppService earningsService;
     @Autowired TaskReviewAppService reviewAppService;
+    @Autowired ApplicationContext context;
     @Autowired TaskRepository taskRepository;
     @Autowired WalletWriteAppService walletWrite;
     @Autowired JdbcTemplate jdbc;
@@ -121,8 +124,7 @@ class BuilderEarningsIntegrationTest {
         // not a settlement yet): the task stays DISPUTED with escrow still held, which
         // TaskStatus.isPendingEscrow() counts as "pending" (it could still pay the builder if the
         // ruling is appealed and overridden) — so it still shows up in pendingIfAccepted, not earned.
-        reviewAppService.reject(rejectedTask.id(), client, RejectReason.A_MISMATCH, "not good enough");
-
+        RejectionSteps.rejectThenArbitrate(context, rejectedTask.id(), client, RejectReason.A_MISMATCH, "not good enough");
         Earnings e = earningsService.earningsFor(builder);
 
         assertThat(e.lifetimeEarned()).isEqualByComparingTo("10.20");   // net of 12.00; rejected task never accepted

@@ -59,6 +59,10 @@ class AgentWriteAppServiceImplTest {
             AgentVersionModel version = versionStore.get(agentVersionId);
             return version == null ? Optional.empty() : Optional.ofNullable(secrets.get(version.agentId()));
         }
+        @Override public Optional<String> findWebhookUrlByVersionId(UUID agentVersionId) {
+            AgentVersionModel version = versionStore.get(agentVersionId);
+            return version == null ? Optional.empty() : Optional.ofNullable(version.webhookUrl());
+        }
 
         @Override public AgentModel save(AgentModel agent) {
             store.put(agent.id(), agent);
