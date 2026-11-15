@@ -1,6 +1,7 @@
 package com.hireai.controller.biz.task.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.hireai.controller.biz.acceptance.dto.ContractDTO;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -16,6 +17,8 @@ public record TaskDTO(
         BigDecimal budget,
         String status,
         OutputSpecDTO outputSpec,
+        /** The Contract frozen at submit (ADR 0009); absent on Tasks submitted before Contracts existed. */
+        ContractDTO contract,
         Instant createdAt,
         String resolution,
         Instant resolvedAt,

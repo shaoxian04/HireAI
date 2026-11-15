@@ -41,6 +41,11 @@ public class TaskDO {
     @Column(name = "output_spec", columnDefinition = "jsonb", nullable = false)
     private String outputSpec;
 
+    /** The frozen Contract (V39); null on Tasks submitted before it. A DB trigger blocks any change once set. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "contract", columnDefinition = "jsonb")
+    private String contract;
+
     @Column(name = "category")
     private String category;
 
@@ -72,7 +77,7 @@ public class TaskDO {
     }
 
     public TaskDO(UUID id, UUID clientId, String title, String description,
-                         BigDecimal budget, String outputSpec, String category, String status,
+                         BigDecimal budget, String outputSpec, String contract, String category, String status,
                          UUID agentVersionId, Instant gmtCreate,
                          String resolution, Instant resolvedAt, String rejectionReason,
                          String rejectReasonCategory, String failureReason) {
@@ -82,6 +87,7 @@ public class TaskDO {
         this.description = description;
         this.budget = budget;
         this.outputSpec = outputSpec;
+        this.contract = contract;
         this.category = category;
         this.status = status;
         this.agentVersionId = agentVersionId;
@@ -99,6 +105,7 @@ public class TaskDO {
     public String getDescription() { return description; }
     public BigDecimal getBudget() { return budget; }
     public String getOutputSpec() { return outputSpec; }
+    public String getContract() { return contract; }
     public String getCategory() { return category; }
     public String getStatus() { return status; }
     public UUID getAgentVersionId() { return agentVersionId; }

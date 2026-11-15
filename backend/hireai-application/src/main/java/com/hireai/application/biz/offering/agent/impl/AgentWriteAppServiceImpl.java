@@ -1,6 +1,7 @@
 package com.hireai.application.biz.offering.agent.impl;
 
 import com.hireai.application.biz.offering.agent.AgentWriteAppService;
+import com.hireai.application.biz.acceptance.TemplateReadAppService;
 import com.hireai.application.port.webhook.WebhookUrlValidatorPort;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.event.AgentActivatedDomainEvent;
@@ -51,11 +52,14 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
     private final WebhookUrlValidatorPort urlValidator;
     private final CategoryRepository categoryRepository;
     private final CategorySuggestionRepository categorySuggestionRepository;
+    /** Checks a new version's Offer against the Templates before it is saved (ADR 0009). */
+    private final TemplateReadAppService templateReadAppService;
 
     @Override
     public AgentRegistration register(AgentRegisterInfo registerInfo) {
         categoryRepository.load().requireAllKnown(registerInfo.capabilityCategories());
         AgentModel agent = registerDomainService.register(registerInfo);
+        templateReadAppService.requireValid(agent.currentVersion().offer());
         assertWebhookDeliverable(agent);
         Instant now = Instant.now();
         Optional<CategorySuggestion> suggestion = CategorySuggestion.of(registerInfo.suggestedCategory(),

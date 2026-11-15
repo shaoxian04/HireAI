@@ -35,6 +35,11 @@ public class AgentVersionDO {
     @Column(name = "output_spec", columnDefinition = "jsonb", nullable = false)
     private String outputSpec;
 
+    /** The version's Offer (V39). A row inserted without one gets the output spec's equivalent from a trigger. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "offer", columnDefinition = "jsonb", nullable = false)
+    private String offer;
+
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "capability_categories", columnDefinition = "text[]", nullable = false)
     private List<String> capabilityCategories;
@@ -60,7 +65,7 @@ public class AgentVersionDO {
     protected AgentVersionDO() {
     }
 
-    public AgentVersionDO(UUID id, UUID agentId, int versionNumber, String outputSpec,
+    public AgentVersionDO(UUID id, UUID agentId, int versionNumber, String outputSpec, String offer,
                                  List<String> capabilityCategories, String webhookUrl,
                                  int maxExecutionSeconds, int maxConcurrent, BigDecimal price,
                                  String status, Instant gmtCreate) {
@@ -68,6 +73,7 @@ public class AgentVersionDO {
         this.agentId = agentId;
         this.versionNumber = versionNumber;
         this.outputSpec = outputSpec;
+        this.offer = offer;
         this.capabilityCategories = capabilityCategories;
         this.webhookUrl = webhookUrl;
         this.maxExecutionSeconds = maxExecutionSeconds;
@@ -81,6 +87,7 @@ public class AgentVersionDO {
     public UUID getAgentId() { return agentId; }
     public int getVersionNumber() { return versionNumber; }
     public String getOutputSpec() { return outputSpec; }
+    public String getOffer() { return offer; }
     public List<String> getCapabilityCategories() { return capabilityCategories; }
     public String getWebhookUrl() { return webhookUrl; }
     public int getMaxExecutionSeconds() { return maxExecutionSeconds; }

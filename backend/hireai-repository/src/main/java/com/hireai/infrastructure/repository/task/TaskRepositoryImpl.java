@@ -9,6 +9,7 @@ import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskQuery;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.shared.model.Money;
+import com.hireai.application.biz.acceptance.AcceptanceJsonMapper;
 import com.hireai.application.biz.task.OutputSpecJsonMapper;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
@@ -30,12 +31,14 @@ public class TaskRepositoryImpl implements TaskRepository {
     private final TaskJpaRepository taskJpa;
     private final TaskResultJpaRepository taskResultJpa;
     private final OutputSpecJsonMapper outputSpecJsonMapper;
+    private final AcceptanceJsonMapper acceptanceJsonMapper;
 
     public TaskRepositoryImpl(TaskJpaRepository taskJpa, TaskResultJpaRepository taskResultJpa,
-                              OutputSpecJsonMapper outputSpecJsonMapper) {
+                              OutputSpecJsonMapper outputSpecJsonMapper, AcceptanceJsonMapper acceptanceJsonMapper) {
         this.taskJpa = taskJpa;
         this.taskResultJpa = taskResultJpa;
         this.outputSpecJsonMapper = outputSpecJsonMapper;
+        this.acceptanceJsonMapper = acceptanceJsonMapper;
     }
 
     @Override
@@ -43,6 +46,7 @@ public class TaskRepositoryImpl implements TaskRepository {
         taskJpa.save(new TaskDO(
                 task.id(), task.clientId(), task.title(), task.description(),
                 task.budget().value(), outputSpecJsonMapper.toJson(task.outputSpec()),
+                task.contract() == null ? null : acceptanceJsonMapper.toJson(task.contract()),
                 task.category(), task.status().name(), task.agentVersionId(), task.createdAt(),
                 task.resolution() == null ? null : task.resolution().name(),
                 task.resolvedAt(), task.rejectionReason(),
@@ -134,6 +138,7 @@ public class TaskRepositoryImpl implements TaskRepository {
         return new TaskModel(
                 entity.getId(), entity.getClientId(), entity.getTitle(), entity.getDescription(),
                 Money.of(entity.getBudget()), outputSpecJsonMapper.fromJson(entity.getOutputSpec()),
+                entity.getContract() == null ? null : acceptanceJsonMapper.contractFromJson(entity.getContract()),
                 entity.getCategory(), TaskStatus.valueOf(entity.getStatus()),
                 entity.getAgentVersionId(), result, entity.getGmtCreate(),
                 entity.getResolution() == null ? null : TaskResolution.valueOf(entity.getResolution()),

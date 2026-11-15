@@ -1,5 +1,6 @@
 package com.hireai.controller.biz.task.converter;
 
+import com.hireai.controller.biz.acceptance.converter.Acceptance2DTOConverter;
 import com.hireai.controller.biz.task.dto.TaskDTO;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -51,6 +52,7 @@ public final class TaskModel2DTOConverter {
                 task.budget().value(),
                 task.status().name(),
                 new TaskDTO.OutputSpecDTO(spec.format().name(), spec.schema(), spec.acceptanceCriteria()),
+                Acceptance2DTOConverter.toDTO(task.contract()),
                 task.createdAt(),
                 task.resolution() == null ? null : task.resolution().name(),
                 task.resolvedAt(),

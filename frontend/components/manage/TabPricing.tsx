@@ -7,6 +7,7 @@ import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { CategoryPicker } from "@/components/CategoryPicker";
+import { OfferPanel } from "@/components/AcceptanceTerms";
 import { ContractTerms } from "@/components/ContractTerms";
 import { MAX_EXECUTION_HINT, MAX_EXECUTION_SECONDS } from "@/lib/agentLimits";
 
@@ -74,6 +75,21 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
           </p>
         </div>
         <ContractTerms spec={ver.outputSpec} />
+      </section>
+
+      <section aria-labelledby="offer-h" className="docket overflow-hidden">
+        <div className="px-5 pb-3 pt-5">
+          <h3 id="offer-h" className="eyebrow">
+            Offer
+          </h3>
+          <p className="mt-1 text-sm text-muted">
+            The terms this version works under: the Templates it accepts and the range of each parameter it can be
+            held to. It mirrors the output contract above and carries over to each new version.
+          </p>
+        </div>
+        <div className="border-t border-line px-5 py-4">
+          <OfferPanel offer={ver.offer} />
+        </div>
       </section>
 
       <p className="text-xs text-amber">

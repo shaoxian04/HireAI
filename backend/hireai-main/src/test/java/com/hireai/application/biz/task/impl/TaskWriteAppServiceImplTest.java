@@ -47,7 +47,8 @@ class TaskWriteAppServiceImplTest {
     private TaskWriteAppServiceImpl service() {
         return new TaskWriteAppServiceImpl(taskRepository, taskSubmitDomainService,
                 walletWriteAppService, eventPublisher, settlementWriteAppService, webhookOutboxAppService,
-                dispatchAttemptRepository, java.time.Clock.systemUTC());
+                dispatchAttemptRepository, java.time.Clock.systemUTC(),
+                org.mockito.Mockito.mock(com.hireai.application.biz.acceptance.TemplateReadAppService.class));
     }
 
     private TaskModel submittedTask() {

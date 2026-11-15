@@ -31,6 +31,7 @@ const AGENT: AgentDTO = {
   listed: true,
   currentVersion: {
     outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "ok" },
+    offer: { price: 10, terms: [{ template: "custom_json", version: 1, params: { schema: { oneOf: ["{}"] } } }] },
     capabilityCategories: ["summarisation"],
     webhookUrl: "https://a.example/run",
     maxExecutionSeconds: 60,
@@ -40,6 +41,13 @@ const AGENT: AgentDTO = {
 
 describe("TabPricing — execution time limit", () => {
   beforeEach(() => apiMock.mockReset());
+
+  it("shows the version's Offer beside its output contract", async () => {
+    render(<TabPricing agentId="a-1" agent={AGENT} onAgentChange={() => {}} />);
+    expect(screen.getByRole("heading", { name: "Offer" })).toBeInTheDocument();
+    expect(await screen.findByText("custom_json@1")).toBeInTheDocument();
+    expect(screen.getByText(/only this value/i)).toBeInTheDocument();
+  });
 
   it("shows the 24-hour execution limit", () => {
     render(<TabPricing agentId="a-1" agent={AGENT} onAgentChange={() => {}} />);

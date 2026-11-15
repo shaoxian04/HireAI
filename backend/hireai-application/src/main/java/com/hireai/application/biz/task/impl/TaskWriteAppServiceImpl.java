@@ -1,5 +1,6 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.application.biz.acceptance.TemplateReadAppService;
 import com.hireai.application.biz.task.TaskWriteAppService;
 import com.hireai.application.biz.ledger.wallet.WalletWriteAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
@@ -43,6 +44,8 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     private final DispatchAttemptRepository dispatchAttemptRepository;
     /** The app's Clock bean (ClockConfig): stamps the client deadline and the UNAVAILABLE dispatch attempt. */
     private final Clock clock;
+    /** Checks the frozen Contract against its Template before the Task is saved (ADR 0009). */
+    private final TemplateReadAppService templateReadAppService;
 
     @Override
     public UUID submit(TaskSubmitInfo taskSubmitInfo) {
@@ -59,13 +62,14 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     }
 
     /**
-     * Shared atomic submit: domain submit → repo save → wallet freeze → publish event.
+     * Shared atomic submit: domain submit → Contract check → repo save → wallet freeze → publish event.
      * {@code directAgentVersionId} is null for normal routing, non-null for direct booking.
      * The transactional semantics are class-level @Transactional (REQUIRED by default).
      */
     private UUID doSubmit(TaskSubmitInfo taskSubmitInfo, UUID directAgentVersionId) {
         String correlationId = UUID.randomUUID().toString();
         TaskModel task = taskSubmitDomainService.submit(taskSubmitInfo);
+        templateReadAppService.requireValid(task.contract());
         UUID taskId = taskRepository.save(task).id();
         if (taskSubmitInfo.deadlineSeconds() != null) {
             // Fixed now, at submit: every later selection (re-match, failover) measures against it.
