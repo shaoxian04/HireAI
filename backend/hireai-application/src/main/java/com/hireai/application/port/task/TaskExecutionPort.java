@@ -59,4 +59,15 @@ public interface TaskExecutionPort {
      * to another version).
      */
     void declineAsBusy(UUID taskId, UUID agentVersionId);
+
+    /**
+     * The Agent refused the task's Contract (HTTP 422 with {@code {"decline":"CONTRACT"}}, #93). Same
+     * shape as {@link #declineAsBusy}: under a row lock, a task still QUEUED for {@code agentVersionId}
+     * records a {@code CONTRACT_DECLINED} dispatch attempt carrying the Agent's {@code reason}
+     * (nullable). A routed task then fails over; a pinned task ends FAILED with
+     * {@code CONTRACT_DECLINED}, a refund and a client {@code task.failed} webhook. No reputation event:
+     * being honest about its limits never costs an Agent reputation, though it counts in its public
+     * decline rate. A no-op when the task has moved on.
+     */
+    void declineContract(UUID taskId, UUID agentVersionId, String reason);
 }

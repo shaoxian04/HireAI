@@ -7,6 +7,7 @@ import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.catalogue.dto.AgentCardDTO;
 import com.hireai.controller.biz.catalogue.dto.AgentProfileDTO;
+import com.hireai.controller.biz.task.dto.ContractDeclineRateDTO;
 import com.hireai.controller.biz.catalogue.dto.CategoryCountDTO;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.application.biz.task.OutputSpecJsonMapper;
@@ -70,7 +71,8 @@ public class CatalogueController extends BaseController {
                         spec.format().name(), spec.schema(), spec.acceptanceCriteria()),
                 Acceptance2DTOConverter.toDTO(acceptanceJsonMapper.offerFromJson(row.offerJson()), row.card().price()),
                 new AgentProfileDTO.StatsDTO(
-                        requests, row.completedCount(), successRate, row.avgTurnaroundSeconds()),
+                        requests, row.completedCount(), successRate, row.avgTurnaroundSeconds(),
+                        ContractDeclineRateDTO.from(readAppService.contractDeclineRate(agentId))),
                 readAppService.reviews(agentId).stream()
                         .map(r -> new AgentProfileDTO.ReviewDTO(
                                 r.id(), r.rating(), r.reviewText(),

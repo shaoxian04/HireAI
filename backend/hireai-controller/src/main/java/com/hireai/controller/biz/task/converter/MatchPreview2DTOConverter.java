@@ -3,6 +3,7 @@ package com.hireai.controller.biz.task.converter;
 import com.hireai.application.biz.task.MatchPreviewAppService.AgentOption;
 import com.hireai.application.biz.task.MatchPreviewAppService.MatchPreview;
 import com.hireai.controller.biz.task.dto.AgentOptionDTO;
+import com.hireai.controller.biz.task.dto.ContractDeclineRateDTO;
 import com.hireai.controller.biz.task.dto.MatchPreviewDTO;
 
 /** Maps the app-layer MatchPreview read model to the HTTP DTO (availability boolean -> label). */
@@ -21,6 +22,7 @@ public final class MatchPreview2DTOConverter {
     private static AgentOptionDTO option(AgentOption o) {
         return new AgentOptionDTO(o.agentId(), o.agentVersionId(), o.agentName(), o.tagline(),
                 o.logoUrl(), o.price(), o.reputationScore(),
-                o.available() ? "AVAILABLE" : "BUSY", o.outputFormat(), o.capabilityCategories());
+                o.available() ? "AVAILABLE" : "BUSY", o.outputFormat(), o.capabilityCategories(),
+                o.reliabilitySum(), o.reliabilityCount(), ContractDeclineRateDTO.from(o.contractDeclines()));
     }
 }

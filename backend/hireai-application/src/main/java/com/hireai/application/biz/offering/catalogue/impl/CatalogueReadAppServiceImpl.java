@@ -2,6 +2,8 @@ package com.hireai.application.biz.offering.catalogue.impl;
 
 import com.hireai.application.biz.offering.catalogue.CatalogueReadAppService;
 import com.hireai.application.port.query.CatalogueQueryPort;
+import com.hireai.domain.biz.task.dispatchattempt.info.ContractDeclineRate;
+import com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.utility.exception.DomainException;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +29,7 @@ public class CatalogueReadAppServiceImpl implements CatalogueReadAppService {
     private static final int REVIEWS_LIMIT = 20;
 
     private final CatalogueQueryPort catalogueQueryPort;
+    private final DispatchAttemptRepository dispatchAttemptRepository;
 
     @Override
     public List<CatalogueQueryPort.AgentCardRow> search(String q, String category, String sort,
@@ -53,5 +56,11 @@ public class CatalogueReadAppServiceImpl implements CatalogueReadAppService {
     @Override
     public List<CatalogueQueryPort.ReviewRow> reviews(UUID agentId) {
         return catalogueQueryPort.reviewsForAgent(agentId, REVIEWS_LIMIT);
+    }
+
+    @Override
+    public ContractDeclineRate contractDeclineRate(UUID agentId) {
+        return dispatchAttemptRepository.declineRatesByAgentId(List.of(agentId))
+                .getOrDefault(agentId, ContractDeclineRate.NONE);
     }
 }

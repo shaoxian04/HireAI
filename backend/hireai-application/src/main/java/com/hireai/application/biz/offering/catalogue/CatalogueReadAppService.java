@@ -4,6 +4,7 @@ import com.hireai.application.port.query.CatalogueQueryPort.AgentCardRow;
 import com.hireai.application.port.query.CatalogueQueryPort.AgentProfileRow;
 import com.hireai.application.port.query.CatalogueQueryPort.CategoryCountRow;
 import com.hireai.application.port.query.CatalogueQueryPort.ReviewRow;
+import com.hireai.domain.biz.task.dispatchattempt.info.ContractDeclineRate;
 import org.springframework.validation.annotation.Validated;
 
 import java.util.List;
@@ -31,4 +32,10 @@ public interface CatalogueReadAppService {
      * visibility.
      */
     List<ReviewRow> reviews(UUID agentId);
+
+    /**
+     * The Agent's public contract-decline rate (#93), over all its versions. Like {@link #reviews},
+     * callers gate on visibility first.
+     */
+    ContractDeclineRate contractDeclineRate(UUID agentId);
 }
