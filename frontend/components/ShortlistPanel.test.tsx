@@ -45,6 +45,14 @@ describe("ShortlistPanel", () => {
     expect(container.querySelector('img[src="https://cdn.test/l.png"]')).toBeTruthy();
   });
 
+  it("shows each agent's public contract-decline rate", () => {
+    render(<ShortlistPanel open budget={30} onSelect={noop} onClose={noop}
+      shortlist={[opt({ agentVersionId: "v1", contractDeclines: { declined: 1, answered: 4, rate: 0.25 } })]}
+      nearMisses={[opt({ agentVersionId: "v2", price: 40, contractDeclines: { declined: 0, answered: 0, rate: null } })]} />);
+    expect(screen.getByText(/declined terms on/i)).toHaveTextContent("Declined terms on 1 of 4 tasks (25%)");
+    expect(screen.getByText("No terms answered yet")).toBeInTheDocument();
+  });
+
   it("shows the empty state when both lists are empty", () => {
     render(<ShortlistPanel open budget={30} shortlist={[]} nearMisses={[]} onSelect={noop} onClose={noop} />);
     expect(screen.getByText(/no agents match/i)).toBeTruthy();

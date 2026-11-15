@@ -18,9 +18,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.util.Optional;
 
 /**
  * Dispatches a {@link DispatchMessage} to an Agent's webhook over a signed HTTPS POST
@@ -38,7 +41,9 @@ import java.time.Clock;
  *   <li>Every WorkOrder to an Agent that has an AgentSigningSecret is signed over the exact
  *       body bytes ({@link #SIGNATURE_HEADER}), so the Agent can prove it came from HireAI.</li>
  * </ul>
- * A 429 or 503 reply is the Agent declining as busy and is thrown as {@link AgentBusyException}.
+ * A 429 or 503 reply is the Agent declining as busy and is thrown as {@link AgentBusyException}. A 422
+ * whose body is {@code {"decline":"CONTRACT","reason":…}} (read up to 8 KiB) is the Agent refusing the
+ * Contract and is thrown as {@link AgentContractDeclinedException}; any other 422 is a failed send.
  * Any other failure of the HTTP send itself (non-2xx reply, unreachable endpoint, timeout) is thrown
  * as {@link AgentSendFailedException}; anything else (e.g. a non-HTTPS URL) is a platform-side error.
  *
@@ -106,6 +111,14 @@ public class AgentDispatchClient implements AgentNoticePort {
                             throw new AgentBusyException("Agent webhook for task " + message.taskId()
                                     + " declined as busy (" + status + ")", status);
                         }
+                        if (status == AgentContractDeclinedException.STATUS) {
+                            Optional<AgentContractDeclinedException.Decline> decline = AgentContractDeclinedException
+                                    .parse(readBounded(response.getBody()), objectMapper);
+                            if (decline.isPresent()) {
+                                throw new AgentContractDeclinedException("Agent webhook for task "
+                                        + message.taskId() + " declined the contract", decline.get().reason());
+                            }
+                        }
                         throw new AgentSendFailedException("Agent webhook for task " + message.taskId()
                                 + " replied " + status, status, null);
                     })
@@ -116,6 +129,15 @@ public class AgentDispatchClient implements AgentNoticePort {
         }
 
         log.info("Dispatched task {} to webhook (correlationId={})", message.taskId(), message.correlationId());
+    }
+
+    /** At most {@link AgentContractDeclinedException#MAX_BODY_BYTES} of a reply body; an unreadable one is empty. */
+    private static byte[] readBounded(InputStream body) {
+        try (body) {
+            return body.readNBytes(AgentContractDeclinedException.MAX_BODY_BYTES);
+        } catch (IOException ex) {
+            return new byte[0];
+        }
     }
 
     /**

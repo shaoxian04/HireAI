@@ -342,10 +342,12 @@ class TaskControllerTest {
                 .thenReturn(new MatchPreview(
                         List.of(new AgentOption(agentId, versionId, "Alpha", "tag", "logo",
                                 new BigDecimal("12.00"), new BigDecimal("80.00"), true, "JSON",
-                                List.of("summarisation"), new BigDecimal("9.000"), 10L)),
+                                List.of("summarisation"), new BigDecimal("9.000"), 10L,
+                                new com.hireai.domain.biz.task.dispatchattempt.info.ContractDeclineRate(1, 4))),
                         List.of(new AgentOption(UUID.randomUUID(), UUID.randomUUID(), "Pricey", null, null,
                                 new BigDecimal("40.00"), new BigDecimal("90.00"), false, "JSON",
-                                List.of("summarisation"), new BigDecimal("0.000"), 0L)), false));
+                                List.of("summarisation"), new BigDecimal("0.000"), 0L,
+                                com.hireai.domain.biz.task.dispatchattempt.info.ContractDeclineRate.NONE)), false));
 
         mockMvc.perform(post("/api/tasks/match-preview")
                         .contentType(MediaType.APPLICATION_JSON).content(previewBody("")))
@@ -354,6 +356,11 @@ class TaskControllerTest {
                 .andExpect(jsonPath("$.data.shortlist[0].agentName").value("Alpha"))
                 .andExpect(jsonPath("$.data.shortlist[0].price").value(12.00))
                 .andExpect(jsonPath("$.data.shortlist[0].availability").value("AVAILABLE"))
+                .andExpect(jsonPath("$.data.shortlist[0].reliabilityCount").value(10))
+                .andExpect(jsonPath("$.data.shortlist[0].contractDeclines.declined").value(1))
+                .andExpect(jsonPath("$.data.shortlist[0].contractDeclines.answered").value(4))
+                .andExpect(jsonPath("$.data.shortlist[0].contractDeclines.rate").value(0.25))
+                .andExpect(jsonPath("$.data.nearMisses[0].contractDeclines.answered").value(0))
                 .andExpect(jsonPath("$.data.nearMisses[0].agentName").value("Pricey"))
                 .andExpect(jsonPath("$.data.nearMisses[0].availability").value("BUSY"))
                 .andExpect(jsonPath("$.data.noCloseMatch").value(false));

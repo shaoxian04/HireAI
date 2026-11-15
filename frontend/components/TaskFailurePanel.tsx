@@ -84,6 +84,10 @@ const REASON_COPY: Record<FailureReason, { headline: string; why: string }> = {
     headline: "The result didn't meet the spec",
     why: "The agent returned something, but it failed the automated output check for this task — so you were never charged for it.",
   },
+  CONTRACT_DECLINED: {
+    headline: "The agent declined your terms",
+    why: "The agent looked at this task's output terms and turned it down before starting, because it can't meet them. Pick an agent that accepts these terms, or change them.",
+  },
 };
 
 const TONE_CLS: Record<Tone, string> = {
