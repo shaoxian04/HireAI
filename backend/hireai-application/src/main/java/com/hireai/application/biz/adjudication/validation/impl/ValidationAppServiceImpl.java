@@ -42,12 +42,13 @@ public class ValidationAppServiceImpl implements ValidationAppService {
     /** The app's Clock bean (ClockConfig): the review window opens at this instant. */
     private final Clock clock;
 
-    private static final int FIRST_ATTEMPT = 1; // retry attempts arrive in Plan 2
-
     @Override
     public TaskModel validateAndGate(TaskModel task) {
+        // The first result is attempt 1; an Agent's revision after a rejection (#95) is the next one.
+        int attempt = reportRepository.findLatestByTaskId(task.id())
+                .map(previous -> previous.attemptNo() + 1).orElse(1);
         ValidationReportModel report =
-                validationDomainService.validate(task.outputSpec(), task.result(), FIRST_ATTEMPT);
+                validationDomainService.validate(task.outputSpec(), task.result(), attempt);
         reportRepository.save(report);
 
         if (report.isPass()) {

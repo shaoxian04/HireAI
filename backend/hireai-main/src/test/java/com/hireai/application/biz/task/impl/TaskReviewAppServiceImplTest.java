@@ -42,6 +42,8 @@ class TaskReviewAppServiceImplTest {
     @Mock SettlementWriteAppService settlementWriteAppService;
     @Mock DisputeAppService disputeAppService;
     @Mock ReputationWriteAppService reputationWriteAppService;
+    @Mock com.hireai.domain.biz.task.rejection.repository.RejectionRepository rejectionRepository;
+    @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     TaskReviewAppServiceImpl service;
 
@@ -51,9 +53,13 @@ class TaskReviewAppServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new TaskReviewAppServiceImpl(taskRepository, agentRepository,
-                settlementWriteAppService, disputeAppService, reputationWriteAppService,
-                java.time.Clock.systemUTC());
+        service = new TaskReviewAppServiceImpl(taskRepository, agentRepository, settlementWriteAppService,
+                new AcceptedSettlement(taskRepository, agentRepository, settlementWriteAppService,
+                        reputationWriteAppService),
+                rejectionRepository,
+                new com.hireai.domain.biz.task.rejection.model.RejectionWindows(
+                        java.time.Duration.ofHours(2), java.time.Duration.ofHours(24)),
+                eventPublisher, java.time.Clock.systemUTC());
     }
 
     /** Build a task in PENDING_REVIEW (passed the validation gate) so accept/reject are legal. */
@@ -86,27 +92,24 @@ class TaskReviewAppServiceImplTest {
     }
 
     /**
-     * A_MISMATCH reject: task transitions to DISPUTED and openDispute is called.
-     * No direct settleRejected call is made (settlement happens when the ruling lands).
-     * The service does not look up the builder for A/B/C rejections.
-     *
-     * <p>OLD behaviour: reject → settleRejected immediately (full refund).
-     * NEW behaviour: A_MISMATCH → dispute → settlement on ruling; D_CHANGED_MIND → charge.
+     * A_MISMATCH reject (#95): the task waits for the Agent's response and its notice is announced.
+     * Nothing is arbitrated and no money moves yet.
      */
     @Test
-    void mismatchRejectOpensDisputeAndNeverTouchesSettlementDirectly() {
+    void mismatchRejectWaitsForTheAgentAndNeverTouchesSettlementOrDisputes() {
         TaskModel task = pendingReviewTask();
         when(taskRepository.findByIdForUpdate(task.id())).thenReturn(Optional.of(task));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.reject(task.id(), clientId, RejectReason.A_MISMATCH, "not good");
 
-        verify(disputeAppService).openDispute(any(TaskModel.class), eq(clientId), eq(RejectReason.A_MISMATCH));
+        verify(disputeAppService, never()).openDispute(any(), any(), any());
         verify(settlementWriteAppService, never()).settleRejected(any(), any(), any());
-        verify(agentRepository, never()).findOwnerByVersionId(any());
+        verify(rejectionRepository).save(any());
+        verify(eventPublisher).publishEvent(any(Object.class));
         ArgumentCaptor<TaskModel> saved = ArgumentCaptor.forClass(TaskModel.class);
         verify(taskRepository).save(saved.capture());
-        assertThat(saved.getValue().status()).isEqualTo(TaskStatus.DISPUTED);
+        assertThat(saved.getValue().status()).isEqualTo(TaskStatus.AWAITING_AGENT_RESPONSE);
     }
 
     @Test

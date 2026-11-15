@@ -75,6 +75,7 @@ class TaskControllerTest {
     @MockBean MatchPreviewAppService matchPreviewAppService;
     @MockBean ValidationReadAppService validationReadAppService;
     @MockBean ReviewAppService reviewAppService;
+    @MockBean com.hireai.application.biz.task.RejectionAppService rejectionAppService;
 
     @BeforeEach
     void noApiKeyByDefault() {

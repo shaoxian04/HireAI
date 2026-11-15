@@ -98,6 +98,11 @@ public class AgentRepositoryImpl implements AgentRepository {
     }
 
     @Override
+    public Optional<String> findWebhookUrlByVersionId(UUID agentVersionId) {
+        return agentJpa.findWebhookUrlByVersionId(agentVersionId);
+    }
+
+    @Override
     public Optional<AgentModel> findById(UUID agentId) {
         return agentJpa.findById(agentId).map(this::toModel);
     }
