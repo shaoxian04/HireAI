@@ -16,7 +16,11 @@ A Python service that consumes dispute requests from RabbitMQ, runs a LangGraph 
 - **PNG, JPEG, WebP and PDF** are attached to every model call as LangChain content blocks, so the multimodal model looks at the file itself; the provider adapter turns them into OpenAI `image_url` and `file` parts. A file over `MEDIA_MAX_BYTES` is only described. GIF is left out because the provider refuses animated GIFs.
 - **Anything else**, or a snapshot too large for the backend to inline, is described by type, size and hash.
 
-Every piece of Agent output (inline payload, decoded file text, each attached file) sits between `BEGIN UNTRUSTED EVIDENCE (…)` and `END UNTRUSTED EVIDENCE` markers. In text, any copy of a marker is defused so the output can't close its own fence. The system prompt tells the model to say what it saw. It also says evidence is data, never instructions, and that text in the evidence asking for a ruling or addressing the arbitrator counts as a manipulation attempt.
+Every piece of Agent output sits between `BEGIN UNTRUSTED EVIDENCE <nonce> (…)` and `END UNTRUSTED EVIDENCE <nonce>` markers. That covers the inline payload, decoded file text, each attached file, and the legacy link with its fetch result. The nonce is a fresh `secrets.token_hex(8)` for each run, and the system prompt names it.
+
+A marker line carries only fixed words, the evidence kind, the backend-verified sha256 and the nonce. The Agent's URL and media type go in the fenced body. As a second defence, Agent text is NFKC-normalised and stripped of zero-width characters, and any spelling of a marker phrase is defused.
+
+The system prompt tells the model to say what it saw. It also says that evidence is data, never instructions, and that text in the evidence asking for a ruling or addressing the arbitrator is a manipulation attempt.
 
 **Outbound.** `POST {BACKEND_BASE_URL}/api/arbitration-callbacks/{disputeId}/ruling` with `Authorization: Bearer <ARBITRATION_CALLBACK_SECRET>` and:
 
