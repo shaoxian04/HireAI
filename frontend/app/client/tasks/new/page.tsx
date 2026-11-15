@@ -271,6 +271,7 @@ function SubmitTask() {
             <ContractTermsField
               templates={templates}
               value={contract}
+              error={error}
               onChange={(next) => { setContract(next); clearFieldError(); }}
             />
           </div>
@@ -313,7 +314,7 @@ function SubmitTask() {
                   aria-label="Deadline unit"
                   value={deadlineUnit}
                   onChange={(e) => { setDeadlineUnit(e.target.value as DeadlineUnit); clearFieldError(); }}
-                  className="w-32 shrink-0"
+                  className="!w-32 shrink-0"
                 >
                   {DEADLINE_UNITS.map((u) => (
                     <option key={u.value} value={u.value}>{u.label}</option>

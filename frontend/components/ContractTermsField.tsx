@@ -2,6 +2,7 @@
 
 import { Field, Input, Select, Skeleton, Textarea } from "@/components/ui";
 import { formatNumber, refOf, type TemplatesState } from "@/components/AcceptanceTerms";
+import { errorFor, type FormError } from "@/lib/formErrors";
 import type { ContractDTO, ContractValue, TemplateDTO, TemplateParameterDTO } from "@/lib/types";
 
 /**
@@ -14,6 +15,8 @@ interface Props {
   templates: TemplatesState;
   value: ContractDTO | null;
   onChange: (next: ContractDTO | null) => void;
+  /** A form error; one naming a term's input (`term-<name>`) is shown under that term. */
+  error?: FormError | null;
 }
 
 /** The Contract without `parameter` (a relax suggestion the Client chose to follow). */
@@ -23,7 +26,7 @@ export function withoutParameter(contract: ContractDTO, parameter: string): Cont
   return { ...contract, params };
 }
 
-export function ContractTermsField({ templates, value, onChange }: Props) {
+export function ContractTermsField({ templates, value, onChange, error = null }: Props) {
   if (templates.status === "loading") {
     return (
       <div role="status" className="space-y-1.5">
@@ -84,6 +87,7 @@ export function ContractTermsField({ templates, value, onChange }: Props) {
               key={p.name}
               parameter={p}
               value={value.params[p.name]}
+              error={errorFor(error, `term-${p.name}`)}
               onChange={(v) => {
                 const params = { ...value.params };
                 if (v === undefined) delete params[p.name];
@@ -104,10 +108,12 @@ export function ContractTermsField({ templates, value, onChange }: Props) {
 function ParameterInput({
   parameter: p,
   value,
+  error,
   onChange,
 }: {
   parameter: TemplateParameterDTO;
   value: ContractValue | undefined;
+  error: string | null;
   onChange: (v: ContractValue | undefined) => void;
 }) {
   const id = `term-${p.name}`;
@@ -121,13 +127,13 @@ function ParameterInput({
         : null;
     const hint = [
       p.description,
-      n !== undefined && p.name.endsWith("_bytes") ? `= ${formatNumber(p.name, n)}` : null,
+      n !== undefined && p.name.endsWith("_bytes") ? `That's ${formatNumber(p.name, n)}.` : null,
       range ? `Allowed: ${range}.` : null,
     ]
       .filter(Boolean)
       .join(" ");
     return (
-      <Field label={p.label} htmlFor={id} hint={hint || undefined}>
+      <Field label={p.label} htmlFor={id} hint={hint || undefined} error={error}>
         <Input
           id={id}
           type="number"
