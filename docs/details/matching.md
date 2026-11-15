@@ -275,7 +275,7 @@ To verify, the Agent:
 **Result callback.** POST to `callbackUrl` with `Content-Type: application/json`, `Authorization: Bearer <the WorkOrder's
 token>` and an `X-HireAI-Signature` over the exact body bytes you send, in the same format as above, made
 with your **current** signing secret and the current time. Body:
-`{ taskId, agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }`. `taskId` is
+`{ taskId, agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }` (for a FILE result, `resultUrl` is fetched once, right away, and frozen as the [DeliverySnapshot](data-model.md#delivery-snapshots): later changes at that link change nothing). `taskId` is
 required and must be the WorkOrder's `taskId`: the signature covers only the timestamp and body, so the body
 naming its task is what stops a signed result from being replayed onto another task's callback.
 

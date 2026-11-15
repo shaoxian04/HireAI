@@ -10,6 +10,7 @@ import { AppShell } from "@/components/AppShell";
 import { StatusTrack } from "@/components/StatusTrack";
 import { InspectionReport } from "@/components/InspectionReport";
 import { TaskFailurePanel } from "@/components/TaskFailurePanel";
+import { DeliverablePanel, LegacyDeliverableLink } from "@/components/DeliverablePanel";
 import WebhookDeliveryStatus from "@/components/WebhookDeliveryStatus";
 import type {
   TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO, ValidationReportDTO, DispatchAttemptDTO,
@@ -387,15 +388,15 @@ function TaskDetail() {
             </p>
           </div>
           <ResultView payload={result.resultPayloadJson} />
-          {result.resultUrl && (
-            <a
-              href={result.resultUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-medium text-accent underline-offset-4 hover:underline"
-            >
-              Open deliverable ↗
-            </a>
+          {result.deliverable ? (
+            <DeliverablePanel
+              deliverable={result.deliverable}
+              sourceUrl={result.resultUrl}
+              downloadPath={`/tasks/${task.id}/deliverable`}
+              fileStem={`deliverable-${task.id}`}
+            />
+          ) : (
+            result.resultUrl && <LegacyDeliverableLink url={result.resultUrl} />
           )}
           {task.status === "PENDING_REVIEW" && task.rejection?.response === "REVISE" && (
             <RevisedResultNotice rejection={task.rejection} />

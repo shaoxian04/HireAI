@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.adjudication;
 
+import com.hireai.application.biz.adjudication.port.ArbitrationDeliverable;
 import com.hireai.application.biz.adjudication.port.ArbitrationGateway;
 import com.hireai.application.biz.adjudication.port.ArbitrationRequestMessage;
 import com.hireai.application.biz.adjudication.port.RulingInfo;
@@ -38,7 +39,7 @@ public class RabbitArbitrationClient implements ArbitrationGateway {
     }
 
     @Override
-    public Optional<RulingInfo> requestRuling(DisputeModel dispute, TaskModel task) {
+    public Optional<RulingInfo> requestRuling(DisputeModel dispute, TaskModel task, ArbitrationDeliverable deliverable) {
         OutputSpec spec = task.outputSpec();
         TaskResultModel result = task.result();
         ArbitrationRequestMessage message = new ArbitrationRequestMessage(
@@ -46,7 +47,8 @@ public class RabbitArbitrationClient implements ArbitrationGateway {
                 spec.format().name(), spec.schema(), spec.acceptanceCriteria(), task.description(),
                 result == null ? null : result.resultPayloadJson(),
                 result == null ? null : result.resultUrl(),
-                dispute.reasonCategory().name());
+                dispute.reasonCategory().name(),
+                deliverable);
         rabbitTemplate.convertAndSend(ArbitrationQueues.EXCHANGE, ArbitrationQueues.ROUTING_KEY, message);
         log.info("Published arbitration request for dispute {} (correlation {})", dispute.id(), dispute.correlationId());
         return Optional.empty();

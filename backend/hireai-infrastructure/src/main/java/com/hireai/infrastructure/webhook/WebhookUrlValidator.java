@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.util.List;
 
 /**
  * The one SSRF guard for outbound webhooks, used for client webhook callbacks and Agent webhook
@@ -47,6 +48,44 @@ public class WebhookUrlValidator implements WebhookUrlValidatorPort {
     @Override
     public void assertAgentWebhookDeliverable(String url) {
         check(url, allowInsecureLocalhostAgents);
+    }
+
+    /**
+     * The SSRF guard for an Agent's deliverable link (the DeliverySnapshot fetch, D24), returning
+     * the addresses it vetted so the caller connects to exactly those and never resolves the name
+     * again (no DNS-rebinding window, unlike the webhook paths' documented gap). HTTPS only; under
+     * {@code hireai.dispatch.allow-insecure-localhost} a {@code localhost}/{@code 127.0.0.1} host
+     * (http or https) is allowed and pinned to loopback. Throws VALIDATION_ERROR otherwise.
+     */
+    public List<InetAddress> vetAgentFileHost(URI uri) {
+        String scheme = uri.getScheme();
+        String host = uri.getHost();
+        if (host == null || scheme == null) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "Link must be an absolute https URL");
+        }
+        boolean localhost = "localhost".equals(host) || "127.0.0.1".equals(host);
+        if (allowInsecureLocalhostAgents && localhost
+                && ("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme))) {
+            return List.of(InetAddress.getLoopbackAddress()); // the dispatch dev opt-in
+        }
+        if (!"https".equalsIgnoreCase(scheme)) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "Link must use HTTPS");
+        }
+        InetAddress[] resolved;
+        try {
+            resolved = hostResolver.resolve(host);
+        } catch (UnknownHostException e) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "Link host does not resolve");
+        }
+        if (resolved == null || resolved.length == 0) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "Link host does not resolve");
+        }
+        for (InetAddress ip : resolved) {
+            if (IpClassifier.isBlocked(ip)) {
+                throw new DomainException(ResultCode.VALIDATION_ERROR, "Link resolves to a private/blocked address");
+            }
+        }
+        return List.of(resolved);
     }
 
     private void check(String url, boolean allowInsecureLocalhost) {

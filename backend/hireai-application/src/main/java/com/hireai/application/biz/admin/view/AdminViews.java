@@ -25,6 +25,14 @@ public final class AdminViews {
                            String agentName, String builderName, BigDecimal agentReputation, BigDecimal agentPrice,
                            String outputSpecJson, String resultPayloadJson, String resultUrl, String agentStatus) {}
 
+    /**
+     * The result's frozen DeliverySnapshot (D24), null when it has none. The admin judges this copy
+     * (download: {@code GET /api/admin/disputes/{id}/deliverable}); {@code resultUrl} only says where
+     * it was fetched from.
+     */
+    public record DeliverableView(String mediaType, String declaredMediaType, long sizeBytes, String sha256,
+                                  Instant fetchedAt) {}
+
     public record TaskRow(UUID id, String title, String status, BigDecimal budget, String clientName,
                           Instant createdAt) {}
 
@@ -53,5 +61,6 @@ public final class AdminViews {
                                 Instant submittedAt, Instant resultReceivedAt,
                                 String agentName, String builderName, BigDecimal agentReputation, BigDecimal agentPrice,
                                 String outputSpecJson, String resultPayloadJson, String resultUrl, String agentStatus,
+                                DeliverableView deliverable,
                                 boolean actionable, SettlementPreview settlementPreview, List<RulingView> rulings) {}
 }

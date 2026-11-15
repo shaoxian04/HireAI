@@ -65,9 +65,9 @@ class ValidationDomainServiceImplTest {
     }
 
     @Test
-    void fileHttpsUrlPasses() {
+    void fileHttpsUrlIsJudgedOnItsFetchedDeliverable() {
         var spec = new OutputSpec(OutputFormat.FILE, null, null);
-        assertThat(svc.validate(spec, result("{}", "https://cdn.example.com/x.pdf"), 1).verdict()).isEqualTo(Verdict.PASS);
+        assertThat(svc.needsDelivery(spec.toContract(), result("{}", "https://cdn.example.com/x.pdf"))).isTrue();
     }
 
     @Test

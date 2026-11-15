@@ -377,7 +377,8 @@ class ArbitrationTransportIntegrationTest {
                 null,
                 "{\"summary\":\"ok\"}",
                 null,
-                RejectReason.A_MISMATCH.name());
+                RejectReason.A_MISMATCH.name(),
+                null);
         rabbitTemplate.convertAndSend("", ArbitrationQueues.DLQ, dlqMsg);
 
         // Awaitility: poll until ArbitrationDlqListener escalates the dispute (async consumer)

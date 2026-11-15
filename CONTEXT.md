@@ -36,7 +36,7 @@ _Avoid_: awaiting capacity (the old status name; capacity is the Agent declining
 The frozen copy of the client-supplied input a Task is judged against — fetched once at submission, content-hashed, and immutable thereafter. It is what the Agent executes on and what an arbitrator later reads, so both sides are held to provably identical evidence even if the original source is amended or disappears.
 _Avoid_: attachment, upload, file, source URL (the URL is only where it came from; the SourceSnapshot is the frozen thing itself)
 
-**DeliverySnapshot** _(designed, not built)_:
+**DeliverySnapshot** _(built for FILE results, #97; per-Item snapshots come with Items)_:
 The frozen copy of what an Agent delivered for an Item — fetched once when the result arrives, content-hashed, and immutable thereafter. Every later step (Acceptance Checks, AI Review, the client's review, arbitration) judges this copy, never the Agent's link, so a deliverable cannot be swapped or withdrawn after the fact. The output-side twin of SourceSnapshot.
 _Avoid_: result URL, attachment (the URL is only where the Agent put it)
 
