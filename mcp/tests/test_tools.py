@@ -142,3 +142,26 @@ async def test_submit_task_passes_the_deadline_on(fake):
     assert fake.calls[0][1]["deadline_seconds"] == 600
     assert fake.calls[1][1]["deadline_seconds"] == 900
     assert fake.calls[2][1]["deadline_seconds"] is None
+
+
+async def test_submit_task_passes_a_json_schema_on_for_a_routed_task(fake):
+    schema = '{"type":"object","required":["total"]}'
+    await server.submit_task(description="do x", budget=50, category="summarisation",
+                             output_format="JSON", schema=schema)
+    await server.submit_task(description="do x", budget=50, category="summarisation")
+    assert fake.calls[0][1]["schema"] == schema
+    assert fake.calls[0][1]["output_format"] == "JSON"
+    assert fake.calls[1][1]["schema"] == ""
+
+
+async def test_submit_task_surfaces_the_backends_400_for_an_unparseable_schema(monkeypatch, fake):
+    from app.client import HireAIError
+
+    async def rejecting(**kwargs):
+        raise HireAIError("outputSpec.schema: is not a valid JSON Schema (it is not JSON)",
+                          code="VALIDATION_ERROR", status=400)
+
+    monkeypatch.setattr(fake, "submit_routed", rejecting)
+    with pytest.raises(HireAIError, match="not a valid JSON Schema"):
+        await server.submit_task(description="do x", budget=50, category="summarisation",
+                                 output_format="JSON", schema="totals please")

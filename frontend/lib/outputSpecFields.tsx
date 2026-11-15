@@ -20,9 +20,12 @@ export const EMPTY_OUTPUT_SPEC: OutputSpecDTO = {
 export function OutputSpecFields({
   value,
   onChange,
+  schemaError,
 }: {
   value: OutputSpecDTO;
   onChange: (next: OutputSpecDTO) => void;
+  /** The server's reason the schema was refused (it must be a valid JSON Schema, spec D8). */
+  schemaError?: string | null;
 }) {
   const set = <K extends keyof OutputSpecDTO>(key: K, v: OutputSpecDTO[K]) =>
     onChange({ ...value, [key]: v });
@@ -46,7 +49,16 @@ export function OutputSpecFields({
           ))}
         </Select>
       </Field>
-      <Field label="Schema" htmlFor="outputSpec.schema">
+      <Field
+        label="Schema"
+        htmlFor="outputSpec.schema"
+        error={schemaError}
+        hint={
+          value.format === "JSON"
+            ? "A JSON Schema object every result is checked against. Leave it blank to accept any JSON."
+            : undefined
+        }
+      >
         <Input
           id="outputSpec.schema"
           value={value.schema}

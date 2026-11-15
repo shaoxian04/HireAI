@@ -3,6 +3,8 @@ import type { OutputSpecDTO, ValidationReportDTO } from "@/lib/types";
 /** What each automated check actually verified, in the client's words. */
 const RULE_TEXT: Record<string, string> = {
   FORMAT_TEXT_NON_EMPTY: "The result is text, and it isn't empty",
+  TEXT_MIN_LENGTH: "The text is at least as long as the contract asks",
+  TEXT_MAX_LENGTH: "The text is no longer than the contract allows",
   FORMAT_JSON_PARSEABLE: "The result is valid JSON",
   SCHEMA_MATCH: "It matches the schema in the contract",
   SCHEMA_SKIPPED: "No schema in the contract, so there was no shape to check",

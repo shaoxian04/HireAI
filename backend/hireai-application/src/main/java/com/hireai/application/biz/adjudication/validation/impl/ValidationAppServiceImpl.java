@@ -46,8 +46,11 @@ public class ValidationAppServiceImpl implements ValidationAppService {
 
     @Override
     public TaskModel validateAndGate(TaskModel task) {
-        ValidationReportModel report =
-                validationDomainService.validate(task.outputSpec(), task.result(), FIRST_ATTEMPT);
+        // The frozen Contract is the binding contract (Invariant #4). A Task submitted before
+        // Contracts existed has none and finishes under its frozen output_spec.
+        ValidationReportModel report = task.contract() != null
+                ? validationDomainService.validate(task.contract(), task.result(), FIRST_ATTEMPT)
+                : validationDomainService.validate(task.outputSpec(), task.result(), FIRST_ATTEMPT);
         reportRepository.save(report);
 
         if (report.isPass()) {

@@ -151,6 +151,32 @@ class ProgrammaticSubmissionIntegrationTest {
     }
 
     @Test
+    void submitViaKeyWithAnUnparseableSchemaIs400AndFreezesNothing() throws Exception {
+        // #90 (D8): a machine Client is never misled into thinking a prose "schema" is enforced.
+        String jwt = login();
+        topUpClient();
+        String rawKey = createKey(jwt, "");
+        UUID clientId = jdbc.queryForObject(
+                "SELECT id FROM users WHERE email = 'client@hireai.local'", UUID.class);
+        java.math.BigDecimal before = jdbc.queryForObject(
+                "SELECT available_balance FROM wallets WHERE user_id = ?", java.math.BigDecimal.class, clientId);
+
+        HttpHeaders h = apiKey(rawKey);
+        h.set("Idempotency-Key", "bad-schema-1");
+        String body = "{\"title\":\"T\",\"description\":\"desc\",\"category\":\"summarisation\",\"budget\":\"10.00\","
+                + "\"outputSpec\":{\"format\":\"JSON\",\"schema\":\"totals must be present\"}}";
+        ResponseEntity<String> r = rest.postForEntity(url("/api/tasks"), new HttpEntity<>(body, h), String.class);
+
+        assertThat(r.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(objectMapper.readTree(r.getBody()).path("message").asText())
+                .startsWith("outputSpec.schema: is not a valid JSON Schema");
+        assertThat(jdbc.queryForObject("SELECT available_balance FROM wallets WHERE user_id = ?",
+                java.math.BigDecimal.class, clientId)).isEqualByComparingTo(before);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM idempotency_keys WHERE idempotency_key = 'bad-schema-1'",
+                Integer.class)).isZero();
+    }
+
+    @Test
     void revokedKeyIsRejectedWith401() throws Exception {
         String jwt = login();
         String rawKey = createKey(jwt, "");
