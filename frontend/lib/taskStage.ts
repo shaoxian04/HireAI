@@ -24,7 +24,9 @@ export function taskStage(status: TaskStatus): StageState {
     case "RESULT_RECEIVED":
       return { index: 4, kind: "active" }; // result in, validation runs
     case "PENDING_REVIEW":
-      return { index: 4, kind: "wait" };
+    case "AWAITING_AGENT_RESPONSE":
+    case "AWAITING_CLIENT_DECISION":
+      return { index: 4, kind: "wait" }; // reviewing, or the rejection response path (#95)
     case "RESOLVED":
       return { index: 5, kind: "done" };
     case "FAILED":
