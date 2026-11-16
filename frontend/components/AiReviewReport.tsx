@@ -86,8 +86,8 @@ export function AiReviewReport({
 
   return (
     <section aria-labelledby="ai-review-h" aria-busy={status === "REQUESTED"} className="docket overflow-hidden">
-      <div className="flex flex-wrap items-start justify-between gap-3 px-5 pb-3 pt-5">
-        <div>
+      <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-5">
+        <div className="min-w-0 flex-1">
           <h2 id="ai-review-h" className="eyebrow">
             {review?.decisive ? "AI Review verdict" : "AI pre-review report"}
           </h2>
@@ -99,7 +99,7 @@ export function AiReviewReport({
         </div>
         {stamp && (
           <>
-            <span aria-hidden style={{ animationDelay: "350ms" }} className={`inspect-stamp stamp ${stamp.cls}`}>
+            <span aria-hidden style={{ animationDelay: "350ms" }} className={`inspect-stamp stamp shrink-0 ${stamp.cls}`}>
               {stamp.text}
             </span>
             <span className="sr-only">AI Review: {stamp.text}.</span>

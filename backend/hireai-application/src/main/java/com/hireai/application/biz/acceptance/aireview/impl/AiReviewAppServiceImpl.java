@@ -159,8 +159,8 @@ public class AiReviewAppServiceImpl implements AiReviewAppService {
                 unusable++;
             }
             boolean lastTry = !transientFailure && unusable >= 2;
-            log.warn("Task {}: the AI reviewer gave no {} verdict (attempt {} of {}): {}", taskId,
-                    transientFailure ? "" : "usable", review.attempts() + 1, settings.maxAttempts(), failure);
+            log.warn("Task {}: the AI reviewer gave no {}verdict (attempt {} of {}): {}", taskId,
+                    transientFailure ? "" : "usable ", review.attempts() + 1, settings.maxAttempts(), failure);
             if (!recordFailure(taskId, failure, lastTry)) {
                 return; // gave up (fee refunded), or someone else finished it
             }
