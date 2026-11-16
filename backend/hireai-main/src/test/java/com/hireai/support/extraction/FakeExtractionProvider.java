@@ -30,7 +30,8 @@ import java.util.function.Function;
  * {@link #NOTHING_EXTRACTED}: no requirements, so every untouched test keeps the Template's
  * defaults). {@link #down()} answers 503, {@link #hanging()} never answers until released,
  * {@link #refusing()} returns a model refusal. {@link #shared()} is the one instance every Spring
- * test context points at; tests that script it call {@link #reset()} first.
+ * test context points at; tests that script it call {@link #reset()} before AND after each test
+ * (a leftover script would make other classes' routed submits extract terms no seeded Offer covers).
  */
 public final class FakeExtractionProvider implements AutoCloseable {
 

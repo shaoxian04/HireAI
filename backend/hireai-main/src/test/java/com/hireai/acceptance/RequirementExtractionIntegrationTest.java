@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hireai.domain.biz.acceptance.check.service.CheckLibrary;
 import com.hireai.support.extraction.FakeExtractionProvider;
 import com.hireai.support.harness.WholeAppIntegrationTest;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.ActiveProfiles;
@@ -48,6 +49,15 @@ class RequirementExtractionIntegrationTest extends WholeAppIntegrationTest {
                 UUID.randomUUID(), SEED_CLIENT);
         key = "ApiKey " + createKey(login("client@hireai.local"));
         category = uniqueCategory();
+    }
+
+    /**
+     * The fake is JVM-wide: a script left behind would make every later routed submit in other test
+     * classes extract terms (e.g. a max_length) no seeded Offer covers, so they would wait AWAITING_AGENT.
+     */
+    @AfterEach
+    void resetTheLlm() {
+        llm.reset();
     }
 
     // ---- mode 1: description only ----
