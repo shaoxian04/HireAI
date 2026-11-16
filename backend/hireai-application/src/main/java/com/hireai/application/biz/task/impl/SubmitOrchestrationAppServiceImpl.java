@@ -118,7 +118,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
                     return resolveExisting(existing.get(), fingerprint);
                 }
             }
-            extraction = contractDraftAppService.draft(info.title(), info.description(),
+            extraction = contractDraftAppService.draft(ctx.ownerId(), info.title(), info.description(),
                     info.outputSpec().acceptanceCriteria(), info.outputSpec().toContract());
             info = new TaskSubmitInfo(info.clientId(), info.title(), info.description(), info.budget(),
                     info.outputSpec(), info.category(), info.deadlineSeconds(), extraction.contract(), info.items());

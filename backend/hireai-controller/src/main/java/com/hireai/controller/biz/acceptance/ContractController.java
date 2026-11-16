@@ -32,11 +32,14 @@ public class ContractController extends BaseController {
 
     private final ContractDraftAppService contractDraftAppService;
     private final TemplateReadAppService templateReadAppService;
+    private final com.hireai.controller.config.CurrentUserProvider currentUser;
 
     public ContractController(ContractDraftAppService contractDraftAppService,
-                              TemplateReadAppService templateReadAppService) {
+                              TemplateReadAppService templateReadAppService,
+                              com.hireai.controller.config.CurrentUserProvider currentUser) {
         this.contractDraftAppService = contractDraftAppService;
         this.templateReadAppService = templateReadAppService;
+        this.currentUser = currentUser;
     }
 
     @PostMapping("/draft")
@@ -50,7 +53,8 @@ public class ContractController extends BaseController {
                 ? new Contract(templateReadAppService.current(request.template().strip()).ref(), Map.of())
                 : (spec != null ? new OutputSpec(spec.format(), spec.schema(), spec.acceptanceCriteria())
                         : new OutputSpec(OutputFormat.TEXT, null, null)).toContract();
-        return ok(Acceptance2DTOConverter.toDTO(contractDraftAppService.draft(request.title(), request.description(),
+        return ok(Acceptance2DTOConverter.toDTO(contractDraftAppService.draft(currentUser.currentUserId(),
+                request.title(), request.description(),
                 spec == null ? null : spec.acceptanceCriteria(), base)));
     }
 }

@@ -1,5 +1,9 @@
 # Test-profile overrides, layered over src/main/resources/application.yml.
 hireai:
+  # Every whole-app test submits as the one dev user: the per-user extraction cap would trip across tests.
+  extraction:
+    rate-limit:
+      max-calls: 100000
   arbitration:
     # Dispute fees (#96) are off by default in tests, so settlement assertions elsewhere stay exact;
     # DisputeFeesAndAppealsIntegrationTest turns them on with its own values.

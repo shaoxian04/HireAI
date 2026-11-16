@@ -19,6 +19,8 @@ public enum ResultCode {
     IDEMPOTENCY_CONFLICT("IDEMPOTENCY_CONFLICT"),
     SPEND_CAP_EXCEEDED("SPEND_CAP_EXCEEDED"),
     EMAIL_ALREADY_REGISTERED("EMAIL_ALREADY_REGISTERED"),
+    /** Too many calls of a capped kind (requirement extraction) in the window: HTTP 429. */
+    RATE_LIMITED("RATE_LIMITED"),
     INTERNAL_ERROR("INTERNAL_ERROR");
 
     private final String code;

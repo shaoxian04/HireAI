@@ -48,6 +48,15 @@ class GlobalExceptionConfigurationTest {
     }
 
     @Test
+    void rateLimitedMapsTo429() {
+        ResponseEntity<WebResult<Void>> response =
+                advice.handleDomain(new DomainException(ResultCode.RATE_LIMITED, "too many extractions"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        assertThat(response.getBody().code()).isEqualTo("RATE_LIMITED");
+    }
+
+    @Test
     void idempotencyConflictMapsTo409() {
         ResponseEntity<WebResult<Void>> response =
                 advice.handleDomain(new DomainException(ResultCode.IDEMPOTENCY_CONFLICT, "duplicate"));

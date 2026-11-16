@@ -47,7 +47,7 @@ class SubmitOrchestrationAppServiceImplTest {
     private final com.hireai.application.biz.acceptance.extraction.ContractDraftAppService drafts =
             mock(com.hireai.application.biz.acceptance.extraction.ContractDraftAppService.class, inv ->
                     inv.getMethod().getName().equals("draft")
-                            ? com.hireai.domain.biz.acceptance.extraction.model.ContractExtraction.unavailable(inv.getArgument(3))
+                            ? com.hireai.domain.biz.acceptance.extraction.model.ContractExtraction.unavailable(inv.getArgument(4))
                             : null);
 
     private final SubmitOrchestrationAppService svc = new SubmitOrchestrationAppServiceImpl(
@@ -67,7 +67,7 @@ class SubmitOrchestrationAppServiceImplTest {
         org.mockito.ArgumentCaptor<TaskSubmitInfo> submitted = org.mockito.ArgumentCaptor.forClass(TaskSubmitInfo.class);
         verify(write).submit(submitted.capture());
         assertThat(submitted.getValue().contract()).isEqualTo(new OutputSpec(OutputFormat.JSON, "{}", "ok").toContract());
-        verify(drafts).draft("T", "desc", "ok", new OutputSpec(OutputFormat.JSON, "{}", "ok").toContract());
+        verify(drafts).draft(any(), eq("T"), eq("desc"), eq("ok"), eq(new OutputSpec(OutputFormat.JSON, "{}", "ok").toContract()));
         verify(write).recordExtraction(eq(taskId), any());
     }
 
@@ -81,7 +81,7 @@ class SubmitOrchestrationAppServiceImplTest {
 
         svc.submitRouted(new SubmitContext(owner, null, null, null, null), withContract);
 
-        verify(drafts, never()).draft(any(), any(), any(), any());
+        verify(drafts, never()).draft(any(), any(), any(), any(), any());
         verify(write, never()).recordExtraction(any(), any());
     }
 
@@ -100,7 +100,7 @@ class SubmitOrchestrationAppServiceImplTest {
         UUID replay = svc.submitRouted(ctx, info(owner, "20.00"));
 
         assertThat(replay).isEqualTo(taskId);
-        verify(drafts, org.mockito.Mockito.times(1)).draft(any(), any(), any(), any());
+        verify(drafts, org.mockito.Mockito.times(1)).draft(any(), any(), any(), any(), any());
     }
 
     private TaskSubmitInfo info(UUID owner, String budget) {
