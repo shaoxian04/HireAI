@@ -103,9 +103,10 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     }
 
     /**
-     * The output spec a routed task records while output_spec still exists (#110 retires it): the
-     * Client's, which must then be of the Contract's Template's shape, else the one the Contract implies
-     * (a structured Contract submitted alone, spec S6 mode 2).
+     * The output spec a routed task is submitted with — only its format (the deliverable's shape) and
+     * prose criteria are kept, as the Contract's description (#110): the Client's, which must then be of
+     * the Contract's Template's shape, else the one the Contract implies (a structured Contract
+     * submitted alone, spec S6 mode 2).
      */
     private OutputSpec outputSpecFor(TaskSubmitInfo info, Contract contract) {
         if (info.contract() == null) {
@@ -113,7 +114,7 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
         }
         OutputShape shape = templateReadAppService.termsFor(contract).template().outputShape();
         if (info.outputSpec() == null) {
-            return OutputSpec.forContract(shape, contract, null);
+            return OutputSpec.describing(shape, contract, null);
         }
         if (!info.outputSpec().format().name().equals(shape.name())) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "outputSpec.format " + info.outputSpec().format()

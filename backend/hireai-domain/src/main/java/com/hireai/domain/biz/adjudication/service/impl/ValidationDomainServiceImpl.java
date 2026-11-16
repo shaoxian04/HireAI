@@ -22,7 +22,6 @@ import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
 import com.hireai.domain.biz.adjudication.service.JsonCheckResult;
 import com.hireai.domain.biz.adjudication.service.SchemaValidator;
 import com.hireai.domain.biz.adjudication.service.ValidationDomainService;
-import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
@@ -201,11 +200,6 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
     @Override
     public boolean needsInvoice(Contract contract) {
         return contract.template().equals(InvoiceExtractionTemplate.AP_INVOICE_EXTRACTION_V1);
-    }
-
-    @Override
-    public ValidationReportModel validate(OutputSpec legacySpec, TaskResultModel result, int attemptNo) {
-        return validate(legacySpec.toContract(), result, attemptNo);
     }
 
     @Override

@@ -13,7 +13,7 @@ import java.util.UUID;
 
 /**
  * JPA persistence entity for a task. Separate from the domain {@code TaskModel} so the
- * domain stays framework-free. {@code output_spec} is stored as JSONB; the repository
+ * domain stays framework-free. {@code contract} is stored as JSONB; the repository
  * impl serialises the {@code OutputSpec} value object to/from JSON. {@code agentVersionId}
  * is a plain UUID (no FK — the Agent context is independent).
  */
@@ -37,13 +37,16 @@ public class TaskDO {
     @Column(name = "budget", nullable = false)
     private BigDecimal budget;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "output_spec", columnDefinition = "jsonb", nullable = false)
-    private String outputSpec;
+    /**
+     * The Client's prose acceptance criteria (V55): intent evidence, never checked. The retired
+     * {@code output_spec} column is deliberately unmapped: kept for history, never read (#110).
+     */
+    @Column(name = "acceptance_criteria")
+    private String acceptanceCriteria;
 
-    /** The frozen Contract (V39); null on Tasks submitted before it. A DB trigger blocks any change once set. */
+    /** The frozen Contract (V39; NOT NULL since V55). A DB trigger blocks any change once set. */
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "contract", columnDefinition = "jsonb")
+    @Column(name = "contract", columnDefinition = "jsonb", nullable = false)
     private String contract;
 
     @Column(name = "category")
@@ -77,7 +80,7 @@ public class TaskDO {
     }
 
     public TaskDO(UUID id, UUID clientId, String title, String description,
-                         BigDecimal budget, String outputSpec, String contract, String category, String status,
+                         BigDecimal budget, String acceptanceCriteria, String contract, String category, String status,
                          UUID agentVersionId, Instant gmtCreate,
                          String resolution, Instant resolvedAt, String rejectionReason,
                          String rejectReasonCategory, String failureReason) {
@@ -86,7 +89,7 @@ public class TaskDO {
         this.title = title;
         this.description = description;
         this.budget = budget;
-        this.outputSpec = outputSpec;
+        this.acceptanceCriteria = acceptanceCriteria;
         this.contract = contract;
         this.category = category;
         this.status = status;
@@ -104,7 +107,7 @@ public class TaskDO {
     public String getTitle() { return title; }
     public String getDescription() { return description; }
     public BigDecimal getBudget() { return budget; }
-    public String getOutputSpec() { return outputSpec; }
+    public String getAcceptanceCriteria() { return acceptanceCriteria; }
     public String getContract() { return contract; }
     public String getCategory() { return category; }
     public String getStatus() { return status; }

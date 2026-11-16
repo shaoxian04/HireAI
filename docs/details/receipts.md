@@ -61,7 +61,7 @@ numbers.
 | `task` | `id`, `submittedAt` |
 | `item` | `no`, `count`; only on an Item's receipt (`itemCount` instead on a whole-Task receipt of a multi-Item Task) |
 | `parties` | `clientRef`, `builderRef`, `agentVersionRef`: pseudonymous references, see below |
-| `contract` | `template` (`key@version`), `templateKey`, `templateVersion`, `sha256` of the RFC 8785 form of the Task's frozen [Contract](#the-contract-a-receipt-names) (its output-spec equivalent for a Task from before Contracts) |
+| `contract` | `template` (`key@version`), `templateKey`, `templateVersion`, `sha256` of the RFC 8785 form of the Task's frozen [Contract](#the-contract-a-receipt-names) (for a Task from before Contracts, the one its output spec mapped onto) |
 | `input` | `sha256` of the UTF-8 task description, or of the Item's input |
 | `delivery` | `agentStatus`, `receivedAt`, `payloadSha256` of the result payload, and `file` (`sha256`, `mediaType`, `sizeBytes`, `fetchedAt`) when a [DeliverySnapshot](data-model.md#delivery-snapshots) was frozen; absent when nothing was delivered |
 | `checks` | `attempt`, `verdict` (`PASS`/`FAIL`), `results[]` of `rule`, `passed`, `detail` |

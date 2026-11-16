@@ -15,13 +15,19 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The output contract a client declares for a task, persisted faithfully and immutably and still
- * consumed by automated validation and by dispute arbitration. {@code format} is required;
- * {@code schema} and {@code acceptanceCriteria} are optional free-form fields.
- *
- * <p>Being replaced by the Contract (ADR 0009): {@link #toContract()} and {@link #toOwnOffer()}
- * are the D39 migration mapping onto the generic Templates, mirrored for existing rows by the
- * V39 SQL backfill. {@code acceptanceCriteria} is prose, so it maps onto no parameter.
+ * An output spec: {@code format} (required), and the optional {@code schema} and prose
+ * {@code acceptanceCriteria}. Since #110 it is never a contract: the Task's frozen Contract is the
+ * single binding contract (Hard Invariant #4). It survives in two roles only:
+ * <ul>
+ *   <li>an <b>input shorthand</b> on submit and Agent registration, mapped onto a Contract or Offer
+ *       by {@link #toContract()} / {@link #toOwnOffer()} (the D39 mapping onto the generic Templates);</li>
+ *   <li>the <b>wire description</b> of a Task's Contract ({@link #describing}) in WorkOrders,
+ *       rejection notices, arbitration requests and the task API, so existing Agents keep reading
+ *       {@code outputSpec.format} / {@code schema}.</li>
+ * </ul>
+ * {@code acceptanceCriteria} is prose that maps onto no Template parameter: it is stored on the Task
+ * beside the Contract as intent evidence for the Client and the arbitrator, and read by requirement
+ * extraction on a mode-1 submit, but never checked automatically.
  */
 public record OutputSpec(OutputFormat format, String schema, String acceptanceCriteria) {
 
@@ -32,13 +38,18 @@ public record OutputSpec(OutputFormat format, String schema, String acceptanceCr
     }
 
     /**
-     * The output spec a Task submitted with only a Contract records (spec S6 mode 2, until #110 retires
-     * output_spec): the Template's shape, and the Contract's schema when it sets one.
+     * The wire description of {@code contract}: {@code format} (its Template's shape), the Contract's
+     * schema when it sets one, and the Client's prose {@code acceptanceCriteria}.
      */
-    public static OutputSpec forContract(com.hireai.domain.biz.acceptance.template.enums.OutputShape shape,
-                                         Contract contract, String acceptanceCriteria) {
+    public static OutputSpec describing(OutputFormat format, Contract contract, String acceptanceCriteria) {
         String schema = contract.params().get(GenericTemplates.SCHEMA) instanceof ParameterValue.Text t ? t.value() : null;
-        return new OutputSpec(OutputFormat.valueOf(shape.name()), schema, acceptanceCriteria);
+        return new OutputSpec(format, schema, acceptanceCriteria);
+    }
+
+    /** {@link #describing(OutputFormat, Contract, String)} from a Template's shape. */
+    public static OutputSpec describing(com.hireai.domain.biz.acceptance.template.enums.OutputShape shape,
+                                        Contract contract, String acceptanceCriteria) {
+        return describing(OutputFormat.valueOf(shape.name()), contract, acceptanceCriteria);
     }
 
     /** The Contract a Task submitted with this spec freezes: TEXT, FILE and JSON map one to one. */

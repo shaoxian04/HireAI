@@ -491,7 +491,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
         RejectionNotice notice = new RejectionNotice(task.id(), task.agentVersionId(), round.round(),
                 round.reasonCategory().name(), round.reason(), round.responseDeadline(), round.revisionAllowed(),
                 publicBaseUrl + "/api/agent-callbacks/" + task.id() + "/items/" + item.itemNo() + "/rejection-response",
-                task.title(), task.description(), outputSpecJsonMapper.toJson(task.outputSpec()),
+                task.title(), task.description(), outputSpecJsonMapper.toJson(task.outputDescription()),
                 item.itemNo(), item.input(), item.resultPayload());
         boolean delivered = agentNoticePort.sendRejectionNotice(webhookUrl, token, secret, notice);
         itemRejectionRepository.recordNoticeAttempt(round.id(), delivered ? now : null);

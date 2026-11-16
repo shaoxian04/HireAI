@@ -101,17 +101,17 @@ class BuilderStatsQueryDaoIntegrationTest {
         UUID taskId = UUID.randomUUID();
         if (createdAt == null) {
             jdbc.update("""
-                    INSERT INTO tasks (id, client_id, title, description, budget, output_spec,
+                    INSERT INTO tasks (id, client_id, title, description, budget, contract,
                                        status, agent_version_id, category)
-                    VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?, 'general')
+                    VALUES (?, ?, ?, ?, ?, contract_from_output_spec(?::jsonb), ?, ?, 'general')
                     """,
                     taskId, clientId, "Task " + taskId.toString().substring(0, 8),
                     "Description", budget, "{\"format\":\"JSON\"}", status, versionId);
         } else {
             jdbc.update("""
-                    INSERT INTO tasks (id, client_id, title, description, budget, output_spec,
+                    INSERT INTO tasks (id, client_id, title, description, budget, contract,
                                        status, agent_version_id, category, gmt_create, gmt_modified)
-                    VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, ?, 'general', ?, ?)
+                    VALUES (?, ?, ?, ?, ?, contract_from_output_spec(?::jsonb), ?, ?, 'general', ?, ?)
                     """,
                     taskId, clientId, "Task " + taskId.toString().substring(0, 8),
                     "Description", budget, "{\"format\":\"JSON\"}", status, versionId,

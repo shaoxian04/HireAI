@@ -33,6 +33,9 @@ class ArbitrationRequest(BaseModel):
     format: str
     schema_: str | None = Field(default=None, alias="schema")
     acceptance_criteria: str | None = None
+    # The task's frozen Contract (JSON text): the single binding contract (Invariant #4). None only
+    # on a request published before the backend sent it.
+    contract: str | None = None
     task_description: str | None = None
     result_payload_json: str | None = None
     result_url: str | None = None

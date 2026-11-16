@@ -17,7 +17,7 @@ public enum ReputationEventType {
     /** Client accepted, or a programmatic task passed validation and auto-settled. */
     TASK_ACCEPTED(ReputationComponent.RELIABILITY, BigDecimal.ONE),
 
-    /** Output failed validation against the binding output_spec (Invariant #4). */
+    /** Output failed validation against the binding Contract (Invariant #4). */
     SPEC_VIOLATION(ReputationComponent.RELIABILITY, BigDecimal.ZERO),
 
     /** The agent reported a non-COMPLETED result on its callback. */

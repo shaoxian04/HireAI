@@ -104,7 +104,7 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
                 result.resultPayloadJson(), result.resultUrl()));
         taskRepository.save(recorded);
 
-        Contract contract = recorded.contract() != null ? recorded.contract() : recorded.outputSpec().toContract();
+        Contract contract = recorded.contract();
         List<TaskItemModel> judged = new ArrayList<>(items.count());
         for (TaskItemModel item : items.all()) {
             if (item.status() != ItemStatus.AWAITING_RESULT) {
@@ -284,7 +284,7 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
     @Override
     public TaskItemModel reviseRejected(TaskModel task, TaskItemModel rejected, String payload, String url,
                                         int round) {
-        Contract contract = task.contract() != null ? task.contract() : task.outputSpec().toContract();
+        Contract contract = task.contract();
         TaskItemModel.requireHttpsResultUrl(rejected.itemNo(), url);
         ItemAcceptance acceptance = acceptanceFor(task, rejected, attemptId(rejected, "revision-" + round),
                 "COMPLETED", payload, url, contract, List.of());

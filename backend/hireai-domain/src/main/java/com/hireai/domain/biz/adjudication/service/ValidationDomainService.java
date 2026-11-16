@@ -5,7 +5,6 @@ import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.acceptance.delivery.model.DeliveryOutcome;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
 import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
-import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 
 /**
@@ -55,13 +54,6 @@ public interface ValidationDomainService {
      * than {@code platformLimit}. The fetch reads one byte past it to tell "at the limit" from "over".
      */
     long deliveryByteLimit(Contract contract, long platformLimit);
-
-    /**
-     * Judges a result of a Task submitted before Contracts existed (its Contract is null) against
-     * its frozen output spec, through the same D39 mapping. A blank or prose schema is still
-     * recorded as {@code SCHEMA_SKIPPED} for these Tasks.
-     */
-    ValidationReportModel validate(OutputSpec legacySpec, TaskResultModel result, int attemptNo);
 
     /**
      * Throws VALIDATION_ERROR when the Contract's terms could not be checked as written: a schema

@@ -157,13 +157,17 @@ class DirectBookingIntegrationTest {
                 "SELECT agent_version_id FROM tasks WHERE id = ?", UUID.class, taskId);
         assertThat(assignedVersion).isEqualTo(agentVersionId);
 
-        // outputSpec in the task must equal the agent version's spec (Invariant #4).
-        // Use Postgres JSONB semantic equality to avoid whitespace/key-order sensitivity.
-        Boolean outputSpecMatches = jdbc.queryForObject(
-                "SELECT (SELECT output_spec FROM tasks WHERE id = ?) = " +
-                "(SELECT output_spec FROM agent_versions WHERE id = ?)",
+        // With no client terms the task freezes the agent's own terms as its Contract (Invariant #4),
+        // keeps the agent's prose criteria beside it, and writes no output_spec (retired, #110).
+        Boolean contractMatches = jdbc.queryForObject(
+                "SELECT (SELECT contract FROM tasks WHERE id = ?) = " +
+                "contract_from_output_spec((SELECT output_spec FROM agent_versions WHERE id = ?))",
                 Boolean.class, taskId, agentVersionId);
-        assertThat(outputSpecMatches).isTrue();
+        assertThat(contractMatches).isTrue();
+        assertThat(jdbc.queryForObject("SELECT acceptance_criteria FROM tasks WHERE id = ?", String.class, taskId))
+                .isEqualTo("valid JSON");
+        assertThat(jdbc.queryForObject("SELECT output_spec IS NULL FROM tasks WHERE id = ?", Boolean.class, taskId))
+                .isTrue();
 
         // Wallet: available 80.00, escrow 20.00
         assertThat(walletReadAppService.getByUserId(client).available()).isEqualTo(Money.of("80.00"));
@@ -176,25 +180,26 @@ class DirectBookingIntegrationTest {
         assertThat(dispatched.agentVersionId()).isEqualTo(agentVersionId);
         assertThat(dispatched.taskId()).isEqualTo(taskId);
 
-        // Invariant #4: dispatch payload outputSpecJson must come from the TASK's stored spec snapshot,
-        // not re-read from the agent version. At booking time both are equal (agent spec was adopted),
-        // but we assert against the task row to pin this contract.
-        String taskOutputSpec = jdbc.queryForObject(
-                "SELECT output_spec::text FROM tasks WHERE id = ?",
+        // Invariant #4: the dispatch carries the TASK's frozen Contract, not one re-read from the agent
+        // version, and an outputSpec describing it (#110).
+        String taskContract = jdbc.queryForObject(
+                "SELECT contract::text FROM tasks WHERE id = ?",
                 String.class, taskId);
+        assertThat(taskContract).as("task contract").isNotNull();
+        assertThat(dispatched.payload().contractJson()).as("dispatched contract").isNotNull();
         assertEquals(
-                objectMapper.readTree(taskOutputSpec),
-                objectMapper.readTree(dispatched.payload().outputSpecJson()),
-                "dispatch payload outputSpecJson must be semantically equal to the task's stored output_spec (Invariant #4)");
+                objectMapper.readTree(taskContract),
+                objectMapper.readTree(dispatched.payload().contractJson()),
+                "dispatch payload contractJson must be semantically equal to the task's frozen Contract (Invariant #4)");
 
-        // Cross-check: task spec == agent spec at booking time (agent spec was adopted as the task's contract).
+        // At booking time the description equals the agent version's spec (its own terms were adopted).
         String agentOutputSpec = jdbc.queryForObject(
                 "SELECT output_spec::text FROM agent_versions WHERE id = ?",
                 String.class, agentVersionId);
         assertEquals(
                 objectMapper.readTree(agentOutputSpec),
                 objectMapper.readTree(dispatched.payload().outputSpecJson()),
-                "at booking time, task output_spec equals the agent version's spec (adoption confirmed)");
+                "at booking time, the task's output description equals the agent version's spec");
     }
 
     /**
@@ -221,8 +226,8 @@ class DirectBookingIntegrationTest {
         UUID taskId = UUID.randomUUID();
         String outputSpecJson = "{\"format\":\"JSON\",\"schema\":\"{\\\"type\\\":\\\"object\\\"}\",\"acceptanceCriteria\":\"valid JSON\"}";
         jdbc.update(
-                "INSERT INTO tasks (id, client_id, title, description, budget, output_spec, category, status, gmt_create) " +
-                "VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, 'SUBMITTED', now())",
+                "INSERT INTO tasks (id, client_id, title, description, budget, contract, category, status, gmt_create) " +
+                "VALUES (?, ?, ?, ?, ?, contract_from_output_spec(?::jsonb), ?, 'SUBMITTED', now())",
                 taskId, client, "Race task", "Deactivation race test",
                 new BigDecimal("15.00"), outputSpecJson, "summarisation");
         walletWriteAppService.freeze(client, Money.of("15.00"), taskId, UUID.randomUUID().toString());

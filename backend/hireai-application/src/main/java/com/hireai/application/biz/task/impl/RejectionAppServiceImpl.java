@@ -260,7 +260,7 @@ public class RejectionAppServiceImpl implements RejectionAppService {
                 rejection.reasonCategory().name(), rejection.reason(), rejection.responseDeadline(),
                 rejection.revisionAllowed(),
                 publicBaseUrl + "/api/agent-callbacks/" + taskId + "/rejection-response",
-                task.title(), task.description(), outputSpecJsonMapper.toJson(task.outputSpec()));
+                task.title(), task.description(), outputSpecJsonMapper.toJson(task.outputDescription()));
         boolean delivered = agentNoticePort.sendRejectionNotice(webhookUrl, token, secret, notice);
         rejectionRepository.recordNoticeAttempt(rejection.id(), delivered ? now : null);
         if (delivered) {

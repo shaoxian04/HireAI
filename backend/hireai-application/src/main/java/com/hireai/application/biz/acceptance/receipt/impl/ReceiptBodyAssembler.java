@@ -126,7 +126,7 @@ class ReceiptBodyAssembler {
 
     /** The Contract's Template and the SHA-256 of its RFC 8785 form (the Task's frozen Contract). */
     private Map<String, Object> contract(TaskModel task) {
-        Contract contract = task.contract() != null ? task.contract() : task.outputSpec().toContract();
+        Contract contract = task.contract();
         Object tree;
         try {
             tree = objectMapper.readValue(acceptanceJsonMapper.toJson(contract), Object.class);

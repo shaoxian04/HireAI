@@ -27,7 +27,10 @@ class TaskModelTest {
         assertThat(task.clientId()).isEqualTo(clientId);
         assertThat(task.status()).isEqualTo(TaskStatus.SUBMITTED);
         assertThat(task.budget()).isEqualTo(Money.of("25.00"));
-        assertThat(task.outputSpec()).isEqualTo(spec());
+        // The spec is an input shorthand: the Task keeps its Contract and describes it (#110).
+        assertThat(task.contract()).isEqualTo(spec().toContract());
+        assertThat(task.outputDescription().format()).isEqualTo(spec().format());
+        assertThat(task.acceptanceCriteria()).isEqualTo(spec().acceptanceCriteria());
         assertThat(task.createdAt()).isNotNull();
     }
 

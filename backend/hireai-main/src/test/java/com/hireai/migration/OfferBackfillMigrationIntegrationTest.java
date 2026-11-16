@@ -21,7 +21,9 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 /**
  * Regression for V39 (#88, spec D39): every agent version that existed before Offers comes out of
  * the migration with the equivalent Offer, and Tasks already submitted keep their output_spec
- * untouched and no Contract. Published Template versions cannot be edited or deleted.
+ * untouched (V55, #110, later gives them the equivalent Contract: see
+ * {@code OutputSpecRetirementMigrationIntegrationTest}). Published Template versions cannot be edited
+ * or deleted.
  */
 class OfferBackfillMigrationIntegrationTest {
 
@@ -60,7 +62,9 @@ class OfferBackfillMigrationIntegrationTest {
 
         assertThat(jdbc.queryForObject("SELECT output_spec = ?::jsonb FROM tasks WHERE id = ?", Boolean.class,
                 inFlightSpec, task)).isTrue();
-        assertThat(jdbc.queryForObject("SELECT contract FROM tasks WHERE id = ?", String.class, task)).isNull();
+        // V55 gave the in-flight Task the Contract its output spec maps onto (the rules it was judged by).
+        assertThat(jdbc.queryForObject("SELECT contract::text FROM tasks WHERE id = ?", String.class, task))
+                .isEqualTo("{\"params\": {\"schema\": \"{}\"}, \"version\": 1, \"template\": \"custom_json\"}");
 
         assertThat(jdbc.queryForList("SELECT template_key || '@' || version FROM contract_templates "
                 + "WHERE status = 'ACTIVE' ORDER BY 1", String.class))

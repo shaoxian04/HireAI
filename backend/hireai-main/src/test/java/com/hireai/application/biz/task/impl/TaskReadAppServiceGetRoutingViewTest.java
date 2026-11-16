@@ -31,7 +31,8 @@ class TaskReadAppServiceGetRoutingViewTest {
 
     private TaskReadAppServiceImpl service() {
         return new TaskReadAppServiceImpl(taskRepository, outputSpecJsonMapper, null, null,
-                org.mockito.Mockito.mock(com.hireai.domain.biz.task.item.repository.TaskItemRepository.class), null, null);
+                org.mockito.Mockito.mock(com.hireai.domain.biz.task.item.repository.TaskItemRepository.class), null, null,
+                new com.hireai.application.biz.acceptance.AcceptanceJsonMapper(new ObjectMapper()));
     }
 
     @Test
@@ -49,9 +50,10 @@ class TaskReadAppServiceGetRoutingViewTest {
         assertThat(view.category()).isEqualTo("translation");
         assertThat(view.budget()).isEqualByComparingTo(new BigDecimal("42.50"));
         assertThat(view.status()).isEqualTo("SUBMITTED");
-        // Invariant #4: the view carries the task's serialised output_spec snapshot.
-        assertThat(view.outputSpecJson()).isNotBlank();
-        assertThat(view.outputSpecJson()).contains("TEXT");
+        // Invariant #4: the view carries the frozen Contract and its wire description (#110).
+        assertThat(view.outputSpecJson()).contains("TEXT").contains("summary");
+        assertThat(view.contract()).isEqualTo(task.contract());
+        assertThat(view.contractJson()).contains("\"template\":\"text_basic\"");
     }
 
     @Test

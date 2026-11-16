@@ -12,7 +12,7 @@ public interface SchemaValidator {
 
     /**
      * @param payloadJson the agent's result payload
-     * @param schemaOrNull the task's declared output_spec.schema (may be null or free prose)
+     * @param schemaOrNull the Contract's schema parameter (may be null)
      */
     JsonCheckResult check(String payloadJson, @Nullable String schemaOrNull);
 

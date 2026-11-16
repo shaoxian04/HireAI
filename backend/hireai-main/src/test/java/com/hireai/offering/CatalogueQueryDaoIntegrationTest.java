@@ -349,9 +349,9 @@ class CatalogueQueryDaoIntegrationTest {
         jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'CLIENT')", clientId);
 
         UUID taskId = UUID.randomUUID();
-        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, output_spec, " +
+        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, contract, " +
                         "category, status, agent_version_id) " +
-                        "VALUES (?, ?, 'T', 'D', 10.00, '{\"format\":\"JSON\"}'::jsonb, " +
+                        "VALUES (?, ?, 'T', 'D', 10.00, contract_from_output_spec('{\"format\":\"JSON\"}'::jsonb), " +
                         "'general', 'RESULT_RECEIVED', ?)",
                 taskId, clientId, versionId);
         jdbc.update("INSERT INTO task_results (id, task_id, result_payload, agent_status, received_at) " +

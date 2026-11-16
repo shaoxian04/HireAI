@@ -56,7 +56,8 @@ class TaskModelReassignTest {
         assertThat(reassigned.clientId()).isEqualTo(original.clientId());
         assertThat(reassigned.budget()).isEqualTo(original.budget());
         assertThat(reassigned.category()).isEqualTo(original.category());
-        assertThat(reassigned.outputSpec()).isEqualTo(original.outputSpec());
+        assertThat(reassigned.outputDescription()).isEqualTo(original.outputDescription());
+        assertThat(reassigned.contract()).isEqualTo(original.contract());
     }
 
     @Test

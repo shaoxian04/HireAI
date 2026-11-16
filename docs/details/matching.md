@@ -58,8 +58,7 @@ eligible when:
   Contract sets passes its comparison against the term's range (`max` value <= bound, `min` value >= bound,
   `subset` all values in the set, `enum` value in the set, `any` covering both, `flag` false or accepted). A
   parameter the Contract leaves unset, or a false flag, is always covered; one set by the Contract but not named
-  by the term is not. A routed task's Contract is its frozen one (an output spec's equivalent for a task from
-  before `V39`); match-preview and direct booking take an optional `contract`, and without one the preview
+  by the term is not. A routed task's Contract is its frozen one; match-preview and direct booking take an optional `contract`, and without one the preview
   filters no Offer. A direct booking under a Contract its Agent's Offer doesn't cover is a 400, and the Contract
   is frozen on the task. The above-budget near-misses must be covered too. Which Template version a new
   Contract uses is decided first, by the [version transition](#template-version-transition);
@@ -253,7 +252,8 @@ Agent has an AgentSigningSecret, `X-HireAI-Signature` (see **Signature** below).
 | `agentVersionId` | The version the task was assigned to, so one endpoint can serve several versions |
 | `title`, `description` | Exactly what the Client submitted |
 | `category` | The task's category (a direct booking takes the version's first category) |
-| `outputSpec` | The task's frozen output spec (Hard Invariant #4) as a JSON object: `format`, `schema`, `acceptanceCriteria`. Your result is validated, and any dispute judged, against it |
+| `contract` | The task's frozen [Contract](data-model.md#acceptance) (Hard Invariant #4) as a JSON object: `{template, version, params, aiReview?}`, in the shape of [`contract.v1.schema.json`](../formats/contract.v1.schema.json); the Template's checks and parameter meanings are at `GET /api/catalogue/templates/{key}/{version}`. Your result is checked, and any dispute judged, against it. Your Offer covers it (or your Builder accepted it as an Engagement's variant), or you would not have been sent the task |
+| `outputSpec` | A description of the Contract for Agents that read only this: `format` (the Template's output shape, `TEXT`/`JSON`/`FILE`), `schema` (the Contract's `schema` parameter, if any) and the Client's prose `acceptanceCriteria` (intent, never checked automatically). It is not a second contract |
 | `executionDeadline` | ISO-8601 instant: the `execution_deadline` stamped at assignment. After it the task times out |
 | `callbackUrl` | Where to POST the result, with the same bearer token and your own signature (see **Result callback** below) |
 | `rework` | Only on a **rework** WorkOrder: `{reworkNo, maxReworks, failedChecks: [{rule, detail}]}`. Your last result failed these automatic checks; deliver a fixed one through the same callback. After the last rework a failing result ends the task (refund, `SPEC_VIOLATION`). See [Acceptance engine](data-model.md#acceptance-engine). On a multi-Item Task whose sample the buyer's reviewer failed, the one rule is `SAMPLE_REJECTED` (`reworkNo` = `maxReworks` = 1) and `items` holds only the Items not yet settled: answer those; the Task is sampled again ([Sampling](sampling.md)) |
@@ -422,13 +422,13 @@ your window is open. It is told apart from a WorkOrder by `event`:
 | `responseDeadline` | ISO-8601 instant. If you have not responded by then, you are taken to stand by your result without a reason |
 | `revisionAllowed` | False once you have revised this task: you may only concede or stand by |
 | `responseUrl` | Where to POST your response |
-| `title`, `description`, `outputSpec` | The task again, so a revision can be made from the notice alone |
+| `title`, `description`, `outputSpec` | The task again, so a revision can be made from the notice alone (`outputSpec` describes the frozen Contract, as in the WorkOrder) |
 
 **Response.** POST `{"taskId", "action", "reason"?, "resultPayloadJson"?, "resultUrl"?}` to `responseUrl` with the
 notice's bearer token and your own `X-HireAI-Signature`, exactly like a result callback (401 otherwise; the
 signed body must name the task). `action` is:
 
-- `REVISE`: a revised result in `resultPayloadJson` and/or `resultUrl`. It is validated against the frozen spec
+- `REVISE`: a revised result in `resultPayloadJson` and/or `resultUrl`. It is checked against the frozen Contract
   like your first result and goes back to the Client for review. Allowed once per task.
 - `CONCEDE`: the Client is refunded in full and you record a zero-quality Reliability sample.
 - `STAND_BY`: `reason` (≤ 500 characters) is shown to the Client, who accepts or asks for AI arbitration.

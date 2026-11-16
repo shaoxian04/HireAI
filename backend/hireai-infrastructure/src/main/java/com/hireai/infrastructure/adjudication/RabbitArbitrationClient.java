@@ -1,5 +1,6 @@
 package com.hireai.infrastructure.adjudication;
 
+import com.hireai.application.biz.acceptance.AcceptanceJsonMapper;
 import com.hireai.application.biz.adjudication.port.ArbitrationDeliverable;
 import com.hireai.application.biz.adjudication.port.ArbitrationGateway;
 import com.hireai.application.biz.adjudication.port.ArbitrationRequestMessage;
@@ -33,14 +34,18 @@ import java.util.Optional;
 public class RabbitArbitrationClient implements ArbitrationGateway {
 
     private final RabbitTemplate rabbitTemplate;
+    private final AcceptanceJsonMapper acceptanceJsonMapper;
 
-    public RabbitArbitrationClient(@Qualifier("dispatchRabbitTemplate") RabbitTemplate rabbitTemplate) {
+    public RabbitArbitrationClient(@Qualifier("dispatchRabbitTemplate") RabbitTemplate rabbitTemplate,
+                                   AcceptanceJsonMapper acceptanceJsonMapper) {
         this.rabbitTemplate = rabbitTemplate;
+        this.acceptanceJsonMapper = acceptanceJsonMapper;
     }
 
     @Override
     public Optional<RulingInfo> requestRuling(DisputeModel dispute, TaskModel task, ArbitrationDeliverable deliverable) {
-        OutputSpec spec = task.outputSpec();
+        // The arbitrator judges against the frozen Contract (Invariant #4); format/schema describe it.
+        OutputSpec spec = task.outputDescription();
         TaskResultModel result = task.result();
         ArbitrationRequestMessage message = new ArbitrationRequestMessage(
                 dispute.id(), task.id(), dispute.correlationId(),
@@ -48,7 +53,8 @@ public class RabbitArbitrationClient implements ArbitrationGateway {
                 result == null ? null : result.resultPayloadJson(),
                 result == null ? null : result.resultUrl(),
                 dispute.reasonCategory().name(),
-                deliverable);
+                deliverable,
+                acceptanceJsonMapper.toJson(task.contract()));
         rabbitTemplate.convertAndSend(ArbitrationQueues.EXCHANGE, ArbitrationQueues.ROUTING_KEY, message);
         log.info("Published arbitration request for dispute {} (correlation {})", dispute.id(), dispute.correlationId());
         return Optional.empty();

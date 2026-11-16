@@ -1,5 +1,6 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.application.biz.acceptance.AcceptanceJsonMapper;
 import com.hireai.application.biz.acceptance.TemplateReadAppService;
 import com.hireai.application.biz.acceptance.delivery.DeliverySnapshotAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
@@ -50,6 +51,7 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     private final TaskItemRepository taskItemRepository;
     private final DeliverySnapshotAppService deliverySnapshotAppService;
     private final TemplateReadAppService templateReadAppService;
+    private final AcceptanceJsonMapper acceptanceJsonMapper;
 
     @Override
     public Optional<String> findFailureDetail(TaskModel task) {
@@ -66,7 +68,7 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
 
     @Override
     public Optional<VersionFallback> findTemplateFallback(TaskModel task) {
-        return task.contract() == null ? Optional.empty() : templateReadAppService.fallbackOf(task.contract());
+        return templateReadAppService.fallbackOf(task.contract());
     }
 
     @Override
@@ -162,9 +164,9 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     public TaskRoutingView getRoutingView(UUID taskId) {
         TaskModel task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
-        // Serialise the task's stored output_spec snapshot: this is the binding contract
-        // (Hard Invariant #4) that must travel with the dispatch, not the agent version's live spec.
-        String outputSpecJson = outputSpecJsonMapper.toJson(task.outputSpec());
+        // The WorkOrder's outputSpec describes the task's frozen Contract (format, schema, criteria),
+        // never the agent version's live spec; the Contract itself travels too (Hard Invariant #4).
+        String outputSpecJson = outputSpecJsonMapper.toJson(task.outputDescription());
         // Matching compares an Agent's price with what one Item pays: a multi-Item Task's budget of
         // record is the per-Item price × the Item count (spec S3), and an Offer's price is per Item.
         int itemCount = taskItemRepository.countByTaskId(task.id());
@@ -173,7 +175,6 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
         return new TaskRoutingView(task.id(), task.title(), task.description(), task.category(),
                 budgetPerItem, task.status().name(), outputSpecJson,
                 taskRepository.findClientDeadline(task.id()).map(ClientDeadline::new).orElse(null),
-                // A task from before V39 has no Contract: its output spec's equivalent (D39) is it.
-                task.contract() != null ? task.contract() : task.outputSpec().toContract());
+                task.contract(), acceptanceJsonMapper.toJson(task.contract()));
     }
 }

@@ -10,7 +10,7 @@ A Python service that consumes dispute requests from RabbitMQ, runs a LangGraph 
 
 ### Evidence
 
-`gather_evidence` builds the evidence from the task, its criteria and the result. A FILE result is judged on the frozen DeliverySnapshot the backend sends inline; the Agent's link is fetched only for an old task that has none (`describe_deliverable` in `app/graph/tools.py`):
+`gather_evidence` builds the evidence from the task, its frozen Contract (the request's `contract`, the binding terms automated acceptance used, Hard Invariant #4), the Client's prose criteria and the result. A FILE result is judged on the frozen DeliverySnapshot the backend sends inline; the Agent's link is fetched only for an old task that has none (`describe_deliverable` in `app/graph/tools.py`):
 
 - **Text** (`text/*`, JSON, XML) is decoded into the evidence, cut at `FETCH_MAX_BYTES`.
 - **PNG, JPEG, WebP and PDF** are attached to every model call as LangChain content blocks, so the multimodal model looks at the file itself; the provider adapter turns them into OpenAI `image_url` and `file` parts. A file over `MEDIA_MAX_BYTES` is only described. GIF is left out because the provider refuses animated GIFs.

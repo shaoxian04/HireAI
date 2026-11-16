@@ -63,8 +63,8 @@ class SpendReadDaoIntegrationTest {
     /** Seeds a task row in the given status and attributes it to the key at created-at `at`. */
     private void seedAttributedTask(UUID user, UUID keyId, String status, String budget, Instant at) {
         UUID taskId = UUID.randomUUID();
-        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, output_spec, category, status, gmt_create) " +
-                "VALUES (?, ?, 'T', 'd', ?, '{}'::jsonb, 'cat', ?, now())",
+        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, contract, category, status, gmt_create) " +
+                "VALUES (?, ?, 'T', 'd', ?, '{\"template\":\"text_basic\",\"version\":1,\"params\":{}}'::jsonb, 'cat', ?, now())",
                 taskId, user, new BigDecimal(budget), status);
         jdbc.update("INSERT INTO api_key_task (task_id, api_key_id, budget, created_at) VALUES (?, ?, ?, ?)",
                 taskId, keyId, new BigDecimal(budget), java.sql.Timestamp.from(at));

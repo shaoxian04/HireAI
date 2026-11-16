@@ -13,14 +13,23 @@ import java.util.List;
  * the instant stamped on the task at assignment; {@code callbackUrl} is where the agent posts
  * its result back. {@code items} are a multi-Item Task's Items (spec S3); empty otherwise.
  * {@code rework} is set only on a rework WorkOrder (D17) and names the checks the previous result
- * failed. Nothing about the client (identity, budget) is carried.
+ * failed. {@code contractJson} is the task's frozen Contract (Hard Invariant #4, #110), opaque like
+ * {@code outputSpecJson}, which describes it. Nothing about the client (identity, budget) is carried.
  */
 public record TaskDispatchPayload(String title, String description, String category,
                                   String outputSpecJson, Instant executionDeadline,
-                                  String callbackUrl, List<DispatchItem> items, ReworkRequest rework) {
+                                  String callbackUrl, List<DispatchItem> items, ReworkRequest rework,
+                                  String contractJson) {
 
     public TaskDispatchPayload {
         items = items == null ? List.of() : List.copyOf(items);
+    }
+
+    /** Without the Contract (tests, and a message queued before #110). */
+    public TaskDispatchPayload(String title, String description, String category, String outputSpecJson,
+                               Instant executionDeadline, String callbackUrl, List<DispatchItem> items,
+                               ReworkRequest rework) {
+        this(title, description, category, outputSpecJson, executionDeadline, callbackUrl, items, rework, null);
     }
 
     /** A first WorkOrder (not a rework) of a single-deliverable Task. */

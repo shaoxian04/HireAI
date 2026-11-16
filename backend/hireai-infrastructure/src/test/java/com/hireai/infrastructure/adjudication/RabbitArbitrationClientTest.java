@@ -1,5 +1,7 @@
 package com.hireai.infrastructure.adjudication;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hireai.application.biz.acceptance.AcceptanceJsonMapper;
 import com.hireai.application.biz.adjudication.port.ArbitrationDeliverable;
 import com.hireai.application.biz.adjudication.port.ArbitrationRequestMessage;
 import com.hireai.application.biz.adjudication.port.RulingInfo;
@@ -25,7 +27,8 @@ import static org.mockito.Mockito.*;
 class RabbitArbitrationClientTest {
 
     private final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
-    private final RabbitArbitrationClient client = new RabbitArbitrationClient(rabbitTemplate);
+    private final RabbitArbitrationClient client = new RabbitArbitrationClient(rabbitTemplate,
+            new AcceptanceJsonMapper(new ObjectMapper()));
 
     @Test
     void publishesRequestAndReturnsEmptyForAsync() {
@@ -56,5 +59,7 @@ class RabbitArbitrationClientTest {
         assertThat(msg.resultPayloadJson()).isEqualTo("{\"a\":1}");
         assertThat(msg.reasonCategory()).isEqualTo("A_MISMATCH");
         assertThat(msg.deliverable()).isEqualTo(deliverable); // the frozen snapshot, not the Agent's link (D24)
+        // The binding contract travels to the arbitrator (Invariant #4, #110).
+        assertThat(msg.contract()).contains("\"template\":\"custom_json\"").contains("\"schema\"");
     }
 }

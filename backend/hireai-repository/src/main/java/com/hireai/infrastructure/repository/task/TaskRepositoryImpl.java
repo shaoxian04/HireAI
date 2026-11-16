@@ -11,19 +11,26 @@ import com.hireai.domain.biz.task.repository.TaskQuery;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.domain.shared.model.Money;
 import com.hireai.application.biz.acceptance.AcceptanceJsonMapper;
-import com.hireai.application.biz.task.OutputSpecJsonMapper;
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.acceptance.template.enums.OutputShape;
+import com.hireai.domain.biz.acceptance.template.model.TemplateRef;
+import com.hireai.domain.biz.acceptance.template.repository.TemplateRepository;
+import com.hireai.domain.biz.task.enums.OutputFormat;
+import com.hireai.domain.biz.task.model.OutputSpec;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Infrastructure implementation of the domain {@link TaskRepository}. Maps
- * {@code TaskModel} &lt;-&gt; JPA entity, serialises the output spec via
- * {@link OutputSpecJsonMapper}, and persists/loads the {@link TaskResultModel} child
+ * {@code TaskModel} &lt;-&gt; JPA entity, serialises the frozen Contract via
+ * {@link AcceptanceJsonMapper}, and persists/loads the {@link TaskResultModel} child
  * through the root only.
  */
 @Repository
@@ -31,23 +38,24 @@ public class TaskRepositoryImpl implements TaskRepository {
 
     private final TaskJpaRepository taskJpa;
     private final TaskResultJpaRepository taskResultJpa;
-    private final OutputSpecJsonMapper outputSpecJsonMapper;
     private final AcceptanceJsonMapper acceptanceJsonMapper;
+    private final TemplateRepository templateRepository;
+    private final Map<TemplateRef, OutputShape> templateShapes = new ConcurrentHashMap<>();
 
     public TaskRepositoryImpl(TaskJpaRepository taskJpa, TaskResultJpaRepository taskResultJpa,
-                              OutputSpecJsonMapper outputSpecJsonMapper, AcceptanceJsonMapper acceptanceJsonMapper) {
+                              AcceptanceJsonMapper acceptanceJsonMapper, TemplateRepository templateRepository) {
         this.taskJpa = taskJpa;
         this.taskResultJpa = taskResultJpa;
-        this.outputSpecJsonMapper = outputSpecJsonMapper;
         this.acceptanceJsonMapper = acceptanceJsonMapper;
+        this.templateRepository = templateRepository;
     }
 
     @Override
     public TaskModel save(TaskModel task) {
         taskJpa.save(new TaskDO(
                 task.id(), task.clientId(), task.title(), task.description(),
-                task.budget().value(), outputSpecJsonMapper.toJson(task.outputSpec()),
-                task.contract() == null ? null : acceptanceJsonMapper.toJson(task.contract()),
+                task.budget().value(), task.acceptanceCriteria(),
+                acceptanceJsonMapper.toJson(task.contract()),
                 task.category(), task.status().name(), task.agentVersionId(), task.createdAt(),
                 task.resolution() == null ? null : task.resolution().name(),
                 task.resolvedAt(), task.rejectionReason(),
@@ -205,16 +213,27 @@ public class TaskRepositoryImpl implements TaskRepository {
         TaskResultModel result = taskResultJpa.findByTaskId(entity.getId())
                 .map(this::toResultModel)
                 .orElse(null);
+        Contract contract = acceptanceJsonMapper.contractFromJson(entity.getContract());
+        // The task's output description is derived from its Contract (#110): the Template's shape and the
+        // Client's prose criteria. The retired output_spec column is never read.
+        OutputSpec description = new OutputSpec(OutputFormat.valueOf(shapeOf(contract).name()), null,
+                entity.getAcceptanceCriteria());
         return new TaskModel(
                 entity.getId(), entity.getClientId(), entity.getTitle(), entity.getDescription(),
-                Money.of(entity.getBudget()), outputSpecJsonMapper.fromJson(entity.getOutputSpec()),
-                entity.getContract() == null ? null : acceptanceJsonMapper.contractFromJson(entity.getContract()),
+                Money.of(entity.getBudget()), description, contract,
                 entity.getCategory(), TaskStatus.valueOf(entity.getStatus()),
                 entity.getAgentVersionId(), result, entity.getGmtCreate(),
                 entity.getResolution() == null ? null : TaskResolution.valueOf(entity.getResolution()),
                 entity.getResolvedAt(), entity.getRejectionReason(),
                 entity.getRejectReasonCategory() == null ? null : RejectReason.valueOf(entity.getRejectReasonCategory()),
                 entity.getFailureReason() == null ? null : FailureReason.valueOf(entity.getFailureReason()));
+    }
+
+    /** A Template version's shape never changes (its definition is immutable), so it is cached. */
+    private OutputShape shapeOf(Contract contract) {
+        return templateShapes.computeIfAbsent(contract.template(), ref -> templateRepository.find(ref)
+                .orElseThrow(() -> new IllegalStateException("A frozen Contract names an unknown Template " + ref))
+                .outputShape());
     }
 
     private TaskResultModel toResultModel(TaskResultDO entity) {
