@@ -70,9 +70,11 @@ public final class TaskModel2DTOConverter {
             Money cut = Money.ZERO;
             Money back = Money.ZERO;
             for (TaskItemModel item : items.all()) {
-                if (item.status() == ItemStatus.ACCEPTED) {
-                    net = net.add(SettlementPolicy.netOf(item.price()));
-                    cut = cut.add(SettlementPolicy.commissionOn(item.price()));
+                Money paid = paidGross(item);
+                if (paid != null) {
+                    net = net.add(SettlementPolicy.netOf(paid));
+                    cut = cut.add(SettlementPolicy.commissionOn(paid));
+                    back = back.add(item.price().subtract(paid));
                 } else if (item.isSettled()) {
                     back = back.add(item.price());
                 }
@@ -121,18 +123,29 @@ public final class TaskModel2DTOConverter {
                 null, null);
     }
 
+    /** What an Item paid the builder's side gross (accepted: its price; pro rata: its share); null if nothing. */
+    private static Money paidGross(TaskItemModel item) {
+        if (item.status() == ItemStatus.ACCEPTED) {
+            return item.price();
+        }
+        if (item.status() == ItemStatus.PRO_RATA && item.paidAmount().isPositive()) {
+            return item.paidAmount();
+        }
+        return null;
+    }
+
     private static TaskItemDTO toItemDTO(TaskItemModel item) {
-        boolean accepted = item.status() == ItemStatus.ACCEPTED;
-        boolean refunded = item.isSettled() && !accepted;
+        Money paid = paidGross(item);
+        Money refund = paid != null ? item.price().subtract(paid) : item.isSettled() ? item.price() : null;
         return new TaskItemDTO(item.itemNo(), item.input(), item.status().name(), item.price().value(),
                 item.resultPayload(), item.resultUrl(),
                 item.checks().isEmpty() ? null : item.checks().stream()
                         .map(c -> new TaskItemDTO.CheckDTO(c.rule(), c.passed(), c.detail()))
                         .toList(),
                 item.autoAccepted() ? Boolean.TRUE : null,
-                accepted ? SettlementPolicy.netOf(item.price()).value() : null,
-                accepted ? SettlementPolicy.commissionOn(item.price()).value() : null,
-                refunded ? item.price().value() : null,
+                paid == null ? null : SettlementPolicy.netOf(paid).value(),
+                paid == null ? null : SettlementPolicy.commissionOn(paid).value(),
+                refund == null || !refund.isPositive() ? null : refund.value(),
                 item.sourceSnapshotId());
     }
 }

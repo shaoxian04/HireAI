@@ -211,6 +211,16 @@ public final class TaskModel {
         return copyWith(TaskStatus.QUEUED, this.agentVersionId, this.result);
     }
 
+    /**
+     * PENDING_REVIEW → QUEUED for the same Agent: a multi-Item Task's sample failed twice, so the whole
+     * Task goes back once for rework and is resampled when it returns (spec S8, D19).
+     */
+    public TaskModel returnForSampleRework() {
+        requireStatus(TaskStatus.PENDING_REVIEW, "returnForSampleRework");
+        requirePresent(agentVersionId, "agent version id");
+        return copyWith(TaskStatus.QUEUED, this.agentVersionId, this.result);
+    }
+
     /** SUBMITTED → AWAITING_AGENT (idempotent from AWAITING_AGENT for re-match no-match passes). */
     public TaskModel markAwaitingAgent() {
         requireStatusIn("markAwaitingAgent", TaskStatus.SUBMITTED, TaskStatus.AWAITING_AGENT);
@@ -390,6 +400,15 @@ public final class TaskModel {
             case PARTIALLY_FULFILLED -> TaskResolution.PARTIALLY_ACCEPTED;
             case NOT_FULFILLED -> TaskResolution.REJECTED;
         }, null);
+    }
+
+    /**
+     * PENDING_REVIEW → RESOLVED REJECTED: every Item of a multi-Item Task settled and none was paid
+     * anything (each was refunded on its own).
+     */
+    public TaskModel resolveItemsAllRefunded() {
+        requireStatus(TaskStatus.PENDING_REVIEW, "resolveItemsAllRefunded");
+        return resolved(TaskResolution.REJECTED, null);
     }
 
     /** PENDING_REVIEW → RESOLVED (REJECTED): the client rejected the result. Reason optional, ≤500 chars. */

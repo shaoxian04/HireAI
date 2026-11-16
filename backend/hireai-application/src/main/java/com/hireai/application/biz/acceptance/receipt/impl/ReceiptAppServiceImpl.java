@@ -27,6 +27,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import com.hireai.domain.biz.task.sampling.repository.InspectionRepository;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -48,6 +50,8 @@ public class ReceiptAppServiceImpl implements ReceiptAppService {
     private final ItemSettlementRepository itemSettlementRepository;
     private final AgentRepository agentRepository;
     private final Clock clock;
+    /** A sampled Task's Item receipts wait for its inspection to end (spec S8, D6). */
+    private final InspectionRepository inspectionRepository;
 
     @Override
     @Transactional
@@ -124,6 +128,12 @@ public class ReceiptAppServiceImpl implements ReceiptAppService {
     private boolean issueQuietly(TaskModel task, Optional<UUID> builderId, TaskItems items,
                                  SettlementModel settlement, ItemSettlementModel itemSettlement) {
         Integer itemNo = itemSettlement == null ? null : itemSettlement.itemNo();
+        if (itemNo != null && inspectionOpen(task)) {
+            // An Item receipt states the sample (its seeds and membership). Issued while the inspection is
+            // still open, it would tell the Agent which Items a second sample or the resample could not
+            // be, or let it redraw them: every Item receipt of the Task waits until the inspection ends.
+            return false;
+        }
         boolean exists = receiptRepository.findByTaskId(task.id()).stream()
                 .anyMatch(r -> Objects.equals(r.itemNo(), itemNo));
         if (exists) {
@@ -143,6 +153,15 @@ public class ReceiptAppServiceImpl implements ReceiptAppService {
             log.warn("Could not issue the receipt for task {} item {}", task.id(), itemNo, e);
             return false;
         }
+    }
+
+    /**
+     * Whether the Task's sampling inspection is still deciding (a sample out, or the rework running). A
+     * Task that ended (timed out, failed) closes it: nothing more will be drawn.
+     */
+    private boolean inspectionOpen(TaskModel task) {
+        return !task.status().isClosed() && inspectionRepository.findByTaskId(task.id())
+                .map(i -> !i.status().isFinished()).orElse(false);
     }
 
     private Optional<UUID> builderOf(TaskModel task) {

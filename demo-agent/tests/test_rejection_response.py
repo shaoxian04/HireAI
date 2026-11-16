@@ -59,3 +59,18 @@ def test_the_response_is_signed_and_names_its_task(monkeypatch, action, field):
     assert sent.headers["Authorization"] == "Bearer tok"
     assert body["taskId"] == "t-1" and body["action"] == action and body[field]
     assert agent.verify_signature(SECRET, sent.headers[agent.SIGNATURE_HEADER], sent.content)
+
+
+def test_an_item_rejection_is_answered_per_item():
+    notice = {"event": "task.item_rejected", "taskId": "t-1", "itemNo": 7, "itemInput": "invoice 7",
+              "reason": "wrong total #revise", "revisionAllowed": True}
+    action = agent.choose_rejection_response(notice)
+    assert action == "REVISE"
+    body = agent.rejection_response_body(notice, action)
+    assert body["taskId"] == "t-1"
+    assert body["resultPayloadJson"] == "Revised item 7: invoice 7 (re-checked)"
+
+
+def test_an_item_rejection_can_be_conceded():
+    notice = {"event": "task.item_rejected", "taskId": "t-1", "itemNo": 3, "reason": "#concede"}
+    assert agent.choose_rejection_response(notice) == "CONCEDE"

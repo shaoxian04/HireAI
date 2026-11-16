@@ -109,7 +109,8 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
                 : new DirectBookingInfo(booked.clientId(), booked.title(), booked.description(),
                         booked.budget(), booked.agentId(),
                         categoryRepository.load().requireKnown(booked.category()), booked.deadlineSeconds(),
-                        booked.contract(), booked.items(), booked.engagementId(), booked.aiReviewCriteria());
+                        booked.contract(), booked.items(), booked.engagementId(), booked.aiReviewCriteria(),
+                        booked.inspectionLevel());
         try {
             return self().submitDirectTx(ctx, info);
         } catch (IdempotencyRaceException e) {

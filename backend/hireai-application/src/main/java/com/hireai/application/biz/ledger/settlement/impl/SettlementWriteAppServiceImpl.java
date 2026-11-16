@@ -58,7 +58,14 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
     @Override
     public void settleRejected(UUID taskId, UUID clientId, Money budget) {
         WalletModel clientWallet = requireWallet(clientId);
-        settlementDomainService.settleRejection(clientWallet, budget, taskId, "settle-" + taskId);
+        // A multi-Item Task's Items may already have settled one by one (a sampled Task reworked after
+        // a failed sample): only what is still in escrow goes back, never their share twice.
+        Money settledItems = itemSettlementRepository.findByTaskId(taskId).stream()
+                .map(ItemSettlementModel::gross).reduce(Money.ZERO, Money::add);
+        Money held = budget.subtract(settledItems);
+        if (held.isPositive()) {
+            settlementDomainService.settleRejection(clientWallet, held, taskId, "settle-" + taskId);
+        }
         walletRepository.save(clientWallet);
         settlementRepository.save(SettlementModel.rejected(taskId));
     }
@@ -116,6 +123,25 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
         }
         itemSettlementRepository.append(ItemSettlementModel.accepted(taskId, itemId, itemNo,
                 breakdown.net(), breakdown.commission()));
+        return breakdown;
+    }
+
+    @Override
+    public SettlementBreakdown settleItemProRata(UUID taskId, UUID itemId, int itemNo, UUID clientId,
+                                                 UUID builderId, Money price, Money paid) {
+        WalletModel clientWallet = requireWallet(clientId);
+        boolean selfSettle = clientId.equals(builderId);
+        WalletModel builderWallet = selfSettle ? clientWallet : loadOrOpen(builderId);
+
+        SettlementBreakdown breakdown = settlementDomainService.settlePartial(
+                clientWallet, builderWallet, price, paid, taskId, itemCorrelation(taskId, itemNo));
+
+        walletRepository.save(clientWallet);
+        if (!selfSettle) {
+            walletRepository.save(builderWallet);
+        }
+        itemSettlementRepository.append(ItemSettlementModel.proRata(taskId, itemId, itemNo,
+                breakdown.net(), breakdown.commission(), price.subtract(paid)));
         return breakdown;
     }
 

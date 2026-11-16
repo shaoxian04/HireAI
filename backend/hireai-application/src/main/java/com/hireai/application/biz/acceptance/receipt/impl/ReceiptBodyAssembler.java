@@ -23,6 +23,14 @@ import com.hireai.domain.biz.ledger.settlement.repository.DisputeFeeRepository;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.info.ReviewWindowState;
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
+import com.hireai.domain.biz.task.sampling.model.InspectionModel;
+import com.hireai.domain.biz.task.sampling.model.ItemJudgementModel;
+import com.hireai.domain.biz.task.sampling.model.ItemRejectionModel;
+import com.hireai.domain.biz.task.sampling.model.SampleDrawModel;
+import com.hireai.domain.biz.task.sampling.model.SampleSizeTable;
+import com.hireai.domain.biz.task.sampling.repository.InspectionRepository;
+import com.hireai.domain.biz.ledger.settlement.repository.ItemSettlementRepository;
+import com.hireai.domain.biz.task.sampling.repository.ItemRejectionRepository;
 import com.hireai.domain.biz.task.item.model.ItemCheck;
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
 import com.hireai.domain.biz.task.model.TaskModel;
@@ -66,6 +74,10 @@ class ReceiptBodyAssembler {
     private final DisputeFeeRepository disputeFeeRepository;
     private final ReceiptEvidenceQueryPort evidence;
     private final ReceiptPartyRefs partyRefs;
+    /** A sampled multi-Item Task's draws and reviewer judgements (spec S8, D6/D21: membership and seed). */
+    private final InspectionRepository inspectionRepository;
+    private final ItemRejectionRepository itemRejectionRepository;
+    private final ItemSettlementRepository itemSettlementRepository;
 
     /** The facts about the subject that the caller has already loaded. */
     record Subject(TaskModel task, UUID builderId, TaskItemModel item, int itemCount,
@@ -96,6 +108,7 @@ class ReceiptBodyAssembler {
         if (s.item() != null) {
             putIfPresent(body, "delivery", itemDelivery(s.item()));
             putIfPresent(body, "checks", itemChecks(s.item()));
+            putIfPresent(body, "sample", sample(s.item()));
             body.put("judgements", itemJudgements(s.item()));
             body.put("settlement", itemSettlement(task, s.itemSettlement()));
         } else {
@@ -204,8 +217,53 @@ class ReceiptBodyAssembler {
         return judgements;
     }
 
-    private static List<Object> itemJudgements(TaskItemModel item) {
+    /**
+     * Whether the Item was in a sample of the inspection, under which plan and from which seed (D6,
+     * D21); absent for an Item of a Task that was not sampled. Anyone with the seed redraws the sample.
+     */
+    private Map<String, Object> sample(TaskItemModel item) {
+        Optional<InspectionModel> inspection = inspectionRepository.findByTaskId(item.taskId());
+        if (inspection.isEmpty()) {
+            return null;
+        }
+        List<Object> draws = new ArrayList<>();
+        Boolean sampled = Boolean.FALSE;
+        for (SampleDrawModel d : inspectionRepository.findDraws(item.taskId())) {
+            boolean member = d.contains(item.itemNo());
+            sampled = sampled || member;
+            draws.add(map("round", d.round(), "stage", d.stage(), "seed", Long.toString(d.seed()),
+                    "lotSize", d.plan().lotSize(), "codeLetter", String.valueOf(d.plan().codeLetter()),
+                    "size", d.itemNos().size(), "member", member,
+                    "defects", d.defects(), "decision", d.decision() == null ? null : d.decision().name()));
+        }
+        InspectionModel i = inspection.get();
+        return map("table", "ISO2859-1", "aql", SampleSizeTable.AQL.toPlainString(),
+                "inspectionLevel", i.level().name(), "outcome", i.status().name(),
+                "errorRate", i.errorRate() == null ? null : i.errorRate().toPlainString(),
+                "sampled", sampled, "draws", draws);
+    }
+
+    private List<Object> itemJudgements(TaskItemModel item) {
         List<Object> judgements = new ArrayList<>();
+        // The buyer's reviewer (D4) and each rejection round of this Item (D17'), oldest first.
+        for (ItemJudgementModel j : inspectionRepository.findJudgements(item.taskId())) {
+            if (j.itemId().equals(item.id())) {
+                judgements.add(map("by", "REVIEWER", "decision", j.passed() ? "PASSED" : "REJECTED",
+                        "round", j.round(), "sampled", j.sampled(),
+                        "reasonCategory", j.reasonCategory() == null ? null : j.reasonCategory().name(),
+                        "at", time(j.judgedAt())));
+            }
+        }
+        for (ItemRejectionModel r : itemRejectionRepository.findByTaskId(item.taskId())) {
+            if (r.itemId().equals(item.id()) && r.round().response() != null) {
+                judgements.add(map("by", "AGENT", "response", r.round().response().name(),
+                        "silent", r.round().responseSilent() ? Boolean.TRUE : null, "at", time(r.round().respondedAt())));
+            }
+            if (r.itemId().equals(item.id()) && r.round().decision() != null) {
+                judgements.add(map("by", "CLIENT", "decision", r.round().decision().name(),
+                        "silent", r.round().decisionSilent() ? Boolean.TRUE : null, "at", time(r.round().decidedAt())));
+            }
+        }
         if (item.status() == ItemStatus.ACCEPTED) {
             judgements.add(map("by", "CLIENT", "decision", "ACCEPTED",
                     "automatic", item.autoAccepted() ? Boolean.TRUE : null));
@@ -245,7 +303,10 @@ class ReceiptBodyAssembler {
     }
 
     private Map<String, Object> settlement(TaskModel task, SettlementModel settlement) {
-        Money price = task.budget();
+        // A multi-Item Task some of whose Items settled on their own (sampling, spec S8) refunds only what
+        // was still held: that is the whole-Task settlement's price.
+        Money price = task.budget().subtract(itemSettlementRepository.findByTaskId(task.id()).stream()
+                .map(ItemSettlementModel::gross).reduce(Money.ZERO, Money::add));
         BigDecimal refunded = price.value().subtract(settlement.net().value()).subtract(settlement.commission().value());
         return map("outcome", settlement.type().name(),
                 "price", money(price), "paid", money(settlement.net()),

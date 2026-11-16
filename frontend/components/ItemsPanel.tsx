@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import type { ItemStatus, TaskDTO, TaskItemDTO, TaskStatus } from "@/lib/types";
 import { Badge, Button, ConfirmDialog } from "@/components/ui";
@@ -16,6 +17,9 @@ interface Props {
   /** Called with the task the backend returns after an accept. */
   onChange: (task: TaskDTO) => void;
 }
+
+/** Items listed before "Show all": a 500-Item task stays readable. */
+const PAGE = 50;
 
 /** Task statuses after which an Item still awaiting its result will never get one. */
 const ENDED: ReadonlySet<TaskStatus> = new Set<TaskStatus>(["TIMED_OUT", "FAILED", "CANCELLED", "SPEC_VIOLATION", "RESOLVED"]);
@@ -42,8 +46,17 @@ function ItemBadge({ item, taskStatus }: { item: TaskItemDTO; taskStatus: TaskSt
     ACCEPTED: item.autoAccepted ? "Accepted automatically" : "Accepted",
     SPEC_VIOLATION: "Failed its checks",
     FAILED: "Agent couldn't do it",
+    REJECTED: "Rejected · being answered",
+    CONCEDED: "Wrong · refunded",
+    PRO_RATA: "Paid pro rata",
   };
-  const colour = item.status === "AWAITING_RESULT" && ENDED.has(taskStatus) ? "CANCELLED" : item.status === "AWAITING_RESULT" ? "QUEUED" : item.status === "ACCEPTED" ? "RESOLVED" : item.status;
+  const COLOUR: Partial<Record<ItemStatus, string>> = {
+    ACCEPTED: "RESOLVED",
+    REJECTED: "AWAITING_AGENT_RESPONSE",
+    CONCEDED: "FAILED",
+    PRO_RATA: "PARTIALLY_ACCEPTED",
+  };
+  const colour = item.status === "AWAITING_RESULT" && ENDED.has(taskStatus) ? "CANCELLED" : item.status === "AWAITING_RESULT" ? "QUEUED" : COLOUR[item.status] ?? item.status;
   return <Badge status={colour}>{label[item.status]}</Badge>;
 }
 
@@ -54,6 +67,7 @@ function Money({ item }: { item: TaskItemDTO }) {
       <p className="tabular text-xs text-dim">
         <span className="font-semibold text-green">{cr(item.payoutAmount)} paid</span> to the builder
         {item.commissionAmount ? ` · ${cr(item.commissionAmount)} fee` : null}
+        {item.refundAmount ? ` · ${cr(item.refundAmount)} refunded` : null}
       </p>
     );
   }
@@ -146,10 +160,13 @@ export function ItemsPanel({ task, now, onChange }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingAll, setConfirmingAll] = useState(false);
+  const [shown, setShown] = useState(PAGE);
 
   const awaiting = items.filter((i) => i.status === "PENDING_REVIEW");
   const accepted = items.filter((i) => i.status === "ACCEPTED").length;
-  const refunded = items.filter((i) => i.status === "SPEC_VIOLATION" || i.status === "FAILED").length;
+  const refunded = items.filter((i) => i.status === "SPEC_VIOLATION" || i.status === "FAILED" || i.status === "CONCEDED").length;
+  const proRata = items.filter((i) => i.status === "PRO_RATA").length;
+  const rejected = items.filter((i) => i.status === "REJECTED").length;
   const reviewing = task.status === "PENDING_REVIEW";
   const canDecide = reviewing && !reviewWindowClosed(task.reviewDeadline, current);
   const releaseOnAll = awaiting.reduce((sum, i) => sum + Number(i.price), 0);
@@ -170,7 +187,9 @@ export function ItemsPanel({ task, now, onChange }: Props) {
   const tally = [
     accepted ? `${accepted} accepted` : null,
     awaiting.length ? `${awaiting.length} awaiting your review` : null,
+    rejected ? `${rejected} rejected` : null,
     refunded ? `${refunded} refunded` : null,
+    proRata ? `${proRata} paid pro rata` : null,
   ].filter(Boolean).join(" · ");
 
   return (
@@ -184,7 +203,8 @@ export function ItemsPanel({ task, now, onChange }: Props) {
       </div>
       <p className="text-sm text-muted">
         Each Item is checked against the contract and settled on its own: an Item that fails its checks, or that
-        the agent couldn&apos;t do, is refunded straight away.
+        the agent couldn&apos;t do, is refunded straight away. The rest are inspected by sampling: you check a random
+        sample against the sources, and the sample decides the others.
       </p>
 
       {reviewing && (
@@ -192,10 +212,13 @@ export function ItemsPanel({ task, now, onChange }: Props) {
           <ReviewWindowNotice deadline={task.reviewDeadline} now={current} subject="items" />
           {canDecide && awaiting.length > 0 && (
             <div className="flex flex-wrap items-center gap-3">
-              <Button disabled={busy} onClick={() => setConfirmingAll(true)}>
+              <Button variant="secondary" disabled={busy} onClick={() => setConfirmingAll(true)}>
                 {awaiting.length === 1 ? "Accept the last Item awaiting review" : `Accept all ${awaiting.length} awaiting review`}
               </Button>
-              <p className="text-xs text-dim">Rejecting single Items is not available yet.</p>
+              <p className="text-xs text-dim">
+                Found a wrong Item? Reject it on the{" "}
+                <Link href={`/client/tasks/${task.id}/review`} className="font-medium text-accent hover:underline">reviewer page</Link>.
+              </p>
             </div>
           )}
         </div>
@@ -206,11 +229,18 @@ export function ItemsPanel({ task, now, onChange }: Props) {
       )}
 
       <ol className="panel divide-y divide-line overflow-hidden p-0">
-        {items.map((item) => (
+        {items.slice(0, shown).map((item) => (
           <ItemRow key={item.itemNo} item={item} task={task} canDecide={canDecide} busy={busy}
             onAccept={(n) => accept(`/tasks/${task.id}/items/${n}/accept`)} />
         ))}
       </ol>
+      {items.length > shown && (
+        <div className="flex justify-center">
+          <Button variant="secondary" onClick={() => setShown(items.length)}>
+            {`Show all ${items.length} Items (${items.length - shown} more)`}
+          </Button>
+        </div>
+      )}
 
       <ConfirmDialog
         open={confirmingAll}

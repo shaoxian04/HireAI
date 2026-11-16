@@ -14,6 +14,10 @@ One receipt per settled subject:
   after a failure, timeout or cancellation);
 - each Item of a [multi-Item Task](data-model.md#items), once that Item's `task_item_settlements` row
   exists. (A multi-Item Task refunded as a whole gets one whole-Task receipt with `itemCount`.)
+- an Item of a [sampled](sampling.md) Task, only once its inspection has ended (lot accepted, pro rata,
+  waived) or the Task closed: an Item receipt states the sample (seeds and membership), and issued while a
+  second sample or the resample could still be drawn it would let the Agent predict or redraw it. Items
+  settled earlier (passed or refunded mid-inspection) get theirs then, with the final `sample` member.
 
 Receipts are issued after the settlement commits, never inside it: `ReceiptIssueSweeper`
 (`hireai.receipts.issue-interval`) catches up, and reading a task's receipts issues any that are
@@ -61,7 +65,8 @@ numbers.
 | `input` | `sha256` of the UTF-8 task description, or of the Item's input |
 | `delivery` | `agentStatus`, `receivedAt`, `payloadSha256` of the result payload, and `file` (`sha256`, `mediaType`, `sizeBytes`, `fetchedAt`) when a [DeliverySnapshot](data-model.md#delivery-snapshots) was frozen; absent when nothing was delivered |
 | `checks` | `attempt`, `verdict` (`PASS`/`FAIL`), `results[]` of `rule`, `passed`, `detail` |
-| `judgements` | in order: Client rejections (`decision: REJECTED`, `round`, `reasonCategory`), Agent responses (`response`: `REVISE`/`CONCEDE`/`STAND_BY`, `silent`), Client decisions (`ACCEPT`/`ARBITRATE`, `silent`), and a final Client `ACCEPTED` (`automatic: true` when the review window closed) |
+| `sample` | on an Item of a sampled Task (spec S8): `table` (`ISO2859-1`), `aql`, `inspectionLevel`, `outcome` (`SAMPLING`/`REWORKING`/`ACCEPTED`/`PRO_RATA`/`WAIVED`), `errorRate` (pro rata only), `sampled` (whether this Item was in any sample), and `draws[]` (`round`, `stage`, `seed` as a decimal string, `lotSize`, `codeLetter`, `size`, `member`, `defects`, `decision`). The draw is reproducible from the seed: see [sampling.md](sampling.md#the-draw) |
+| `judgements` | on an Item, first the buyer's reviewer (`by: REVIEWER`, `decision` `PASSED`/`REJECTED`, `round`, `sampled`, `reasonCategory`), the Agent's responses and the buyer's decisions on it; otherwise, in order: Client rejections (`decision: REJECTED`, `round`, `reasonCategory`), Agent responses (`response`: `REVISE`/`CONCEDE`/`STAND_BY`, `silent`), Client decisions (`ACCEPT`/`ARBITRATE`, `silent`), and a final Client `ACCEPTED` (`automatic: true` when the review window closed) |
 | `ruling` | `disputeId`, effective `category`, `appealedBy`, and `rulings[]` (`tier`, `category`, `decidedBy`, `decidedAt`, `rationale`) |
 | `fees` | `charges[]` (`type`, `clientCharged`, `builderCharged`, `platformCovered`) and their `ledgerEntries[]` |
 | `settlement` | `outcome` (`ACCEPT`/`REJECT`/`SPLIT`), `price`, `paid` (to the Builder), `commission`, `refunded`, `failureReason`, `settledAt`, `ledgerEntries[]` (`id`, `party` CLIENT/BUILDER, `type`, `amount`, `at`); `paid + commission + refunded = price` |
@@ -76,8 +81,8 @@ one else can, without the key.
 
 ### Extending the format
 
-New facts arrive as new optional members under `v1`: the sample membership and seed of sampled Items
-(#105) and the SourceSnapshot hashes of the input documents (#104) will be added this way. Receipts
+New facts arrive as new optional members under `v1` (the `sample` member was added this way); the
+SourceSnapshot hashes of the input documents (#104) will be too. Receipts
 already issued keep their stored bytes and signature, so they keep verifying. A verifier must ignore
 members it does not know. Only a change to an existing member's meaning bumps `format`.
 

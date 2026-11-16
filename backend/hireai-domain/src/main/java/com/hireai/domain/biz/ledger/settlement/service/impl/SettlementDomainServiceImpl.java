@@ -34,7 +34,17 @@ public class SettlementDomainServiceImpl implements SettlementDomainService {
     @Override
     public SettlementBreakdown settleSplit(WalletModel clientWallet, WalletModel builderWallet,
                                            Money budget, UUID taskId, String correlationId) {
-        Money builderShare = SettlementPolicy.builderShareOnSplit(budget);
+        return settlePartial(clientWallet, builderWallet, budget, SettlementPolicy.builderShareOnSplit(budget),
+                taskId, correlationId);
+    }
+
+    @Override
+    public SettlementBreakdown settlePartial(WalletModel clientWallet, WalletModel builderWallet,
+                                             Money budget, Money builderShare, UUID taskId, String correlationId) {
+        if (!builderShare.isPositive() || builderShare.isGreaterThan(budget)) {
+            throw new IllegalArgumentException("A partial share must be in (0, budget]; got " + builderShare
+                    + " of " + budget);
+        }
         Money commission = SettlementPolicy.commissionOn(builderShare);
         Money net = builderShare.subtract(commission);
         Money clientRefund = budget.subtract(builderShare); // by subtraction → exact reconciliation

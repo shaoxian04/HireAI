@@ -41,4 +41,11 @@ public interface SettlementDomainService {
      */
     SettlementBreakdown settleSplit(WalletModel clientWallet, WalletModel builderWallet,
                                     Money budget, UUID taskId, String correlationId);
+
+    /**
+     * Pro-rata (spec D19): the builder is paid 85/15 on {@code builderGross} (0 &lt; gross &lt; budget)
+     * and the rest of {@code budget} is refunded to the client, by subtraction so it reconciles exactly.
+     */
+    SettlementBreakdown settlePartial(WalletModel clientWallet, WalletModel builderWallet,
+                                      Money budget, Money builderGross, UUID taskId, String correlationId);
 }

@@ -98,6 +98,8 @@ def sign_body(secret: str, body: bytes, now: float | None = None) -> str:
 
 
 REJECTION_EVENT = "task.rejected"
+# A buyer's reviewer rejected one Item of a multi-Item Task (sampling): same choices, per Item.
+ITEM_REJECTION_EVENT = "task.item_rejected"
 REJECTION_ENV = "HIREAI_AGENT_REJECTION_RESPONSE"
 REJECTION_ACTIONS = ("REVISE", "CONCEDE", "STAND_BY", "SILENT")
 REVISED_SUMMARY = DEMO_SUMMARY + " (Revised: figures re-checked against the source article.)"
@@ -124,9 +126,13 @@ def choose_rejection_response(notice: dict) -> str:
 def rejection_response_body(notice: dict, action: str) -> dict:
     body = {"taskId": notice["taskId"], "action": action}
     if action == "STAND_BY":
-        body["reason"] = "The summary states only figures that appear in the source article."
+        body["reason"] = ("The extracted fields match the source document as delivered." if notice.get("itemNo")
+                          is not None else "The summary states only figures that appear in the source article.")
     if action == "REVISE":
-        body["resultPayloadJson"] = json.dumps({"summary": REVISED_SUMMARY})
+        if notice.get("itemNo") is not None:
+            body["resultPayloadJson"] = f"Revised item {notice['itemNo']}: {notice.get('itemInput', '')} (re-checked)"
+        else:
+            body["resultPayloadJson"] = json.dumps({"summary": REVISED_SUMMARY})
     return body
 
 
@@ -152,10 +158,10 @@ async def run(request: Request, authorization: str = Header(default="")):
         log.warning("Rejected a WorkOrder with a missing or invalid %s", SIGNATURE_HEADER)
         raise HTTPException(status_code=401, detail="Invalid WorkOrder signature")
     body = json.loads(raw)
-    if body.get("event") == REJECTION_EVENT:
+    if body.get("event") in (REJECTION_EVENT, ITEM_REJECTION_EVENT):
         action = choose_rejection_response(body)
-        log.info("Rejection notice for %s (round %s, %s): %r -> %s", body["taskId"], body.get("round"),
-                 body.get("reasonCategory"), body.get("reason"), action)
+        log.info("Rejection notice for %s item %s (round %s, %s): %r -> %s", body["taskId"], body.get("itemNo"),
+                 body.get("round"), body.get("reasonCategory"), body.get("reason"), action)
         if action != "SILENT":
             asyncio.create_task(_respond_to_rejection(body, action, token, secret))
         return {"accepted": True, "taskId": body["taskId"]}

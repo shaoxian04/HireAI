@@ -12,7 +12,8 @@ import java.util.Map;
  * leaves it unset. {@code acceptsAiReview}: Clients may book an AI Review of this Agent's results, which
  * on API/MCP settles the Task and is final (spec S10, D38).
  */
-public record OfferDTO(BigDecimal price, List<TermDTO> terms, boolean acceptsAiReview) {
+public record OfferDTO(BigDecimal price, List<TermDTO> terms, boolean acceptsAiReview,
+                       String strictestInspectionLevel) {
 
     public record TermDTO(String template, int version, Map<String, Map<String, Object>> params) {
     }

@@ -47,7 +47,8 @@ class AgentCallbackAppServiceImplTest {
     private AgentCallbackAppServiceImpl service() {
         return new AgentCallbackAppServiceImpl(taskRepository, dispatchTokenService,
                 validationAppService, settlementWriteAppService, webhookOutboxAppService,
-                reputationWriteAppService, agentReadAppService, java.time.Clock.systemUTC(), org.mockito.Mockito.mock(com.hireai.application.biz.task.item.TaskItemAppService.class));
+                reputationWriteAppService, agentReadAppService, java.time.Clock.systemUTC(), org.mockito.Mockito.mock(com.hireai.application.biz.task.item.TaskItemAppService.class),
+                org.mockito.Mockito.mock(com.hireai.application.biz.task.sampling.SamplingAppService.class));
     }
 
     private TaskModel executingTask() {

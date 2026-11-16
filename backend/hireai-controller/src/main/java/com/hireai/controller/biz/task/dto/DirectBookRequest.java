@@ -4,6 +4,7 @@ import com.hireai.controller.biz.acceptance.dto.ContractRequest;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.hireai.domain.biz.task.item.info.ItemInput;
+import com.hireai.domain.biz.task.sampling.enums.InspectionLevel;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -50,7 +51,12 @@ public record DirectBookRequest(
          * Optional (spec S10): an AI Review of these criteria, priced and frozen at booking. Offered
          * only when the Agent's Offer accepts it and the fee is at most 10% of the price.
          */
-        @Valid AiReviewRequest aiReview
+        @Valid AiReviewRequest aiReview,
+        /**
+         * Optional, with Items (spec S8, D21): the sampling inspection level, II (the default) or III when
+         * the Agent's Offer allows it. A stricter level samples more Items.
+         */
+        InspectionLevel inspectionLevel
 ) {
 
     /** The criteria code cannot check, in the Client's words. */

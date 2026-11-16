@@ -55,7 +55,8 @@ class DirectBookingAppServiceTest {
             mock(com.hireai.application.biz.acceptance.source.SourceSnapshotAppService.class),
             new com.hireai.domain.biz.acceptance.aireview.model.AiReviewPolicy(
                     com.hireai.domain.shared.model.Money.of("0.10"), com.hireai.domain.shared.model.Money.of("0.10"),
-                    new java.math.BigDecimal("2"), new java.math.BigDecimal("0.10"), 5));
+                    new java.math.BigDecimal("2"), new java.math.BigDecimal("0.10"), 5),
+            mock(com.hireai.domain.biz.task.sampling.repository.InspectionRepository.class));
 
     // ---- helpers ----
 

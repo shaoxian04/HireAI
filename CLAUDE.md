@@ -100,6 +100,8 @@ Read the relevant file on demand — don't preload everything.
   **Read before a structural/convention change, or when questioning why something is the way it is.**
 - **`docs/details/data-model.md`** — aggregates, the 3NF schema, the append-only ledger, status enums.
   **Read before changing the schema, an entity, or the settlement/reputation logic.**
+- **`docs/details/sampling.md`** — sampling inspection of multi-Item Tasks: the lot-size table, the seeded draw, the reviewer, double sampling, rework and pro rata.
+  **Read before touching Items' review, sampling or the reviewer page.**
 - **`docs/details/programmatic-channel.md`** — the API-key machine channel end to end: key auth, idempotency, the two spend caps, open/direct submit, deterministic auto-settlement, signed push webhooks (transactional outbox + sweeper + SSRF guard), and the **MCP server facade + OpenAPI** (§6a — stdio tools over the same REST surface).
   **Read before touching API keys, the programmatic submit path, auto-settlement, webhooks, or the MCP facade.**
 - **`docs/details/receipts.md`** — signed receipts: when one is issued, the `hireai.receipt.v1` format, pseudonymous parties, how to verify, the W3C VC 2.0 and OTel exports, the Contract hash, signing-key config and rotation. JSON Schemas of these open formats: `docs/formats/`.

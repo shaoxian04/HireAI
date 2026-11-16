@@ -135,7 +135,9 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
 
     @Override
     public List<DispatchItem> workOrderItems(UUID taskId) {
-        return taskItemRepository.findByTaskId(taskId).all().stream()
+        // Only the Items still awaiting a result: all of them on first dispatch; on a sampled Task's
+        // whole-Task rework (spec S8, D19), the ones not yet settled or on their own rejection path.
+        return taskItemRepository.findByTaskId(taskId).awaitingResult().stream()
                 .map(item -> new DispatchItem(item.itemNo(), item.input(), item.id(), item.sourceSnapshotId(), null))
                 .toList();
     }

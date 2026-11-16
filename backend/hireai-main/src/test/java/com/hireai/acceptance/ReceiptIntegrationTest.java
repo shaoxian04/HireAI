@@ -177,9 +177,9 @@ class ReceiptIntegrationTest extends WholeAppIntegrationTest {
         UUID taskId = book(seeded.agentId(), "3.00", List.of("invoice A", "invoice B #empty", "invoice C #fail"));
         awaitStatus(taskId, "PENDING_REVIEW");
 
-        // Items 2 and 3 were refunded at once; item 1 waits for review.
-        assertThat(getData("/api/tasks/" + taskId + "/receipts"))
-                .extracting(r -> r.get("itemNo").asInt()).containsExactly(2, 3);
+        // Items 2 and 3 were refunded at once, but the Task is sampled (#105): no Item receipt is issued while
+        // its inspection is open, since a receipt states the sample. Item 1 waits for review.
+        assertThat(getData("/api/tasks/" + taskId + "/receipts")).isEmpty();
         post("/api/tasks/" + taskId + "/items/1/accept");
 
         JsonNode list = getData("/api/tasks/" + taskId + "/receipts");
@@ -195,7 +195,12 @@ class ReceiptIntegrationTest extends WholeAppIntegrationTest {
         assertThat(accepted.get("item").get("count").asInt()).isEqualTo(3);
         assertThat(accepted.get("input").get("sha256").asText()).isEqualTo(Sha256.hex("invoice A"));
         assertThat(accepted.get("delivery").get("payloadSha256").asText()).isEqualTo(Sha256.hex("done: invoice A"));
-        assertThat(accepted.get("judgements").get(0).get("decision").asText()).isEqualTo("ACCEPTED");
+        // Accepting one Item is the reviewer's pass on it (#105): the reviewer's judgement, then the acceptance.
+        assertThat(accepted.get("judgements").get(0).get("by").asText()).isEqualTo("REVIEWER");
+        assertThat(accepted.get("judgements").get(0).get("decision").asText()).isEqualTo("PASSED");
+        JsonNode judgements = accepted.get("judgements");
+        assertThat(judgements.get(judgements.size() - 1).get("decision").asText()).isEqualTo("ACCEPTED");
+        assertThat(accepted.get("sample").get("sampled").asBoolean()).isTrue();
         assertThat(accepted.get("settlement").get("outcome").asText()).isEqualTo("ACCEPT");
         assertThat(accepted.get("settlement").get("price").asText()).isEqualTo("3.00");
         assertThat(accepted.get("settlement").get("paid").asText()).isEqualTo("2.55");

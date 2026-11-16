@@ -56,7 +56,7 @@ public final class Acceptance2DTOConverter {
             }));
             return new OfferDTO.TermDTO(term.template().key(), term.template().version(), params);
         }).toList();
-        return new OfferDTO(price, terms, offer.acceptsAiReview());
+        return new OfferDTO(price, terms, offer.acceptsAiReview(), offer.inspectionCeiling().name());
     }
 
     /** Null when there was no fallback. */

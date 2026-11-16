@@ -41,7 +41,7 @@ public final class OfferRequest2ModelConverter {
             }
             terms.add(new OfferTerm(new TemplateRef(term.template(), term.version()), params));
         }
-        return new Offer(terms, Boolean.TRUE.equals(request.acceptsAiReview()));
+        return new Offer(terms, Boolean.TRUE.equals(request.acceptsAiReview()), request.strictestInspectionLevel());
     }
 
     private static ParameterRange range(String template, String name, Map<String, Object> raw) {

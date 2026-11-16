@@ -22,6 +22,9 @@ public interface TaskItemRepository {
     /** Saves an Item's new state (status, result, checks). */
     void update(TaskItemModel item);
 
+    /** Saves several Items' new states in one batch. */
+    void updateAll(List<TaskItemModel> items);
+
     /** The Task's Items in Item order; empty for a single-deliverable Task. */
     TaskItems findByTaskId(UUID taskId);
 

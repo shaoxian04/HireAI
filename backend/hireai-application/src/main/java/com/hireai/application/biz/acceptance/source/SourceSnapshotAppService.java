@@ -39,6 +39,12 @@ public interface SourceSnapshotAppService {
     /** Serves (or refuses) a download through a signed link, and logs it (D31). */
     Download download(String token, String remoteAddress, String userAgent);
 
+    /**
+     * A snapshot's bytes for its buyer's own reviewer (spec S8: comparing a sampled Item with its document);
+     * the caller checked ownership. Refused RETIRED once retention deleted the content.
+     */
+    Download contentOf(UUID sourceSnapshotId);
+
     /** Ids of every snapshot whose content is still held: the retention pass's candidates. */
     List<UUID> retentionCandidateIds();
 

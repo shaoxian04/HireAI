@@ -61,7 +61,8 @@ class TaskReviewAppServiceImplTest {
                         java.time.Duration.ofHours(2), java.time.Duration.ofHours(24)),
                 eventPublisher, java.time.Clock.systemUTC(),
                 org.mockito.Mockito.mock(com.hireai.application.biz.task.item.TaskItemAppService.class),
-                org.mockito.Mockito.mock(com.hireai.application.biz.acceptance.aireview.AiReviewAppService.class));
+                org.mockito.Mockito.mock(com.hireai.application.biz.acceptance.aireview.AiReviewAppService.class),
+                org.mockito.Mockito.mock(com.hireai.application.biz.task.sampling.SamplingAppService.class));
     }
 
     /** Build a task in PENDING_REVIEW (passed the validation gate) so accept/reject are legal. */

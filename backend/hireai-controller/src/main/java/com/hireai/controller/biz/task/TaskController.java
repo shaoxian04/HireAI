@@ -136,7 +136,8 @@ public class TaskController extends BaseController {
                         request.category() == null || request.category().isBlank() ? null : request.category(),
                         request.deadlineSeconds(), ContractRequest2ModelConverter.toModel(request.contract()),
                         request.itemInputs(), request.engagementId(),
-                        request.aiReview() == null ? List.of() : request.aiReview().criteria()));
+                        request.aiReview() == null ? List.of() : request.aiReview().criteria(),
+                        request.inspectionLevel()));
         return ok(withTemplateFallback(readAppService.getForClient(taskId, clientId)));
     }
 

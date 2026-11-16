@@ -1,5 +1,6 @@
 package com.hireai.controller.biz.acceptance.dto;
 
+import com.hireai.domain.biz.task.sampling.enums.InspectionLevel;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -19,11 +20,13 @@ import java.util.Map;
 public record OfferRequest(
         @NotEmpty @Size(max = 16) List<@NotNull @Valid TermRequest> terms,
         /** Optional (spec S10, D38): accept AI Review on this Agent's results; default false. */
-        Boolean acceptsAiReview
+        Boolean acceptsAiReview,
+        /** The strictest sampling level a buyer may choose for a multi-Item Task (II or III); default II. */
+        InspectionLevel strictestInspectionLevel
 ) {
 
     public OfferRequest(List<TermRequest> terms) {
-        this(terms, null);
+        this(terms, null, null);
     }
 
     public record TermRequest(

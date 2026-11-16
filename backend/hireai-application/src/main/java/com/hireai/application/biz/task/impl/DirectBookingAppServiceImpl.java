@@ -12,6 +12,9 @@ import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.shared.model.Money;
 import com.hireai.domain.biz.acceptance.coverage.info.ContractTerms;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
+import com.hireai.domain.biz.task.sampling.enums.InspectionLevel;
+import com.hireai.domain.biz.task.sampling.model.InspectionModel;
+import com.hireai.domain.biz.task.sampling.repository.InspectionRepository;
 import com.hireai.domain.biz.acceptance.template.info.ContractResolution;
 import com.hireai.domain.biz.acceptance.coverage.info.Coverage;
 import com.hireai.domain.biz.acceptance.coverage.service.OfferCoverageDomainService;
@@ -67,6 +70,8 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
     private final SourceSnapshotAppService sourceSnapshotAppService;
     /** Prices AI Review and decides whether a booking may add it (spec S10). */
     private final AiReviewPolicy aiReviewPolicy;
+    /** Records a multi-Item booking's chosen inspection level (spec S8) in the booking transaction. */
+    private final InspectionRepository inspectionRepository;
 
     @Override
     public UUID book(DirectBookingInfo booked) {
@@ -151,7 +156,18 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
                 agent.currentVersion().outputSpec(), agent.currentVersion().taskCategoryFor(info.category()),
                 info.deadlineSeconds(), frozen, info.items());
 
+        // A multi-Item Task is inspected by sampling (spec S8, D21): the buyer may choose a stricter level
+        // than the default, up to what this Agent's Offer accepts. Checked before anything is frozen.
+        InspectionLevel level = info.items().isEmpty() ? null
+                : InspectionLevel.chosen(info.inspectionLevel(), agent.currentVersion().offer().inspectionCeiling());
+        if (info.items().isEmpty() && info.inspectionLevel() != null) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "inspectionLevel: only a Task with Items is inspected by sampling");
+        }
         UUID taskId = taskWriteAppService.submitDirectlyBooked(submitInfo, agent.currentVersionId());
+        if (level != null) {
+            inspectionRepository.save(InspectionModel.open(taskId, level));
+        }
         log.info("Task {} direct-booked to agent {} (version {})",
                 taskId, agent.id(), agent.currentVersionId());
         return taskId;

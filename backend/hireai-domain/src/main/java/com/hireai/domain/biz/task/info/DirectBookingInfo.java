@@ -2,6 +2,7 @@ package com.hireai.domain.biz.task.info;
 
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.task.item.info.ItemInput;
+import com.hireai.domain.biz.task.sampling.enums.InspectionLevel;
 import com.hireai.domain.biz.task.item.model.TaskItems;
 import com.hireai.domain.shared.model.Money;
 
@@ -23,11 +24,13 @@ import java.util.UUID;
  *
  * <p>{@code aiReviewCriteria} are the criteria the Client wants an AI Review to judge (spec S10),
  * empty for none. The booking prices the review, checks it is offered and freezes it in the Contract.
+ * {@code inspectionLevel}: the sampling level the Client chose for its Items (spec S8, D21; null = the
+ * default), checked against the Agent's Offer.
  */
 public record DirectBookingInfo(UUID clientId, String title, String description,
                                 Money budget, UUID agentId, String category, Long deadlineSeconds,
                                 Contract contract, List<ItemInput> items, UUID engagementId,
-                                List<String> aiReviewCriteria) {
+                                List<String> aiReviewCriteria, InspectionLevel inspectionLevel) {
 
     public DirectBookingInfo {
         items = items == null ? List.of() : List.copyOf(items);
@@ -36,9 +39,23 @@ public record DirectBookingInfo(UUID clientId, String title, String description,
 
     public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,
                              String category, Long deadlineSeconds, Contract contract, List<ItemInput> items,
+                             UUID engagementId, List<String> aiReviewCriteria) {
+        this(clientId, title, description, budget, agentId, category, deadlineSeconds, contract, items,
+                engagementId, aiReviewCriteria, null);
+    }
+
+    public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,
+                             String category, Long deadlineSeconds, Contract contract, List<ItemInput> items,
+                             UUID engagementId, InspectionLevel inspectionLevel) {
+        this(clientId, title, description, budget, agentId, category, deadlineSeconds, contract, items,
+                engagementId, List.of(), inspectionLevel);
+    }
+
+    public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,
+                             String category, Long deadlineSeconds, Contract contract, List<ItemInput> items,
                              UUID engagementId) {
         this(clientId, title, description, budget, agentId, category, deadlineSeconds, contract, items,
-                engagementId, List.of());
+                engagementId, List.of(), null);
     }
 
     public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,
@@ -58,13 +75,13 @@ public record DirectBookingInfo(UUID clientId, String title, String description,
     /** This booking with {@code chosen} as its Contract. */
     public DirectBookingInfo withContract(Contract chosen) {
         return new DirectBookingInfo(clientId, title, description, budget, agentId, category, deadlineSeconds,
-                chosen, items, engagementId, aiReviewCriteria);
+                chosen, items, engagementId, aiReviewCriteria, inspectionLevel);
     }
 
     /** This booking with its Items replaced (a document Item's blank input becomes its file name). */
     public DirectBookingInfo withItems(List<ItemInput> replaced) {
         return new DirectBookingInfo(clientId, title, description, budget, agentId, category, deadlineSeconds,
-                contract, replaced, engagementId, aiReviewCriteria);
+                contract, replaced, engagementId, aiReviewCriteria, inspectionLevel);
     }
 
     public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,

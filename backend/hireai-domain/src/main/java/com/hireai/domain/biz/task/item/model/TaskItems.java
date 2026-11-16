@@ -105,6 +105,35 @@ public record TaskItems(List<TaskItemModel> all) {
         return !all.isEmpty() && all.stream().allMatch(TaskItemModel::isSettled);
     }
 
+    /** Whether any Item was paid anything (accepted, or pro rata). */
+    public boolean anyPaid() {
+        return all.stream().anyMatch(i -> i.status() == ItemStatus.ACCEPTED || i.status() == ItemStatus.PRO_RATA);
+    }
+
+    /**
+     * Whether any Item is paid, or still open on its rejection path: after a whole-Task rework (spec S8)
+     * a Task whose reworked Items all failed still has Items that settled, or will, on their own.
+     */
+    public boolean anyOpenOrPaid() {
+        return anyPaid() || all.stream().anyMatch(i -> i.status() == ItemStatus.REJECTED);
+    }
+
+    /** The Items still awaiting a result, in Item order. */
+    public List<TaskItemModel> awaitingResult() {
+        return all.stream().filter(i -> i.status() == ItemStatus.AWAITING_RESULT).toList();
+    }
+
+    /**
+     * The accepted-Item count the Task's reputation event credits (D22): every accepted Item, plus the
+     * pro-rata Items weighted by what they were paid of their price, rounded down.
+     */
+    public int creditedCount() {
+        BigDecimal proRata = all.stream().filter(i -> i.status() == ItemStatus.PRO_RATA)
+                .map(i -> i.paidAmount().value().divide(i.price().value(), QUALITY_SCALE, RoundingMode.DOWN))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return acceptedCount() + proRata.setScale(0, RoundingMode.DOWN).intValue();
+    }
+
     public int acceptedCount() {
         return (int) all.stream().filter(i -> i.status() == ItemStatus.ACCEPTED).count();
     }

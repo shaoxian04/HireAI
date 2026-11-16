@@ -176,6 +176,8 @@ export interface OfferDTO {
   terms: { template: string; version: number; params: Record<string, OfferRange> }[];
   /** Clients may book an AI Review of this agent's results (final on API/MCP). */
   acceptsAiReview?: boolean;
+  /** The strictest sampling level (#105) a buyer may choose for a multi-Item booking; "II" is the default. */
+  strictestInspectionLevel?: InspectionLevel;
 }
 
 // ── Agents ──
@@ -285,7 +287,18 @@ export interface TaskDTO {
 }
 
 /** An Item's own state inside a multi-Item Task. */
-export type ItemStatus = "AWAITING_RESULT" | "PENDING_REVIEW" | "ACCEPTED" | "SPEC_VIOLATION" | "FAILED";
+export type ItemStatus =
+  | "AWAITING_RESULT"
+  | "PENDING_REVIEW"
+  | "ACCEPTED"
+  | "SPEC_VIOLATION"
+  | "FAILED"
+  /** The buyer's reviewer found it wrong (#105); on its rejection response path, still in escrow. */
+  | "REJECTED"
+  /** The agent conceded the reviewer's rejection; refunded. */
+  | "CONCEDED"
+  /** Settled by extrapolation after a failed resample: paid price x (1 - error rate), the rest refunded. */
+  | "PRO_RATA";
 
 /** One Item of a multi-Item Task and its outcome; amounts appear once it settled. */
 export interface TaskItemDTO {
@@ -457,6 +470,8 @@ export interface DirectBookRequest {
   engagementId?: string;
   /** Optional: an AI Review of these criteria, priced and frozen at booking. */
   aiReview?: { criteria: string[] };
+  /** Optional, with Items (#105): the sampling level, "II" (default) or "III" when the agent's Offer allows it. */
+  inspectionLevel?: InspectionLevel;
 }
 
 /** An Engagement's lifecycle (acceptance/engagement/enums/EngagementStatus.java). */
@@ -978,6 +993,60 @@ export type AgentReputationDTO = {
   unproven: boolean;
   recentEvents: ReputationEventDTO[];
 };
+
+// ── Sampling inspection (#105, spec S8) ──
+
+export type InspectionLevel = "I" | "II" | "III";
+export type InspectionStatus = "SAMPLING" | "REWORKING" | "ACCEPTED" | "PRO_RATA" | "WAIVED";
+export type SampleDecision = "ACCEPT_LOT" | "DRAW_SECOND" | "REWORK" | "PRO_RATA";
+
+/** One sample drawn after delivery from a recorded seed, under the plan the lot-size table set. */
+export interface SampleDrawDTO {
+  round: number;
+  stage: number;
+  /** A 64-bit number, as a string. */
+  seed: string;
+  codeLetter: string;
+  lotSize: number;
+  firstSampleSize: number;
+  /** 0 for a single plan (no second sample). */
+  secondSampleSize: number;
+  firstAccept: number;
+  firstReject: number;
+  secondAccept: number;
+  secondReject: number;
+  fullInspection: boolean;
+  itemNos: number[];
+  drawnAt: string;
+  /** Set once every sampled Item settled: the wrong ones found in this sample. */
+  defects?: number | null;
+  decision?: SampleDecision | null;
+  decidedAt?: string | null;
+}
+
+export interface ItemJudgementDTO {
+  itemNo: number;
+  round: number;
+  passed: boolean;
+  reasonCategory?: RejectReason | null;
+  reason?: string | null;
+  /** In a sample of its round when judged; otherwise an extra check that never feeds the error rate. */
+  sampled: boolean;
+  judgedAt: string;
+}
+
+export interface InspectionDTO {
+  level: InspectionLevel;
+  round: number;
+  status: InspectionStatus;
+  /** Set once the Task settled pro rata. */
+  errorRate?: number | null;
+  aql: number;
+  draws: SampleDrawDTO[];
+  judgements: ItemJudgementDTO[];
+  /** Every rejection round of every Item, oldest first. */
+  itemRejections: { itemNo: number; rejection: RejectionDTO }[];
+}
 
 /** The settlement a receipt records (format hireai.receipt.v1, docs/details/receipts.md); amounts are strings. */
 export interface ReceiptSettlement {

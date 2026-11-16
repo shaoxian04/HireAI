@@ -15,7 +15,10 @@ public interface SettlementWriteAppService {
     /** Accept: payout 85% to the builder + 15% commission; records an ACCEPT settlement. */
     SettlementBreakdown settleAccepted(UUID taskId, UUID clientId, UUID builderId, Money budget);
 
-    /** Reject: full refund to the client; records a REJECT settlement. */
+    /**
+     * Reject: full refund to the client; records a REJECT settlement. For a multi-Item Task some of whose
+     * Items already settled on their own (spec S3/S8), only the escrow still held is refunded.
+     */
     void settleRejected(UUID taskId, UUID clientId, Money budget);
 
     /**
@@ -24,6 +27,13 @@ public interface SettlementWriteAppService {
      */
     SettlementBreakdown settleItemAccepted(UUID taskId, UUID itemId, int itemNo, UUID clientId, UUID builderId,
                                            Money price);
+
+    /**
+     * One Item of a multi-Item Task settled pro rata (spec D19): the builder is paid 85/15 on {@code paid}
+     * (0 &lt; paid &lt; price) and the rest of the price is refunded; records the Item's SPLIT settlement.
+     */
+    SettlementBreakdown settleItemProRata(UUID taskId, UUID itemId, int itemNo, UUID clientId, UUID builderId,
+                                          Money price, Money paid);
 
     /** One Item of a multi-Item Task refunded in full to the client; records the Item's REJECT settlement. */
     void settleItemRefunded(UUID taskId, UUID itemId, int itemNo, UUID clientId, Money price);
