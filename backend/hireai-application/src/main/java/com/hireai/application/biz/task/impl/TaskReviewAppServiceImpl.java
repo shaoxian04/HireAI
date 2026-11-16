@@ -3,6 +3,7 @@ package com.hireai.application.biz.task.impl;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.application.biz.task.item.TaskItemAppService;
+import com.hireai.application.biz.task.sampling.SamplingAppService;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskStatus;
@@ -46,6 +47,8 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
     private final Clock clock;
     /** A multi-Item Task is accepted Item by Item (spec S3). */
     private final TaskItemAppService taskItemAppService;
+    /** A multi-Item Task's Items are judged through its sampling inspection (spec S8). */
+    private final SamplingAppService samplingAppService;
 
     @Override
     public UUID accept(UUID taskId, UUID clientId) {
@@ -53,6 +56,7 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
         if (taskItemAppService.hasItems(taskId)) {
             requirePendingReview(task);
             taskItemAppService.acceptAllAwaitingReview(task, false); // every Item still awaiting review
+            samplingAppService.waive(taskId); // the buyer accepted without waiting for the sample
             log.info("Task {}: all Items awaiting review accepted by client {}", taskId, clientId);
             return taskId;
         }
@@ -72,7 +76,9 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
 
     @Override
     public void acceptItem(UUID taskId, UUID clientId, int itemNo) {
-        taskItemAppService.acceptItem(taskId, clientId, itemNo);
+        // Accepting one Item is the reviewer's pass on it: it pays the Item and, if it was sampled,
+        // counts towards the sample (spec S8).
+        samplingAppService.judge(taskId, clientId, itemNo, true, null, null);
     }
 
     @Override
@@ -96,6 +102,7 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
         // The Client's silence counts as acceptance (spec D10): the same settlement as their click.
         if (taskItemAppService.hasItems(taskId)) {
             taskItemAppService.acceptAllAwaitingReview(task, true);
+            samplingAppService.waive(taskId);
         } else {
             acceptedSettlement.settle(task);
         }
@@ -114,11 +121,10 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
         }
         TaskModel task = loadOwned(taskId, clientId);
         if (taskItemAppService.hasItems(taskId)) {
-            // Rejecting single Items comes with the reviewer flow (spec S8, D17'); until then a
-            // multi-Item Task's Items are accepted, or accepted automatically when the window closes.
+            // A multi-Item Task's Items are judged one by one by the buyer's reviewer (spec S8, D17').
             throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
-                    "Task " + taskId + " has several Items; accept them one by one or all at once. "
-                            + "Rejecting Items of a multi-Item Task is not available yet");
+                    "Task " + taskId + " has several Items; judge them one by one "
+                            + "(POST /api/tasks/" + taskId + "/items/{itemNo}/judgement), or accept them all");
         }
         if (task.status() == TaskStatus.PENDING_REVIEW) {
             Instant deadline = reviewDeadline(taskId);

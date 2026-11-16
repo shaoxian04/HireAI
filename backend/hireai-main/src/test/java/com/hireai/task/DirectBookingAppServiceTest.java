@@ -52,7 +52,8 @@ class DirectBookingAppServiceTest {
             new com.hireai.domain.biz.task.model.ExecutionGrace(60),
             mock(com.hireai.domain.biz.adjudication.service.ValidationDomainService.class),
             mock(com.hireai.application.biz.acceptance.engagement.EngagementAppService.class),
-            mock(com.hireai.application.biz.acceptance.source.SourceSnapshotAppService.class));
+            mock(com.hireai.application.biz.acceptance.source.SourceSnapshotAppService.class),
+            mock(com.hireai.domain.biz.task.sampling.repository.InspectionRepository.class));
 
     // ---- helpers ----
 

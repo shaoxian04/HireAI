@@ -8,6 +8,7 @@ import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.acceptance.contract.model.ParameterValue;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
 import com.hireai.domain.biz.acceptance.offer.model.OfferTerm;
+import com.hireai.domain.biz.task.sampling.enums.InspectionLevel;
 import com.hireai.domain.biz.acceptance.offer.model.ParameterRange;
 import com.hireai.domain.biz.acceptance.template.enums.ExpectationMode;
 import com.hireai.domain.biz.acceptance.template.enums.OutputShape;
@@ -101,6 +102,9 @@ public class AcceptanceJsonMapper {
             term.params().forEach((name, range) -> params.set(name, rangeNode(range)));
             terms.add(termNode);
         }
+        if (offer.strictestInspectionLevel() != null) {
+            root.put("strictestInspectionLevel", offer.strictestInspectionLevel().name());
+        }
         return write(root);
     }
 
@@ -113,7 +117,8 @@ public class AcceptanceJsonMapper {
                     .forEachRemaining(e -> params.put(e.getKey(), range(e.getKey(), e.getValue())));
             terms.add(new OfferTerm(ref(termNode), params));
         }
-        return new Offer(terms);
+        JsonNode level = root.path("strictestInspectionLevel");
+        return new Offer(terms, level.isTextual() ? InspectionLevel.valueOf(level.asText()) : null);
     }
 
     private JsonNode rangeNode(ParameterRange range) {

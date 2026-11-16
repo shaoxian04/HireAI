@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 public class TaskItemRepositoryImpl implements TaskItemRepository {
 
     private static final String COLUMNS = "id, task_id, item_no, input, price, status, agent_status, "
-            + "result_payload, result_url, checks::text AS checks, auto_accepted, source_snapshot_id";
+            + "result_payload, result_url, checks::text AS checks, auto_accepted, source_snapshot_id, paid_amount";
     private static final TypeReference<List<ItemCheck>> CHECKS = new TypeReference<>() { };
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -53,9 +53,24 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
         jdbc.update("""
                 UPDATE task_items SET status = :status, agent_status = :agentStatus,
                        result_payload = :resultPayload, result_url = :resultUrl,
-                       checks = CAST(:checks AS jsonb), auto_accepted = :autoAccepted, updated_at = now()
+                       checks = CAST(:checks AS jsonb), auto_accepted = :autoAccepted,
+                       paid_amount = :paidAmount, updated_at = now()
                 WHERE id = :id
                 """, params(item));
+    }
+
+    @Override
+    public void updateAll(List<TaskItemModel> items) {
+        if (items.isEmpty()) {
+            return;
+        }
+        jdbc.batchUpdate("""
+                UPDATE task_items SET status = :status, agent_status = :agentStatus,
+                       result_payload = :resultPayload, result_url = :resultUrl,
+                       checks = CAST(:checks AS jsonb), auto_accepted = :autoAccepted,
+                       paid_amount = :paidAmount, updated_at = now()
+                WHERE id = :id
+                """, items.stream().map(this::params).toArray(MapSqlParameterSource[]::new));
     }
 
     @Override
@@ -108,7 +123,8 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
                 .addValue("resultUrl", item.resultUrl())
                 .addValue("checks", writeChecks(item.checks()))
                 .addValue("autoAccepted", item.autoAccepted())
-                .addValue("sourceSnapshotId", item.sourceSnapshotId());
+                .addValue("sourceSnapshotId", item.sourceSnapshotId())
+                .addValue("paidAmount", item.paidAmount() == null ? null : item.paidAmount().value());
     }
 
     private RowMapper<TaskItemModel> rowMapper() {
@@ -118,7 +134,8 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
                 ItemStatus.valueOf(rs.getString("status")), rs.getString("agent_status"),
                 rs.getString("result_payload"), rs.getString("result_url"),
                 readChecks(rs.getString("checks")), rs.getBoolean("auto_accepted"),
-                rs.getObject("source_snapshot_id", UUID.class));
+                rs.getObject("source_snapshot_id", UUID.class),
+                rs.getBigDecimal("paid_amount") == null ? null : Money.of(rs.getBigDecimal("paid_amount")));
     }
 
     private String writeChecks(List<ItemCheck> checks) {

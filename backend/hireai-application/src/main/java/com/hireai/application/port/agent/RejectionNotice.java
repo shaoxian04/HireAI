@@ -8,11 +8,29 @@ import java.util.UUID;
  * D20): which round, why, until when it may respond, whether it may still revise, and where to send
  * its response. The task's own text and frozen output spec ride along, so a revision can be made
  * from the notice alone.
+ *
+ * <p>A buyer's reviewer rejecting one Item of a multi-Item Task (spec S8, D17′) sends the same notice
+ * with {@link #ITEM_EVENT} and {@code itemNo}, the Item's input and the result being rejected set; for a
+ * whole-Task rejection they are null.
  */
 public record RejectionNotice(UUID taskId, UUID agentVersionId, int round, String reasonCategory, String reason,
                               Instant responseDeadline, boolean revisionAllowed, String responseUrl,
-                              String title, String description, String outputSpecJson) {
+                              String title, String description, String outputSpecJson,
+                              Integer itemNo, String itemInput, String itemResult) {
 
     /** The {@code event} field of the notice body, which tells it apart from a WorkOrder. */
     public static final String EVENT = "task.rejected";
+    /** The {@code event} of a single Item's rejection. */
+    public static final String ITEM_EVENT = "task.item_rejected";
+
+    public RejectionNotice(UUID taskId, UUID agentVersionId, int round, String reasonCategory, String reason,
+                           Instant responseDeadline, boolean revisionAllowed, String responseUrl,
+                           String title, String description, String outputSpecJson) {
+        this(taskId, agentVersionId, round, reasonCategory, reason, responseDeadline, revisionAllowed, responseUrl,
+                title, description, outputSpecJson, null, null, null);
+    }
+
+    public String event() {
+        return itemNo == null ? EVENT : ITEM_EVENT;
+    }
 }

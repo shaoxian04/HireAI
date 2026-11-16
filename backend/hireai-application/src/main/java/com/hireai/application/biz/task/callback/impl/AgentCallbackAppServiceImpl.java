@@ -6,6 +6,7 @@ import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.callback.AgentCallbackAppService;
 import com.hireai.application.biz.task.item.TaskItemAppService;
+import com.hireai.application.biz.task.sampling.SamplingAppService;
 import com.hireai.domain.biz.reputation.enums.ReputationEventType;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
 import com.hireai.application.port.security.DispatchTokenClaims;
@@ -14,6 +15,7 @@ import com.hireai.application.port.security.DispatchTokenService;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.info.AgentResultInfo;
 import com.hireai.domain.biz.task.enums.FailureReason;
+import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
@@ -52,6 +54,8 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
     private final AgentReadAppService agentReadAppService;
     private final Clock clock;
     private final TaskItemAppService taskItemAppService;
+    /** A web-channel multi-Item Task is inspected by sampling once its Items are judged (spec S8). */
+    private final SamplingAppService samplingAppService;
 
     @Override
     @Transactional(readOnly = true)
@@ -105,7 +109,10 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
         }
         if (taskItemAppService.hasItems(taskId)) {
             // A multi-Item Task: each Item is judged and settled on its own (spec S3).
-            taskItemAppService.recordItemResults(task, result);
+            TaskModel judged = taskItemAppService.recordItemResults(task, result);
+            if (judged.status() == TaskStatus.PENDING_REVIEW) {
+                samplingAppService.onItemsDelivered(judged);
+            }
             return;
         }
         TaskResultModel resultModel = TaskResultModel.record(

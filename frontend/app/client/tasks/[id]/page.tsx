@@ -23,6 +23,7 @@ import { RatingPrompt } from "@/components/RatingPrompt";
 import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
 import { ContractPanel } from "@/components/AcceptanceTerms";
 import { ItemsPanel } from "@/components/ItemsPanel";
+import { InspectionCard } from "@/components/sampling/InspectionSummary";
 import { VersionFallbackNotice } from "@/components/VersionFallbackNotice";
 import { DispatchHistory } from "@/components/ContractDeclines";
 import { AgentResponsePending, ClientDecisionPanel, RevisedResultNotice } from "@/components/RejectionPanel";
@@ -386,6 +387,7 @@ function TaskDetail() {
 
       <DispatchHistory attempts={attempts} />
 
+      {multiItem && <InspectionCard task={task} />}
       {multiItem && <ItemsPanel task={task} onChange={setTask} />}
 
       {!result && !multiItem && RESULT_READY.has(task.status) && (

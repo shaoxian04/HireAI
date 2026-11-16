@@ -31,18 +31,24 @@ function BookingForm() {
   const clearFieldError = () => setError((er) => (er?.field ? null : er));
   const [submitting, setSubmitting] = useState(false);
   const [documents, setDocuments] = useState<DocumentSelection>({ engagementId: null, sourceIds: [] });
+  const [stricter, setStricter] = useState(false);
   const onDocumentsChange = useCallback((s: DocumentSelection) => setDocuments(s), []);
   useFocusOnFieldError(error);
   // Built here rather than in onSubmit so the idempotency signature is derived from the very
   // object that gets sent: retrying the same booking reuses one key (deduped server-side),
   // while an edited title or description starts a fresh one.
   const itemCount = documents.engagementId ? documents.sourceIds.length : 0;
+  const strictAllowed = profile?.offer?.strictestInspectionLevel === "III";
   const bookingBody: DirectBookRequest | null = profile
     ? {
         title, description, budget: profile.card.price, agentId: id,
         // Documents become the Items, priced each at the agent's price, under the Engagement.
         ...(itemCount > 0 && documents.engagementId
-          ? { engagementId: documents.engagementId, items: documents.sourceIds.map((sourceId) => ({ sourceId })) }
+          ? {
+              engagementId: documents.engagementId,
+              items: documents.sourceIds.map((sourceId) => ({ sourceId })),
+              ...(stricter && strictAllowed ? { inspectionLevel: "III" as const } : {}),
+            }
           : {}),
       }
     : null;
@@ -157,6 +163,24 @@ function BookingForm() {
 
           <EngagementDocuments agentId={id} agentName={card.name} onChange={onDocumentsChange} />
 
+          {itemCount >= MIN_ITEMS && (
+            <fieldset className="space-y-2 rounded-lg border border-line bg-surface px-4 py-3">
+              <legend className="px-1 text-xs font-semibold text-muted">How the batch is checked</legend>
+              <p className="text-sm text-muted">
+                You check a random sample of the documents against the agent&apos;s results, sized by a standard
+                lot-size table, and the sample decides the rest.
+              </p>
+              {strictAllowed ? (
+                <label className="flex items-start gap-2 text-sm text-fg">
+                  <input type="checkbox" className="mt-1" checked={stricter} onChange={(e) => setStricter(e.target.checked)} />
+                  <span>Inspect more strictly (level III): a larger sample, which this agent accepts.</span>
+                </label>
+              ) : (
+                <p className="text-xs text-dim">This agent accepts the normal inspection level (II) only.</p>
+              )}
+            </fieldset>
+          )}
+
           <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line text-sm">
             <div className="bg-surface px-4 py-3">
               <dt className="text-xs text-dim">You&apos;ll pay</dt>
@@ -174,7 +198,7 @@ function BookingForm() {
           </dl>
           <p className="text-xs text-dim">
             The price is fixed by the agent and frozen in escrow, not charged, until you accept the result.
-            {itemCount > 0 && " With documents, each one is an Item you accept, or get refunded, on its own."}
+            {itemCount > 0 && " With documents, each one is an Item that is paid, or refunded, on its own."}
           </p>
 
           {error && !error.field && (

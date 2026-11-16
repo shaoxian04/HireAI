@@ -1,5 +1,6 @@
 package com.hireai.controller.biz.acceptance.dto;
 
+import com.hireai.domain.biz.task.sampling.enums.InspectionLevel;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -17,8 +18,14 @@ import java.util.Map;
  * Bounds are checked against the Templates by the service.
  */
 public record OfferRequest(
-        @NotEmpty @Size(max = 16) List<@NotNull @Valid TermRequest> terms
+        @NotEmpty @Size(max = 16) List<@NotNull @Valid TermRequest> terms,
+        /** The strictest sampling level a buyer may choose for a multi-Item Task (II or III); default II. */
+        InspectionLevel strictestInspectionLevel
 ) {
+
+    public OfferRequest(List<TermRequest> terms) {
+        this(terms, null);
+    }
 
     public record TermRequest(
             @NotBlank @Size(max = 64) String template,

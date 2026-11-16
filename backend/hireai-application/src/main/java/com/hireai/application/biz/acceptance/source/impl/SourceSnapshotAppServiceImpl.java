@@ -161,6 +161,16 @@ public class SourceSnapshotAppServiceImpl implements SourceSnapshotAppService {
 
     @Override
     @Transactional(readOnly = true)
+    public Download contentOf(UUID sourceSnapshotId) {
+        SourceSnapshotModel snapshot = sourceSnapshotRepository.findById(sourceSnapshotId)
+                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Document not found"));
+        Optional<byte[]> content = snapshot.isRetired() ? Optional.empty() : contentStore.get(snapshot.sha256());
+        return content.<Download>map(bytes -> new Download.Served(snapshot, bytes))
+                .orElseGet(() -> new Download.Refused(Download.Reason.RETIRED));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<UUID> retentionCandidateIds() {
         return sourceSnapshotRepository.idsHoldingContent();
     }

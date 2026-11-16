@@ -88,6 +88,9 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
     public TaskModel recordItemResults(TaskModel inFlight, AgentResultInfo result) {
         TaskItems items = taskItemRepository.findByTaskId(inFlight.id());
         Map<Integer, AgentItemResultInfo> byItemNo = indexByItemNo(result.items(), items);
+        // A Task that already had a result is back from its whole-Task rework (spec S8): each reworked
+        // Item's deliverable is a new attempt and gets its own frozen copy.
+        boolean reworked = inFlight.result() != null;
 
         TaskModel recorded = inFlight.recordResult(TaskResultModel.record(inFlight.id(), result.agentStatus(),
                 result.resultPayloadJson(), result.resultUrl()));
@@ -96,7 +99,19 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
         Contract contract = recorded.contract() != null ? recorded.contract() : recorded.outputSpec().toContract();
         List<TaskItemModel> judged = new ArrayList<>(items.count());
         for (TaskItemModel item : items.all()) {
-            TaskItemModel next = judge(item, byItemNo.get(item.itemNo()), contract);
+            if (item.status() != ItemStatus.AWAITING_RESULT) {
+                // Settled, or on its own rejection path, before a whole-Task rework (spec S8): a rework
+                // re-sends only the Items still awaiting a result, and only those take a new one.
+                judged.add(item);
+                continue;
+            }
+            AgentItemResultInfo itemResult = byItemNo.get(item.itemNo());
+            TaskItemModel next = itemResult == null || !"COMPLETED".equalsIgnoreCase(itemResult.agentStatus())
+                    ? item.recordFailure(itemResult == null ? "MISSING" : itemResult.agentStatus())
+                    : item.recordResult(itemResult.agentStatus().trim(), payloadOf(itemResult.resultPayloadJson()),
+                            itemResult.resultUrl(), checksFor(item, attemptId(item, reworked ? "rework" : null),
+                                    itemResult.agentStatus().trim(), itemResult.resultPayloadJson(),
+                                    itemResult.resultUrl(), contract));
             taskItemRepository.update(next);
             if (next.status() == ItemStatus.SPEC_VIOLATION || next.status() == ItemStatus.FAILED) {
                 // Refunded at once: one bad Item never holds the others back (D14).
@@ -107,7 +122,7 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
         }
         TaskItems outcome = new TaskItems(judged);
 
-        if (!outcome.anyPassed()) {
+        if (!outcome.anyPassed() && !outcome.anyOpenOrPaid()) {
             TaskModel failed = recorded.failValidation(); // every Item already refunded on its own
             taskRepository.save(failed);
             recordReputation(failed, outcome);
@@ -160,23 +175,61 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
 
     private TaskModel acceptAndResolve(TaskModel pendingReview, TaskItems items, boolean automatically) {
         TaskItems after = items;
+        UUID builderId = builderOf(pendingReview);
+        List<TaskItemModel> accepted = new ArrayList<>();
         for (TaskItemModel item : items.awaitingReview()) {
-            TaskItemModel accepted = automatically ? item.acceptAutomatically() : item.accept();
-            settleAccepted(pendingReview, accepted);
-            after = replace(after, accepted);
+            TaskItemModel next = automatically ? item.acceptAutomatically() : item.accept();
+            settlementWriteAppService.settleItemAccepted(pendingReview.id(), next.id(), next.itemNo(),
+                    pendingReview.clientId(), builderId, next.price());
+            accepted.add(next);
         }
-        return resolve(pendingReview, after);
+        taskItemRepository.updateAll(accepted);
+        for (TaskItemModel next : accepted) {
+            after = replace(after, next);
+        }
+        // An Item on its own rejection path (spec S8, D17') settles when that path does.
+        return after.allSettled() ? resolve(pendingReview, after) : pendingReview;
     }
 
-    private void settleAccepted(TaskModel task, TaskItemModel accepted) {
+    @Override
+    public void settleAccepted(TaskModel task, TaskItemModel accepted) {
         taskItemRepository.update(accepted);
         settlementWriteAppService.settleItemAccepted(task.id(), accepted.id(), accepted.itemNo(),
                 task.clientId(), builderOf(task), accepted.price());
     }
 
+    @Override
+    public void settleRefunded(TaskModel task, TaskItemModel refunded) {
+        taskItemRepository.update(refunded);
+        settlementWriteAppService.settleItemRefunded(task.id(), refunded.id(), refunded.itemNo(),
+                task.clientId(), refunded.price());
+    }
+
+    @Override
+    public void settleProRata(TaskModel task, TaskItemModel proRata) {
+        taskItemRepository.update(proRata);
+        if (!proRata.paidAmount().isPositive()) { // an error rate of 1: nothing to pay
+            settlementWriteAppService.settleItemRefunded(task.id(), proRata.id(), proRata.itemNo(), task.clientId(),
+                    proRata.price());
+            return;
+        }
+        settlementWriteAppService.settleItemProRata(task.id(), proRata.id(), proRata.itemNo(), task.clientId(),
+                builderOf(task), proRata.price(), proRata.paidAmount());
+    }
+
+    @Override
+    public TaskModel resolveIfAllSettled(TaskModel task) {
+        if (task.status() != TaskStatus.PENDING_REVIEW) {
+            return task;
+        }
+        TaskItems items = taskItemRepository.findByTaskId(task.id());
+        return items.allSettled() ? resolve(task, items) : task;
+    }
+
     /** Every Item has settled: the Task resolves and writes its one reputation event (D22, D27). */
     private TaskModel resolve(TaskModel pendingReview, TaskItems settled) {
-        TaskModel resolved = pendingReview.resolveItems(settled.allAccepted());
+        TaskModel resolved = settled.anyPaid() ? pendingReview.resolveItems(settled.allAccepted())
+                : pendingReview.resolveItemsAllRefunded();
         taskRepository.save(resolved);
         recordReputation(resolved, settled);
         if (apiKeyTaskRepository.findApiKeyIdByTask(resolved.id()).isPresent()) {
@@ -189,26 +242,50 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
 
     private void recordReputation(TaskModel task, TaskItems settled) {
         reputationWriteAppService.recordItemsOutcome(task.id(), task.agentVersionId(), task.clientId(),
-                settled.acceptedCount(), settled.count());
+                settled.creditedCount(), settled.count());
     }
 
-    private TaskItemModel judge(TaskItemModel item, AgentItemResultInfo itemResult, Contract contract) {
-        if (itemResult == null || !"COMPLETED".equalsIgnoreCase(itemResult.agentStatus())) {
-            return item.recordFailure(itemResult == null ? "MISSING" : itemResult.agentStatus());
+    @Override
+    public TaskItemModel reviseRejected(TaskModel task, TaskItemModel rejected, String payload, String url,
+                                        int round) {
+        Contract contract = task.contract() != null ? task.contract() : task.outputSpec().toContract();
+        TaskItemModel.requireHttpsResultUrl(rejected.itemNo(), url);
+        List<ItemCheck> checks = checksFor(rejected, attemptId(rejected, "revision-" + round), "COMPLETED",
+                payload, url, contract);
+        TaskItemModel revised = rejected.revise(payloadOf(payload), url, checks);
+        if (revised.status() == ItemStatus.SPEC_VIOLATION) {
+            settleRefunded(task, revised); // a revision that fails the Contract's checks is refunded (D17)
+        } else {
+            taskItemRepository.update(revised);
         }
-        String payload = itemResult.resultPayloadJson() == null ? "" : itemResult.resultPayloadJson();
-        // The Item's result as the checks see it, under the Item's own id, so a file deliverable gets
-        // its own DeliverySnapshot (one per Item) and every later step judges that frozen copy.
-        TaskResultModel asResult = TaskResultModel.rehydrate(item.id(), item.taskId(),
-                itemResult.agentStatus().trim(), payload, itemResult.resultUrl(), clock.instant());
+        return revised;
+    }
+
+    private static String payloadOf(String payload) {
+        return payload == null ? "" : payload;
+    }
+
+    /**
+     * The id an Item's result is judged under: the Item's own id for its first result (so a file
+     * deliverable gets its own DeliverySnapshot, one per Item, and every later step judges that frozen
+     * copy), and a stable id per later attempt (the whole-Task rework, each revision).
+     */
+    private static UUID attemptId(TaskItemModel item, String attempt) {
+        return attempt == null ? item.id()
+                : UUID.nameUUIDFromBytes((item.id() + "#" + attempt).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private List<ItemCheck> checksFor(TaskItemModel item, UUID resultId, String agentStatus, String payload,
+                                      String url, Contract contract) {
+        TaskResultModel asResult = TaskResultModel.rehydrate(resultId, item.taskId(), agentStatus,
+                payloadOf(payload), url, clock.instant());
         DeliveryOutcome delivery = validationDomainService.needsDelivery(contract, asResult)
                 ? deliverySnapshotAppService.capture(contract, asResult)
                 : null;
         ValidationReportModel report = validationDomainService.validate(contract, asResult, delivery, FIRST_ATTEMPT);
-        List<ItemCheck> checks = report.checks().stream()
+        return report.checks().stream()
                 .map(c -> new ItemCheck(c.rule(), c.passed(), c.detail()))
                 .toList();
-        return item.recordResult(itemResult.agentStatus().trim(), payload, itemResult.resultUrl(), checks);
     }
 
     /** Refuses (400) a callback naming an Item twice or an Item the Task does not have. */

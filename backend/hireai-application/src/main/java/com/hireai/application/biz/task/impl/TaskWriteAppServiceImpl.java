@@ -242,7 +242,9 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
                 .filter(previous -> !executionDeadline.isAfter(previous))
                 .map(previous -> previous.plus(1, java.time.temporal.ChronoUnit.MICROS))
                 .orElse(executionDeadline);
-        taskRepository.save(task.returnForRework());
+        // A sampled multi-Item Task whose sample failed goes back from review (spec S8, D19).
+        taskRepository.save(task.status() == TaskStatus.PENDING_REVIEW ? task.returnForSampleRework()
+                : task.returnForRework());
         taskRepository.stampExecutionDeadline(taskId, deadline);
         log.info("Task {} returned to agent version {} for rework (deadline {})",
                 taskId, task.agentVersionId(), deadline);

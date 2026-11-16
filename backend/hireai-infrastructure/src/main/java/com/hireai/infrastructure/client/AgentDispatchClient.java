@@ -152,10 +152,11 @@ public class AgentDispatchClient implements AgentNoticePort {
         try {
             requireSecureWebhook(webhookUrl);
             urlValidator.assertAgentWebhookDeliverable(webhookUrl);
-            byte[] body = serializeNotice(new RejectionNoticeBody(RejectionNotice.EVENT, notice.taskId(),
+            byte[] body = serializeNotice(new RejectionNoticeBody(notice.event(), notice.taskId(),
                     notice.agentVersionId(), notice.round(), notice.reasonCategory(), notice.reason(),
                     notice.responseDeadline().toString(), notice.revisionAllowed(), notice.responseUrl(),
-                    notice.title(), notice.description(), readJson(notice.outputSpecJson())));
+                    notice.title(), notice.description(), readJson(notice.outputSpecJson()),
+                    notice.itemNo(), notice.itemInput(), notice.itemResult()));
             RestClient.RequestBodySpec request = restClient.post()
                     .uri(URI.create(webhookUrl))
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken)

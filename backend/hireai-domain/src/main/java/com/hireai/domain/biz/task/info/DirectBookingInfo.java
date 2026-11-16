@@ -2,6 +2,7 @@ package com.hireai.domain.biz.task.info;
 
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.task.item.info.ItemInput;
+import com.hireai.domain.biz.task.sampling.enums.InspectionLevel;
 import com.hireai.domain.biz.task.item.model.TaskItems;
 import com.hireai.domain.shared.model.Money;
 
@@ -20,13 +21,23 @@ import java.util.UUID;
  * booking. With Items, {@code budget} is the per-Item price (it must cover the Agent's price) and the
  * Task freezes {@link #escrow()}. {@code engagementId} books under the Client's Engagement with this
  * Agent (ADR 0010): only then may an Item's input be a SourceSnapshot (a confidential document).
+ * {@code inspectionLevel}: the sampling level the Client chose for its Items (spec S8, D21; null = the
+ * default), checked against the Agent's Offer.
  */
 public record DirectBookingInfo(UUID clientId, String title, String description,
                                 Money budget, UUID agentId, String category, Long deadlineSeconds,
-                                Contract contract, List<ItemInput> items, UUID engagementId) {
+                                Contract contract, List<ItemInput> items, UUID engagementId,
+                                InspectionLevel inspectionLevel) {
 
     public DirectBookingInfo {
         items = items == null ? List.of() : List.copyOf(items);
+    }
+
+    public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,
+                             String category, Long deadlineSeconds, Contract contract, List<ItemInput> items,
+                             UUID engagementId) {
+        this(clientId, title, description, budget, agentId, category, deadlineSeconds, contract, items,
+                engagementId, null);
     }
 
     public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,
@@ -42,13 +53,13 @@ public record DirectBookingInfo(UUID clientId, String title, String description,
     /** This booking with {@code chosen} as its Contract. */
     public DirectBookingInfo withContract(Contract chosen) {
         return new DirectBookingInfo(clientId, title, description, budget, agentId, category, deadlineSeconds,
-                chosen, items, engagementId);
+                chosen, items, engagementId, inspectionLevel);
     }
 
     /** This booking with its Items replaced (a document Item's blank input becomes its file name). */
     public DirectBookingInfo withItems(List<ItemInput> replaced) {
         return new DirectBookingInfo(clientId, title, description, budget, agentId, category, deadlineSeconds,
-                contract, replaced, engagementId);
+                contract, replaced, engagementId, inspectionLevel);
     }
 
     public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,

@@ -79,7 +79,7 @@ public final class RejectionModel {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "A rejection round starts at 1; got " + round);
         }
         return new RejectionModel(UUID.randomUUID(), taskId, round, reasonCategory, trim(reason), now,
-                now.plus(windows.agentResponse()), revisionAllowed, null, null, false, null, null, null, false, null);
+                windows.responseDeadline(now), revisionAllowed, null, null, false, null, null, null, false, null);
     }
 
     /**
@@ -100,7 +100,7 @@ public final class RejectionModel {
                     "Task " + taskId + " was already revised once; concede or stand by instead");
         }
         String kept = action == AgentResponse.STAND_BY ? trim(standByReason) : null;
-        Instant decisionBy = action == AgentResponse.STAND_BY ? now.plus(windows.clientDecision()) : null;
+        Instant decisionBy = action == AgentResponse.STAND_BY ? windows.decisionDeadline(now) : null;
         return new RejectionModel(id, taskId, round, reasonCategory, reason, rejectedAt, responseDeadline,
                 revisionAllowed, action, kept, false, now, decisionBy, null, false, null);
     }
@@ -113,7 +113,7 @@ public final class RejectionModel {
                     "The response window for task " + taskId + " is still open until " + responseDeadline);
         }
         return new RejectionModel(id, taskId, round, reasonCategory, reason, rejectedAt, responseDeadline,
-                revisionAllowed, AgentResponse.STAND_BY, null, true, now, now.plus(windows.clientDecision()),
+                revisionAllowed, AgentResponse.STAND_BY, null, true, now, windows.decisionDeadline(now),
                 null, false, null);
     }
 

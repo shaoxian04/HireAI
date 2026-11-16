@@ -4,6 +4,7 @@ import com.hireai.controller.biz.acceptance.dto.ContractRequest;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.hireai.domain.biz.task.item.info.ItemInput;
+import com.hireai.domain.biz.task.sampling.enums.InspectionLevel;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -45,7 +46,12 @@ public record DirectBookRequest(
          * Optional: book under your Engagement with this Agent (ADR 0010). Only then may an Item's input be
          * a document you uploaded to it ({@code {"sourceId": ...}}).
          */
-        UUID engagementId
+        UUID engagementId,
+        /**
+         * Optional, with Items (spec S8, D21): the sampling inspection level, II (the default) or III when
+         * the Agent's Offer allows it. A stricter level samples more Items.
+         */
+        InspectionLevel inspectionLevel
 ) {
 
     /**

@@ -41,7 +41,7 @@ public final class OfferRequest2ModelConverter {
             }
             terms.add(new OfferTerm(new TemplateRef(term.template(), term.version()), params));
         }
-        return new Offer(terms);
+        return new Offer(terms, request.strictestInspectionLevel());
     }
 
     private static ParameterRange range(String template, String name, Map<String, Object> raw) {

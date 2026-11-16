@@ -11,7 +11,7 @@ import java.util.Map;
  * {@code {"acceptsTrue":b}} ({@code flag}). A parameter left out is accepted only when a Contract
  * leaves it unset.
  */
-public record OfferDTO(BigDecimal price, List<TermDTO> terms) {
+public record OfferDTO(BigDecimal price, List<TermDTO> terms, String strictestInspectionLevel) {
 
     public record TermDTO(String template, int version, Map<String, Map<String, Object>> params) {
     }

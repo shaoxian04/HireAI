@@ -9,13 +9,16 @@ import java.util.UUID;
 /**
  * One Item of a multi-Item Task (spec S3) and its outcome. Amounts appear once the Item settled:
  * an accepted Item pays the builder {@code payoutAmount} and the platform {@code commissionAmount};
- * a refunded one returns {@code refundAmount} to the Client.
+ * a refunded one returns {@code refundAmount} to the Client; a pro-rata one does both, in part.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record TaskItemDTO(
         int itemNo,
         String input,
-        /** AWAITING_RESULT, PENDING_REVIEW, ACCEPTED, SPEC_VIOLATION or FAILED. */
+        /**
+         * AWAITING_RESULT, PENDING_REVIEW, ACCEPTED, SPEC_VIOLATION, FAILED, REJECTED (a reviewer found it
+         * wrong; on its rejection response path), CONCEDED (refunded) or PRO_RATA (paid in part, D19).
+         */
         String status,
         BigDecimal price,
         String resultPayload,

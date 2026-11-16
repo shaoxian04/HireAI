@@ -2,6 +2,7 @@ package com.hireai.application.biz.task.item;
 
 import com.hireai.domain.biz.task.info.AgentResultInfo;
 import com.hireai.domain.biz.task.item.info.ItemInput;
+import com.hireai.domain.biz.task.item.model.TaskItemModel;
 import com.hireai.domain.biz.task.item.model.TaskItems;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.shared.model.Money;
@@ -44,4 +45,25 @@ public interface TaskItemAppService {
 
     /** The Items of one Task, in Item order; empty for a single-deliverable Task. */
     TaskItems itemsOf(UUID taskId);
+
+    /** Saves an Item just accepted and pays it 85/15 out of the Task's escrow (caller holds the row lock). */
+    void settleAccepted(TaskModel task, TaskItemModel accepted);
+
+    /** Saves an Item just refunded (failed, conceded) and refunds its price (caller holds the row lock). */
+    void settleRefunded(TaskModel task, TaskItemModel refunded);
+
+    /** Saves a PRO_RATA Item and pays it its pro-rata share, refunding the rest (caller holds the row lock). */
+    void settleProRata(TaskModel task, TaskItemModel proRata);
+
+    /**
+     * Resolves a PENDING_REVIEW Task once every Item has settled, writing its one reputation event;
+     * otherwise leaves it as it is. Returns the Task as it now stands.
+     */
+    TaskModel resolveIfAllSettled(TaskModel task);
+
+    /**
+     * The Agent revised an Item a reviewer rejected (D17′): runs the Contract's checks on the revision and
+     * saves it, back to review when it passes, else refunded. {@code round}: the rejection round it answers.
+     */
+    TaskItemModel reviseRejected(TaskModel task, TaskItemModel rejected, String payload, String url, int round);
 }

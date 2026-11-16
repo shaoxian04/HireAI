@@ -135,7 +135,7 @@ public class TaskController extends BaseController {
                         Money.of(request.budget()), request.agentId(),
                         request.category() == null || request.category().isBlank() ? null : request.category(),
                         request.deadlineSeconds(), ContractRequest2ModelConverter.toModel(request.contract()),
-                        request.itemInputs(), request.engagementId()));
+                        request.itemInputs(), request.engagementId(), request.inspectionLevel()));
         return ok(withTemplateFallback(readAppService.getForClient(taskId, clientId)));
     }
 
