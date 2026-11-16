@@ -213,6 +213,38 @@ class ImageGenerationAcceptanceTest {
         assertThat(rules(report)).contains("IMAGE_DIMENSIONS:REJECT", "IMAGE_BACKGROUND_COLOUR:REVIEW");
     }
 
+    @Test
+    void aPngWithBrokenPixelDataIsStillSizedAndItsPixelChecksRejectSoItIsReworkedNotReviewed() {
+        ValidationReportModel report = judge(contract(64, 64, "#ffffff"), "image/png", DecodedImage.corrupt(64, 64));
+
+        assertThat(report.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(rules(report)).contains("IMAGE_FORMAT:REJECT", "IMAGE_DIMENSIONS:PASS",
+                "IMAGE_BACKGROUND_COLOUR:REJECT");
+        // Wrong size on a corrupt file: judged on the header it declares.
+        assertThat(rules(judge(contract(32, 32, null), "image/png", DecodedImage.corrupt(64, 64))))
+                .contains("IMAGE_DIMENSIONS:REJECT");
+    }
+
+    @Test
+    void aPngOrJpegWhoseHeaderCannotBeReadIsRejectedOutright() {
+        for (String type : List.of("image/png", "image/jpeg")) {
+            ValidationReportModel report = judge(contract(64, 64, "#ffffff"), type, null);
+
+            assertThat(report.verdict()).as(type).isEqualTo(Verdict.FAIL);
+            assertThat(rules(report)).as(type).contains("IMAGE_FORMAT:REJECT", "IMAGE_DIMENSIONS:REJECT",
+                    "IMAGE_BACKGROUND_COLOUR:REJECT").noneMatch(r -> r.endsWith(":REVIEW"));
+        }
+    }
+
+    @Test
+    void anAnomalyCannotTurnACorruptFileIntoAReview() {
+        ValidationReportModel report = judge(contract(64, 64, "#ffffff"), "image/png", DecodedImage.corrupt(64, 64),
+                List.of(new SelfReportedAnomaly("IMAGE_BACKGROUND_COLOUR", "Trust me, it is white.")), FindingFacts.NONE);
+
+        assertThat(report.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(report.rejectingChecks()).extracting(CheckResult::rule).contains("IMAGE_FORMAT");
+    }
+
     private ValidationReportModel judge(Contract contract, String mediaType, DecodedImage image) {
         return judge(contract, mediaType, image, List.of(), FindingFacts.NONE);
     }

@@ -71,6 +71,9 @@ class AcceptanceEngineIntegrationTest extends WholeAppIntegrationTest {
         files.serve("/white.png", png(64, 64, Color.WHITE), "image/png");
         files.serve("/red.png", png(64, 64, Color.RED), "image/png");
         files.serve("/small.png", png(32, 32, Color.WHITE), "image/png");
+        byte[] noisy = noisyPng(64, 64);
+        files.serve("/truncated.png", java.util.Arrays.copyOf(noisy, noisy.length / 2), "image/png");
+        files.serve("/garbage.png", "not an image at all, just text".getBytes(StandardCharsets.US_ASCII), "image/png");
         files.serve("/logo.webp", "RIFF\u0000\u0000\u0000\u0000WEBPVP8 ".getBytes(StandardCharsets.ISO_8859_1), "image/webp");
         jdbc.update("INSERT INTO wallets (id, user_id, available_balance, escrow_balance) VALUES (?, ?, 1000.00, 0.00) "
                 + "ON CONFLICT (user_id) DO UPDATE SET available_balance = wallets.available_balance + 1000.00",
@@ -194,6 +197,32 @@ class AcceptanceEngineIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
+    void aTruncatedPngIsSizedOnItsHeaderAndReworkedNeverSentToReview() throws Exception {
+        Booking booking = book(order -> order.json().has("rework") ? "/white.png" : "/truncated.png");
+
+        awaitStatus(booking.taskId, "PENDING_REVIEW");
+        JsonNode failed = booking.agent.awaitWorkOrders(2, Duration.ofSeconds(30)).get(1).json()
+                .path("rework").path("failedChecks");
+        assertThat(failed.findValuesAsText("rule")).containsExactly("IMAGE_FORMAT", "IMAGE_BACKGROUND_COLOUR");
+        JsonNode first = get("/api/tasks/" + booking.taskId + "/validation").path("previousAttempts").get(0);
+        assertThat(first.path("verdict").asText()).isEqualTo("FAIL");
+        assertThat(first.path("failedChecks").findValuesAsText("rule")).doesNotContain("IMAGE_DIMENSIONS");
+        assertThat(reviewReason(booking.taskId)).isNull();
+    }
+
+    @Test
+    void garbageLabelledAsAPngIsRejectedAndEndsRefundedAfterTheReworks() throws Exception {
+        BigDecimal before = available();
+        Booking booking = book(order -> "/garbage.png");
+
+        awaitStatus(booking.taskId, "SPEC_VIOLATION");
+        JsonNode report = get("/api/tasks/" + booking.taskId + "/validation");
+        assertThat(report.path("verdict").asText()).isEqualTo("FAIL");
+        assertThat(outcomes(report)).contains("IMAGE_FORMAT:REJECT").noneMatch(o -> o.endsWith(":REVIEW"));
+        assertThat(available()).isEqualByComparingTo(before);
+    }
+
+    @Test
     void pixelsThePlatformCannotReadAreLeftToTheClientNotGuessed() throws Exception {
         Booking booking = book(order -> "/logo.webp");
 
@@ -310,6 +339,20 @@ class AcceptanceEngineIntegrationTest extends WholeAppIntegrationTest {
                         + "VALUES (?, ?, 1, '{\"format\":\"FILE\"}'::jsonb, ?, ?, 60, ?, ?::jsonb)",
                 versionId, agentId, new String[]{category}, webhookUrl, new BigDecimal("10.00"), IMAGE_OFFER);
         return agentId;
+    }
+
+    /** A PNG of random pixels: incompressible, so cutting it in half cuts its image data mid-stream. */
+    private static byte[] noisyPng(int width, int height) throws Exception {
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        java.util.Random noise = new java.util.Random(98);
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                image.setRGB(x, y, noise.nextInt());
+            }
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(image, "png", out);
+        return out.toByteArray();
     }
 
     private static byte[] png(int width, int height, Color background) throws Exception {

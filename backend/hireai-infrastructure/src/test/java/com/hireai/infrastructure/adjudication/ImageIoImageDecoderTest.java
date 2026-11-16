@@ -44,6 +44,34 @@ class ImageIoImageDecoderTest {
     }
 
     @Test
+    void aPngWhosePixelDataIsCutOffKeepsItsSizeAndIsMarkedCorrupt() throws Exception {
+        BufferedImage image = new BufferedImage(64, 64, BufferedImage.TYPE_INT_RGB);
+        java.util.Random noise = new java.util.Random(98);
+        for (int y = 0; y < 64; y++) {
+            for (int x = 0; x < 64; x++) {
+                image.setRGB(x, y, noise.nextInt()); // incompressible, so the image data is long
+            }
+        }
+        byte[] png = encode(image, "png");
+        byte[] truncated = Arrays.copyOf(png, png.length / 2); // valid header, IDAT cut off mid-stream
+
+        DecodedImage decoded = decoder.decode(truncated).orElseThrow();
+
+        assertThat(decoded.width()).isEqualTo(64);
+        assertThat(decoded.height()).isEqualTo(64);
+        assertThat(decoded.isCorrupt()).isTrue();
+        assertThat(decoded.hasPixels()).isFalse();
+    }
+
+    @Test
+    void anImageTooLargeToDecodeIsNotCorrupt() {
+        assertThat(decoder.decode(pngHeaderOnly(5000, 5000))).hasValueSatisfying(d -> {
+            assertThat(d.isCorrupt()).isFalse();
+            assertThat(d.pixels()).isEqualTo(DecodedImage.Pixels.TOO_LARGE);
+        });
+    }
+
+    @Test
     void bytesThatAreNotADecodableImageAreEmpty() {
         assertThat(decoder.decode("RIFF\0\0\0\0WEBPVP8 ".getBytes(StandardCharsets.ISO_8859_1))).isEmpty();
         assertThat(decoder.decode("%PDF-1.7".getBytes(StandardCharsets.US_ASCII))).isEmpty();

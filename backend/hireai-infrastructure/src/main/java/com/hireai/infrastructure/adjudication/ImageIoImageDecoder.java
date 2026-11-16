@@ -22,6 +22,10 @@ import java.util.Optional;
  * The {@link ImageDecoder} port on the JDK's ImageIO: PNG, JPEG, GIF and BMP decode; anything else
  * (WebP, a PDF, garbage) is empty, so the pixel checks send the result to review.
  *
+ * <p>It fails closed. Bytes whose header cannot be read are empty (the checks reject a PNG or JPEG
+ * like that); a readable header over broken pixel data is {@link DecodedImage#corrupt}, so the size
+ * is still judged and the pixel checks reject.
+ *
  * <p>Memory is bounded before any pixel is decoded. The header is read first; an image wider or
  * taller than the Template allows ({@link ImageGenerationTemplate#MAX_DIMENSION}), or whose edge
  * would take more than {@link #MAX_EDGE_BYTES} at its own bit depth and band count, is answered
@@ -60,13 +64,21 @@ public class ImageIoImageDecoder implements ImageDecoder {
                 if (width <= 0 || height <= 0) {
                     return Optional.empty();
                 }
-                long edgeBytes = 2L * (width + (long) height) * bytesPerPixel(reader);
-                if (width > MAX_DIMENSION || height > MAX_DIMENSION || edgeBytes > MAX_EDGE_BYTES) {
-                    log.info("Reading only the size of a {}x{} px image (limit {} px a side, {} edge bytes)",
-                            width, height, MAX_DIMENSION, MAX_EDGE_BYTES);
-                    return Optional.of(DecodedImage.headerOnly(width, height));
+                // From here the size is known: whatever happens to the pixels, the size checks run on it.
+                try {
+                    long edgeBytes = 2L * (width + (long) height) * bytesPerPixel(reader);
+                    if (width > MAX_DIMENSION || height > MAX_DIMENSION || edgeBytes > MAX_EDGE_BYTES) {
+                        log.info("Reading only the size of a {}x{} px image (limit {} px a side, {} edge bytes)",
+                                width, height, MAX_DIMENSION, MAX_EDGE_BYTES);
+                        return Optional.of(DecodedImage.headerOnly(width, height));
+                    }
+                    return Optional.of(new DecodedImage(width, height, edge(reader, width, height)));
+                } catch (IOException | RuntimeException e) {
+                    // Fails closed: a readable header over broken pixel data is a corrupt file, which
+                    // the pixel checks reject (rework), not an unknown one left to review.
+                    log.info("A delivered {}x{} px image has broken pixel data: {}", width, height, e.toString());
+                    return Optional.of(DecodedImage.corrupt(width, height));
                 }
-                return Optional.of(new DecodedImage(width, height, edge(reader, width, height)));
             } finally {
                 reader.dispose();
             }
