@@ -1,5 +1,6 @@
 import type { ContractDTO, ExtractionDTO, OutputSpecDTO, ValidationCheckDTO, ValidationReportDTO } from "@/lib/types";
 import { requirementsYouJudge } from "@/lib/extraction";
+import { checkDetail } from "@/lib/checkDetail";
 
 /** What each automated check actually verified, in the client's words. */
 const RULE_TEXT: Record<string, string> = {
@@ -199,7 +200,7 @@ export function InspectionReport({
                   {ruleText(c.rule)}
                 </p>
                 {c.detail && state !== "pass" && (
-                  <p className={`mt-0.5 break-words text-sm ${state === "review" ? "text-amber" : "text-red"}`}>{c.detail}</p>
+                  <p className={`mt-0.5 break-words text-sm ${state === "review" ? "text-amber" : "text-red"}`}>{checkDetail(c.detail)}</p>
                 )}
               </div>
             </li>

@@ -26,6 +26,21 @@ class NetworkntSchemaValidatorTest {
     }
 
     @Test
+    void invalidJsonIsReportedInPlainWordsWithWhereNotTheParsersMessage() {
+        JsonCheckResult r = validator.check("Extracted fields:\n{\"total\": 1}", null);
+
+        assertThat(r.detail()).isEqualTo("the result isn't valid JSON (line 1, column 10)");
+        assertThat(r.detail()).doesNotContain("Unrecognized").doesNotContain("StreamReadFeature")
+                .doesNotContain("Source");
+    }
+
+    @Test
+    void aSchemaMismatchListsThePlainMessagesWithoutTheValidatorsBrackets() {
+        String schema = "{\"type\":\"object\",\"required\":[\"title\"]}";
+        assertThat(validator.check("{\"x\":1}", schema).detail()).doesNotStartWith("[").contains("title");
+    }
+
+    @Test
     void anEmptyOrBlankPayloadIsNotJson() {
         for (String empty : new String[]{"", "   ", "\n", null}) {
             JsonCheckResult r = validator.check(empty, null);

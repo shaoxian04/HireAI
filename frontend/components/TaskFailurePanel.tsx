@@ -3,6 +3,7 @@
 import { ButtonLink } from "@/components/ui";
 import { rebookHref } from "@/lib/rebook";
 import type { FailureReason, TaskStatus, ValidationReportDTO } from "@/lib/types";
+import { checkDetail } from "@/lib/checkDetail";
 
 interface Props {
   taskId: string;
@@ -150,7 +151,7 @@ export function TaskFailurePanel({ taskId, status, failureReason, budget, detail
             {failedChecks.map((c, i) => (
               <li key={i}>
                 <span className="text-red">{c.rule}</span>
-                {c.detail ? ` — ${c.detail}` : ""}
+                {c.detail ? ` — ${checkDetail(c.detail)}` : ""}
               </li>
             ))}
           </ul>

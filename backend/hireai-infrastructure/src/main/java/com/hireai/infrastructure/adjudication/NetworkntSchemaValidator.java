@@ -56,7 +56,12 @@ public class NetworkntSchemaValidator implements SchemaValidator {
         try {
             payload = payloadJson == null ? null : mapper.readTree(payloadJson);
         } catch (Exception e) {
-            return new JsonCheckResult(false, false, false, "payload is not valid JSON: " + e.getMessage());
+            // The detail reaches the Client: the parser's own message ("Unrecognized token ...") stays in the log.
+            log.debug("A result is not valid JSON: {}", e.getMessage());
+            var at = e instanceof JsonProcessingException jpe ? jpe.getLocation() : null;
+            return new JsonCheckResult(false, false, false, at == null || at.getLineNr() < 1
+                    ? "the result isn't valid JSON"
+                    : "the result isn't valid JSON (line " + at.getLineNr() + ", column " + at.getColumnNr() + ")");
         }
         // An empty or blank payload reads as a "missing" node, not as JSON: it is no result at all.
         if (payload == null || payload.isMissingNode()) {
@@ -78,7 +83,8 @@ public class NetworkntSchemaValidator implements SchemaValidator {
             return new JsonCheckResult(true, false, false, "schema could not be applied; skipped");
         }
         return new JsonCheckResult(true, true, errors.isEmpty(),
-                errors.isEmpty() ? "matches schema" : errors.toString());
+                errors.isEmpty() ? "matches schema" : "doesn't match the schema: " + errors.stream().limit(5)
+                        .map(ValidationMessage::getMessage).collect(Collectors.joining("; ")));
     }
 
     @Override

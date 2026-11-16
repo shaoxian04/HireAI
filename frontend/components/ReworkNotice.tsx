@@ -1,5 +1,6 @@
 import { ruleText } from "@/components/InspectionReport";
 import type { ValidationReportDTO } from "@/lib/types";
+import { checkDetail } from "@/lib/checkDetail";
 
 /**
  * Shown while a result an automatic check rejected is back with its agent for rework (#98, spec
@@ -31,7 +32,7 @@ export function ReworkNotice({ report }: { report: ValidationReportDTO | null })
           {failed.map((c, i) => (
             <li key={`${c.rule}-${i}`}>
               <span className="font-medium text-fg">{ruleText(c.rule)}</span>
-              {c.detail && <span className="block break-words text-red">{c.detail}</span>}
+              {c.detail && <span className="block break-words text-red">{checkDetail(c.detail)}</span>}
             </li>
           ))}
         </ul>

@@ -56,6 +56,15 @@ describe("ItemsPanel", () => {
     expect(screen.getByText(/weekends don.t count/i)).toBeInTheDocument();
   });
 
+  it("shows a failed check's raw parser error in plain words", () => {
+    const raw = "payload is not valid JSON: Unrecognized token 'Extracted': was expecting (JSON String)\n at [Source: "
+      + "REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 10]";
+    const items: TaskItemDTO[] = [ITEMS[0], { ...ITEMS[1], checks: [{ rule: "FORMAT_JSON_PARSEABLE", passed: false, detail: raw }] }];
+    render(<ItemsPanel task={task({ items })} now={NOW} onChange={() => {}} />);
+    expect(screen.getByText(/the result isn't valid JSON \(line 1, column 10\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/StreamReadFeature|Unrecognized token/)).toBeNull();
+  });
+
   it("accepts one Item and shows the task the backend returns", async () => {
     signIn();
     const user = userEvent.setup();
