@@ -5,6 +5,8 @@ import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.domain.biz.acceptance.delivery.model.DeliveryOutcome;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.item.TaskItemAppService;
+import com.hireai.application.biz.task.routing.RoutingAppService;
+import com.hireai.domain.biz.task.routing.info.ReworkRequest;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
 import com.hireai.domain.biz.acceptance.check.model.AcceptanceEvidence;
 import com.hireai.domain.biz.acceptance.check.model.FindingFacts;
@@ -12,6 +14,7 @@ import com.hireai.domain.biz.acceptance.check.model.InvoiceReading;
 import com.hireai.domain.biz.acceptance.check.model.SelfReportedAnomaly;
 import com.hireai.domain.biz.acceptance.check.service.InvoiceReader;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.adjudication.model.ReworkPolicy;
 import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
 import com.hireai.domain.biz.adjudication.service.ValidationDomainService;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
@@ -35,6 +38,7 @@ import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,6 +63,8 @@ import java.util.UUID;
 public class TaskItemAppServiceImpl implements TaskItemAppService {
 
     private static final int FIRST_ATTEMPT = 1;
+    /** The Task-level rework reason when some of its Items come back for rework (spec S5). */
+    public static final String ITEM_CHECKS_FAILED = "ITEM_CHECKS_FAILED";
 
     private final TaskItemRepository taskItemRepository;
     private final TaskRepository taskRepository;
@@ -74,6 +80,10 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
     private final DeliverySnapshotAppService deliverySnapshotAppService;
     /** Reads an invoice result for the ap_invoice_extraction checks (#106). */
     private final InvoiceReader invoiceReader;
+    /** How many times a rejected Item may come back (spec S5, {@code hireai.acceptance.max-reworks}). */
+    private final ReworkPolicy reworkPolicy;
+    /** Looked up lazily: routing depends on the task write service, which depends on this one. */
+    private final ObjectProvider<RoutingAppService> routingAppService;
 
     @Override
     public void createForSubmit(UUID taskId, List<ItemInput> inputs, Money price) {
@@ -105,7 +115,10 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
         taskRepository.save(recorded);
 
         Contract contract = recorded.contract();
+        int maxReworks = reworkPolicy.maxReworks();
+        Boolean agentCanRework = null; // asked once, only when an Item needs it
         List<TaskItemModel> judged = new ArrayList<>(items.count());
+        List<TaskItemModel> reworking = new ArrayList<>();
         for (TaskItemModel item : items.all()) {
             if (item.status() != ItemStatus.AWAITING_RESULT) {
                 // Settled, or on its own rejection path, before a whole-Task rework (spec S8): a rework
@@ -118,16 +131,31 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
                     ? item.recordFailure(itemResult == null ? "MISSING" : itemResult.agentStatus())
                     : item.recordResult(itemResult.agentStatus().trim(), payloadOf(itemResult.resultPayloadJson()),
                             itemResult.resultUrl(), acceptanceFor(recorded, item,
-                                    attemptId(item, reworked ? "rework" : null), itemResult.agentStatus().trim(),
-                                    itemResult.resultPayloadJson(), itemResult.resultUrl(), contract,
-                                    itemResult.anomalies()));
+                                    attemptId(item, reworked ? "rework-" + recorded.result().id() : null),
+                                    itemResult.agentStatus().trim(), itemResult.resultPayloadJson(),
+                                    itemResult.resultUrl(), contract, itemResult.anomalies()));
+            if (next.reworkAllowed(maxReworks)) {
+                if (agentCanRework == null) {
+                    agentCanRework = agentRepository.findCandidateByVersionId(recorded.agentVersionId()).isPresent();
+                }
+                if (agentCanRework) {
+                    // A deterministic rejection goes back to the same Agent with its failing checks (spec S5),
+                    // up to maxReworks times; its escrow stays held meanwhile.
+                    next = next.returnForItemRework(maxReworks);
+                    reworking.add(next);
+                }
+            }
             taskItemRepository.update(next);
             if (next.status() == ItemStatus.SPEC_VIOLATION || next.status() == ItemStatus.FAILED) {
-                // Refunded at once: one bad Item never holds the others back (D14).
+                // Refunded at once (reworks used up, or the Agent said it failed): one bad Item never holds
+                // the others back (D14).
                 settlementWriteAppService.settleItemRefunded(next.taskId(), next.id(), next.itemNo(),
                         recorded.clientId(), next.price());
             }
             judged.add(next);
+        }
+        if (!reworking.isEmpty()) {
+            return returnForItemRework(recorded, reworking, maxReworks);
         }
         TaskItems outcome = new TaskItems(judged);
 
@@ -158,6 +186,25 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
         log.info("Task {}: {} of {} Items await review (window closes {})", gated.id(),
                 outcome.awaitingReview().size(), outcome.count(), reviewDeadline);
         return gated;
+    }
+
+    /**
+     * Sends the Task back to its Agent for the Items a check rejected (spec S5): the WorkOrder carries only
+     * Items still awaiting a result, each with the checks it failed. The Items that passed wait meanwhile, so
+     * the review window, sampling and the API channel's settlement all start once every rework has come back.
+     */
+    private TaskModel returnForItemRework(TaskModel recorded, List<TaskItemModel> reworking, int maxReworks) {
+        int reworkNo = reworking.stream().mapToInt(TaskItemModel::reworks).max().orElse(1);
+        String itemNos = String.join(", ", reworking.stream().map(i -> String.valueOf(i.itemNo())).toList());
+        ReworkRequest request = new ReworkRequest(reworkNo, maxReworks, List.of(new ReworkRequest.FailedCheck(
+                ITEM_CHECKS_FAILED, "Item(s) " + itemNos + " failed their checks and come back for rework; each "
+                        + "carries the checks it failed. Answer only the Items in this WorkOrder.")));
+        if (!routingAppService.getObject().redispatchForRework(recorded.id(), recorded.agentVersionId(), request)) {
+            throw new IllegalStateException("Task " + recorded.id() + ": the agent became unavailable mid-rework");
+        }
+        log.info("Task {}: Items {} failed their checks -> back to the agent for rework (up to {})",
+                recorded.id(), itemNos, maxReworks);
+        return taskRepository.findById(recorded.id()).orElseThrow();
     }
 
     @Override

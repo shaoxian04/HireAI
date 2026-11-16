@@ -31,7 +31,7 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
 
     private static final String COLUMNS = "id, task_id, item_no, input, price, status, agent_status, "
             + "result_payload, result_url, checks::text AS checks, auto_accepted, source_snapshot_id, paid_amount, "
-            + "findings::text AS findings, anomalies::text AS anomalies";
+            + "findings::text AS findings, anomalies::text AS anomalies, rework_count";
     private static final TypeReference<List<ItemCheck>> CHECKS = new TypeReference<>() { };
     private static final TypeReference<List<Finding>> FINDINGS = new TypeReference<>() { };
     private static final TypeReference<List<SelfReportedAnomaly>> ANOMALIES = new TypeReference<>() { };
@@ -61,7 +61,7 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
                        result_payload = :resultPayload, result_url = :resultUrl,
                        checks = CAST(:checks AS jsonb), auto_accepted = :autoAccepted,
                        paid_amount = :paidAmount, findings = CAST(:findings AS jsonb),
-                       anomalies = CAST(:anomalies AS jsonb), updated_at = now()
+                       anomalies = CAST(:anomalies AS jsonb), rework_count = :reworks, updated_at = now()
                 WHERE id = :id
                 """, params(item));
     }
@@ -76,7 +76,7 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
                        result_payload = :resultPayload, result_url = :resultUrl,
                        checks = CAST(:checks AS jsonb), auto_accepted = :autoAccepted,
                        paid_amount = :paidAmount, findings = CAST(:findings AS jsonb),
-                       anomalies = CAST(:anomalies AS jsonb), updated_at = now()
+                       anomalies = CAST(:anomalies AS jsonb), rework_count = :reworks, updated_at = now()
                 WHERE id = :id
                 """, items.stream().map(this::params).toArray(MapSqlParameterSource[]::new));
     }
@@ -134,7 +134,8 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
                 .addValue("anomalies", write(item.anomalies()))
                 .addValue("autoAccepted", item.autoAccepted())
                 .addValue("sourceSnapshotId", item.sourceSnapshotId())
-                .addValue("paidAmount", item.paidAmount() == null ? null : item.paidAmount().value());
+                .addValue("paidAmount", item.paidAmount() == null ? null : item.paidAmount().value())
+                .addValue("reworks", item.reworks());
     }
 
     private RowMapper<TaskItemModel> rowMapper() {
@@ -146,7 +147,8 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
                 read(rs.getString("checks"), CHECKS), rs.getBoolean("auto_accepted"),
                 rs.getObject("source_snapshot_id", UUID.class),
                 rs.getBigDecimal("paid_amount") == null ? null : Money.of(rs.getBigDecimal("paid_amount")),
-                read(rs.getString("findings"), FINDINGS), read(rs.getString("anomalies"), ANOMALIES));
+                read(rs.getString("findings"), FINDINGS), read(rs.getString("anomalies"), ANOMALIES),
+                rs.getInt("rework_count"));
     }
 
     private String write(List<?> values) {
