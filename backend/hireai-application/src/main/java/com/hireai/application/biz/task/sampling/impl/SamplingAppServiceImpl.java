@@ -15,6 +15,7 @@ import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.event.ItemRejectedDomainEvent;
 import com.hireai.domain.biz.task.info.AgentRejectionResponseInfo;
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
+import com.hireai.domain.biz.task.item.model.FlaggedShareCap;
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
 import com.hireai.domain.biz.task.item.model.TaskItems;
 import com.hireai.domain.biz.task.model.ReviewWindow;
@@ -92,6 +93,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
     private final RejectionWindows itemWindows;
     private final ReviewWindow reviewWindow;
     private final Clock clock;
+    private final FlaggedShareCap flaggedShareCap;
     private final String publicBaseUrl;
     private final SecureRandom seeds = new SecureRandom();
 
@@ -103,7 +105,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
                                   OutputSpecJsonMapper outputSpecJsonMapper,
                                   SourceSnapshotAppService sourceSnapshotAppService,
                                   ApplicationEventPublisher eventPublisher, RejectionWindows windows,
-                                  ReviewWindow reviewWindow, Clock clock,
+                                  ReviewWindow reviewWindow, Clock clock, FlaggedShareCap flaggedShareCap,
                                   @Value("${hireai.platform.public-base-url:http://localhost:8080}")
                                   String publicBaseUrl) {
         this.taskRepository = taskRepository;
@@ -122,6 +124,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
         this.itemWindows = windows.countingBusinessDays();
         this.reviewWindow = reviewWindow;
         this.clock = clock;
+        this.flaggedShareCap = flaggedShareCap;
         this.publicBaseUrl = publicBaseUrl;
     }
 
@@ -142,7 +145,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
         }
         // The lot is the Items every check passed; an Item a check sent to review is the reviewer's to judge
         // on its own (D7) and is never drawn.
-        List<Integer> lot = taskItemRepository.findByTaskId(taskId).lot().stream()
+        List<Integer> lot = taskItemRepository.findByTaskId(taskId).lot(flaggedShareCap).stream()
                 .map(TaskItemModel::itemNo).toList();
         if (lot.isEmpty()) {
             // Nothing passed the checks this round: every Item already settled, is on its own path, or
@@ -243,7 +246,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
                 cumulative.sampled(), inspection.round());
         Instant now = clock.instant();
         if (decision.next() == SamplingDecision.Next.DRAW_SECOND) {
-            List<Integer> candidates = items.lot().stream().map(TaskItemModel::itemNo)
+            List<Integer> candidates = items.lot(flaggedShareCap).stream().map(TaskItemModel::itemNo)
                     .filter(n -> !sampledInRound.contains(n)).toList();
             if (candidates.isEmpty()) {
                 // The lot has nothing left to draw: the first sample was all of it, so judge it as both.
@@ -284,7 +287,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
             return;
         }
         inspectionRepository.save(inspection.startRework());
-        List<TaskItemModel> back = taskItemRepository.findByTaskId(task.id()).lot().stream()
+        List<TaskItemModel> back = taskItemRepository.findByTaskId(task.id()).lot(flaggedShareCap).stream()
                 .map(TaskItemModel::returnForRework).toList();
         taskItemRepository.updateAll(back);
         ReworkRequest request = new ReworkRequest(SAMPLE_REWORKS, SAMPLE_REWORKS, List.of(
@@ -300,7 +303,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
 
     private void settleProRata(TaskModel task, InspectionModel inspection, BigDecimal errorRate) {
         inspectionRepository.save(inspection.settleProRata(errorRate));
-        for (TaskItemModel item : taskItemRepository.findByTaskId(task.id()).lot()) {
+        for (TaskItemModel item : taskItemRepository.findByTaskId(task.id()).lot(flaggedShareCap)) {
             Money paid = ProRata.paidFor(item.price(), errorRate);
             if (paid.equals(item.price())) {
                 taskItemAppService.settleAccepted(task, item.accept());

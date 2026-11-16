@@ -9,12 +9,16 @@ D19, D21 in the [decision log](../superpowers/specs/2026-11-15-acceptance-contra
 
 - **The lot** is the Items that passed the Contract's checks when the Agent delivered (`PENDING_REVIEW`).
   Items that failed their checks or that the Agent could not do were refunded at once and are not in it.
-- **Items flagged for review are not in the lot** (#106, D7): an Item a check sent to review (for an invoice,
-  figures that don't add up) is never drawn, accepted with the lot, reworked with it or settled pro rata. The
-  reviewer judges it on its own, like an extra check (never counted), on the reviewer page's "Flagged for your own
-  check" list. An Agent's anomaly holds an Item out only by softening a failed anomaly-eligible check on it; one
-  that explains nothing is ignored here. When the review window closes, a flagged Item nobody judged is refunded
-  (`UNREVIEWED`, owner decision on #87) and is left out of the reputation event; the rest are accepted as below.
+- **Items flagged for review are not in the lot** (#106, D7), up to a cap: an Item a check sent to review (for an
+  invoice, figures that don't add up) is never drawn, accepted with the lot, reworked with it or settled pro rata.
+  The reviewer judges it on its own, like an extra check (never counted), on the reviewer page's "Flagged for your
+  own check" list. An Agent's anomaly holds an Item out only by softening a failed anomaly-eligible check on it; one
+  that explains nothing is ignored here. **The flagged-share cap** (`FlaggedShareCap`,
+  `hireai.acceptance.flagged-share` / `flagged-minimum`) limits how many flagged Items are held out: the first ones
+  in Item order up to that share of the Task's Items; flagged Items beyond it stay in the random lot, so an Agent
+  cannot shrink the sample or move Items it is unsure of out of it by flagging them. When the review window
+  closes, a flagged Item nobody judged is **accepted and paid** like any other (owner decision on #87: no refund
+  unless the Agent is shown wrong) and counts as accepted in the reputation event.
 - **One table for every Template** (`SampleSizeTable`, D21): ISO 2859-1 Table I gives the code letter for
   the lot size and inspection level; Table III-A gives the double sampling plan for that letter at
   **AQL 2.5**, normal inspection. Where the table has no double plan (its single plan accepts on zero

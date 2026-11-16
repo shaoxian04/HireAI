@@ -50,14 +50,12 @@ function ItemBadge({ item, taskStatus }: { item: TaskItemDTO; taskStatus: TaskSt
     REJECTED: "Rejected · being answered",
     CONCEDED: "Wrong · refunded",
     PRO_RATA: "Paid pro rata",
-    UNREVIEWED: "Not checked in time · refunded",
   };
   const COLOUR: Partial<Record<ItemStatus, string>> = {
     ACCEPTED: "RESOLVED",
     REJECTED: "AWAITING_AGENT_RESPONSE",
     CONCEDED: "FAILED",
     PRO_RATA: "PARTIALLY_ACCEPTED",
-    UNREVIEWED: "CANCELLED",
   };
   const colour = item.status === "AWAITING_RESULT" && ENDED.has(taskStatus) ? "CANCELLED" : item.status === "AWAITING_RESULT" ? "QUEUED" : COLOUR[item.status] ?? item.status;
   return <Badge status={colour}>{label[item.status]}</Badge>;
@@ -168,7 +166,7 @@ export function ItemsPanel({ task, now, onChange }: Props) {
 
   const awaiting = items.filter((i) => i.status === "PENDING_REVIEW");
   const accepted = items.filter((i) => i.status === "ACCEPTED").length;
-  const refunded = items.filter((i) => i.status === "SPEC_VIOLATION" || i.status === "FAILED" || i.status === "CONCEDED" || i.status === "UNREVIEWED").length;
+  const refunded = items.filter((i) => i.status === "SPEC_VIOLATION" || i.status === "FAILED" || i.status === "CONCEDED").length;
   const proRata = items.filter((i) => i.status === "PRO_RATA").length;
   const rejected = items.filter((i) => i.status === "REJECTED").length;
   const reviewing = task.status === "PENDING_REVIEW";

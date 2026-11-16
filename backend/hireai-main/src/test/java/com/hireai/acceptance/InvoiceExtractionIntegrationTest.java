@@ -54,6 +54,8 @@ import static org.awaitility.Awaitility.await;
  * up, with or without an anomaly), {@code broken} (not JSON).
  */
 @Import(TestClockConfig.class)
+// Two of the batch's seven invoices are flagged: a cap of 30% (2) holds both out for the reviewer's own check.
+@org.springframework.test.context.TestPropertySource(properties = "hireai.acceptance.flagged-share=0.30")
 class InvoiceExtractionIntegrationTest extends WholeAppIntegrationTest {
 
     private static final UUID DEV_USER = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -248,7 +250,7 @@ class InvoiceExtractionIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
-    void aFlaggedItemNobodyJudgesIsRefundedWhenTheReviewWindowClosesWithoutCountingAgainstTheAgent()
+    void aFlaggedItemNobodyJudgesIsAcceptedAndPaidWhenTheReviewWindowCloses()
             throws Exception {
         FakeAgent agent = invoiceAgent();
         UUID agentId = seedInvoiceAgent(agent, "1.00");
@@ -269,9 +271,10 @@ class InvoiceExtractionIntegrationTest extends WholeAppIntegrationTest {
 
         JsonNode task = getTask(taskId);
         assertThat(task.get("status").asText()).isEqualTo("RESOLVED");
-        assertThat(statuses(task)).containsExactly("ACCEPTED", "ACCEPTED", "UNREVIEWED");
-        assertThat(item(task, 3).get("refundAmount").decimalValue()).isEqualByComparingTo("1.00");
-        // Its work was never shown wrong: the Task's one reputation event weighs only the 2 judged Items.
+        // No refund unless the Agent is shown wrong (owner decision on #87): silence accepts the flagged Item.
+        assertThat(statuses(task)).containsExactly("ACCEPTED", "ACCEPTED", "ACCEPTED");
+        assertThat(item(task, 3).get("payoutAmount").decimalValue()).isPositive();
+        // It counts as accepted in the Task's one reputation event.
         assertThat(jdbc.queryForObject("SELECT quality FROM reputation_events WHERE task_id = ?", BigDecimal.class,
                 taskId)).isEqualByComparingTo("1.000");
     }

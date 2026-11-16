@@ -20,6 +20,7 @@ import com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository;
 import com.hireai.domain.biz.task.info.AgentResultInfo;
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
 import com.hireai.domain.biz.task.item.info.AgentItemResultInfo;
+import com.hireai.domain.biz.task.item.model.FlaggedShareCap;
 import com.hireai.domain.biz.task.item.model.ItemAcceptance;
 import com.hireai.domain.biz.task.item.model.ItemCheck;
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
@@ -74,6 +75,8 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
     private final DeliverySnapshotAppService deliverySnapshotAppService;
     /** Reads an invoice result for the ap_invoice_extraction checks (#106). */
     private final InvoiceReader invoiceReader;
+    /** How many flagged Items a Task holds out of the sampled lot (owner decision on #87). */
+    private final FlaggedShareCap flaggedShareCap;
 
     @Override
     public void createForSubmit(UUID taskId, List<ItemInput> inputs, Money price) {
@@ -192,22 +195,17 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
         acceptAndResolve(pendingReview, taskItemRepository.findByTaskId(pendingReview.id()), false, true);
     }
 
-    /** Accepts the Items awaiting review ({@code lotOnly}: not those a check sent to the reviewer, D7). */
+    /**
+     * Accepts the Items awaiting review ({@code lotOnly}: not those a check held out for the reviewer, D7).
+     * When the review window closes every Item still awaiting review is accepted, a flagged one too: no
+     * refund unless the Agent is shown wrong (owner decision on #87, revised 2026-11-16).
+     */
     private TaskModel acceptAndResolve(TaskModel pendingReview, TaskItems items, boolean automatically,
                                        boolean lotOnly) {
         TaskItems after = items;
         UUID builderId = builderOf(pendingReview);
         List<TaskItemModel> accepted = new ArrayList<>();
-        if (automatically && !lotOnly) {
-            // The review window closed (owner decision on #87, 2026-11-16): an Item a check sent to review
-            // that nobody judged is refunded, not accepted on silence; its Agent is not penalised for it.
-            for (TaskItemModel item : items.flaggedForReview()) {
-                TaskItemModel refunded = item.refundUnreviewed();
-                settleRefunded(pendingReview, refunded);
-                after = replace(after, refunded);
-            }
-        }
-        for (TaskItemModel item : automatically || lotOnly ? items.lot() : items.awaitingReview()) {
+        for (TaskItemModel item : lotOnly ? items.lot(flaggedShareCap) : items.awaitingReview()) {
             TaskItemModel next = automatically ? item.acceptAutomatically() : item.accept();
             settlementWriteAppService.settleItemAccepted(pendingReview.id(), next.id(), next.itemNo(),
                     pendingReview.clientId(), builderId, next.price());
@@ -271,14 +269,8 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
     }
 
     private void recordReputation(TaskModel task, TaskItems settled) {
-        // Items refunded because nobody judged them never count against the Agent (owner decision on #87).
-        int judged = settled.reputationCount();
-        if (judged == 0) {
-            log.info("Task {}: no Item was judged, so it writes no reputation event", task.id());
-            return;
-        }
         reputationWriteAppService.recordItemsOutcome(task.id(), task.agentVersionId(), task.clientId(),
-                settled.creditedCount(), judged);
+                settled.creditedCount(), settled.count());
     }
 
     @Override

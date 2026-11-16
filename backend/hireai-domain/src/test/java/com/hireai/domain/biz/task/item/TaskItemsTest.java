@@ -5,6 +5,7 @@ import com.hireai.domain.biz.adjudication.enums.CheckOutcome;
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
 import com.hireai.domain.biz.task.item.info.ItemInput;
 import com.hireai.domain.biz.task.item.model.ItemAcceptance;
+import com.hireai.domain.biz.task.item.model.FlaggedShareCap;
 import com.hireai.domain.biz.task.item.model.ItemCheck;
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
 import com.hireai.domain.biz.task.item.model.TaskItems;
@@ -26,6 +27,9 @@ class TaskItemsTest {
 
     private final UUID taskId = UUID.randomUUID();
     private static final List<ItemCheck> PASSED = List.of(new ItemCheck("FORMAT_TEXT_NON_EMPTY", true, null));
+    private static final FlaggedShareCap CAP = new FlaggedShareCap(new BigDecimal("0.10"), 1);
+    private static final List<ItemCheck> REVIEW = List.of(new ItemCheck("INVOICE_TOTAL", false, "mismatch",
+            CheckOutcome.REVIEW));
     private static final List<ItemCheck> FAILED = List.of(new ItemCheck("FORMAT_TEXT_NON_EMPTY", false, "empty"));
 
     @Test
@@ -54,8 +58,8 @@ class TaskItemsTest {
         assertThat(flagged.findings()).containsExactly(duplicate);
         assertThat(broken.status()).isEqualTo(ItemStatus.SPEC_VIOLATION);
         TaskItems items = new TaskItems(List.of(flagged, clean, broken));
-        assertThat(items.lot()).extracting(TaskItemModel::itemNo).containsExactly(2);
-        assertThat(items.flaggedForReview()).extracting(TaskItemModel::itemNo).containsExactly(1);
+        assertThat(items.lot(CAP)).extracting(TaskItemModel::itemNo).containsExactly(2);
+        assertThat(items.flaggedForReview(CAP)).extracting(TaskItemModel::itemNo).containsExactly(1);
         assertThat(items.awaitingReview()).hasSize(2);
         // Accepting keeps what was reported; a whole-Task rework takes the result, and its Findings, back.
         assertThat(flagged.accept().findings()).containsExactly(duplicate);
@@ -140,5 +144,56 @@ class TaskItemsTest {
         assertThat(open.allSettled()).isFalse();
         assertThat(open.awaitingReview()).extracting(TaskItemModel::itemNo).containsExactly(1);
         assertThat(open.anyPassed()).isTrue();
+    }
+
+    @Test
+    void theFlaggedShareIsCappedSoOverFlaggingCannotShrinkTheSampledLot() {
+        // 20 Items, every one flagged: 10% (2) are held out for the reviewer; the other 18 stay in the lot.
+        TaskItems submitted = TaskItems.submit(taskId, Collections.nCopies(20, "x"), Money.of("1.00"));
+        TaskItems allFlagged = new TaskItems(submitted.all().stream()
+                .map(i -> i.recordResult("COMPLETED", "{}", null, REVIEW)).toList());
+
+        assertThat(allFlagged.flaggedForReview(CAP)).extracting(TaskItemModel::itemNo).containsExactly(1, 2);
+        assertThat(allFlagged.lot(CAP)).hasSize(18);
+        // The same lot as if only the capped share had been flagged: the sample size cannot move.
+        TaskItems twoFlagged = new TaskItems(submitted.all().stream()
+                .map(i -> i.recordResult("COMPLETED", "{}", null, i.itemNo() <= 2 ? REVIEW : PASSED)).toList());
+        assertThat(allFlagged.lot(CAP)).extracting(TaskItemModel::itemNo)
+                .isEqualTo(twoFlagged.lot(CAP).stream().map(TaskItemModel::itemNo).toList());
+    }
+
+    @Test
+    void theHeldOutFlaggedItemsStayTheSameAsTheirStatusesChange() {
+        TaskItems submitted = TaskItems.submit(taskId, Collections.nCopies(10, "x"), Money.of("1.00"));
+        TaskItems flagged = new TaskItems(submitted.all().stream()
+                .map(i -> i.recordResult("COMPLETED", "{}", null, i.itemNo() <= 3 ? REVIEW : PASSED)).toList());
+        assertThat(flagged.flaggedForReview(CAP)).extracting(TaskItemModel::itemNo).containsExactly(1);
+
+        // The reviewer accepts the held-out Item: Items 2 and 3 do not move out of the lot.
+        TaskItems afterJudging = new TaskItems(flagged.all().stream()
+                .map(i -> i.itemNo() == 1 ? i.accept() : i).toList());
+        assertThat(afterJudging.flaggedForReview(CAP)).isEmpty();
+        assertThat(afterJudging.lot(CAP)).extracting(TaskItemModel::itemNo).contains(2, 3).hasSize(9);
+    }
+
+    @Test
+    void theCapIsAShareOfTheItemsWithAFloor() {
+        assertThat(CAP.allowed(3)).isEqualTo(1);
+        assertThat(CAP.allowed(25)).isEqualTo(2);
+        assertThat(CAP.allowed(100)).isEqualTo(10);
+        assertThatThrownBy(() -> new FlaggedShareCap(new BigDecimal("1.5"), 1))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new FlaggedShareCap(new BigDecimal("0.1"), -1))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void aFlaggedItemAcceptedOnSilenceIsPaidAndCountsAsAccepted() {
+        TaskItems submitted = TaskItems.submit(taskId, List.of("a", "b"), Money.of("1.00"));
+        TaskItems settled = new TaskItems(List.of(
+                submitted.item(1).recordResult("COMPLETED", "{}", null, REVIEW).acceptAutomatically(),
+                submitted.item(2).recordResult("COMPLETED", "{}", null, PASSED).acceptAutomatically()));
+        assertThat(settled.allAccepted()).isTrue();
+        assertThat(settled.creditedCount()).isEqualTo(2);
     }
 }

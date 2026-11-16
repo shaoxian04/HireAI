@@ -98,17 +98,23 @@ public record TaskItems(List<TaskItemModel> all) {
     }
 
     /**
-     * The sampled lot (spec S8): the Items awaiting review that every check passed. An Item a check sent to
-     * review ({@link TaskItemModel#needsReview()}, D7) is the reviewer's to judge on its own, so it is never
-     * drawn, accepted with the lot, reworked with it or settled pro rata.
+     * The sampled lot (spec S8): the Items awaiting review, less those a check sent to the reviewer's own
+     * judgement (D7) within the {@code cap}. A held-out Item is never drawn, accepted with the lot, reworked
+     * with it or settled pro rata; a flagged Item beyond the cap stays in the lot like any other.
      */
-    public List<TaskItemModel> lot() {
-        return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW && !i.needsReview()).toList();
+    public List<TaskItemModel> lot(FlaggedShareCap cap) {
+        List<TaskItemModel> heldOut = flaggedForReview(cap);
+        return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW && !heldOut.contains(i)).toList();
     }
 
-    /** The Items awaiting the reviewer's own judgement because a check sent them to review (D7). */
-    public List<TaskItemModel> flaggedForReview() {
-        return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW && i.needsReview()).toList();
+    /**
+     * The Items awaiting the reviewer's own judgement because a check sent them to review (D7): the first
+     * {@code cap.allowed(count())} flagged Items in Item order. The rank counts every flagged Item whatever its
+     * status, so judging a held-out Item never moves another flagged Item out of the lot.
+     */
+    public List<TaskItemModel> flaggedForReview(FlaggedShareCap cap) {
+        return all.stream().filter(TaskItemModel::needsReview).limit(cap.allowed(count()))
+                .filter(i -> i.status() == ItemStatus.PENDING_REVIEW).toList();
     }
 
     public boolean anyPassed() {
@@ -146,14 +152,6 @@ public record TaskItems(List<TaskItemModel> all) {
                 .map(i -> i.paidAmount().value().divide(i.price().value(), QUALITY_SCALE, RoundingMode.DOWN))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return acceptedCount() + proRata.setScale(0, RoundingMode.DOWN).intValue();
-    }
-
-    /**
-     * How many Items the Task's reputation event weighs (D22): all of them except those refunded because
-     * nobody judged them ({@code UNREVIEWED}), whose work was never shown wrong (owner decision on #87).
-     */
-    public int reputationCount() {
-        return (int) all.stream().filter(i -> i.status() != ItemStatus.UNREVIEWED).count();
     }
 
     public int acceptedCount() {
