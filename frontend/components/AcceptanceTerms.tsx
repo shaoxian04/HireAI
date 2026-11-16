@@ -8,7 +8,6 @@ import type {
   ContractValue,
   OfferDTO,
   OfferRange,
-  OutputFormat,
   TemplateDTO,
   TemplateParameterDTO,
 } from "@/lib/types";
