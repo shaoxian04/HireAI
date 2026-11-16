@@ -98,18 +98,18 @@ public record TaskItems(List<TaskItemModel> all) {
     }
 
     /**
-     * The lot the sample decides for (spec S8): the Items awaiting review that every check passed. Only these
-     * are ever settled without their own judgement: accepted with the lot (or at once on the API channel),
-     * reworked with it or settled pro rata. An Item a check sent to review ({@link TaskItemModel#needsReview()},
-     * D7) never is: the reviewer judges it, or it is accepted when the review window closes.
+     * The Items a passed lot (or the API channel) accepts and pays at once (spec S8): those awaiting review that
+     * every check passed. An Item a check sent to review ({@link TaskItemModel#needsReview()}, D7) is never
+     * paid without its own judgement: the reviewer judges it, or it is accepted when the review window closes.
      */
     public List<TaskItemModel> lot() {
         return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW && !i.needsReview()).toList();
     }
 
     /**
-     * The Items the random sample is drawn from (spec S8): the {@link #lot()}, plus every flagged Item beyond
-     * the {@code cap}. A flagged Item within the cap (the first ones, in Item order) is the reviewer's own
+     * The Items the random sample is drawn from, and that a failed lot reworks or settles pro rata (spec S8):
+     * the {@link #lot()}, plus every flagged Item beyond the {@code cap}. They share every penalty of the lot,
+     * but a passed lot still leaves the flagged ones to their own review. A flagged Item within the cap (the first ones, in Item order) is the reviewer's own
      * extra check and never drawn; one beyond it can be drawn and then counts in the error rate like any
      * sampled Item. So flagging more Items cannot shrink the population, the sample or the measured error
      * rate. The rank counts every flagged Item whatever its status, so judging one never moves another.

@@ -287,7 +287,8 @@ public class SamplingAppServiceImpl implements SamplingAppService {
             return;
         }
         inspectionRepository.save(inspection.startRework());
-        List<TaskItemModel> back = taskItemRepository.findByTaskId(task.id()).lot().stream()
+        // A failed lot takes back every Item the sample stood for, flagged Items beyond the cap included.
+        List<TaskItemModel> back = taskItemRepository.findByTaskId(task.id()).sampleable(flaggedShareCap).stream()
                 .map(TaskItemModel::returnForRework).toList();
         taskItemRepository.updateAll(back);
         ReworkRequest request = new ReworkRequest(SAMPLE_REWORKS, SAMPLE_REWORKS, List.of(
@@ -303,7 +304,8 @@ public class SamplingAppServiceImpl implements SamplingAppService {
 
     private void settleProRata(TaskModel task, InspectionModel inspection, BigDecimal errorRate) {
         inspectionRepository.save(inspection.settleProRata(errorRate));
-        for (TaskItemModel item : taskItemRepository.findByTaskId(task.id()).lot()) {
+        // Every unverified Item the sample stood for settles at the measured rate, flagged beyond the cap too.
+        for (TaskItemModel item : taskItemRepository.findByTaskId(task.id()).sampleable(flaggedShareCap)) {
             Money paid = ProRata.paidFor(item.price(), errorRate);
             if (paid.equals(item.price())) {
                 taskItemAppService.settleAccepted(task, item.accept());

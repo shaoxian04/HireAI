@@ -17,10 +17,10 @@ D19, D21 in the [decision log](../superpowers/specs/2026-11-15-acceptance-contra
   `hireai.acceptance.flagged-share` / `flagged-minimum`) decides sample membership only: the first flagged Items
   in Item order, up to that share of the Task's Items, are never drawn; flagged Items beyond it can be drawn
   (`TaskItems.sampleable`) and then count in the error rate like any sampled Item, so an Agent cannot shrink the
-  sample or move Items it is unsure of out of it by flagging them. Whatever the cap, a flagged Item is never
-  settled with the lot (`TaskItems.lot`: not accepted with it, at once on the API channel, reworked with it or
-  settled pro rata): the reviewer judges it, or when the review window closes it is **accepted and paid** like
-  any other (owner decision on #87: no refund unless the Agent is shown wrong) and counts as accepted in the
+  sample or move Items it is unsure of out of it by flagging them. They share the lot's penalties too: a failed
+  lot reworks them and settles them pro rata with the rest. But no flagged Item is ever paid without its own
+  judgement (`TaskItems.lot`: not accepted with a passed lot, nor at once on the API channel): the reviewer
+  judges it, or when the review window closes it is **accepted and paid** like any other (owner decision on #87: no refund unless the Agent is shown wrong) and counts as accepted in the
   reputation event.
 - **One table for every Template** (`SampleSizeTable`, D21): ISO 2859-1 Table I gives the code letter for
   the lot size and inspection level; Table III-A gives the double sampling plan for that letter at

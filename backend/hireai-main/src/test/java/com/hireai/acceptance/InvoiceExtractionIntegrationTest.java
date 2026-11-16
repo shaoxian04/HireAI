@@ -39,6 +39,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -312,6 +314,55 @@ class InvoiceExtractionIntegrationTest extends WholeAppIntegrationTest {
         clock.set(Instant.parse(task.get("reviewDeadline").asText()));
         taskReviewAppService.autoAcceptOne(taskId);
         assertThat(statuses(getTask(taskId))).containsOnly("ACCEPTED");
+    }
+
+    @Test
+    void aFailedLotReworksTheFlaggedItemsBeyondTheCapButNotThoseWithinIt() throws Exception {
+        FakeAgent agent = invoiceAgent();
+        UUID agentId = seedInvoiceAgent(agent, "1.00");
+        UUID engagementId = openEngagement(agentId);
+        // 30 invoices, Items 1-11 with figures that don't add up. The cap (30% of 30) is 9: Items 1-9 are the
+        // reviewer's own checks, Items 10 and 11 stand in the lot with the 19 clean ones.
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (int n = 1; n <= 30; n++) {
+            items.add(item(engagementId, "f-" + n + ".pdf", pdf("fail-" + n), n <= 11 ? "silent" : "ok"));
+        }
+        UUID taskId = book(agentId, engagementId, items, null);
+        awaitStatus(taskId, "PENDING_REVIEW");
+        List<Integer> withinCap = List.of(1, 2, 3, 4, 5, 6, 7, 8, 9);
+        List<Integer> beyondCap = List.of(10, 11);
+
+        Set<Integer> judged = new HashSet<>();
+        for (int draw = 0; draw < 2; draw++) {
+            List<Integer> sample = new ArrayList<>();
+            get("/api/tasks/" + taskId + "/inspection").get("draws").get(draw).get("itemNos")
+                    .forEach(n -> sample.add(n.asInt()));
+            assertThat(sample).hasSize(8).doesNotContainAnyElementsOf(withinCap);
+            // One wrong Item in each sample: the lot fails, and the whole Task goes back once.
+            judge(taskId, sample.get(0), Map.of("passed", false, "reasonCategory", "B_FACTUAL", "reason", "wrong"));
+            concede(agent, taskId, sample.get(0));
+            for (int n : sample.subList(1, sample.size())) {
+                judge(taskId, n, Map.of("passed", true));
+            }
+            judged.addAll(sample);
+        }
+
+        RecordedWorkOrder rework = await().atMost(Duration.ofSeconds(20)).until(() -> agent.workOrders().stream()
+                .filter(o -> o.json().has("rework")).findFirst(), java.util.Optional::isPresent).get();
+        List<Integer> returned = new ArrayList<>();
+        rework.json().get("items").forEach(i -> returned.add(i.get("itemNo").asInt()));
+        // Flagged Items beyond the cap share the lot's penalty unless the sample already judged them; those
+        // within it stay the reviewer's own, untouched by the lot's outcome.
+        for (int n : beyondCap) {
+            assertThat(judged.contains(n) || returned.contains(n)).as("Item %d", n).isTrue();
+        }
+        assertThat(returned).hasSize(30 - 9 - 16).doesNotContainAnyElementsOf(withinCap)
+                .doesNotContainAnyElementsOf(judged);
+        JsonNode task = getTask(taskId);
+        for (int n : withinCap) {
+            assertThat(item(task, n).get("status").asText()).isEqualTo("PENDING_REVIEW");
+            assertThat(item(task, n).get("payoutAmount")).isNull();
+        }
     }
 
     @Test
