@@ -12,4 +12,10 @@ public interface DeliverySnapshotRepository {
 
     /** The snapshot taken for one result (a revised result has its own id). */
     Optional<DeliverySnapshot> findByTaskResultId(UUID taskResultId);
+
+    /**
+     * The snapshot of an Item's latest attempt (its first result, the whole-Task rework, a revision):
+     * the last one fetched for it. Earlier attempts' snapshots stay stored.
+     */
+    Optional<DeliverySnapshot> findLatestForItem(UUID itemId);
 }

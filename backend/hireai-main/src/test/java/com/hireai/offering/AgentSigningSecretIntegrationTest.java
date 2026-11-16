@@ -122,9 +122,11 @@ class AgentSigningSecretIntegrationTest extends WholeAppIntegrationTest {
 
         // Full-row agent saves (activate, publish a version) must not wipe the secret column.
         assertThat(send("POST", "/api/agents/" + agentId + "/activate", builder, null).statusCode()).isEqualTo(200);
-        assertThat(send("POST", "/api/agents/" + agentId + "/versions", builder,
-                "{\"price\":7,\"maxExecutionSeconds\":60,\"capabilityCategories\":[\"summarisation\"]}")
-                .statusCode()).isEqualTo(200);
+        HttpResponse<String> published = send("POST", "/api/agents/" + agentId + "/versions", builder,
+                "{\"price\":7,\"maxExecutionSeconds\":60,\"capabilityCategories\":[\"summarisation\"]}");
+        assertThat(published.statusCode()).as(published.body()).isEqualTo(200);
+        // The publish response reads the Agent back after the save: it still has its secret.
+        assertThat(mapper.readTree(published.body()).path("data").path("hasSigningSecret").asBoolean()).isTrue();
 
         assertThat(storedSecret(agentId)).isEqualTo(secret);
     }

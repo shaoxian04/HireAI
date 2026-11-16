@@ -70,8 +70,9 @@ public class TaskRepositoryImpl implements TaskRepository {
                         result.id(), result.taskId(), result.resultPayloadJson(),
                         result.resultUrl(), result.agentStatus(), result.receivedAt()));
             } else if (!stored.get().getId().equals(result.id())) {
-                // A revision (#95) is a new result for a task that already has one: it replaces it.
-                taskResultJpa.replaceResult(result.taskId(), result.resultPayloadJson(), result.resultUrl(),
+                // A rework (#98) or revision (#95) is a new result for a task that already has one: it
+                // replaces it, id included, so the current result's DeliverySnapshot is the one found.
+                taskResultJpa.replaceResult(result.taskId(), result.id(), result.resultPayloadJson(), result.resultUrl(),
                         result.agentStatus(), result.receivedAt());
             }
         }

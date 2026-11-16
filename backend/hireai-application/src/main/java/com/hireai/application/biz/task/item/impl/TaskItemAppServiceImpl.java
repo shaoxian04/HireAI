@@ -311,7 +311,7 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
         TaskResultModel asResult = TaskResultModel.rehydrate(resultId, item.taskId(), agentStatus,
                 payloadOf(payload), url, clock.instant());
         DeliveryOutcome delivery = validationDomainService.needsDelivery(contract, asResult)
-                ? deliverySnapshotAppService.capture(contract, asResult)
+                ? deliverySnapshotAppService.capture(contract, asResult, item.id())
                 : null;
         InvoiceReading invoice = validationDomainService.needsInvoice(contract) ? invoiceReader.read(payload) : null;
         FindingFacts facts = FindingFacts.NONE;

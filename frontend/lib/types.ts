@@ -511,6 +511,8 @@ export interface DirectBookRequest {
   deadlineSeconds?: number;
   /** Optional: the Contract to book under; the agent's Offer must cover it, and it is frozen on the task. */
   contract?: ContractDTO;
+  /** Optional, with `contract`: the draft's extraction the booking was made from, kept on the task (D7). */
+  extraction?: ExtractionDTO;
   /**
    * Optional: a multi-Item Task's Items (2+). A string is a text Item; `{ sourceId }` is an Item whose
    * input is a document uploaded to the Engagement (`input` defaults to its file name). With Items,
@@ -756,6 +758,11 @@ export interface AdminSettlementPreviewDTO {
   notFulfilledRefund: number;
   partialBuilderNet: number;
   partialClientRefund: number;
+  /** Loser pays: the dispute fees each side would bear under each outcome. */
+  fulfilledClientFees: number;
+  notFulfilledBuilderFees: number;
+  partialClientFees: number;
+  partialBuilderFees: number;
 }
 
 export interface AdminDisputeDetailDTO {
@@ -777,7 +784,8 @@ export interface AdminDisputeDetailDTO {
   builderName: string | null;
   agentReputation: number | null;
   agentPrice: number | null;
-  outputSpecJson: string | null;
+  /** The task's frozen Contract (JSON), the binding terms. */
+  contractJson: string | null;
   resultPayloadJson: string | null;
   resultUrl: string | null;
   agentStatus: string | null;

@@ -37,6 +37,41 @@ public final class ContractRequest2ModelConverter {
         return new Contract(new TemplateRef(request.template(), request.version()), params);
     }
 
+    /**
+     * The extraction a booking carries back from its draft (D7), or null. Mapped requirements keep their
+     * check and parameter values, unmapped ones their reason.
+     */
+    public static com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord toModel(
+            com.hireai.controller.biz.acceptance.dto.ExtractionRequest request) {
+        if (request == null) {
+            return null;
+        }
+        var requirements = (request.requirements() == null
+                ? java.util.List.<com.hireai.controller.biz.acceptance.dto.ExtractionRequest.RequirementRequest>of()
+                : request.requirements()).stream().map(r -> {
+                    if (r.mapped()) {
+                        if (r.check() == null || r.check().isBlank()) {
+                            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                                    "extraction.requirements: a mapped requirement names its check");
+                        }
+                        Map<String, ParameterValue> params = new LinkedHashMap<>();
+                        if (r.params() != null) {
+                            r.params().forEach((name, raw) -> {
+                                if (raw != null) {
+                                    params.put(name, value(name, raw));
+                                }
+                            });
+                        }
+                        return com.hireai.domain.biz.acceptance.extraction.model.ExtractedRequirement.mapped(
+                                r.text(), r.check(), params);
+                    }
+                    return com.hireai.domain.biz.acceptance.extraction.model.ExtractedRequirement.unmapped(
+                            r.text(), r.unmappedReason());
+                }).toList();
+        return new com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord(
+                new TemplateRef(request.template(), request.version()), request.status(), requirements);
+    }
+
     private static ParameterValue value(String name, Object raw) {
         if (raw instanceof Boolean b) {
             return new ParameterValue.Flag(b);

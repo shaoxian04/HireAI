@@ -1,4 +1,5 @@
-import type { OutputSpecDTO, ValidationCheckDTO, ValidationReportDTO } from "@/lib/types";
+import type { ContractDTO, ExtractionDTO, OutputSpecDTO, ValidationCheckDTO, ValidationReportDTO } from "@/lib/types";
+import { requirementsYouJudge } from "@/lib/extraction";
 
 /** What each automated check actually verified, in the client's words. */
 const RULE_TEXT: Record<string, string> = {
@@ -133,6 +134,8 @@ export function InspectionReport({
   spec,
   awaitingYou,
   autoAccepted = false,
+  contract,
+  extraction,
 }: {
   report: ValidationReportDTO;
   spec: OutputSpecDTO;
@@ -140,11 +143,17 @@ export function InspectionReport({
   awaitingYou: boolean;
   /** The review window closed unreviewed (#94), so nobody judged the acceptance criteria. */
   autoAccepted?: boolean;
+  /** The task's frozen Contract and what extraction made of its description (D7). */
+  contract?: ContractDTO | null;
+  extraction?: ExtractionDTO | null;
 }) {
+  const yours = requirementsYouJudge(extraction, contract);
   const stamp = STAMP[report.verdict] ?? STAMP.FAIL;
   const anomalies = report.anomalies ?? [];
   const findings = report.findings ?? [];
-  const previous = report.previousAttempts ?? [];
+  // Only results a check rejected were sent back for rework; a passed earlier result was replaced by the
+  // agent revising it after the client's rejection, which the rejection panel already explains.
+  const previous = (report.previousAttempts ?? []).filter((a) => a.verdict === "FAIL");
   return (
     <section aria-labelledby="inspection-h" className="docket overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-3 px-5 pb-3 pt-5">
@@ -209,11 +218,28 @@ export function InspectionReport({
                   ? "Acceptance criteria not judged: the review window closed first"
                   : "Acceptance criteria, judged by you when you reviewed it"}
             </p>
-            <p className="mt-0.5 text-sm text-muted">
-              {spec.acceptanceCriteria
-                ? spec.acceptanceCriteria
-                : "The contract sets no acceptance criteria, so judge it against your brief."}
-            </p>
+            {(spec.acceptanceCriteria || yours.length === 0) && (
+              <p className="mt-0.5 text-sm text-muted">
+                {spec.acceptanceCriteria
+                  ? spec.acceptanceCriteria
+                  : "The contract sets no acceptance criteria, so judge it against your brief."}
+              </p>
+            )}
+            {yours.length > 0 && (
+              <>
+                <p id="inspection-yours-h" className="mt-1.5 text-sm text-muted">
+                  From your description, not checked automatically: you judge these.
+                </p>
+                <ul aria-labelledby="inspection-yours-h" className="mt-1.5 space-y-1.5">
+                  {yours.map((r, i) => (
+                    <li key={i} className="border-l-2 border-amber pl-2.5">
+                      <p className="text-sm text-fg">&ldquo;{r.text}&rdquo;</p>
+                      <p className="text-xs text-dim">{r.why}</p>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </div>
         </li>
       </ol>

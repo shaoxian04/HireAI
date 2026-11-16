@@ -85,7 +85,7 @@ public class JdbcAdminQueryDao implements AdminQueryPort {
                        t.gmt_create AS submitted_at, tr.received_at AS result_received_at,
                        ag.name AS agent_name, split_part(bu.email, '@', 1) AS builder_name,
                        ag.reputation_score AS agent_reputation, av.price AS agent_price,
-                       av.output_spec::text AS output_spec_json,
+                       t.contract::text AS contract_json,
                        tr.result_payload::text AS result_payload_json, tr.result_url, tr.agent_status
                 FROM tasks t
                 JOIN users u ON u.id = t.client_id
@@ -103,7 +103,7 @@ public class JdbcAdminQueryDao implements AdminQueryPort {
                 toInstant(rs.getTimestamp("submitted_at")), toInstant(rs.getTimestamp("result_received_at")),
                 rs.getString("agent_name"), rs.getString("builder_name"),
                 rs.getBigDecimal("agent_reputation"), rs.getBigDecimal("agent_price"),
-                rs.getString("output_spec_json"), rs.getString("result_payload_json"),
+                rs.getString("contract_json"), rs.getString("result_payload_json"),
                 rs.getString("result_url"), rs.getString("agent_status")));
         return rows.stream().findFirst();
     }

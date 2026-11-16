@@ -157,4 +157,12 @@ describe("ItemsPanel", () => {
 
     expect(screen.getAllByText(/waiting for the agent/i)).toHaveLength(3);
   });
+
+  it("says accepting all also accepts the Items flagged for the client's own check", () => {
+    const flagged = { ...ITEMS[0], itemNo: 4, needsReview: true } as TaskItemDTO;
+    render(<ItemsPanel task={task({ items: [ITEMS[0], flagged], itemCount: 2 })} now={NOW} onChange={() => {}} />);
+    expect(screen.getByText(/not decided by the sample/i)).toHaveTextContent(/accepting all accepts them too/i);
+    expect(screen.queryByText(/never paid with the batch/i)).not.toBeInTheDocument();
+  });
 });
+

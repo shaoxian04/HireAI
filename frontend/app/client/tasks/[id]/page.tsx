@@ -418,6 +418,8 @@ function TaskDetail() {
           spec={task.outputSpec}
           awaitingYou={task.status === "PENDING_REVIEW"}
           autoAccepted={!!task.autoAccepted}
+          contract={task.contract}
+          extraction={task.extraction}
         />
       )}
 
@@ -513,7 +515,7 @@ function TaskDetail() {
               {task.resolution === "ACCEPTED" ? (
                 <>
                   <p className="text-[0.9375rem] text-fg">
-                    <span className="tabular font-bold text-green">{task.payoutAmount} cr</span> paid to the builder
+                    <span className="tabular font-bold text-green">{Number(task.payoutAmount ?? 0).toFixed(2)} cr</span> paid to the builder
                   </p>
                   {task.autoAccepted && (
                     <p className="text-sm text-muted">
@@ -529,7 +531,7 @@ function TaskDetail() {
               ) : (
                 <>
                   <p className="text-[0.9375rem] text-fg">
-                    <span className="tabular font-bold text-fg">{task.refundAmount} cr</span> refunded to your wallet
+                    <span className="tabular font-bold text-fg">{Number(task.refundAmount ?? 0).toFixed(2)} cr</span> refunded to your wallet
                     {task.rejectionReason ? <span className="text-muted"> — “{task.rejectionReason}”</span> : null}
                   </p>
                   {task.rejection?.response === "CONCEDE" && (

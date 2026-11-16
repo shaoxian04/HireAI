@@ -20,12 +20,15 @@ public final class AdminViews {
                              String reasonCategory, Instant createdAt, String clientName,
                              boolean hasArbitratorRuling, boolean needsAttention) {}
 
-    /** Full evidence a DAO assembles for the dispute detail (task submission + agent + result). */
+    /**
+     * Full evidence a DAO assembles for the dispute detail (task submission + agent + result).
+     * {@code contractJson} is the task's frozen Contract, the binding terms (Hard Invariant #4).
+     */
     public record Evidence(UUID taskId, String taskTitle, String taskDescription, String clientName,
                            String clientReason, BigDecimal budget, String category, String outputFormat,
                            Instant submittedAt, Instant resultReceivedAt,
                            String agentName, String builderName, BigDecimal agentReputation, BigDecimal agentPrice,
-                           String outputSpecJson, String resultPayloadJson, String resultUrl, String agentStatus) {}
+                           String contractJson, String resultPayloadJson, String resultUrl, String agentStatus) {}
 
     /**
      * The result's frozen DeliverySnapshot (D24), null when it has none. The admin judges this copy
@@ -49,12 +52,16 @@ public final class AdminViews {
 
     /**
      * What each ruling category would settle for this budget, computed server-side from SettlementPolicy
-     * (so the money math is never duplicated in the UI). Amounts are indicative — the actual movement
-     * still happens deterministically in the domain at apply-time (Inv #3).
+     * (so the money math is never duplicated in the UI), and the dispute fees the side(s) it goes against
+     * would bear (loser pays, D43: the arbitration cost, plus the Appeal Fee once appealed, each capped).
+     * Amounts are indicative — the actual movement still happens deterministically in the domain at
+     * apply-time (Inv #3), and a fee a wallet cannot cover is borne by the platform.
      */
     public record SettlementPreview(BigDecimal budget, BigDecimal fulfilledPayout, BigDecimal fulfilledCommission,
                                     BigDecimal notFulfilledRefund, BigDecimal partialBuilderNet,
-                                    BigDecimal partialClientRefund) {}
+                                    BigDecimal partialClientRefund, BigDecimal fulfilledClientFees,
+                                    BigDecimal notFulfilledBuilderFees, BigDecimal partialClientFees,
+                                    BigDecimal partialBuilderFees) {}
 
     public record DisputeDetail(UUID disputeId, UUID taskId, String taskTitle, String taskDescription,
                                 String status, String reasonCategory, String clientReason,
@@ -62,7 +69,7 @@ public final class AdminViews {
                                 BigDecimal budget, String category, String outputFormat,
                                 Instant submittedAt, Instant resultReceivedAt,
                                 String agentName, String builderName, BigDecimal agentReputation, BigDecimal agentPrice,
-                                String outputSpecJson, String resultPayloadJson, String resultUrl, String agentStatus,
+                                String contractJson, String resultPayloadJson, String resultUrl, String agentStatus,
                                 DeliverableView deliverable,
                                 boolean actionable, SettlementPreview settlementPreview, List<RulingView> rulings) {}
 }

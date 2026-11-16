@@ -1,6 +1,7 @@
 package com.hireai.controller.biz.task.dto;
 
 import com.hireai.controller.biz.acceptance.dto.ContractRequest;
+import com.hireai.controller.biz.acceptance.dto.ExtractionRequest;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.hireai.domain.biz.task.item.info.ItemInput;
@@ -56,7 +57,13 @@ public record DirectBookRequest(
          * Optional, with Items (spec S8, D21): the sampling inspection level, II (the default) or III when
          * the Agent's Offer allows it. A stricter level samples more Items.
          */
-        InspectionLevel inspectionLevel
+        InspectionLevel inspectionLevel,
+        /**
+         * Optional, with {@code contract}: the extraction of the {@code POST /api/contracts/draft} the
+         * Client booked from, kept on the Task as the record of what each requirement became (which are
+         * checked automatically, which the Client judges). It must name the Contract's Template version.
+         */
+        @Valid ExtractionRequest extraction
 ) {
 
     /** The criteria code cannot check, in the Client's words. */

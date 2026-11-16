@@ -48,9 +48,7 @@ public class AgentRepositoryImpl implements AgentRepository {
 
     @Override
     public AgentModel save(AgentModel agent) {
-        agentJpa.save(new AgentDO(
-                agent.id(), agent.ownerId(), agent.name(), agent.status().name(),
-                agent.currentVersionId(), agent.reputationScore(), agent.createdAt()));
+        saveAgentRow(agent);
 
         AgentVersionModel version = agent.currentVersion();
         if (version != null && versionJpa.findById(version.id()).isEmpty()) {
@@ -80,9 +78,17 @@ public class AgentRepositoryImpl implements AgentRepository {
                 v.maxExecutionSeconds(), v.maxConcurrent(), v.pricing().price(),
                 v.status().name(), v.createdAt()));
         // 3. update the agent row (current_version_id now points at the new version when ACTIVE).
-        agentJpa.save(new AgentDO(
-                agent.id(), agent.ownerId(), agent.name(), agent.status().name(),
-                agent.currentVersionId(), agent.reputationScore(), agent.createdAt()));
+        saveAgentRow(agent);
+    }
+
+    /** Inserts the agent row, or updates the managed one in place (keeping its signing-secret flag). */
+    private void saveAgentRow(AgentModel agent) {
+        agentJpa.findById(agent.id()).ifPresentOrElse(
+                row -> row.update(agent.name(), agent.status().name(), agent.currentVersionId(),
+                        agent.reputationScore()),
+                () -> agentJpa.save(new AgentDO(
+                        agent.id(), agent.ownerId(), agent.name(), agent.status().name(),
+                        agent.currentVersionId(), agent.reputationScore(), agent.createdAt())));
     }
 
     @Override

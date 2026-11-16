@@ -16,15 +16,17 @@ public interface TaskResultJpaRepository extends JpaRepository<TaskResultDO, UUI
     Optional<TaskResultDO> findByTaskId(UUID taskId);
 
     /**
-     * Replaces a task's delivered result with the Agent's revision (#95). The row keeps its id; the
-     * replaced content is kept on the rejection round it answered.
+     * Replaces a task's delivered result with the Agent's rework (#98) or revision (#95). The row takes
+     * the new result's id, the id its DeliverySnapshot is keyed by, so every reader finds the current
+     * result's frozen file; the replaced result's snapshot stays on record under its own id, and its
+     * content is kept on the rejection round it answered.
      */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query(value = """
-            UPDATE task_results SET result_payload = :payload, result_url = :url, agent_status = :status,
+            UPDATE task_results SET id = :id, result_payload = :payload, result_url = :url, agent_status = :status,
                    received_at = :receivedAt, gmt_modified = now()
              WHERE task_id = :taskId
             """, nativeQuery = true)
-    int replaceResult(@Param("taskId") UUID taskId, @Param("payload") String payload, @Param("url") String url,
+    int replaceResult(@Param("taskId") UUID taskId, @Param("id") UUID id, @Param("payload") String payload, @Param("url") String url,
                       @Param("status") String status, @Param("receivedAt") Instant receivedAt);
 }

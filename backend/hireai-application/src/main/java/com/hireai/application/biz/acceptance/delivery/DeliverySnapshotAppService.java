@@ -20,7 +20,12 @@ public interface DeliverySnapshotAppService {
      * (capped by {@code hireai.delivery.max-bytes}), hashes and stores the bytes and records the
      * snapshot. Idempotent per result: a result that already has a snapshot returns it unfetched.
      */
-    DeliveryOutcome capture(Contract contract, TaskResultModel result);
+    default DeliveryOutcome capture(Contract contract, TaskResultModel result) {
+        return capture(contract, result, null);
+    }
+
+    /** {@link #capture(Contract, TaskResultModel)} for one Item's attempt ({@code itemId} null for a whole Task). */
+    DeliveryOutcome capture(Contract contract, TaskResultModel result, java.util.UUID itemId);
 
     Optional<DeliverySnapshot> findForResult(TaskResultModel result);
 

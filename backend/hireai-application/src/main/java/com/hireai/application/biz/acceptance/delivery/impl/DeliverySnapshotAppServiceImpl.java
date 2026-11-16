@@ -49,7 +49,7 @@ public class DeliverySnapshotAppServiceImpl implements DeliverySnapshotAppServic
     }
 
     @Override
-    public DeliveryOutcome capture(Contract contract, TaskResultModel result) {
+    public DeliveryOutcome capture(Contract contract, TaskResultModel result, java.util.UUID itemId) {
         Optional<DeliverySnapshot> existing = snapshotRepository.findByTaskResultId(result.id());
         if (existing.isPresent()) {
             return new DeliveryOutcome.Captured(existing.get());
@@ -58,7 +58,7 @@ public class DeliverySnapshotAppServiceImpl implements DeliverySnapshotAppServic
         DeliveryFetch fetch = fetchPort.fetch(result.resultUrl(), limit);
         return switch (fetch) {
             case DeliveryFetch.Fetched fetched -> {
-                DeliverySnapshot snapshot = DeliverySnapshot.capture(result.taskId(), result.id(),
+                DeliverySnapshot snapshot = DeliverySnapshot.capture(result.taskId(), result.id(), itemId,
                         result.resultUrl(), fetched, clock.instant());
                 contentStore.put(snapshot.sha256(), fetched.content());
                 snapshotRepository.save(snapshot);
