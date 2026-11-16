@@ -21,6 +21,7 @@ import com.hireai.controller.biz.task.dto.DirectBookRequest;
 import com.hireai.controller.biz.task.dto.DispatchAttemptDTO;
 import com.hireai.controller.biz.task.dto.MatchPreviewDTO;
 import com.hireai.controller.biz.task.dto.MatchPreviewRequest;
+import com.hireai.controller.biz.acceptance.converter.Acceptance2DTOConverter;
 import com.hireai.controller.biz.acceptance.converter.ContractRequest2ModelConverter;
 import com.hireai.controller.biz.task.dto.RejectTaskRequest;
 import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
@@ -118,8 +119,7 @@ public class TaskController extends BaseController {
                 request.items());
         UUID taskId = submitOrchestrationAppService.submitRouted(
                 submitContext(clientId, idempotencyKey), info);
-        TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId));
-        return ok(dto);
+        return ok(withTemplateFallback(readAppService.getForClient(taskId, clientId)));
     }
 
     @PostMapping("/direct")
@@ -134,7 +134,13 @@ public class TaskController extends BaseController {
                         request.category() == null || request.category().isBlank() ? null : request.category(),
                         request.deadlineSeconds(), ContractRequest2ModelConverter.toModel(request.contract()),
                         request.items()));
-        return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId)));
+        return ok(withTemplateFallback(readAppService.getForClient(taskId, clientId)));
+    }
+
+    /** A submit/booking response: the task, and whether its Contract fell back a version (spec D36). */
+    private TaskDTO withTemplateFallback(TaskModel task) {
+        return TaskModel2DTOConverter.toDTO(task).withTemplateFallback(
+                Acceptance2DTOConverter.toDTO(readAppService.findTemplateFallback(task).orElse(null)));
     }
 
     /**
@@ -158,7 +164,9 @@ public class TaskController extends BaseController {
         return ok(TaskModel2DTOConverter.toDTO(task, agentId,
                 readAppService.findReviewWindow(task).orElse(null),
                 rejectionAppService.findLatest(task.id()).orElse(null),
-                readAppService.findFailureDetail(task).orElse(null), readAppService.findItems(task), true));
+                readAppService.findFailureDetail(task).orElse(null), readAppService.findItems(task), true)
+                .withTemplateFallback(Acceptance2DTOConverter.toDTO(
+                        readAppService.findTemplateFallback(task).orElse(null))));
     }
 
     @GetMapping("/{taskId}/result")

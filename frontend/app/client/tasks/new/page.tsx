@@ -8,6 +8,7 @@ import { errorFor, toFormError, useFocusOnFieldError, validateForm, type FormErr
 const TASK_FIELDS = { title: "Title", description: "Description", budget: "Budget", deadlineSeconds: "Deadline" };
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
+import { VersionFallbackNotice } from "@/components/VersionFallbackNotice";
 import { ShortlistPanel } from "@/components/ShortlistPanel";
 import { CategoryCombobox } from "@/components/CategoryCombobox";
 import { ContractTermsField, parameterLabel, withoutParameter } from "@/components/ContractTermsField";
@@ -352,6 +353,8 @@ function SubmitTask() {
           noMatch={preview.noMatch ?? null}
           labelFor={(p) => parameterLabel(contractTemplate, p)}
           onRelax={onRelax}
+          fallback={preview.fallback ?? null}
+          templateTitle={contractTemplate?.title}
           budget={budgetValue}
           onSelect={(o) => {
             setSelected(o);
@@ -390,6 +393,11 @@ function SubmitTask() {
               ? <>The agent is held to your output terms: {contractTemplate.title}.</>
               : "The agent works under its own output terms."}
           </p>
+          {contractTemplate && preview?.fallback && (
+            <div className="mt-3">
+              <VersionFallbackNotice fallback={preview.fallback} templateTitle={contractTemplate.title} context="booking" />
+            </div>
+          )}
           <div className="mt-4 flex items-center gap-4">
             <Button onClick={onBook} disabled={loading}>
               {loading ? "Booking…" : "Confirm & book"}

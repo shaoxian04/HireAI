@@ -1,6 +1,7 @@
 package com.hireai.application.biz.task;
 
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.acceptance.template.info.VersionFallback;
 import com.hireai.domain.biz.task.routing.info.NoMatchExplanation;
 import com.hireai.domain.biz.task.dispatchattempt.info.ContractDeclineRate;
 import com.hireai.domain.shared.model.Money;
@@ -46,10 +47,16 @@ public interface MatchPreviewAppService {
     /**
      * {@code noCloseMatch}: the shortlist is empty although Agents in the category fit the budget (and
      * deadline), because every one of them is below the relevance floor. False when there simply is
-     * no such Agent.
+     * no such Agent. {@code fallback} (spec D36): the preview's Contract was matched under the previous
+     * Template version because no Agent's Offer covers the current one yet; null otherwise.
      */
     record MatchPreview(List<AgentOption> shortlist, List<AgentOption> nearMisses, boolean noCloseMatch,
-                        NoMatchExplanation noMatch) {
+                        NoMatchExplanation noMatch, VersionFallback fallback) {
+
+        public MatchPreview(List<AgentOption> shortlist, List<AgentOption> nearMisses, boolean noCloseMatch,
+                            NoMatchExplanation noMatch) {
+            this(shortlist, nearMisses, noCloseMatch, noMatch, null);
+        }
 
         public MatchPreview(List<AgentOption> shortlist, List<AgentOption> nearMisses, boolean noCloseMatch) {
             this(shortlist, nearMisses, noCloseMatch, null);
