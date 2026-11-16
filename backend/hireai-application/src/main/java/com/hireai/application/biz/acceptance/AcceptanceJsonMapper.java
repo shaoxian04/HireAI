@@ -7,6 +7,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.hireai.domain.biz.acceptance.aireview.model.AiReviewTerms;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.acceptance.contract.model.ParameterValue;
+import com.hireai.domain.biz.acceptance.extraction.enums.ExtractionStatus;
+import com.hireai.domain.biz.acceptance.extraction.model.ExtractedRequirement;
+import com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
 import com.hireai.domain.biz.acceptance.offer.model.OfferTerm;
 import com.hireai.domain.biz.task.sampling.enums.InspectionLevel;
@@ -104,6 +107,42 @@ public class AcceptanceJsonMapper {
             return new ParameterValue.Flag(node.asBoolean());
         }
         throw corrupt("Contract parameter " + name + " has an unreadable value");
+    }
+
+    // ---- Extraction record (V53__contract_extraction.sql documents the shape) ----
+
+    public String toJson(ExtractionRecord record) {
+        ObjectNode root = refNode(record.template());
+        root.put("status", record.status().name());
+        ArrayNode requirements = root.putArray("requirements");
+        for (ExtractedRequirement r : record.requirements()) {
+            ObjectNode node = requirements.addObject();
+            node.put("text", r.text());
+            if (r.mapped()) {
+                node.put("check", r.check());
+                ObjectNode params = node.putObject("params");
+                r.params().forEach((name, value) -> params.set(name, valueNode(value)));
+            } else {
+                node.put("unmappedReason", r.unmappedReason());
+            }
+        }
+        return write(root);
+    }
+
+    public ExtractionRecord extractionFromJson(String json) {
+        JsonNode root = read(json);
+        List<ExtractedRequirement> requirements = new ArrayList<>();
+        for (JsonNode node : root.path("requirements")) {
+            String text = node.path("text").asText();
+            if (node.hasNonNull("check")) {
+                Map<String, ParameterValue> params = new LinkedHashMap<>();
+                node.path("params").fields().forEachRemaining(e -> params.put(e.getKey(), value(e.getKey(), e.getValue())));
+                requirements.add(ExtractedRequirement.mapped(text, node.path("check").asText(), params));
+            } else {
+                requirements.add(ExtractedRequirement.unmapped(text, node.path("unmappedReason").asText(null)));
+            }
+        }
+        return new ExtractionRecord(ref(root), ExtractionStatus.valueOf(root.path("status").asText()), requirements);
     }
 
     // ---- Offer ----

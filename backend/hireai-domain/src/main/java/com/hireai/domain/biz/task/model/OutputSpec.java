@@ -31,6 +31,16 @@ public record OutputSpec(OutputFormat format, String schema, String acceptanceCr
         }
     }
 
+    /**
+     * The output spec a Task submitted with only a Contract records (spec S6 mode 2, until #110 retires
+     * output_spec): the Template's shape, and the Contract's schema when it sets one.
+     */
+    public static OutputSpec forContract(com.hireai.domain.biz.acceptance.template.enums.OutputShape shape,
+                                         Contract contract, String acceptanceCriteria) {
+        String schema = contract.params().get(GenericTemplates.SCHEMA) instanceof ParameterValue.Text t ? t.value() : null;
+        return new OutputSpec(OutputFormat.valueOf(shape.name()), schema, acceptanceCriteria);
+    }
+
     /** The Contract a Task submitted with this spec freezes: TEXT, FILE and JSON map one to one. */
     public Contract toContract() {
         if (format == OutputFormat.JSON && hasSchema()) {

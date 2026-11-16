@@ -43,10 +43,65 @@ class SubmitOrchestrationAppServiceImplTest {
     private final ApiKeyTaskRepository attribution = mock(ApiKeyTaskRepository.class);
     private final SpendReadPort spendRead = mock(SpendReadPort.class);
     private final Instant fixed = Instant.parse("2026-07-15T10:00:00Z");
+    /** Mode-1 extraction: by default the LLM is "unavailable", so the output spec's Contract is adopted. */
+    private final com.hireai.application.biz.acceptance.extraction.ContractDraftAppService drafts =
+            mock(com.hireai.application.biz.acceptance.extraction.ContractDraftAppService.class, inv ->
+                    inv.getMethod().getName().equals("draft")
+                            ? com.hireai.domain.biz.acceptance.extraction.model.ContractExtraction.unavailable(inv.getArgument(3))
+                            : null);
 
     private final SubmitOrchestrationAppService svc = new SubmitOrchestrationAppServiceImpl(
             write, direct, idem, attribution, spendRead, TestCategories.listOf("cat", "other"),
-            Clock.fixed(fixed, ZoneOffset.UTC));
+            Clock.fixed(fixed, ZoneOffset.UTC), drafts);
+
+    // ---- submit modes (spec S6) ----
+
+    @Test
+    void aDescriptionOnlySubmitAdoptsTheExtractedContractAndRecordsTheExtraction() {
+        UUID owner = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        when(write.submit(any())).thenReturn(taskId);
+
+        svc.submitRouted(new SubmitContext(owner, null, null, null, null), info(owner, "20.00"));
+
+        org.mockito.ArgumentCaptor<TaskSubmitInfo> submitted = org.mockito.ArgumentCaptor.forClass(TaskSubmitInfo.class);
+        verify(write).submit(submitted.capture());
+        assertThat(submitted.getValue().contract()).isEqualTo(new OutputSpec(OutputFormat.JSON, "{}", "ok").toContract());
+        verify(drafts).draft("T", "desc", "ok", new OutputSpec(OutputFormat.JSON, "{}", "ok").toContract());
+        verify(write).recordExtraction(eq(taskId), any());
+    }
+
+    @Test
+    void aSubmitWithAContractIsNotExtracted() {
+        UUID owner = UUID.randomUUID();
+        when(write.submit(any())).thenReturn(UUID.randomUUID());
+        TaskSubmitInfo base = info(owner, "20.00");
+        TaskSubmitInfo withContract = new TaskSubmitInfo(owner, "T", "desc", base.budget(), base.outputSpec(), "cat",
+                null, base.outputSpec().toContract());
+
+        svc.submitRouted(new SubmitContext(owner, null, null, null, null), withContract);
+
+        verify(drafts, never()).draft(any(), any(), any(), any());
+        verify(write, never()).recordExtraction(any(), any());
+    }
+
+    @Test
+    void aDescriptionOnlyReplayReturnsTheFirstTaskWithoutExtractingAgain() {
+        UUID owner = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        SubmitContext ctx = new SubmitContext(owner, "idem-x", null, null, null);
+        when(idem.find(owner, "idem-x")).thenReturn(Optional.empty());
+        when(write.submit(any())).thenReturn(taskId);
+        svc.submitRouted(ctx, info(owner, "20.00"));
+        org.mockito.ArgumentCaptor<IdempotencyRecord> stored = org.mockito.ArgumentCaptor.forClass(IdempotencyRecord.class);
+        verify(idem).insert(stored.capture());
+        when(idem.find(owner, "idem-x")).thenReturn(Optional.of(stored.getValue()));
+
+        UUID replay = svc.submitRouted(ctx, info(owner, "20.00"));
+
+        assertThat(replay).isEqualTo(taskId);
+        verify(drafts, org.mockito.Mockito.times(1)).draft(any(), any(), any(), any());
+    }
 
     private TaskSubmitInfo info(UUID owner, String budget) {
         return new TaskSubmitInfo(owner, "T", "desc", Money.of(budget),

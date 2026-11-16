@@ -83,6 +83,15 @@ public interface TaskRepository {
     /** The task's failure detail; empty when none was recorded. */
     Optional<String> findFailureDetail(UUID taskId);
 
+    /**
+     * Operational column write (unmapped on the entity): what requirement extraction made of a mode-1
+     * submit (spec S6), written once in the submit transaction; a DB trigger freezes it.
+     */
+    void stampContractExtraction(UUID taskId, com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord extraction);
+
+    /** The task's extraction record; empty when no extraction ran (mode 2, direct booking, older tasks). */
+    Optional<com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord> findContractExtraction(UUID taskId);
+
     /** Operational column write (unmapped on the entity). Pins the agent version for direct bookings. */
     void pinAgentVersion(UUID taskId, UUID agentVersionId);
 

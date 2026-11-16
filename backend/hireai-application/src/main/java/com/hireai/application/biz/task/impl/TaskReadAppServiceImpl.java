@@ -59,6 +59,12 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     }
 
     @Override
+    public Optional<com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord> findContractExtraction(
+            TaskModel task) {
+        return taskRepository.findContractExtraction(task.id());
+    }
+
+    @Override
     public Optional<VersionFallback> findTemplateFallback(TaskModel task) {
         return task.contract() == null ? Optional.empty() : templateReadAppService.fallbackOf(task.contract());
     }

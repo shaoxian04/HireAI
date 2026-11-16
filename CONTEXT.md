@@ -78,6 +78,10 @@ _Avoid_: batch (a batch is just a Task with many Items), document, line, sub-tas
 The platform-curated catalogue of Acceptance Checks a Contract may use, each with fixed meaning and adjustable parameters ("background colour is red, within this hue range"). A natural-language requirement either maps onto an entry or is not automatically checked — no check is invented at submission.
 _Avoid_: rules engine, validators
 
+**Requirement extraction** _(built for the API, #100)_:
+Turning a Task's description into Contract terms: an LLM proposes, for each requirement, the Check Library entry it means and its values, and the platform keeps a proposal only if it fits the Template exactly. What does not fit is an **unmapped requirement**: still part of the brief, but checked by no automatic check. A description-only submit adopts the result; a Client who sends its own Contract gets no extraction.
+_Avoid_: parsing, auto-contract
+
 **Finding** _(built, #98)_:
 A fact about the Task's *input* noticed while accepting it — a duplicate invoice, a source document that does not add up, a supplier missing from the buyer's records. Reported to the client; it never changes what the Agent is paid.
 _Avoid_: error, violation, exception (none of these are the Agent's fault)

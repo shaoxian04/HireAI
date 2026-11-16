@@ -84,7 +84,7 @@ public class SecurityConfig {
                         // no GET wildcard covers it.
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
                                 "/api/tasks", "/api/tasks/direct", "/api/tasks/match-preview",
-                                "/api/tasks/direct/ai-review-quote")
+                                "/api/tasks/direct/ai-review-quote", "/api/contracts/draft")
                                 .hasAnyRole("CLIENT", "API_CLIENT")
                         .requestMatchers(org.springframework.http.HttpMethod.GET,
                                 "/api/tasks", "/api/tasks/*", "/api/tasks/*/result",

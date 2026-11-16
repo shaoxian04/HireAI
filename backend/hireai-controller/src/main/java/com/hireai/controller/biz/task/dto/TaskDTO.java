@@ -2,6 +2,7 @@ package com.hireai.controller.biz.task.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.hireai.controller.biz.acceptance.dto.ContractDTO;
+import com.hireai.controller.biz.acceptance.dto.ExtractionDTO;
 import com.hireai.controller.biz.acceptance.dto.VersionFallbackDTO;
 
 import java.math.BigDecimal;
@@ -74,7 +75,13 @@ public record TaskDTO(
          * flagged something), UNDECIDED (a check could not decide) or AI_REVIEW_UNAVAILABLE (a decisive
          * AI Review gave no usable verdict, #107). Absent otherwise and on list/command responses.
          */
-        String reviewReason
+        String reviewReason,
+        /**
+         * What requirement extraction made of the description (spec S6): present on a task submitted
+         * with a description only (mode 1), on the submit response and GET /api/tasks/{id}; absent for a
+         * structured Contract (mode 2), a direct booking, and on list responses.
+         */
+        ExtractionDTO extraction
 ) {
 
     /** This task with its version-fallback notice (null leaves it out). */
@@ -82,7 +89,7 @@ public record TaskDTO(
         return new TaskDTO(id, clientId, title, description, budget, status, outputSpec, contract, createdAt,
                 resolution, resolvedAt, rejectionReason, payoutAmount, commissionAmount, refundAmount,
                 failureReason, category, agentId, reviewDeadline, autoAccepted, rejection, failureDetail,
-                itemCount, itemPrice, items, fallback, reviewReason);
+                itemCount, itemPrice, items, fallback, reviewReason, extraction);
     }
 
     /** This task with why its result waits for the Client's review (null leaves it out). */
@@ -90,7 +97,15 @@ public record TaskDTO(
         return new TaskDTO(id, clientId, title, description, budget, status, outputSpec, contract, createdAt,
                 resolution, resolvedAt, rejectionReason, payoutAmount, commissionAmount, refundAmount,
                 failureReason, category, agentId, reviewDeadline, autoAccepted, rejection, failureDetail,
-                itemCount, itemPrice, items, templateFallback, reason);
+                itemCount, itemPrice, items, templateFallback, reason, extraction);
+    }
+
+    /** This task with what extraction made of its description (null leaves it out). */
+    public TaskDTO withExtraction(ExtractionDTO extraction) {
+        return new TaskDTO(id, clientId, title, description, budget, status, outputSpec, contract, createdAt,
+                resolution, resolvedAt, rejectionReason, payoutAmount, commissionAmount, refundAmount,
+                failureReason, category, agentId, reviewDeadline, autoAccepted, rejection, failureDetail,
+                itemCount, itemPrice, items, templateFallback, reviewReason, extraction);
     }
 
     public record OutputSpecDTO(String format, String schema, String acceptanceCriteria) {

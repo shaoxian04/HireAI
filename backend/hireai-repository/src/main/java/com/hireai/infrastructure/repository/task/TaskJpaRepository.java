@@ -64,6 +64,14 @@ public interface TaskJpaRepository extends JpaRepository<TaskDO, UUID> {
     Optional<String> findFailureDetail(@Param("id") UUID id);
 
     @Modifying
+    @Query(value = "UPDATE tasks SET contract_extraction = CAST(:json AS jsonb) WHERE id = :id", nativeQuery = true)
+    void stampContractExtraction(@Param("id") UUID id, @Param("json") String json);
+
+    @Query(value = "SELECT CAST(contract_extraction AS text) FROM tasks WHERE id = :id AND contract_extraction IS NOT NULL",
+            nativeQuery = true)
+    Optional<String> findContractExtraction(@Param("id") UUID id);
+
+    @Modifying
     @Query(value = "UPDATE tasks SET pinned_agent_version_id = :versionId WHERE id = :id", nativeQuery = true)
     void pinAgentVersion(@Param("id") UUID id, @Param("versionId") UUID versionId);
 

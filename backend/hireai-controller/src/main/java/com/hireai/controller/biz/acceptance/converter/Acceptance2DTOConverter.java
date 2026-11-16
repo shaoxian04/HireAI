@@ -1,6 +1,10 @@
 package com.hireai.controller.biz.acceptance.converter;
 
 import com.hireai.controller.biz.acceptance.dto.ContractDTO;
+import com.hireai.controller.biz.acceptance.dto.ContractDraftDTO;
+import com.hireai.controller.biz.acceptance.dto.ExtractionDTO;
+import com.hireai.domain.biz.acceptance.extraction.model.ContractExtraction;
+import com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord;
 import com.hireai.controller.biz.acceptance.dto.OfferDTO;
 import com.hireai.controller.biz.acceptance.dto.TemplateDTO;
 import com.hireai.controller.biz.acceptance.dto.VersionFallbackDTO;
@@ -33,16 +37,36 @@ public final class Acceptance2DTOConverter {
         if (contract == null) {
             return null;
         }
+        return new ContractDTO(contract.template().key(), contract.template().version(), params(contract.params()),
+                contract.aiReview() == null ? null : new ContractDTO.AiReviewTermsDTO(
+                        contract.aiReview().criteria(), contract.aiReview().fee().value()));
+    }
+
+    private static Map<String, Object> params(Map<String, ParameterValue> values) {
         Map<String, Object> params = new LinkedHashMap<>();
-        contract.params().forEach((name, value) -> params.put(name, switch (value) {
+        values.forEach((name, value) -> params.put(name, switch (value) {
             case ParameterValue.Number n -> n.value();
             case ParameterValue.Text t -> t.value();
             case ParameterValue.TextSet s -> List.copyOf(s.values());
             case ParameterValue.Flag f -> f.value();
         }));
-        return new ContractDTO(contract.template().key(), contract.template().version(), params,
-                contract.aiReview() == null ? null : new ContractDTO.AiReviewTermsDTO(
-                        contract.aiReview().criteria(), contract.aiReview().fee().value()));
+        return params;
+    }
+
+    /** Null when no extraction ran (a structured Contract, a direct booking, an older Task). */
+    public static ExtractionDTO toDTO(ExtractionRecord record) {
+        if (record == null) {
+            return null;
+        }
+        return new ExtractionDTO(record.template().key(), record.template().version(), record.status().name(),
+                record.requirements().stream()
+                        .map(r -> new ExtractionDTO.RequirementDTO(r.text(), r.mapped(), r.check(),
+                                r.mapped() ? params(r.params()) : null, r.unmappedReason()))
+                        .toList());
+    }
+
+    public static ContractDraftDTO toDTO(ContractExtraction extraction) {
+        return new ContractDraftDTO(toDTO(extraction.contract()), toDTO(extraction.record()));
     }
 
     public static OfferDTO toDTO(Offer offer, BigDecimal price) {
