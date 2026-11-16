@@ -15,4 +15,12 @@ public interface SubmitOrchestrationAppService {
     UUID submitRouted(SubmitContext ctx, TaskSubmitInfo info);
 
     UUID submitDirect(SubmitContext ctx, DirectBookingInfo info);
+
+    /**
+     * {@link #submitDirect(SubmitContext, DirectBookingInfo)} for a booking made from a Contract draft
+     * (D7): the draft's extraction is kept on the Task in the booking transaction. It must name the
+     * booked Contract's Template version (400 otherwise, nothing booked).
+     */
+    UUID submitDirect(SubmitContext ctx, DirectBookingInfo info,
+                      com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord extraction);
 }

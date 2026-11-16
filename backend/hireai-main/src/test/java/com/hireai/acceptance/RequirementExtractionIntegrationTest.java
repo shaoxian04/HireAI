@@ -279,6 +279,45 @@ class RequirementExtractionIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
+    void aWebBookingFromTheDraftKeepsTheExtractionItWasBookedOnAndTheTaskReturnsIt() throws Exception {
+        UUID agentId = seedTextAgent();
+        String extraction = """
+                {"template":"text_basic","version":1,"status":"EXTRACTED","requirements":[
+                  {"text":"No more than 800 characters","mapped":true,"check":"TEXT_MAX_LENGTH","params":{"max_length":800}},
+                  {"text":"Keep it upbeat","mapped":false,"unmappedReason":"No automatic check fits it."}]}""";
+
+        HttpResponse<String> r = send("POST", "/api/tasks/direct", key, """
+                {"title":"Blurb","description":"Write a blurb. Keep it upbeat.","budget":10.00,"agentId":"%s",
+                 "contract":{"template":"text_basic","version":1,"params":{}},"extraction":%s}"""
+                .formatted(agentId, extraction));
+
+        assertThat(r.statusCode()).as(r.body()).isEqualTo(200);
+        String taskId = mapper.readTree(r.body()).path("data").path("id").asText();
+        JsonNode read = get("/api/tasks/" + taskId);
+        assertThat(read.path("extraction").path("status").asText()).isEqualTo("EXTRACTED");
+        assertThat(requirements(read.path("extraction")))
+                .containsExactly("No more than 800 characters:TEXT_MAX_LENGTH", "Keep it upbeat:unmapped");
+        assertThat(read.path("extraction").path("requirements").path(1).path("unmappedReason").asText())
+                .isEqualTo("No automatic check fits it.");
+        assertThat(llm.requests()).isEmpty(); // recorded as booked, not extracted again
+    }
+
+    @Test
+    void aBookingsExtractionOfAnotherTemplateThanItsContractIs400AndBooksNothing() throws Exception {
+        UUID agentId = seedTextAgent();
+        int before = taskCount();
+
+        HttpResponse<String> r = send("POST", "/api/tasks/direct", key, """
+                {"title":"Blurb","description":"Write a blurb.","budget":10.00,"agentId":"%s",
+                 "contract":{"template":"text_basic","version":1,"params":{}},
+                 "extraction":{"template":"image_generation","version":1,"status":"EXTRACTED","requirements":[]}}"""
+                .formatted(agentId));
+
+        assertThat(r.statusCode()).as(r.body()).isEqualTo(400);
+        assertThat(taskCount()).isEqualTo(before);
+    }
+
+    @Test
     void aDraftNamingAnUnknownTemplateIs400AndAnAnonymousDraftIs401() throws Exception {
         HttpResponse<String> unknown = send("POST", "/api/contracts/draft", key,
                 "{\"description\":\"A logo\",\"template\":\"no_such_template\"}");
@@ -340,6 +379,21 @@ class RequirementExtractionIntegrationTest extends WholeAppIntegrationTest {
         HttpResponse<String> r = send("GET", path, key, null);
         assertThat(r.statusCode()).as(r.body()).isEqualTo(200);
         return mapper.readTree(r.body()).path("data");
+    }
+
+    private UUID seedTextAgent() {
+        UUID ownerId = UUID.randomUUID();
+        jdbc.update("INSERT INTO users (id, email) VALUES (?, ?)", ownerId, ownerId + "@test.local");
+        jdbc.update("INSERT INTO user_roles (user_id, role) VALUES (?, 'BUILDER')", ownerId);
+        UUID agentId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        jdbc.update("INSERT INTO agents (id, owner_id, name, status, current_version_id, reputation_score) "
+                + "VALUES (?, ?, 'Text Agent', 'ACTIVE', ?, 80.00)", agentId, ownerId, versionId);
+        jdbc.update("INSERT INTO agent_profiles (agent_id, is_listed) VALUES (?, true)", agentId);
+        jdbc.update("INSERT INTO agent_versions (id, agent_id, version_number, output_spec, capability_categories, "
+                        + "webhook_url, max_execution_seconds, price) VALUES (?, ?, 1, '{\"format\":\"TEXT\"}'::jsonb, ?, ?, 60, ?)",
+                versionId, agentId, new String[]{category}, fakeAgent().webhookUrl(), new BigDecimal("10.00"));
+        return agentId;
     }
 
     private static List<String> requirements(JsonNode extraction) {

@@ -132,6 +132,16 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
 
     @Override
     public UUID submitDirect(SubmitContext ctx, DirectBookingInfo booked) {
+        return submitDirect(ctx, booked, null);
+    }
+
+    @Override
+    public UUID submitDirect(SubmitContext ctx, DirectBookingInfo booked, ExtractionRecord extraction) {
+        if (extraction != null
+                && (booked.contract() == null || !booked.contract().template().equals(extraction.template()))) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "extraction: it must name the Template version of the booking's contract");
+        }
         // The category is optional on a booking; when given it must be a listed slug (#80).
         DirectBookingInfo info = booked.category() == null ? booked
                 : new DirectBookingInfo(booked.clientId(), booked.title(), booked.description(),
@@ -140,7 +150,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
                         booked.contract(), booked.items(), booked.engagementId(), booked.aiReviewCriteria(),
                         booked.inspectionLevel());
         try {
-            return self().submitDirectTx(ctx, info);
+            return self().submitDirectTx(ctx, info, extraction);
         } catch (IdempotencyRaceException e) {
             return self().resolveRaceWinner(ctx.ownerId(), ctx.idempotencyKey(), e.fingerprint());
         }
@@ -159,8 +169,14 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
     }
 
     @Transactional
-    public UUID submitDirectTx(SubmitContext ctx, DirectBookingInfo info) {
-        return orchestrate(ctx, fingerprintDirect(info), frozenBy(ctx, info), () -> directBookingAppService.book(info));
+    public UUID submitDirectTx(SubmitContext ctx, DirectBookingInfo info, ExtractionRecord extraction) {
+        return orchestrate(ctx, fingerprintDirect(info), frozenBy(ctx, info), () -> {
+            UUID taskId = directBookingAppService.book(info);
+            if (extraction != null) {
+                taskWriteAppService.recordExtraction(taskId, extraction);
+            }
+            return taskId;
+        });
     }
 
     /**

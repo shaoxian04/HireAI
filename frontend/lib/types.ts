@@ -511,6 +511,8 @@ export interface DirectBookRequest {
   deadlineSeconds?: number;
   /** Optional: the Contract to book under; the agent's Offer must cover it, and it is frozen on the task. */
   contract?: ContractDTO;
+  /** Optional, with `contract`: the draft's extraction the booking was made from, kept on the task (D7). */
+  extraction?: ExtractionDTO;
   /**
    * Optional: a multi-Item Task's Items (2+). A string is a text Item; `{ sourceId }` is an Item whose
    * input is a document uploaded to the Engagement (`input` defaults to its file name). With Items,

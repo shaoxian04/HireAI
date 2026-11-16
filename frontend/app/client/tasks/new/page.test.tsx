@@ -631,6 +631,30 @@ describe("submit task — extracted checks (#101)", () => {
     fireEvent.click(screen.getByRole("button", { name: /confirm & book/i }));
     await waitFor(() => expect(booked).not.toBeNull());
     expect(booked!.contract).toEqual(EXTRACTED.contract);
+    // The task keeps what the booking card showed, so its page can list what the Client judges.
+    expect(booked!.extraction).toEqual(EXTRACTED.extraction);
+  });
+
+  it("labels a term the Client set in Output terms as theirs, even when the description asked the same", async () => {
+    server.use(
+      http.get("*/api/catalogue/templates", () => ok(TEXT_TEMPLATES)),
+      http.post("*/api/contracts/draft", () => ok(EXTRACTED)),
+      http.post("*/api/tasks/match-preview", () => ok(previewBody)),
+    );
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    const terms = await screen.findByLabelText(/output terms/i);
+    await screen.findByRole("option", { name: "Text" });
+    fireEvent.change(terms, { target: { value: "text_basic@1" } });
+    fireEvent.change(await screen.findByLabelText(/longest text accepted/i), { target: { value: "800" } });
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    await screen.findByRole("dialog", { name: /pick your agent/i });
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    const checks = await screen.findByRole("region", { name: /what booking agrees to/i });
+    const automatic = within(checks).getByRole("list", { name: /^checked automatically/i });
+    expect(automatic).toHaveTextContent(/from your output terms/i);
+    expect(automatic).not.toHaveTextContent(/from your description/i);
   });
 
   it("keeps the Client's own output terms over an extracted value for the same term", async () => {

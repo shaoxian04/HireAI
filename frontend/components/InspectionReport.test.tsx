@@ -40,6 +40,49 @@ describe("InspectionReport", () => {
     expect(screen.getByText(/sets no acceptance criteria/i)).toBeInTheDocument();
   });
 
+  it("lists the requirements the booking left to the client instead of saying the contract sets none", () => {
+    render(
+      <InspectionReport
+        report={{ verdict: "PASS", checks: [{ rule: "FORMAT_TEXT_NON_EMPTY", passed: true, detail: null }] }}
+        spec={{ ...(spec as object), acceptanceCriteria: null } as never}
+        awaitingYou
+        contract={{ template: "text_basic", version: 1, params: {} }}
+        extraction={{
+          template: "text_basic", version: 1, status: "EXTRACTED",
+          requirements: [
+            { text: "No more than 800 characters", mapped: true, check: "TEXT_MAX_LENGTH", params: { max_length: 800 } },
+            { text: "Keep it upbeat", mapped: false, unmappedReason: "No automatic check fits it." },
+          ],
+        }}
+      />,
+    );
+    expect(screen.queryByText(/sets no acceptance criteria/i)).toBeNull();
+    const yours = screen.getByRole("list", { name: /you judge these/i });
+    expect(yours).toHaveTextContent(/keep it upbeat/i);
+    expect(yours).toHaveTextContent(/no automatic check fits it/i);
+    // Dropped before booking, so the client judges it too.
+    expect(yours).toHaveTextContent(/no more than 800 characters/i);
+  });
+
+  it("does not list a requirement the frozen contract checks", () => {
+    render(
+      <InspectionReport
+        report={{ verdict: "PASS", checks: [] }}
+        spec={{ ...(spec as object), acceptanceCriteria: null } as never}
+        awaitingYou
+        contract={{ template: "text_basic", version: 1, params: { max_length: 800 } }}
+        extraction={{
+          template: "text_basic", version: 1, status: "EXTRACTED",
+          requirements: [
+            { text: "No more than 800 characters", mapped: true, check: "TEXT_MAX_LENGTH", params: { max_length: 800 } },
+          ],
+        }}
+      />,
+    );
+    expect(screen.queryByRole("list", { name: /you judge these/i })).toBeNull();
+    expect(screen.getByText(/sets no acceptance criteria/i)).toBeInTheDocument();
+  });
+
   it("does not claim the client judged a result that was accepted automatically", () => {
     render(
       <InspectionReport

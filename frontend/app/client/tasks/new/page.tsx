@@ -16,6 +16,7 @@ import { refOf, useTemplates } from "@/components/AcceptanceTerms";
 import { fetchMatchPreview } from "@/lib/rebook";
 import { BookingChecks } from "@/components/BookingChecks";
 import {
+  bookedExtraction,
   draftKey,
   draftRequest,
   effectiveContract,
@@ -73,6 +74,7 @@ function SubmitTask() {
   const [dropped, setDropped] = useState<string[]>([]);
   const terms = effectiveContract(draft?.state ?? null, contract, dropped);
   const fates = requirementFates(draft?.state ?? null, terms, dropped);
+  const extraction = bookedExtraction(draft?.state ?? null, terms);
   const contractTemplate =
     terms && templates.status === "ready" ? templates.byRef.get(refOf(terms.template, terms.version)) : undefined;
   const [preview, setPreview] = useState<MatchPreviewDTO | null>(null);
@@ -94,6 +96,7 @@ function SubmitTask() {
         title, description, budget: selected.price, agentId: selected.agentId, // the agent's price, not the typed budget
         ...(typeof deadlineSeconds === "number" ? { deadlineSeconds } : {}),
         ...(terms ? { contract: terms } : {}),
+        ...(extraction ? { extraction } : {}),
       }
     : null;
   const getIdempotencyKey = useIdempotencyKey(directBookSignature(bookingBody));
@@ -444,7 +447,7 @@ function SubmitTask() {
               <VersionFallbackNotice fallback={preview.fallback} templateTitle={contractTemplate.title} context="booking" />
             </div>
           )}
-          <BookingChecks contract={terms} template={contractTemplate} draft={draft?.state ?? null} fates={fates} />
+          <BookingChecks contract={terms} own={contract} template={contractTemplate} draft={draft?.state ?? null} fates={fates} />
           <div className="mt-4 flex items-center gap-4">
             <Button onClick={onBook} disabled={loading}>
               {loading ? "Booking…" : "Confirm & book"}

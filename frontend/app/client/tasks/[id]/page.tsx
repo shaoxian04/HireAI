@@ -418,6 +418,8 @@ function TaskDetail() {
           spec={task.outputSpec}
           awaitingYou={task.status === "PENDING_REVIEW"}
           autoAccepted={!!task.autoAccepted}
+          contract={task.contract}
+          extraction={task.extraction}
         />
       )}
 

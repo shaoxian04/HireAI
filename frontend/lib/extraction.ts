@@ -1,4 +1,4 @@
-import type { ContractDTO, ContractDraftDTO, ContractValue, RequirementDTO } from "@/lib/types";
+import type { ContractDTO, ContractDraftDTO, ContractValue, ExtractionDTO, RequirementDTO } from "@/lib/types";
 
 /**
  * Requirement extraction on the web (#101, spec S6/D28c). Before the shortlist search the description
@@ -71,6 +71,39 @@ export function requirementFates(state: DraftState | null, booked: ContractDTO |
       ? "You dropped this term to find agents, so it is not checked automatically."
       : "Your output terms set this differently, and yours are the ones checked.";
     return { kind: "yours", requirement, why };
+  });
+}
+
+/**
+ * The draft's extraction to keep on the booked task (D7), so its page can say which requirements the
+ * Client judges. Only when the booking is held to the Template version the draft was read against.
+ */
+export function bookedExtraction(state: DraftState | null, booked: ContractDTO | null): ExtractionDTO | null {
+  if (state?.kind !== "ready" || !booked) return null;
+  const extraction = state.draft.extraction;
+  return extraction.template === booked.template && extraction.version === booked.version ? extraction : null;
+}
+
+/**
+ * On the task page: the requirements found in the description that the frozen Contract does not check
+ * as written (not mapped, or dropped or set differently before booking). The Client judges these.
+ */
+export function requirementsYouJudge(
+  extraction: ExtractionDTO | null | undefined,
+  contract: ContractDTO | null | undefined,
+): { text: string; why: string }[] {
+  if (!extraction) return [];
+  return extraction.requirements.flatMap((requirement) => {
+    if (!requirement.mapped) {
+      return [{ text: requirement.text, why: requirement.unmappedReason ?? "No automatic check fits it." }];
+    }
+    const kept =
+      !!contract &&
+      contract.template === extraction.template &&
+      Object.entries(requirement.params ?? {}).every(([name, value]) => sameValue(contract.params[name], value));
+    return kept
+      ? []
+      : [{ text: requirement.text, why: "The terms you booked don't check it as written, so it isn't checked automatically." }];
   });
 }
 

@@ -36,6 +36,7 @@ import com.hireai.controller.config.CurrentApiKeyProvider;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
+import com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
@@ -159,16 +160,21 @@ public class TaskController extends BaseController {
                                          @RequestHeader(value = "Idempotency-Key", required = false)
                                          String idempotencyKey) {
         UUID clientId = currentUser.currentUserId();
-        UUID taskId = submitOrchestrationAppService.submitDirect(
-                submitContext(clientId, idempotencyKey),
-                new DirectBookingInfo(clientId, request.title(), request.description(),
-                        Money.of(request.budget()), request.agentId(),
-                        request.category() == null || request.category().isBlank() ? null : request.category(),
-                        request.deadlineSeconds(), contractOf(request.contract()),
-                        request.itemInputs(), request.engagementId(),
-                        request.aiReview() == null ? List.of() : request.aiReview().criteria(),
-                        request.inspectionLevel()));
-        return ok(withTemplateFallback(readAppService.getForClient(taskId, clientId)));
+        SubmitContext ctx = submitContext(clientId, idempotencyKey);
+        DirectBookingInfo info = new DirectBookingInfo(clientId, request.title(), request.description(),
+                Money.of(request.budget()), request.agentId(),
+                request.category() == null || request.category().isBlank() ? null : request.category(),
+                request.deadlineSeconds(), contractOf(request.contract()),
+                request.itemInputs(), request.engagementId(),
+                request.aiReview() == null ? List.of() : request.aiReview().criteria(),
+                request.inspectionLevel());
+        ExtractionRecord extraction = ContractRequest2ModelConverter.toModel(request.extraction());
+        UUID taskId = extraction == null
+                ? submitOrchestrationAppService.submitDirect(ctx, info)
+                : submitOrchestrationAppService.submitDirect(ctx, info, extraction);
+        TaskModel task = readAppService.getForClient(taskId, clientId);
+        return ok(withTemplateFallback(task).withExtraction(
+                Acceptance2DTOConverter.toDTO(readAppService.findContractExtraction(task).orElse(null))));
     }
 
     /** A submit/booking response: the task, and whether its Contract fell back a version (spec D36). */

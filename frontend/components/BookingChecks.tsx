@@ -16,6 +16,8 @@ import type { ContractDTO, ReviewWindowsDTO, TemplateDTO } from "@/lib/types";
 interface Props {
   /** The Contract the booking freezes; null = the agent's own output terms. */
   contract: ContractDTO | null;
+  /** The terms the Client set in Output terms (null = none): a term there is theirs, whatever was extracted. */
+  own?: ContractDTO | null;
   template?: TemplateDTO;
   draft: DraftState | null;
   fates: RequirementFate[];
@@ -41,7 +43,7 @@ function Heading({ id, children }: { id: string; children: React.ReactNode }) {
   return <h3 id={id} className="text-sm font-semibold text-fg">{children}</h3>;
 }
 
-export function BookingChecks({ contract, template, draft, fates }: Props) {
+export function BookingChecks({ contract, own = null, template, draft, fates }: Props) {
   const windows = useReviewWindows();
   const checked = fates.filter((f) => f.kind === "checked");
   const yours = fates.filter((f) => f.kind === "yours");
@@ -73,6 +75,7 @@ export function BookingChecks({ contract, template, draft, fates }: Props) {
           )}
           {params.map(([name, value]) => {
             const label = template?.parameters.find((p) => p.name === name)?.label ?? name;
+            const theirs = own !== null && own.template === contract?.template && name in own.params;
             const from = checked.find((f) => f.requirement.params && name in f.requirement.params);
             return (
               <li key={name} className="grid gap-1 px-3 py-2.5 sm:grid-cols-[11rem_1fr] sm:gap-4">
@@ -80,7 +83,13 @@ export function BookingChecks({ contract, template, draft, fates }: Props) {
                 <span className="min-w-0 text-sm">
                   <ContractValueView name={name} value={value} />
                   <span className="mt-0.5 block text-xs text-dim">
-                    {from ? <>From your description: &ldquo;{from.requirement.text}&rdquo;</> : "From your output terms"}
+                    {theirs ? (
+                      "From your output terms"
+                    ) : from ? (
+                      <>From your description: &ldquo;{from.requirement.text}&rdquo;</>
+                    ) : (
+                      "From your description"
+                    )}
                   </span>
                 </span>
               </li>
