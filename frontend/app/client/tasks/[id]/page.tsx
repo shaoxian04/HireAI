@@ -341,7 +341,7 @@ function TaskDetail() {
             Contract
           </h2>
           <div className="mt-2">
-            <ContractPanel contract={task.contract} legacyFormat={task.outputSpec?.format} />
+            <ContractPanel contract={task.contract} />
             {task.templateFallback && (
               <div className="mt-3">
                 <VersionFallbackNotice fallback={task.templateFallback} context="task" />

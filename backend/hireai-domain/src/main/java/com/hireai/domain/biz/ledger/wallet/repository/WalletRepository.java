@@ -21,5 +21,12 @@ public interface WalletRepository {
 
     Optional<WalletModel> findByUserId(UUID userId);
 
+    /**
+     * {@link #findByUserId} under a row lock held to the end of the transaction: every settlement and every
+     * escrow movement reads its wallets this way, so two of them touching one wallet at the same moment
+     * serialize instead of failing the version check.
+     */
+    Optional<WalletModel> findByUserIdForUpdate(UUID userId);
+
     List<LedgerEntryModel> findLedger(UUID walletId, WalletLedgerQuery query);
 }

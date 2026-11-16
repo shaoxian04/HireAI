@@ -199,6 +199,11 @@ hireai:
     model: ${EXTRACTION_MODEL:gpt-4o-mini}
     # Connect and read timeout per extraction request; a slower answer falls back to the defaults.
     timeout: ${EXTRACTION_TIMEOUT:PT10S}
+    # Per-user cap on extractions (drafts and description-only submits together), over a sliding
+    # window; beyond it the request is a 429 before anything is extracted or frozen.
+    rate-limit:
+      max-calls: ${EXTRACTION_RATE_LIMIT_MAX_CALLS:20}
+      window: ${EXTRACTION_RATE_LIMIT_WINDOW:PT1M}
   auth:
     # HS256 signing secret for authentication JWTs. MUST be overridden in real deploys.
     # Dev default is >= 32 bytes (HS256 minimum). Never a real secret in git.

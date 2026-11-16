@@ -26,6 +26,15 @@ class NetworkntSchemaValidatorTest {
     }
 
     @Test
+    void anEmptyOrBlankPayloadIsNotJson() {
+        for (String empty : new String[]{"", "   ", "\n", null}) {
+            JsonCheckResult r = validator.check(empty, null);
+            assertThat(r.validJson()).as("[%s]", empty).isFalse();
+            assertThat(r.detail()).contains("empty");
+        }
+    }
+
+    @Test
     void validJsonNoSchemaIsApplicableFalse() {
         JsonCheckResult r = validator.check("{\"a\":1}", null);
         assertThat(r.validJson()).isTrue();

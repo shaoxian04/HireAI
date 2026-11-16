@@ -14,7 +14,14 @@ public class SettlementDomainServiceImpl implements SettlementDomainService {
     @Override
     public SettlementBreakdown settleAcceptance(WalletModel clientWallet, WalletModel builderWallet,
                                                 Money budget, UUID taskId, String correlationId) {
-        Money commission = SettlementPolicy.commissionOn(budget);
+        return settleAcceptance(clientWallet, builderWallet, budget, SettlementPolicy.commissionOn(budget), taskId,
+                correlationId);
+    }
+
+    @Override
+    public SettlementBreakdown settleAcceptance(WalletModel clientWallet, WalletModel builderWallet,
+                                                Money budget, Money commission, UUID taskId, String correlationId) {
+        requireCommissionWithin(commission, budget);
         Money net = budget.subtract(commission);
 
         clientWallet.release(net, taskId, LedgerEntryType.PAYOUT, correlationId);
@@ -41,11 +48,19 @@ public class SettlementDomainServiceImpl implements SettlementDomainService {
     @Override
     public SettlementBreakdown settlePartial(WalletModel clientWallet, WalletModel builderWallet,
                                              Money budget, Money builderShare, UUID taskId, String correlationId) {
+        return settlePartial(clientWallet, builderWallet, budget, builderShare,
+                SettlementPolicy.commissionOn(builderShare), taskId, correlationId);
+    }
+
+    @Override
+    public SettlementBreakdown settlePartial(WalletModel clientWallet, WalletModel builderWallet, Money budget,
+                                             Money builderShare, Money commission, UUID taskId,
+                                             String correlationId) {
         if (!builderShare.isPositive() || builderShare.isGreaterThan(budget)) {
             throw new IllegalArgumentException("A partial share must be in (0, budget]; got " + builderShare
                     + " of " + budget);
         }
-        Money commission = SettlementPolicy.commissionOn(builderShare);
+        requireCommissionWithin(commission, builderShare);
         Money net = builderShare.subtract(commission);
         Money clientRefund = budget.subtract(builderShare); // by subtraction → exact reconciliation
 
@@ -58,5 +73,11 @@ public class SettlementDomainServiceImpl implements SettlementDomainService {
         }
         builderWallet.credit(net, taskId, LedgerEntryType.SPLIT, correlationId);
         return new SettlementBreakdown(net, commission);
+    }
+
+    private static void requireCommissionWithin(Money commission, Money gross) {
+        if (commission == null || commission.isNegative() || commission.isGreaterThan(gross)) {
+            throw new IllegalArgumentException("A commission must be in [0, " + gross + "]; got " + commission);
+        }
     }
 }

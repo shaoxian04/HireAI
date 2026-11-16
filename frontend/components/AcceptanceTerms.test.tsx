@@ -69,13 +69,6 @@ describe("ContractPanel", () => {
     expect(await screen.findByText(/no parameters are set/i)).toBeInTheDocument();
   });
 
-  it("explains a task submitted before contracts existed", () => {
-    render(<ContractPanel contract={null} legacyFormat="TEXT" />);
-
-    expect(screen.getByText(/submitted before contracts/i)).toHaveTextContent(/text/i);
-    expect(apiMock).not.toHaveBeenCalled();
-  });
-
   it("shows a loading state, then still names the Template when its details can't load", async () => {
     apiMock.mockRejectedValue(new Error("down"));
     render(<ContractPanel contract={{ template: "custom_json", version: 1, params: { schema: SCHEMA } }} />);

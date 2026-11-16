@@ -165,7 +165,7 @@ function ParameterInput({
             return (
               <label
                 key={v}
-                className={`inline-flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 font-mono text-xs transition ${on ? "border-accent/60 bg-accent/10 text-fg" : "border-line text-muted hover:border-line-bright"}`}
+                className={`inline-flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 font-mono text-xs transition ${on ? "border-accent bg-accent/20 font-medium text-fg" : "border-line text-muted hover:border-line-bright"}`}
               >
                 <input
                   type="checkbox"

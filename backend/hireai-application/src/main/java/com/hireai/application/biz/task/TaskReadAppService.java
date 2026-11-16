@@ -98,6 +98,12 @@ public interface TaskReadAppService {
     /** The Task's Items in Item order; empty for a single-deliverable Task (no ownership check: pass an owned Task). */
     TaskItems findItems(TaskModel task);
 
+    /**
+     * What the Task's recorded settlements say (whole-Task and per Item): every amount shown comes from here
+     * (no ownership check: pass an owned Task).
+     */
+    com.hireai.domain.biz.ledger.settlement.model.TaskSettlementRecord findSettlementRecord(TaskModel task);
+
     /** The Items of several Tasks (list views); Tasks without Items are absent from the map. */
     Map<UUID, TaskItems> findItems(Collection<UUID> taskIds);
 }

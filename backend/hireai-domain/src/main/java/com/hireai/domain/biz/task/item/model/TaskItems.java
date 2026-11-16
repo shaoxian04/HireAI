@@ -28,8 +28,9 @@ public record TaskItems(List<TaskItemModel> all) {
     public static final int MAX_INPUT_LENGTH = 5000;
     private static final int QUALITY_SCALE = 3;
     /**
-     * The lowest per-Item price that still earns a commission: each Item settles on its own and the
-     * 15% is rounded per Item, so below 0.04 it rounds to 0.00 and a many-Item Task would pay none.
+     * The lowest per-Item price that still earns a commission: 15% of a lower price rounds to 0.00, so a
+     * Task whose only paid Item cost less would pay none. Commission is allocated on the Task's running
+     * total ({@code TaskSettlementRecord.commissionOnNextItem}), not rounded up on every Item.
      * Single-deliverable Tasks keep their own minimum (see build-status Known gaps).
      */
     public static final Money MIN_ITEM_PRICE = Money.of("0.04");

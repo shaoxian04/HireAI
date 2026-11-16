@@ -144,8 +144,12 @@ export interface ContractDTO {
 /** What an AI Review would cost on a booking, and whether it is offered (`reason` says why not). */
 export interface AiReviewQuoteDTO {
   fee: number;
-  /** The gate: an AI Review may cost at most this (10% of the price). */
+  /** The gate: an AI Review may cost at most this (`maxFeeShare` of the price). */
   maxFee: number;
+  /** What the booking freezes: the price plus the fee, summed by the platform. */
+  total: number;
+  /** The largest share of the price an AI Review may cost (e.g. 0.1). */
+  maxFeeShare: number;
   available: boolean;
   reason: string | null;
   maxCriteria: number;

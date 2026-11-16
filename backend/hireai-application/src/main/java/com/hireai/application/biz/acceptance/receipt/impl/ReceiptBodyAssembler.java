@@ -18,6 +18,7 @@ import com.hireai.domain.biz.adjudication.repository.DisputeRepository;
 import com.hireai.domain.biz.adjudication.repository.ValidationReportRepository;
 import com.hireai.domain.biz.ledger.settlement.info.DisputeFeeCharge;
 import com.hireai.domain.biz.ledger.settlement.model.ItemSettlementModel;
+import com.hireai.domain.biz.ledger.settlement.model.TaskSettlementRecord;
 import com.hireai.domain.biz.ledger.settlement.model.SettlementModel;
 import com.hireai.domain.biz.ledger.settlement.repository.DisputeFeeRepository;
 import com.hireai.domain.biz.task.enums.TaskResolution;
@@ -308,8 +309,8 @@ class ReceiptBodyAssembler {
     private Map<String, Object> settlement(TaskModel task, SettlementModel settlement) {
         // A multi-Item Task some of whose Items settled on their own (sampling, spec S8) refunds only what
         // was still held: that is the whole-Task settlement's price.
-        Money price = task.budget().subtract(itemSettlementRepository.findByTaskId(task.id()).stream()
-                .map(ItemSettlementModel::gross).reduce(Money.ZERO, Money::add));
+        Money price = new TaskSettlementRecord(task.budget(), java.util.Optional.of(settlement),
+                itemSettlementRepository.findByTaskId(task.id())).stillHeld();
         BigDecimal refunded = price.value().subtract(settlement.net().value()).subtract(settlement.commission().value());
         return map("outcome", settlement.type().name(),
                 "price", money(price), "paid", money(settlement.net()),

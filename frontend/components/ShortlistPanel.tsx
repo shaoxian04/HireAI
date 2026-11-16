@@ -24,6 +24,8 @@ interface Props {
   fallback?: VersionFallbackDTO | null;
   /** The plain title of the terms' Template, for the fallback notice. */
   templateTitle?: string;
+  /** True when the terms (some or all) were taken from the description, not set by the Client (#101). */
+  termsExtracted?: boolean;
   onSelect: (option: AgentOptionDTO) => void;
   onClose: () => void;
 }
@@ -39,6 +41,7 @@ export function ShortlistPanel({
   onRelax,
   fallback = null,
   templateTitle,
+  termsExtracted = false,
   onSelect,
   onClose,
 }: Props) {
@@ -83,6 +86,7 @@ export function ShortlistPanel({
               labelFor={labelFor}
               onRelax={onRelax}
               hasNearMisses={nearMisses.length > 0}
+              extracted={termsExtracted}
             />
           )}
           {!termsBlocked && noCloseMatch && shortlist.length === 0 && (
@@ -258,18 +262,22 @@ function NoMatchExplanation({
   labelFor,
   onRelax,
   hasNearMisses,
+  extracted,
 }: {
   noMatch: NoMatchDTO;
   labelFor: (parameter: string) => string;
   onRelax?: (parameter: string) => void;
   hasNearMisses: boolean;
+  extracted: boolean;
 }) {
   return (
     <div role="status" className="space-y-4 px-6 py-6">
       <div>
         <p className="text-sm font-semibold">No agent accepts these terms</p>
         <p className="mt-1 text-sm text-dim">
-          Agents in this category and budget were ruled out by your output terms.
+          {extracted
+            ? "Agents in this category and budget were ruled out by the terms taken from your description."
+            : "Agents in this category and budget were ruled out by your output terms."}
           {hasNearMisses && " Agents above your budget that accept them are listed below."}
         </p>
       </div>

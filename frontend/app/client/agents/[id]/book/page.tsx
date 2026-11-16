@@ -95,10 +95,10 @@ function BookingForm() {
   const { card } = profile;
   const bookErrors = { title: "Title", description: "Description" };
   const fee = aiCriteria && aiQuote ? aiQuote.fee : 0;
-  // The price as the agent set it; price × documents for a batch; or price + fee to the cent once an
-  // AI Review is priced (AI Review is not offered on a batch).
+  // The price as the agent set it; price × documents for a batch; or, once an AI Review is priced, the
+  // platform's own total of price + fee (AI Review is not offered on a batch).
   const total = itemCount > 0 ? String(Math.round(card.price * itemCount * 100) / 100)
-    : fee > 0 ? (Math.round((card.price + fee) * 100) / 100).toFixed(2) : String(card.price);
+    : fee > 0 && aiQuote ? aiQuote.total.toFixed(2) : String(card.price);
   // With AI Review on, book only once it is priced, offered and has a criterion to judge.
   const aiReviewBlocks = aiCriteria !== null && (aiQuote === null || aiReview.length === 0);
 

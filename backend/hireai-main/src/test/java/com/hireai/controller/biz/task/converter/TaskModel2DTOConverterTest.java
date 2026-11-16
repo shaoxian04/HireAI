@@ -10,13 +10,19 @@ import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.shared.model.Money;
 import org.junit.jupiter.api.Test;
 
+import com.hireai.domain.biz.ledger.settlement.model.ItemSettlementModel;
+import com.hireai.domain.biz.ledger.settlement.model.SettlementModel;
+import com.hireai.domain.biz.ledger.settlement.model.TaskSettlementRecord;
+
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Unit tests for TaskModel2DTOConverter — verifies settlement display amounts per resolution.
+ * Unit tests for TaskModel2DTOConverter: the amounts shown are the recorded settlement's.
  */
 class TaskModel2DTOConverterTest {
 
@@ -35,10 +41,39 @@ class TaskModel2DTOConverterTest {
         return disputed.resolveDispute(resolution);
     }
 
+    private static TaskSettlementRecord recorded(TaskModel task, SettlementModel whole) {
+        return new TaskSettlementRecord(task.budget(), Optional.of(whole), List.of());
+    }
+
+    @Test
+    void anUnsettledTaskShowsNoAmounts() {
+        TaskModel task = resolvedWith(Money.of("100.00"), TaskResolution.ACCEPTED);
+        TaskDTO dto = TaskModel2DTOConverter.toDTO(task, new TaskSettlementRecord(task.budget(), Optional.empty(),
+                List.of()));
+        assertThat(dto.payoutAmount()).isNull();
+        assertThat(dto.commissionAmount()).isNull();
+        assertThat(dto.refundAmount()).isNull();
+    }
+
+    @Test
+    void multiItemAmountsAreTheItemsRecordedSettlements() {
+        TaskModel task = resolvedWith(Money.of("0.30"), TaskResolution.ACCEPTED);
+        // Three 0.10 Items, their commissions allocated on the running total: 0.02 + 0.01 + 0.02 = 0.05 (15%).
+        TaskSettlementRecord record = new TaskSettlementRecord(task.budget(), Optional.empty(), List.of(
+                ItemSettlementModel.accepted(task.id(), UUID.randomUUID(), 1, Money.of("0.08"), Money.of("0.02")),
+                ItemSettlementModel.accepted(task.id(), UUID.randomUUID(), 2, Money.of("0.09"), Money.of("0.01")),
+                ItemSettlementModel.accepted(task.id(), UUID.randomUUID(), 3, Money.of("0.08"), Money.of("0.02"))));
+        TaskDTO dto = TaskModel2DTOConverter.toDTO(task, record);
+        assertThat(dto.payoutAmount()).isEqualByComparingTo("0.25");
+        assertThat(dto.commissionAmount()).isEqualByComparingTo("0.05");
+        assertThat(dto.refundAmount()).isNull();
+    }
+
     @Test
     void acceptedResolutionShowsFullPayout() {
         TaskModel task = resolvedWith(Money.of("100.00"), TaskResolution.ACCEPTED);
-        TaskDTO dto = TaskModel2DTOConverter.toDTO(task);
+        TaskDTO dto = TaskModel2DTOConverter.toDTO(task, recorded(task,
+                SettlementModel.accepted(task.id(), Money.of("85.00"), Money.of("15.00"))));
 
         assertThat(dto.resolution()).isEqualTo("ACCEPTED");
         assertThat(dto.payoutAmount()).isEqualByComparingTo(new BigDecimal("85.00"));
@@ -49,7 +84,8 @@ class TaskModel2DTOConverterTest {
     @Test
     void partiallyAcceptedResolutionShowsSplitAmounts() {
         TaskModel task = resolvedWith(Money.of("100.00"), TaskResolution.PARTIALLY_ACCEPTED);
-        TaskDTO dto = TaskModel2DTOConverter.toDTO(task);
+        TaskDTO dto = TaskModel2DTOConverter.toDTO(task, recorded(task,
+                SettlementModel.split(task.id(), Money.of("42.50"), Money.of("7.50"))));
 
         assertThat(dto.resolution()).isEqualTo("PARTIALLY_ACCEPTED");
         // payout=42.50, commission=7.50, refund=50.00; payout + commission + refund == budget
@@ -63,7 +99,7 @@ class TaskModel2DTOConverterTest {
     @Test
     void rejectedResolutionShowsFullRefund() {
         TaskModel task = resolvedWith(Money.of("100.00"), TaskResolution.REJECTED);
-        TaskDTO dto = TaskModel2DTOConverter.toDTO(task);
+        TaskDTO dto = TaskModel2DTOConverter.toDTO(task, recorded(task, SettlementModel.rejected(task.id())));
 
         assertThat(dto.resolution()).isEqualTo("REJECTED");
         assertThat(dto.refundAmount()).isEqualByComparingTo(new BigDecimal("100.00"));

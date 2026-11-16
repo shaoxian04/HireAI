@@ -19,7 +19,7 @@ type QuoteState =
 /**
  * Opting into AI Review on a booking (spec S10, D37): the criteria code can't check, in the client's
  * words, and the fee they would freeze for it. The fee is quoted by the platform from the agent's
- * output type and the number of criteria, and it is offered only when it is at most 10% of the price
+ * output type and the number of criteria, and it is offered only when it is at most the platform's share of the price
  * and the agent's Offer accepts AI Review. `criteria` is null while the option is off.
  *
  * `onQuote` reports the fee to freeze, or null when nothing will be frozen for it (off, still
@@ -176,7 +176,7 @@ function QuoteLine({ state }: { state: QuoteState }) {
   return (
     <p className="text-sm text-muted" aria-live="polite">
       <span className="display tabular text-base text-fg">{`${quote.fee.toFixed(2)} cr`}</span>
-      {` fee, frozen with the price (at most ${quote.maxFee.toFixed(2)} cr, 10% of it). It is charged once the review runs, and refunded if it never does.`}
+      {` fee, frozen with the price (at most ${quote.maxFee.toFixed(2)} cr, ${Math.round(quote.maxFeeShare * 100)}% of it). It is charged once the review runs, and refunded if it never does.`}
     </p>
   );
 }

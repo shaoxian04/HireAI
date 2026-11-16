@@ -9,6 +9,7 @@ import com.hireai.domain.biz.ledger.settlement.model.ItemSettlementModel;
 import com.hireai.domain.biz.ledger.settlement.repository.DisputeFeeRepository;
 import com.hireai.domain.biz.ledger.settlement.service.DisputeFeeDomainService;
 import com.hireai.domain.biz.ledger.settlement.model.SettlementModel;
+import com.hireai.domain.biz.ledger.settlement.model.TaskSettlementRecord;
 import com.hireai.domain.biz.ledger.settlement.repository.ItemSettlementRepository;
 import com.hireai.domain.biz.ledger.settlement.repository.SettlementRepository;
 import com.hireai.domain.biz.ledger.settlement.service.SettlementDomainService;
@@ -60,9 +61,7 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
         WalletModel clientWallet = requireWallet(clientId);
         // A multi-Item Task's Items may already have settled one by one (a sampled Task reworked after
         // a failed sample): only what is still in escrow goes back, never their share twice.
-        Money settledItems = itemSettlementRepository.findByTaskId(taskId).stream()
-                .map(ItemSettlementModel::gross).reduce(Money.ZERO, Money::add);
-        Money held = budget.subtract(settledItems);
+        Money held = recordOf(taskId, budget).stillHeld();
         if (held.isPositive()) {
             settlementDomainService.settleRejection(clientWallet, held, taskId, "settle-" + taskId);
         }
@@ -114,8 +113,8 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
         boolean selfSettle = clientId.equals(builderId);
         WalletModel builderWallet = selfSettle ? clientWallet : loadOrOpen(builderId);
 
-        SettlementBreakdown breakdown = settlementDomainService.settleAcceptance(
-                clientWallet, builderWallet, price, taskId, itemCorrelation(taskId, itemNo));
+        SettlementBreakdown breakdown = settlementDomainService.settleAcceptance(clientWallet, builderWallet, price,
+                recordOf(taskId, price).commissionOnNextItem(price), taskId, itemCorrelation(taskId, itemNo));
 
         walletRepository.save(clientWallet);
         if (!selfSettle) {
@@ -133,8 +132,8 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
         boolean selfSettle = clientId.equals(builderId);
         WalletModel builderWallet = selfSettle ? clientWallet : loadOrOpen(builderId);
 
-        SettlementBreakdown breakdown = settlementDomainService.settlePartial(
-                clientWallet, builderWallet, price, paid, taskId, itemCorrelation(taskId, itemNo));
+        SettlementBreakdown breakdown = settlementDomainService.settlePartial(clientWallet, builderWallet, price, paid,
+                recordOf(taskId, price).commissionOnNextItem(paid), taskId, itemCorrelation(taskId, itemNo));
 
         walletRepository.save(clientWallet);
         if (!selfSettle) {
@@ -151,6 +150,11 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
         settlementDomainService.settleRejection(clientWallet, price, taskId, itemCorrelation(taskId, itemNo));
         walletRepository.save(clientWallet);
         itemSettlementRepository.append(ItemSettlementModel.refunded(taskId, itemId, itemNo, price));
+    }
+
+    /** The Task's recorded settlements so far; {@code budget} only feeds {@code stillHeld}. */
+    private TaskSettlementRecord recordOf(UUID taskId, Money budget) {
+        return new TaskSettlementRecord(budget, java.util.Optional.empty(), itemSettlementRepository.findByTaskId(taskId));
     }
 
     @Override
@@ -178,12 +182,12 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
     }
 
     private WalletModel requireWallet(UUID userId) {
-        return walletRepository.findByUserId(userId)
+        return walletRepository.findByUserIdForUpdate(userId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "No wallet for user " + userId));
     }
 
     private WalletModel loadOrOpen(UUID userId) {
-        return walletRepository.findByUserId(userId)
+        return walletRepository.findByUserIdForUpdate(userId)
                 .orElseGet(() -> walletRepository.save(WalletModel.openFor(userId)));
     }
 }

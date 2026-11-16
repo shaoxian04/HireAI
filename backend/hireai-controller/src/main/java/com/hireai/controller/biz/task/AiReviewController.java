@@ -60,8 +60,9 @@ public class AiReviewController extends BaseController {
         AiReviewQuote quote = directBookingAppService.quoteAiReview(request.agentId(),
                 ContractRequest2ModelConverter.toModel(request.contract()), Money.of(request.budget()),
                 request.criteria());
-        return ok(new QuoteDTO(quote.fee().value(), quote.maxFee().value(), quote.available(), quote.reason(),
-                aiReviewPolicy.maxCriteria()));
+        return ok(new QuoteDTO(quote.fee().value(), quote.maxFee().value(),
+                Money.of(request.budget()).add(quote.fee()).value(), aiReviewPolicy.maxFeeShare(),
+                quote.available(), quote.reason(), aiReviewPolicy.maxCriteria()));
     }
 
     /** The Task's AI Review, owner-only (Invariant #5): another client, or a Task without one, gets 404. */
@@ -89,8 +90,12 @@ public class AiReviewController extends BaseController {
             @Valid ContractRequest contract) {
     }
 
-    /** {@code fee}: what it would cost; {@code maxFee}: the gate (10% of the price); {@code reason}: why not offered. */
-    public record QuoteDTO(BigDecimal fee, BigDecimal maxFee, boolean available, String reason, int maxCriteria) {
+    /**
+     * {@code fee}: what it would cost; {@code maxFee}: the gate ({@code maxFeeShare} of the price); {@code total}: what
+     * the booking would freeze, the price plus the fee; {@code reason}: why not offered.
+     */
+    public record QuoteDTO(BigDecimal fee, BigDecimal maxFee, BigDecimal total, BigDecimal maxFeeShare,
+                           boolean available, String reason, int maxCriteria) {
     }
 
     /**
