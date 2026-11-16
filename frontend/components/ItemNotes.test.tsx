@@ -30,7 +30,7 @@ describe("an invoice Item's notes (#106)", () => {
     render(<ItemNotes item={FLAGGED} />);
     const why = screen.getByLabelText("Why Item 5 needs your review");
     expect(within(why).getByText("Subtotal plus tax is the grand total")).toBeInTheDocument();
-    expect(within(why).getByText(/outside the random sample/)).toBeInTheDocument();
+    expect(within(why).getByText(/checked on its own, not with the batch.*accepted/)).toBeInTheDocument();
     // The agent's words are quoted once, in the check they explain.
     expect(within(why).getByText(/The Agent reported: the document says 130/)).toBeInTheDocument();
     expect(screen.queryByText("The agent reported")).not.toBeInTheDocument();
