@@ -31,11 +31,20 @@ describe("an invoice Item's notes (#106)", () => {
     const why = screen.getByLabelText("Why Item 5 needs your review");
     expect(within(why).getByText("Subtotal plus tax is the grand total")).toBeInTheDocument();
     expect(within(why).getByText(/outside the random sample/)).toBeInTheDocument();
-    expect(screen.getByText("The agent reported")).toBeInTheDocument();
-    expect(screen.getByText(/“the document says 130”/)).toBeInTheDocument();
+    // The agent's words are quoted once, in the check they explain.
+    expect(within(why).getByText(/The Agent reported: the document says 130/)).toBeInTheDocument();
+    expect(screen.queryByText("The agent reported")).not.toBeInTheDocument();
     const findings = screen.getByLabelText("Findings about Item 5");
     expect(within(findings).getByText("This invoice number from this supplier was extracted before")).toBeInTheDocument();
     expect(within(findings).getByText(/never changes what the agent is paid/)).toBeInTheDocument();
+  });
+
+  it("shows an anomaly that explains no check on its own, without holding the Item for review", () => {
+    render(<ItemNotes item={{ itemNo: 2, input: "b.pdf", status: "PENDING_REVIEW", price: 2,
+      anomalies: [{ check: null, description: "The scan is faint at the bottom" }] }} />);
+    expect(screen.getByText("The agent reported")).toBeInTheDocument();
+    expect(screen.getByText("“The scan is faint at the bottom”")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Why Item 2 needs your review")).not.toBeInTheDocument();
   });
 
   it("shows nothing for a plain Item", () => {

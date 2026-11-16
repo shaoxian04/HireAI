@@ -13,7 +13,8 @@ export function reviewChecks(item: TaskItemDTO) {
  */
 export function ItemNotes({ item }: { item: TaskItemDTO }) {
   const review = reviewChecks(item);
-  const anomalies = item.anomalies ?? [];
+  // An anomaly already quoted in the check it sent to review ("The Agent reported: …") is not repeated.
+  const anomalies = (item.anomalies ?? []).filter((a) => !review.some((c) => c.detail?.includes(a.description)));
   const findings = item.findings ?? [];
   if (review.length === 0 && anomalies.length === 0 && findings.length === 0) return null;
   return (
@@ -40,7 +41,7 @@ export function ItemNotes({ item }: { item: TaskItemDTO }) {
           <p className="eyebrow">The agent reported</p>
           {anomalies.map((a, i) => (
             <p key={i} className="text-sm text-fg">
-              {a.check && <span className="mr-1.5 text-muted">{`${ruleText(a.check)}:`}</span>}
+              {a.check && <span className="mr-1.5 text-muted">{`${ruleText(a.check)}: `}</span>}
               {`“${a.description}”`}
             </p>
           ))}

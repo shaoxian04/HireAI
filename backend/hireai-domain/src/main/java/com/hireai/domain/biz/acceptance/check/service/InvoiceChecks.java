@@ -164,7 +164,7 @@ final class InvoiceChecks {
             }
             BigDecimal expected = money(line.quantity().multiply(line.unitPrice()));
             if (!agrees(expected, line.amount(), tolerance)) {
-                wrong.add("line " + (i + 1) + ": " + plain(line.quantity()) + " x " + plain(line.unitPrice()) + " = "
+                wrong.add("line " + (i + 1) + ": " + line.quantity().stripTrailingZeros().toPlainString() + " x " + plain(line.unitPrice()) + " = "
                         + plain(expected) + ", but its amount is " + plain(line.amount()));
             }
         }
@@ -199,7 +199,7 @@ final class InvoiceChecks {
             return "the lines' tax";
         }
         if (invoice.taxRate() != null) {
-            return "the subtotal at " + plain(invoice.taxRate()) + " %";
+            return "the subtotal at " + invoice.taxRate().stripTrailingZeros().toPlainString() + " %";
         }
         return null;
     }
@@ -284,7 +284,10 @@ final class InvoiceChecks {
     }
 
     private static String plain(BigDecimal value) {
-        return value.toPlainString();
+        // Amounts read as money (120 -> 120.00); a finer figure (a unit price of 33.333) keeps its digits.
+        // The reader bounds every figure first, so rescaling here is cheap.
+        return value.scale() <= MONEY_SCALE ? value.setScale(MONEY_SCALE, RoundingMode.UNNECESSARY).toPlainString()
+                : value.toPlainString();
     }
 
     private static boolean isIsoDate(String value) {

@@ -136,7 +136,33 @@ function BookingForm() {
               The agent&apos;s result is validated against these terms before you see it.
             </p>
           </div>
-          <ContractTerms spec={profile.outputSpec} />
+          {invoice ? (
+            <dl className="grid gap-px border-t border-line bg-line text-sm" aria-label="Invoice extraction terms">
+              <div className="bg-surface px-5 py-3">
+                <dt className="text-xs text-dim">Template</dt>
+                <dd className="text-fg">
+                  {"Invoice extraction "}
+                  <span className="font-mono text-xs text-dim">{`${invoice.template}@${invoice.version}`}</span>
+                </dd>
+              </div>
+              <div className="bg-surface px-5 py-3">
+                <dt className="text-xs text-dim">Checked on every invoice</dt>
+                <dd className="text-fg">
+                  Every field is there and well formed; each line, the lines&apos; sum, the tax and the grand total add up.
+                </dd>
+              </div>
+              <div className="bg-surface px-5 py-3">
+                <dt className="text-xs text-dim">When the figures don&apos;t add up</dt>
+                <dd className="text-fg">
+                  {expectation === "business_valid" && offersBusinessValid(profile.offer)
+                    ? "The agent must correct them or report why; an unreported mismatch is refunded."
+                    : "The agent copies the document faithfully and the invoice comes to you to check, outside the sample."}
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <ContractTerms spec={profile.outputSpec} />
+          )}
         </section>
 
         <div className="docket-tear" />

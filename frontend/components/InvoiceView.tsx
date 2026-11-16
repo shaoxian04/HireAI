@@ -36,6 +36,8 @@ function amount(v: unknown): string {
  */
 export function InvoiceView({ invoice }: { invoice: InvoiceResult }) {
   const lines = invoice.line_items.map((l) => (l && typeof l === "object" ? (l as Record<string, unknown>) : {}));
+  // The tax column only when a line carries its own tax: the result sits in a narrow column beside the document.
+  const lineTax = lines.some((l) => l.tax_amount !== undefined && l.tax_amount !== null);
   const currency = typeof invoice.currency === "string" ? invoice.currency : "";
   const head: [string, unknown][] = [
     ["Supplier", invoice.supplier_name],
@@ -47,7 +49,7 @@ export function InvoiceView({ invoice }: { invoice: InvoiceResult }) {
   ];
   return (
     <div className="space-y-4" aria-label="Extracted invoice">
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
         {head.map(([label, v]) => (
           <div key={label} className="min-w-0">
             <dt className="text-xs font-medium text-dim">{label}</dt>
@@ -55,25 +57,25 @@ export function InvoiceView({ invoice }: { invoice: InvoiceResult }) {
           </div>
         ))}
       </dl>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[22rem] text-sm">
+      <div>
+        <table className="w-full table-auto text-sm">
           <thead>
             <tr className="border-b border-line text-left text-xs text-dim">
               <th className="py-1.5 pr-3 font-medium">Line</th>
-              <th className="py-1.5 pr-3 text-right font-medium">Qty</th>
-              <th className="py-1.5 pr-3 text-right font-medium">Unit</th>
-              <th className="py-1.5 pr-3 text-right font-medium">Tax</th>
+              <th className="py-1.5 pr-2 text-right font-medium">Qty</th>
+              <th className="py-1.5 pr-2 text-right font-medium">Unit</th>
+              {lineTax && <th className="py-1.5 pr-3 text-right font-medium">Tax</th>}
               <th className="py-1.5 text-right font-medium">Amount</th>
             </tr>
           </thead>
           <tbody className="tabular">
             {lines.map((l, i) => (
               <tr key={i} className="border-b border-line/60">
-                <td className="py-1.5 pr-3 text-fg">{show(l.description)}</td>
-                <td className="py-1.5 pr-3 text-right font-mono text-muted">{show(l.quantity)}</td>
-                <td className="py-1.5 pr-3 text-right font-mono text-muted">{amount(l.unit_price)}</td>
-                <td className="py-1.5 pr-3 text-right font-mono text-muted">{l.tax_amount === undefined ? "—" : amount(l.tax_amount)}</td>
-                <td className="py-1.5 text-right font-mono text-fg">{amount(l.amount)}</td>
+                <td className="break-words py-1.5 pr-3 text-fg">{show(l.description)}</td>
+                <td className="py-1.5 pr-2 text-right font-mono text-xs text-muted">{show(l.quantity)}</td>
+                <td className="whitespace-nowrap py-1.5 pr-2 text-right font-mono text-xs text-muted">{amount(l.unit_price)}</td>
+                {lineTax && <td className="py-1.5 pr-3 text-right font-mono text-xs text-muted">{amount(l.tax_amount)}</td>}
+                <td className="whitespace-nowrap py-1.5 text-right font-mono text-xs text-fg">{amount(l.amount)}</td>
               </tr>
             ))}
           </tbody>

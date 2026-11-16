@@ -214,6 +214,11 @@ export function ItemsPanel({ task, now, onChange }: Props) {
       {reviewing && (
         <div className="space-y-3">
           <ReviewWindowNotice deadline={task.reviewDeadline} now={current} subject="items" />
+          {awaiting.some((i) => i.needsReview) && (
+            <p className="text-xs text-muted">
+              {"Items marked “Needs your own check” are the exception: if nobody checks them by then, they are refunded to you, not accepted."}
+            </p>
+          )}
           {canDecide && awaiting.length > 0 && (
             <div className="flex flex-wrap items-center gap-3">
               <Button variant="secondary" disabled={busy} onClick={() => setConfirmingAll(true)}>
