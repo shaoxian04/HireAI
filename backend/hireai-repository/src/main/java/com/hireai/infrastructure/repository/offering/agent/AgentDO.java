@@ -62,6 +62,18 @@ public class AgentDO {
         this.gmtCreate = gmtCreate;
     }
 
+    /**
+     * Copies a saved Agent's mapped fields onto this managed row. Saving a fresh {@code AgentDO} instead
+     * would merge its {@code hasSigningSecret = false} into the persistence context, so a read-back in
+     * the same transaction would wrongly report no secret.
+     */
+    void update(String name, String status, UUID currentVersionId, BigDecimal reputationScore) {
+        this.name = name;
+        this.status = status;
+        this.currentVersionId = currentVersionId;
+        this.reputationScore = reputationScore;
+    }
+
     public UUID getId() { return id; }
     public UUID getOwnerId() { return ownerId; }
     public String getName() { return name; }
