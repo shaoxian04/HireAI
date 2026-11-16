@@ -81,7 +81,7 @@ export function ReceiptsPanel({ taskId, refreshKey }: { taskId: string; refreshK
         <p className="mt-1 max-w-2xl text-sm text-muted">
           The platform&apos;s signed record of how this work settled: the contract, fingerprints of what was asked for
           and what was delivered, every check, any ruling, and the ledger entries.{" "}
-          {many ? "Each settled Item has its own." : null} Anyone you share it with can check it against
+          {many ? "Each settled Item has its own. " : null}Anyone you share it with can check it against
           HireAI&apos;s published key, without having to trust our records.
         </p>
       </div>
@@ -123,7 +123,9 @@ export function ReceiptsPanel({ taskId, refreshKey }: { taskId: string; refreshK
                 </p>
                 <p className="text-xs text-dim">
                   Signed <time dateTime={r.issuedAt}>{new Date(r.issuedAt).toLocaleString()}</time> with key{" "}
-                  <span className="break-all font-mono">{r.keyId}</span>
+                  <span title={r.keyId} className="inline-block max-w-full overflow-hidden text-ellipsis whitespace-nowrap align-bottom font-mono">
+                    {r.keyId}
+                  </span>
                 </p>
               </div>
               <Button

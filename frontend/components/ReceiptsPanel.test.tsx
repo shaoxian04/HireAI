@@ -61,6 +61,8 @@ describe("ReceiptsPanel", () => {
     expect(screen.getByText("Item 2")).toBeInTheDocument();
     expect(screen.getByText(/3\.00 cr refunded/i)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /download receipt/i })).toHaveLength(2);
+    // The sentence joins the explanation with a space, not "own.Anyone".
+    expect(screen.getByRole("region", { name: /signed receipts/i })).toHaveTextContent(/its own\. Anyone/);
   });
 
   it("describes a split", async () => {
