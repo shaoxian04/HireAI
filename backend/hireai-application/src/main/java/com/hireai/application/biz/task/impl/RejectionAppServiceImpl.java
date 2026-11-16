@@ -22,7 +22,6 @@ import com.hireai.domain.biz.task.rejection.model.RejectionModel;
 import com.hireai.domain.biz.task.rejection.model.RejectionWindows;
 import com.hireai.domain.biz.task.rejection.repository.RejectionRepository;
 import com.hireai.domain.biz.task.repository.TaskRepository;
-import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 import lombok.extern.slf4j.Slf4j;
@@ -96,17 +95,10 @@ public class RejectionAppServiceImpl implements RejectionAppService {
 
     @Override
     public void respond(UUID taskId, String bearerToken, AgentRejectionResponseInfo response) {
-        DispatchTokenClaims claims = dispatchTokenService.verify(bearerToken);
-        if (!claims.taskId().equals(taskId)) {
-            throw new DispatchTokenInvalidException(
-                    "Dispatch token task " + claims.taskId() + " does not match response task " + taskId);
-        }
+        DispatchTokenClaims claims = dispatchTokenService.verify(bearerToken).requireTask(taskId);
         TaskModel task = taskRepository.findByIdForUpdate(taskId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
-        if (!claims.agentVersionId().equals(task.agentVersionId())) {
-            throw new DispatchTokenInvalidException("Dispatch token agent version " + claims.agentVersionId()
-                    + " does not match task " + taskId + " assignment " + task.agentVersionId());
-        }
+        claims.requireAssignedVersion(task.agentVersionId());
         if (task.status() != TaskStatus.AWAITING_AGENT_RESPONSE) {
             throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
                     "Task " + taskId + " is " + task.status() + "; it is not awaiting a response to a rejection");

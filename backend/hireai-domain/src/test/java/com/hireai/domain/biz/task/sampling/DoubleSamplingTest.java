@@ -153,4 +153,18 @@ class DoubleSamplingTest {
             }
         }
     }
+
+    @Test
+    void anItemCountsAsPassOnceAcceptedAsADefectOnceRefundedAndOpenOtherwise() {
+        assertThat(SampleItemOutcome.of(com.hireai.domain.biz.task.item.enums.ItemStatus.ACCEPTED))
+                .isEqualTo(SampleItemOutcome.PASS);
+        assertThat(SampleItemOutcome.of(com.hireai.domain.biz.task.item.enums.ItemStatus.CONCEDED))
+                .isEqualTo(SampleItemOutcome.DEFECT);
+        assertThat(SampleItemOutcome.of(com.hireai.domain.biz.task.item.enums.ItemStatus.SPEC_VIOLATION))
+                .isEqualTo(SampleItemOutcome.DEFECT);
+        assertThat(SampleItemOutcome.of(com.hireai.domain.biz.task.item.enums.ItemStatus.REJECTED))
+                .isEqualTo(SampleItemOutcome.OPEN);
+        assertThat(SampleItemOutcome.of(com.hireai.domain.biz.task.item.enums.ItemStatus.PENDING_REVIEW))
+                .isEqualTo(SampleItemOutcome.OPEN);
+    }
 }

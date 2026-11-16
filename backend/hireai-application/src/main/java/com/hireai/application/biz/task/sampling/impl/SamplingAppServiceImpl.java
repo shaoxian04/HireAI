@@ -42,7 +42,6 @@ import com.hireai.domain.biz.task.sampling.repository.InspectionRepository;
 import com.hireai.domain.biz.task.sampling.repository.ItemRejectionRepository;
 import com.hireai.domain.biz.task.item.repository.TaskItemRepository;
 import com.hireai.domain.shared.model.Money;
-import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 import lombok.extern.slf4j.Slf4j;
@@ -323,15 +322,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
     private static Map<Integer, SampleItemOutcome> outcomes(TaskItems items) {
         Map<Integer, SampleItemOutcome> outcomes = new HashMap<>();
         for (TaskItemModel item : items.all()) {
-            SampleItemOutcome outcome;
-            if (item.status() == ItemStatus.ACCEPTED) {
-                outcome = SampleItemOutcome.PASS;
-            } else if (item.status().isRefunded()) {
-                outcome = SampleItemOutcome.DEFECT;
-            } else {
-                outcome = SampleItemOutcome.OPEN;
-            }
-            outcomes.put(item.itemNo(), outcome);
+            outcomes.put(item.itemNo(), SampleItemOutcome.of(item.status()));
         }
         return outcomes;
     }
@@ -352,17 +343,10 @@ public class SamplingAppServiceImpl implements SamplingAppService {
     @Override
     public void respondToItemRejection(UUID taskId, int itemNo, String bearerToken,
                                        AgentRejectionResponseInfo response) {
-        DispatchTokenClaims claims = dispatchTokenService.verify(bearerToken);
-        if (!claims.taskId().equals(taskId)) {
-            throw new DispatchTokenInvalidException(
-                    "Dispatch token task " + claims.taskId() + " does not match response task " + taskId);
-        }
+        DispatchTokenClaims claims = dispatchTokenService.verify(bearerToken).requireTask(taskId);
         TaskModel task = taskRepository.findByIdForUpdate(taskId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
-        if (!claims.agentVersionId().equals(task.agentVersionId())) {
-            throw new DispatchTokenInvalidException("Dispatch token agent version " + claims.agentVersionId()
-                    + " does not match task " + taskId + " assignment " + task.agentVersionId());
-        }
+        claims.requireAssignedVersion(task.agentVersionId());
         requireOpen(task);
         TaskItemModel item = taskItemRepository.findByTaskId(taskId).item(itemNo);
         ItemRejectionModel rejection = itemRejectionRepository.findLatest(item.id())
