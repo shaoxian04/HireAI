@@ -16,7 +16,7 @@ const item = (itemNo: number, status: TaskItemDTO["status"]): TaskItemDTO => ({ 
 
 describe("ruleText", () => {
   it("states a double plan's first stage", () => {
-    expect(ruleText(draw())).toBe("Up to 1 Item wrong accepts every Item still awaiting review; 2 draws a second "
+    expect(ruleText(draw())).toBe("Up to 1 Item wrong accepts every Item still awaiting review; 2 wrong draws a second "
       + "sample of 32; 3 or more fails the sample.");
   });
   it("states the second stage on both samples", () => {
@@ -51,7 +51,11 @@ describe("currentDraw and path", () => {
     const insp = inspection({ status: "ACCEPTED", draws: [draw({ decision: "ACCEPT_LOT", defects: 0 })] });
     expect(path(insp).map((s) => s.state)).toEqual(["done", "skipped", "skipped", "skipped", "skipped"]);
   });
-  it("walks the whole path to a pro-rata settlement", () => {
+  it("marks every step that never happened as skipped once the buyer waived the sample", () => {
+    const insp = inspection({ status: "WAIVED" });
+    expect(path(insp).map((s) => s.state)).toEqual(["skipped", "skipped", "skipped", "skipped", "skipped"]);
+  });
+    it("walks the whole path to a pro-rata settlement", () => {
     const insp = inspection({
       round: 2, status: "PRO_RATA", errorRate: 0.25,
       draws: [draw({ decision: "REWORK", defects: 3 }), draw({ round: 2, decision: "PRO_RATA", defects: 3 })],

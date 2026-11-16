@@ -212,7 +212,7 @@ export function ItemsPanel({ task, now, onChange }: Props) {
           <ReviewWindowNotice deadline={task.reviewDeadline} now={current} subject="items" />
           {canDecide && awaiting.length > 0 && (
             <div className="flex flex-wrap items-center gap-3">
-              <Button disabled={busy} onClick={() => setConfirmingAll(true)}>
+              <Button variant="secondary" disabled={busy} onClick={() => setConfirmingAll(true)}>
                 {awaiting.length === 1 ? "Accept the last Item awaiting review" : `Accept all ${awaiting.length} awaiting review`}
               </Button>
               <p className="text-xs text-dim">

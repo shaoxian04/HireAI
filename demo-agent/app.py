@@ -126,7 +126,8 @@ def choose_rejection_response(notice: dict) -> str:
 def rejection_response_body(notice: dict, action: str) -> dict:
     body = {"taskId": notice["taskId"], "action": action}
     if action == "STAND_BY":
-        body["reason"] = "The summary states only figures that appear in the source article."
+        body["reason"] = ("The extracted fields match the source document as delivered." if notice.get("itemNo")
+                          is not None else "The summary states only figures that appear in the source article.")
     if action == "REVISE":
         if notice.get("itemNo") is not None:
             body["resultPayloadJson"] = f"Revised item {notice['itemNo']}: {notice.get('itemInput', '')} (re-checked)"

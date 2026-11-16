@@ -142,9 +142,9 @@ function Reviewer() {
         <p className="eyebrow">Reviewer · sampling inspection</p>
         <h1 className="display text-[2.4rem] text-fg">{task.title}</h1>
         <p className="max-w-2xl text-sm text-muted">
-          You check a random sample of the {task.itemCount} Items against their sources, instead of all of them. The
-          sample was drawn after the agent delivered, from a recorded seed, so the agent couldn&apos;t know which Items
-          you would check. Only the sample decides what happens to the rest.
+          {`You check a random sample of the ${task.itemCount} Items against their sources, instead of all of them. `
+            + "The sample was drawn after the agent delivered, from a recorded seed, so the agent couldn't know which "
+            + "Items you would check. Only the sample decides what happens to the rest."}
         </p>
       </header>
 

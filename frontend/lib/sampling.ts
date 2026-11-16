@@ -88,7 +88,7 @@ export function ruleText(draw: SampleDrawDTO): string {
   const between = draw.firstReject - draw.firstAccept === 2
     ? `${draw.firstAccept + 1}`
     : `${draw.firstAccept + 1} to ${draw.firstReject - 1}`;
-  return `${accept} accepts every Item still awaiting review; ${between} draws a second sample of `
+  return `${accept} accepts every Item still awaiting review; ${between} wrong draws a second sample of `
     + `${draw.secondSampleSize}; ${draw.firstReject} or more fails the sample.`;
 }
 
@@ -106,8 +106,9 @@ export function path(inspection: InspectionDTO): Step[] {
   const reworked = inspection.round === 2 || r1.some((d) => d.decision === "REWORK");
   const proRata = inspection.status === "PRO_RATA";
   const finished = inspection.status === "ACCEPTED" || proRata || inspection.status === "WAIVED";
+  // Once the inspection ended, a step that never happened was skipped, never still to come.
   const state = (done: boolean, current: boolean, skipped = false): Step["state"] =>
-    skipped ? "skipped" : done ? "done" : current ? "current" : "upcoming";
+    done ? "done" : skipped || finished ? "skipped" : current ? "current" : "upcoming";
   const firstDone = r1[0]?.decision != null;
   return [
     { key: "sample", label: "First sample", state: state(firstDone, !firstDone && inspection.round === 1) },
