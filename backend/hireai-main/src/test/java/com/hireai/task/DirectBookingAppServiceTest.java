@@ -46,7 +46,7 @@ class DirectBookingAppServiceTest {
 
     private final DirectBookingAppServiceImpl service = new DirectBookingAppServiceImpl(
             agentRepository, agentProfileRepository, taskWriteAppService,
-            mock(com.hireai.application.biz.acceptance.TemplateReadAppService.class),
+            currentVersionsOnly(),
             new com.hireai.domain.biz.acceptance.coverage.service.impl.OfferCoverageDomainServiceImpl(),
             java.time.Clock.systemUTC(),
             new com.hireai.domain.biz.task.model.ExecutionGrace(60),
@@ -55,6 +55,32 @@ class DirectBookingAppServiceTest {
             mock(com.hireai.application.biz.acceptance.source.SourceSnapshotAppService.class));
 
     // ---- helpers ----
+
+    /**
+     * Templates where every requested version is the current one (no transition): resolveNew keeps the
+     * requested Contract under a custom_json-shaped Template, so the Agent's own Offer covers it.
+     */
+    private static com.hireai.application.biz.acceptance.TemplateReadAppService currentVersionsOnly() {
+        com.hireai.application.biz.acceptance.TemplateReadAppService templates =
+                mock(com.hireai.application.biz.acceptance.TemplateReadAppService.class);
+        when(templates.resolveNew(any(), any())).thenAnswer(call -> {
+            com.hireai.domain.biz.acceptance.contract.model.Contract requested = call.getArgument(0);
+            com.hireai.domain.biz.acceptance.template.model.TemplateModel template =
+                    new com.hireai.domain.biz.acceptance.template.model.TemplateModel(requested.template(), "JSON",
+                            null, com.hireai.domain.biz.acceptance.template.enums.OutputShape.JSON, List.of(),
+                            List.of(new com.hireai.domain.biz.acceptance.template.model.TemplateParameter("schema",
+                                    "JSON Schema", null,
+                                    com.hireai.domain.biz.acceptance.template.enums.ParameterComparison.ENUM,
+                                    com.hireai.domain.biz.acceptance.template.model.ParameterBounds.openText(5000))),
+                            com.hireai.domain.biz.acceptance.template.enums.ExpectationMode.NONE,
+                            java.util.Map.of("FULFILLED", BigDecimal.ONE, "PARTIALLY_FULFILLED",
+                                    new BigDecimal("0.5"), "NOT_FULFILLED", BigDecimal.ZERO),
+                            com.hireai.domain.biz.acceptance.template.enums.TemplateStatus.ACTIVE, Instant.now());
+            return new com.hireai.domain.biz.acceptance.template.info.ContractResolution(
+                    new com.hireai.domain.biz.acceptance.coverage.info.ContractTerms(template, requested), null);
+        });
+        return templates;
+    }
 
     private static final OutputSpec AGENT_SPEC = new OutputSpec(OutputFormat.JSON, "{\"type\":\"object\"}", "valid JSON");
     private static final String CATEGORY = "summarisation";
@@ -121,6 +147,7 @@ class DirectBookingAppServiceTest {
         TaskSubmitInfo submitted = infoCaptor.getValue();
         assertThat(submitted.clientId()).isEqualTo(clientId);
         assertThat(submitted.outputSpec()).isEqualTo(AGENT_SPEC);
+        assertThat(submitted.contract()).isEqualTo(AGENT_SPEC.toContract()); // resolved, then frozen (D36)
         assertThat(submitted.category()).isEqualTo(CATEGORY);
         assertThat(versionCaptor.getValue()).isEqualTo(agent.currentVersionId());
     }

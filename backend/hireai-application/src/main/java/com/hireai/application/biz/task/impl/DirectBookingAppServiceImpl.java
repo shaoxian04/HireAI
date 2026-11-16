@@ -6,7 +6,10 @@ import com.hireai.application.biz.acceptance.source.SourceSnapshotAppService;
 import com.hireai.domain.biz.acceptance.engagement.model.EngagementModel;
 import com.hireai.domain.biz.acceptance.source.model.SourceSnapshotModel;
 import com.hireai.domain.biz.task.item.info.ItemInput;
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.acceptance.coverage.info.ContractTerms;
+import com.hireai.domain.biz.acceptance.offer.model.Offer;
+import com.hireai.domain.biz.acceptance.template.info.ContractResolution;
 import com.hireai.domain.biz.acceptance.coverage.info.Coverage;
 import com.hireai.domain.biz.acceptance.coverage.service.OfferCoverageDomainService;
 
@@ -113,22 +116,30 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
             info = info.withItems(attachSources(engagement, info.items()));
         }
 
+        ContractTerms terms;
         if (info.contract() != null && engagement != null && engagement.agentAccepted(info.contract())) {
-            // The Agent accepted exactly this Contract as the Engagement's Template variant (D1): its
-            // explicit acceptance stands in for Offer coverage. Its bounds are still checked at submit.
+            // The Agent accepted exactly this Contract (Template version included) as the Engagement's
+            // Template variant (D1): its explicit acceptance stands in for Offer coverage, and the version is
+            // the one it accepted, never re-resolved. Its bounds are still checked.
             templateReadAppService.requireValid(info.contract());
-        } else if (info.contract() != null) {
-            // Booking under the Client's own Contract (#91): it must be valid for its Template and the
-            // Agent's Offer must cover it, or the Agent would be held to terms it never offered.
-            templateReadAppService.requireValid(info.contract());
-            ContractTerms terms = templateReadAppService.termsFor(info.contract());
-            Coverage coverage = offerCoverageDomainService.coverage(terms.template(), terms.contract(),
-                    agent.currentVersion().offer());
+            terms = templateReadAppService.termsFor(info.contract());
+        } else {
+            // The Contract the booking freezes: the Client's own terms (#91), else the Agent's own spec's
+            // equivalent. New Contracts use the current Template version, or during a transition the
+            // previous one when this Agent's Offer covers only that (spec D36); either way the Agent's
+            // Offer must cover it, or the Agent would be held to terms it never offered.
+            Contract requested = info.contract() != null ? info.contract()
+                    : agent.currentVersion().outputSpec().toContract();
+            Offer offer = agent.currentVersion().offer();
+            ContractResolution resolution = templateReadAppService.resolveNew(requested, t ->
+                    offerCoverageDomainService.coverage(t.template(), t.contract(), offer).covered());
+            terms = resolution.terms();
+            Coverage coverage = offerCoverageDomainService.coverage(terms.template(), terms.contract(), offer);
             if (!coverage.covered()) {
                 throw new DomainException(ResultCode.VALIDATION_ERROR, coverage.templateOffered()
                         ? "This Agent's Offer does not cover the Contract's " + String.join(", ",
                                 coverage.blockingParameters())
-                        : "This Agent does not offer Template " + info.contract().template());
+                        : "This Agent does not offer Template " + terms.contract().template());
             }
         }
 
@@ -138,7 +149,7 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
         TaskSubmitInfo submitInfo = new TaskSubmitInfo(
                 info.clientId(), info.title(), info.description(), info.budget(),
                 agent.currentVersion().outputSpec(), agent.currentVersion().taskCategoryFor(info.category()),
-                info.deadlineSeconds(), info.contract(), info.items());
+                info.deadlineSeconds(), terms.contract(), info.items());
 
         UUID taskId = taskWriteAppService.submitDirectlyBooked(submitInfo, agent.currentVersionId());
         log.info("Task {} direct-booked to agent {} (version {})",

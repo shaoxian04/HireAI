@@ -3,6 +3,8 @@ package com.hireai.application.biz.task.impl;
 import com.hireai.application.biz.acceptance.TemplateReadAppService;
 import com.hireai.application.biz.offering.embedding.TaskTextEmbeddingAppService;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.acceptance.template.info.ContractResolution;
+import com.hireai.domain.biz.acceptance.template.info.VersionFallback;
 import com.hireai.domain.biz.task.info.MatchCriteria;
 import com.hireai.application.biz.task.MatchPreviewAppService;
 import com.hireai.application.port.query.MatchPreviewQueryPort;
@@ -59,12 +61,7 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
                                 Set<UUID> excludedAgentIds, Long deadlineSeconds, Contract contract) {
         // An unknown slug is a 400 naming the valid ones (#80).
         String normalized = categoryRepository.load().requireKnown(category);
-        MatchCriteria criteria = new PreviewCriteria(normalized, budget.value());
-        if (contract != null) {
-            // A Contract outside its Template's bounds (or an unknown Template) is a 400, as at submit.
-            templateReadAppService.requireValid(contract);
-            criteria = criteria.withTerms(templateReadAppService.termsFor(contract));
-        }
+        MatchCriteria base = new PreviewCriteria(normalized, budget.value());
         Set<UUID> excluded = excludedAgentIds == null ? Set.of() : excludedAgentIds;
         // Excluded before ranking, so they leave the shortlist and the near-misses alike.
         Long longestExecution = null;
@@ -84,6 +81,17 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
                         (a, b) -> a));
 
         List<AgentCandidate> candidates = rows.stream().map(this::toCandidate).toList();
+        MatchCriteria criteria = base;
+        VersionFallback fallback = null;
+        if (contract != null) {
+            // A Contract outside its Template's bounds (or an unknown Template) is a 400, as at submit.
+            // New Contracts use the current version, or fall back during a transition when no listed
+            // Agent's Offer covers it (spec D36); the Client is told.
+            ContractResolution resolution = templateReadAppService.resolveNew(contract,
+                    terms -> candidates.stream().anyMatch(c -> matcher.covers(base.withTerms(terms), c)));
+            criteria = base.withTerms(resolution.terms());
+            fallback = resolution.fallback();
+        }
         List<AgentOption> shortlist = matcher
                 .rank(criteria, candidates).stream()
                 .limit(SHORTLIST_LIMIT)
@@ -106,7 +114,7 @@ public class MatchPreviewAppServiceImpl implements MatchPreviewAppService {
 
         return new MatchPreview(withContractDeclines(shortlist), withContractDeclines(nearMisses),
                 matcher.noCloseMatch(criteria, candidates),
-                matcher.explainNoMatch(criteria, candidates).orElse(null));
+                matcher.explainNoMatch(criteria, candidates).orElse(null), fallback);
     }
 
     /** Adds each Agent's public contract-decline rate (#93): shown to the Client, never ranked on. */

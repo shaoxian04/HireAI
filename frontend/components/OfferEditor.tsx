@@ -398,7 +398,10 @@ export function OfferEditor({
   problems: Record<string, string>;
   onChange: (draft: OfferDraft) => void;
 }) {
-  const shown = templates.filter((t) => t.status === "ACTIVE" || refOf(t.key, t.version) in value);
+  // A retired or closed version could never be matched; one the Offer already names stays visible.
+  const shown = templates.filter(
+    (t) => (t.status === "ACTIVE" && t.takesNewContracts !== false) || refOf(t.key, t.version) in value,
+  );
   return (
     <div className="space-y-3">
       {shown.map((template) => {

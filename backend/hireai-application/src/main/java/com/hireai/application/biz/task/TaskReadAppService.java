@@ -10,6 +10,7 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
 
 import com.hireai.domain.biz.acceptance.delivery.model.DeliverySnapshot;
+import com.hireai.domain.biz.acceptance.template.info.VersionFallback;
 
 import java.util.List;
 import java.util.Optional;
@@ -52,6 +53,12 @@ public interface TaskReadAppService {
      * waits AWAITING_AGENT and once it ended NO_ELIGIBLE_AGENT, empty otherwise.
      */
     Optional<String> findFailureDetail(@NonNull TaskModel task);
+
+    /**
+     * Whether the task's frozen Contract uses the previous Template version during its transition
+     * (spec D36), so the Client is told; empty otherwise (and for tasks without a Contract).
+     */
+    Optional<VersionFallback> findTemplateFallback(@NonNull TaskModel task);
 
     TaskResultModel getResult(@NonNull UUID taskId, @NonNull UUID clientId);
 

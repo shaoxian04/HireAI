@@ -3,6 +3,9 @@ package com.hireai.controller.biz.acceptance.converter;
 import com.hireai.controller.biz.acceptance.dto.ContractDTO;
 import com.hireai.controller.biz.acceptance.dto.OfferDTO;
 import com.hireai.controller.biz.acceptance.dto.TemplateDTO;
+import com.hireai.controller.biz.acceptance.dto.VersionFallbackDTO;
+import com.hireai.domain.biz.acceptance.template.info.TemplateLifecycle;
+import com.hireai.domain.biz.acceptance.template.info.VersionFallback;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.acceptance.contract.model.ParameterValue;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
@@ -54,7 +57,21 @@ public final class Acceptance2DTOConverter {
         return new OfferDTO(price, terms);
     }
 
+    /** Null when there was no fallback. */
+    public static VersionFallbackDTO toDTO(VersionFallback fallback) {
+        if (fallback == null) {
+            return null;
+        }
+        return new VersionFallbackDTO(fallback.current().key(), fallback.current().version(),
+                fallback.used().version(), fallback.transitionEndsAt(), fallback.summary());
+    }
+
     public static TemplateDTO toDTO(TemplateModel template) {
+        return toDTO(template, null);
+    }
+
+    /** {@code lifecycle} (spec D36) is where the version stands now; null leaves those fields out. */
+    public static TemplateDTO toDTO(TemplateModel template, TemplateLifecycle lifecycle) {
         return new TemplateDTO(
                 template.ref().key(),
                 template.ref().version(),
@@ -66,7 +83,10 @@ public final class Acceptance2DTOConverter {
                 template.expectationMode().name(),
                 template.rulingSettlement(),
                 template.status().name(),
-                template.publishedAt());
+                template.publishedAt(),
+                lifecycle == null ? null : lifecycle.current(),
+                lifecycle == null ? null : lifecycle.takesNewContracts(),
+                lifecycle == null ? null : lifecycle.takesNewContractsUntil());
     }
 
     private static TemplateDTO.ParameterDTO toDTO(TemplateParameter parameter) {

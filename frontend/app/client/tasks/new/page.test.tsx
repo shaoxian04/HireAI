@@ -469,6 +469,37 @@ describe("submit task — output terms (#91)", () => {
     expect(booked!.contract).toEqual(terms);
   });
 
+  it("tells the Client when the terms fell back to the previous Template version, before and at booking", async () => {
+    const fallback = {
+      template: "file_basic", currentVersion: 2, usedVersion: 1, transitionEndsAt: "2026-12-16T00:00:00Z",
+      summary: "No agent accepts file_basic@2 yet",
+    };
+    server.use(http.post("*/api/tasks/match-preview", () => ok({ ...previewBody, fallback })));
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    await chooseFileTerms();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    const dialog = await screen.findByRole("dialog", { name: /pick your agent/i });
+    expect(dialog.textContent).toMatch(/no agent accepts the new version of file yet/i);
+    expect(dialog.textContent).toMatch(/until 16 Dec 2026/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    await waitFor(() => expect(screen.getAllByRole("status").some((s) =>
+      /booking holds the agent to file_basic@1/i.test(s.textContent ?? ""))).toBe(true));
+  });
+
+  it("does not show a fallback notice when the terms use the current version", async () => {
+    server.use(http.post("*/api/tasks/match-preview", () => ok(previewBody)));
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    await chooseFileTerms();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    const dialog = await screen.findByRole("dialog", { name: /pick your agent/i });
+    expect(dialog.textContent).not.toMatch(/new version/i);
+  });
+
   it("explains a no-match and searches again only when the Client drops a term", async () => {
     const sent: Record<string, unknown>[] = [];
     server.use(
