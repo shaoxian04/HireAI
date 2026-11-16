@@ -617,6 +617,7 @@ describe("submit task — extracted checks (#101)", () => {
     expect(order).toEqual(["draft", "preview"]);
     expect(draftSent).toEqual({ title: "Summarise", description: "the report" });
     expect(previewSent!.contract).toEqual(EXTRACTED.contract);
+    expect(screen.getByText(/held to the terms read from your description: text/i)).toBeInTheDocument();
     // The mapped requirement is checked automatically, in plain words.
     const automatic = within(checks).getByRole("list", { name: /^checked automatically/i });
     expect(automatic).toHaveTextContent(/longest text accepted/i);

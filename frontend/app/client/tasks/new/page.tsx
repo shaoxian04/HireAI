@@ -432,9 +432,11 @@ function SubmitTask() {
             )}
           </p>
           <p className="mt-1 text-sm text-muted">
-            {contractTemplate
-              ? <>The agent is held to your output terms: {contractTemplate.title}.</>
-              : "The agent works under its own output terms."}
+            {!contractTemplate
+              ? "The agent works under its own output terms."
+              : contract
+                ? <>The agent is held to your output terms: {contractTemplate.title}.</>
+                : <>The agent is held to the terms read from your description: {contractTemplate.title}.</>}
           </p>
           {contractTemplate && preview?.fallback && (
             <div className="mt-3">

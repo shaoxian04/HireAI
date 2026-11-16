@@ -135,8 +135,8 @@ export function BookingChecks({ contract, template, draft, fates }: Props) {
         {windows.status === "ready" && (
           <>
             <p className="text-sm text-muted">
-              You have {windowInWords(windows.windows.reviewSeconds)} to accept or reject the result. If you don&apos;t
-              decide, it is accepted and paid for you.
+              You have {windowInWords(windows.windows.reviewSeconds)}{" "}
+              to accept or reject the result. If you don&apos;t decide, it is accepted and paid for you.
             </p>
             <p className="text-sm text-muted">
               If you reject it, the agent has {windowInWords(windows.windows.agentResponseSeconds)} to respond: revise
