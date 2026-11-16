@@ -64,6 +64,7 @@ public class RejectionAppServiceImpl implements RejectionAppService {
     private final RejectionWindows windows;
     private final Clock clock;
     private final String publicBaseUrl;
+    private final com.hireai.application.biz.acceptance.AcceptanceJsonMapper acceptanceJsonMapper;
 
     public RejectionAppServiceImpl(TaskRepository taskRepository, RejectionRepository rejectionRepository,
                                    AgentRepository agentRepository, DispatchTokenService dispatchTokenService,
@@ -74,7 +75,9 @@ public class RejectionAppServiceImpl implements RejectionAppService {
                                    AgentNoticePort agentNoticePort, OutputSpecJsonMapper outputSpecJsonMapper,
                                    RejectionWindows windows, Clock clock,
                                    @Value("${hireai.platform.public-base-url:http://localhost:8080}")
-                                   String publicBaseUrl) {
+                                   String publicBaseUrl,
+                                   com.hireai.application.biz.acceptance.AcceptanceJsonMapper acceptanceJsonMapper) {
+        this.acceptanceJsonMapper = acceptanceJsonMapper;
         this.taskRepository = taskRepository;
         this.rejectionRepository = rejectionRepository;
         this.agentRepository = agentRepository;
@@ -260,7 +263,8 @@ public class RejectionAppServiceImpl implements RejectionAppService {
                 rejection.reasonCategory().name(), rejection.reason(), rejection.responseDeadline(),
                 rejection.revisionAllowed(),
                 publicBaseUrl + "/api/agent-callbacks/" + taskId + "/rejection-response",
-                task.title(), task.description(), outputSpecJsonMapper.toJson(task.outputDescription()));
+                task.title(), task.description(), outputSpecJsonMapper.toJson(task.outputDescription()),
+                null, null, null, acceptanceJsonMapper.toJson(task.contract()));
         boolean delivered = agentNoticePort.sendRejectionNotice(webhookUrl, token, secret, notice);
         rejectionRepository.recordNoticeAttempt(rejection.id(), delivered ? now : null);
         if (delivered) {

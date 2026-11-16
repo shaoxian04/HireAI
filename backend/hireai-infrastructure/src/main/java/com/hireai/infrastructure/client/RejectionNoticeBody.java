@@ -29,5 +29,7 @@ public record RejectionNoticeBody(
         @JsonInclude(JsonInclude.Include.NON_NULL) Integer itemNo,
         @JsonInclude(JsonInclude.Include.NON_NULL) String itemInput,
         /** The Item's result being rejected, as the Agent delivered it. */
-        @JsonInclude(JsonInclude.Include.NON_NULL) String itemResult) {
+        @JsonInclude(JsonInclude.Include.NON_NULL) String itemResult,
+        /** The task's frozen Contract, exactly as the WorkOrder's {@code contract} (#110). */
+        @JsonInclude(JsonInclude.Include.NON_NULL) JsonNode contract) {
 }

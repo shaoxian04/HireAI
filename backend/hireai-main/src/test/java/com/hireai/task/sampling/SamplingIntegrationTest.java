@@ -276,6 +276,7 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
         assertThat(notice.field("itemInput")).isEqualTo("invoice 1");
         assertThat(notice.field("itemResult")).isEqualTo("done: invoice 1");
         assertThat(notice.json().get("revisionAllowed").asBoolean()).isTrue();
+        assertThat(notice.json().get("contract").get("template").asText()).isNotBlank(); // the frozen Contract
         // The response window counts business days: 2h from Wednesday 10:00.
         assertThat(Instant.parse(notice.field("responseDeadline"))).isEqualTo(clock.instant().plus(Duration.ofHours(2)));
         assertThat(respond(agent, taskId, notice, "REVISE", null, "done again: invoice 1").statusCode()).isEqualTo(200);

@@ -95,6 +95,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
     private final Clock clock;
     private final FlaggedShareCap flaggedShareCap;
     private final String publicBaseUrl;
+    private final com.hireai.application.biz.acceptance.AcceptanceJsonMapper acceptanceJsonMapper;
     private final SecureRandom seeds = new SecureRandom();
 
     public SamplingAppServiceImpl(TaskRepository taskRepository, TaskItemRepository taskItemRepository,
@@ -107,7 +108,9 @@ public class SamplingAppServiceImpl implements SamplingAppService {
                                   ApplicationEventPublisher eventPublisher, RejectionWindows windows,
                                   ReviewWindow reviewWindow, Clock clock, FlaggedShareCap flaggedShareCap,
                                   @Value("${hireai.platform.public-base-url:http://localhost:8080}")
-                                  String publicBaseUrl) {
+                                  String publicBaseUrl,
+                                  com.hireai.application.biz.acceptance.AcceptanceJsonMapper acceptanceJsonMapper) {
+        this.acceptanceJsonMapper = acceptanceJsonMapper;
         this.taskRepository = taskRepository;
         this.taskItemRepository = taskItemRepository;
         this.taskItemAppService = taskItemAppService;
@@ -497,7 +500,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
                 round.reasonCategory().name(), round.reason(), round.responseDeadline(), round.revisionAllowed(),
                 publicBaseUrl + "/api/agent-callbacks/" + task.id() + "/items/" + item.itemNo() + "/rejection-response",
                 task.title(), task.description(), outputSpecJsonMapper.toJson(task.outputDescription()),
-                item.itemNo(), item.input(), item.resultPayload());
+                item.itemNo(), item.input(), item.resultPayload(), acceptanceJsonMapper.toJson(task.contract()));
         boolean delivered = agentNoticePort.sendRejectionNotice(webhookUrl, token, secret, notice);
         itemRejectionRepository.recordNoticeAttempt(round.id(), delivered ? now : null);
         if (delivered) {

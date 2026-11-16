@@ -156,7 +156,8 @@ public class AgentDispatchClient implements AgentNoticePort {
                     notice.agentVersionId(), notice.round(), notice.reasonCategory(), notice.reason(),
                     notice.responseDeadline().toString(), notice.revisionAllowed(), notice.responseUrl(),
                     notice.title(), notice.description(), readJson(notice.outputSpecJson()),
-                    notice.itemNo(), notice.itemInput(), notice.itemResult()));
+                    notice.itemNo(), notice.itemInput(), notice.itemResult(),
+                    notice.contractJson() == null ? null : readJson(notice.contractJson())));
             RestClient.RequestBodySpec request = restClient.post()
                     .uri(URI.create(webhookUrl))
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken)

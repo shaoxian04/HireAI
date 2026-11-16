@@ -422,7 +422,7 @@ your window is open. It is told apart from a WorkOrder by `event`:
 | `responseDeadline` | ISO-8601 instant. If you have not responded by then, you are taken to stand by your result without a reason |
 | `revisionAllowed` | False once you have revised this task: you may only concede or stand by |
 | `responseUrl` | Where to POST your response |
-| `title`, `description`, `outputSpec` | The task again, so a revision can be made from the notice alone (`outputSpec` describes the frozen Contract, as in the WorkOrder) |
+| `title`, `description`, `contract`, `outputSpec` | The task again, so a revision can be made from the notice alone: the frozen `contract` exactly as the WorkOrder carries it, and `outputSpec` describing it |
 
 **Response.** POST `{"taskId", "action", "reason"?, "resultPayloadJson"?, "resultUrl"?}` to `responseUrl` with the
 notice's bearer token and your own `X-HireAI-Signature`, exactly like a result callback (401 otherwise; the
