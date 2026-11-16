@@ -88,9 +88,12 @@ class AiReviewPolicyTest {
     @Test
     void aReviewThatFailsTooOftenGivesUpAndOnlyAFrozenOneIsReleased() {
         AiReviewModel review = requested(List.of("a"));
-        AiReviewModel once = review.recordFailure("timeout", 2, Instant.now());
+        AiReviewModel once = review.recordFailure("timeout", true, 2, Instant.now());
         assertThat(once.status().name()).isEqualTo("REQUESTED");
-        AiReviewModel twice = once.recordFailure("timeout", 2, Instant.now());
+        // An unusable answer is never retried: the same evidence would get the same answer.
+        assertThat(review.recordFailure("no verdict on a", false, 2, Instant.now()).status().name())
+                .isEqualTo("FAILED");
+        AiReviewModel twice = once.recordFailure("timeout", true, 2, Instant.now());
         assertThat(twice.status().name()).isEqualTo("FAILED");
         assertThatThrownBy(() -> twice.release(Instant.now())).isInstanceOf(DomainException.class);
         assertThat(AiReviewModel.frozen(UUID.randomUUID(), new AiReviewTerms(List.of("a"), Money.of("0.20")),

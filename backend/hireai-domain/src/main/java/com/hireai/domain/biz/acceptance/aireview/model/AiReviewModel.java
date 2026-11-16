@@ -78,11 +78,15 @@ public record AiReviewModel(UUID taskId, List<String> criteria, Money fee, AiRev
                 reviewerModel, null, createdAt, requestedAt, now);
     }
 
-    /** The reviewer could not answer; FAILED after {@code maxAttempts}, else still REQUESTED for a retry. */
-    public AiReviewModel recordFailure(String reason, int maxAttempts, Instant now) {
+    /**
+     * The reviewer gave no usable verdict, which is never a pass (fail closed). FAILED at once when the
+     * failure is not {@code retryable} (an unusable answer), else after {@code maxAttempts}; until then
+     * still REQUESTED for a retry.
+     */
+    public AiReviewModel recordFailure(String reason, boolean retryable, int maxAttempts, Instant now) {
         requireStatus(AiReviewStatus.REQUESTED, "recordFailure");
         int tried = attempts + 1;
-        boolean givesUp = tried >= maxAttempts;
+        boolean givesUp = !retryable || tried >= maxAttempts;
         return new AiReviewModel(taskId, criteria, fee, givesUp ? AiReviewStatus.FAILED : AiReviewStatus.REQUESTED,
                 decisive, tried, List.of(), null, reason, createdAt, requestedAt, givesUp ? now : null);
     }

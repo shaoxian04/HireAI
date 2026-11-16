@@ -177,8 +177,10 @@ public class OpenAiReviewerClient implements AiReviewerPort {
     }
 
     /**
-     * Redacts anything that reads as a fence marker, after the normalisation a model would see through
-     * (NFKC, invisible and bidi characters dropped), and notes how many invisible characters there were.
+     * Redacts only the spans that read as a fence marker once normalised the way a model would see
+     * through them (per-character NFKC, invisible and bidi characters dropped, case-folded); the rest
+     * of the evidence is kept byte for byte, invisible characters included, and their count is noted.
+     * The arbitrator's scheme (#99).
      */
     static String defuse(String raw) {
         String text = raw == null ? "" : raw;
@@ -186,40 +188,88 @@ public class OpenAiReviewerClient implements AiReviewerPort {
             text = text.substring(0, MAX_TEXT_CHARS) + "\n[truncated]";
         }
         long invisible = INVISIBLE.matcher(text).results().count();
-        String normalised = INVISIBLE.matcher(Normalizer.normalize(text, Normalizer.Form.NFKC)).replaceAll("");
-        if (MARKER.matcher(normalised).find()) {
-            text = MARKER.matcher(normalised).replaceAll("[marker removed]");
+        // A normalised copy, with each of its characters mapped back to the original index it came from.
+        StringBuilder normalised = new StringBuilder();
+        List<Integer> origin = new ArrayList<>();
+        int i = 0;
+        while (i < text.length()) {
+            int codePoint = text.codePointAt(i);
+            int width = Character.charCount(codePoint);
+            String piece = new String(Character.toChars(codePoint));
+            if (!INVISIBLE.matcher(piece).matches()) {
+                String folded = Normalizer.normalize(piece, Normalizer.Form.NFKC).toLowerCase(java.util.Locale.ROOT);
+                for (int k = 0; k < folded.length(); k++) {
+                    normalised.append(folded.charAt(k));
+                    origin.add(i);
+                }
+            }
+            i += width;
         }
-        return invisible == 0 ? text
-                : text + "\n[note: " + invisible + " zero-width/bidi control characters present in this evidence]";
+        StringBuilder out = new StringBuilder();
+        int copiedUpTo = 0;
+        var matcher = MARKER.matcher(normalised);
+        while (matcher.find()) {
+            int start = origin.get(matcher.start());
+            int lastOrigin = origin.get(matcher.end() - 1);
+            int end = lastOrigin + Character.charCount(text.codePointAt(lastOrigin));
+            if (start < copiedUpTo) {
+                continue;
+            }
+            out.append(text, copiedUpTo, start).append("[marker removed]");
+            copiedUpTo = end;
+        }
+        out.append(text.substring(copiedUpTo));
+        return invisible == 0 ? out.toString()
+                : out + "\n[note: " + invisible + " zero-width/bidi control characters present in this evidence]";
     }
 
     private static Map<String, Object> text(String value) {
         return Map.of("type", "text", "text", value);
     }
 
-    private Answer answerFrom(JsonNode response, List<String> criteria) {
-        String content = response == null ? null
-                : response.path("choices").path(0).path("message").path("content").asText(null);
+    /**
+     * Fails closed: the answer counts only when it parses into the schema with an explicit boolean and
+     * a non-blank reason for every criterion, each exactly once. A refusal, malformed JSON, an unknown,
+     * missing or repeated criterion, or a blank reason is "unavailable" (never a pass), not retried.
+     */
+    Answer answerFrom(JsonNode response, List<String> criteria) {
+        JsonNode message = response == null ? null : response.path("choices").path(0).path("message");
+        if (message == null || message.isMissingNode()) {
+            throw AiReviewerUnavailableException.unusableAnswer("AI Review response has no message");
+        }
+        if (message.hasNonNull("refusal") && !message.path("refusal").asText().isBlank()) {
+            throw AiReviewerUnavailableException.unusableAnswer("The AI reviewer refused to judge the deliverable");
+        }
+        String content = message.path("content").asText(null);
         if (content == null || content.isBlank()) {
-            throw new AiReviewerUnavailableException("AI Review response has no answer");
+            throw AiReviewerUnavailableException.unusableAnswer("AI Review response has no answer");
         }
         JsonNode answer;
         try {
             answer = mapper.readTree(content);
         } catch (Exception e) {
-            throw new AiReviewerUnavailableException("AI Review answer is not JSON", e);
+            throw AiReviewerUnavailableException.unusableAnswer("AI Review answer is not JSON");
         }
-        List<CriterionVerdict> verdicts = new ArrayList<>();
-        for (JsonNode verdict : answer.path("verdicts")) {
-            int index = verdict.path("criterion").asInt(0);
-            if (index < 1 || index > criteria.size() || !verdict.path("passed").isBoolean()) {
-                throw new AiReviewerUnavailableException("AI Review answered an unknown criterion " + index);
+        JsonNode list = answer == null ? null : answer.path("verdicts");
+        if (list == null || !list.isArray() || list.size() != criteria.size()) {
+            throw AiReviewerUnavailableException.unusableAnswer(
+                    "AI Review did not give exactly one verdict per criterion");
+        }
+        CriterionVerdict[] byIndex = new CriterionVerdict[criteria.size()];
+        for (JsonNode verdict : list) {
+            JsonNode index = verdict.path("criterion");
+            JsonNode passed = verdict.path("passed");
+            JsonNode reason = verdict.path("reason");
+            if (!index.isIntegralNumber() || index.asInt() < 1 || index.asInt() > criteria.size()
+                    || byIndex[index.asInt() - 1] != null || !passed.isBoolean() || !reason.isTextual()
+                    || reason.asText().isBlank()) {
+                throw AiReviewerUnavailableException.unusableAnswer(
+                        "AI Review gave an unusable verdict for criterion " + index);
             }
-            verdicts.add(new CriterionVerdict(criteria.get(index - 1), verdict.path("passed").asBoolean(),
-                    verdict.path("reason").asText("")));
+            byIndex[index.asInt() - 1] = new CriterionVerdict(criteria.get(index.asInt() - 1), passed.asBoolean(),
+                    reason.asText());
         }
         String answeredBy = response.path("model").asText(model);
-        return new Answer(verdicts, answeredBy);
+        return new Answer(List.of(byIndex), answeredBy);
     }
 }

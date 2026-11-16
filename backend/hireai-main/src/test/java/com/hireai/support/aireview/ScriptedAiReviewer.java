@@ -13,7 +13,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * It answers from tags in each criterion's own text, so a test scripts the verdict where it books:
  * <ul>
  *   <li>{@code #fail} in a criterion → that criterion fails, every other one passes;</li>
- *   <li>{@code #error} in any criterion → the reviewer is unavailable (every attempt).</li>
+ *   <li>{@code #error} in any criterion → the reviewer is unavailable (every attempt, retryable);</li>
+ *   <li>{@code #malformed} in any criterion → an unusable answer (not retried);</li>
+ *   <li>{@code #partial} in a criterion → the answer leaves that criterion unjudged.</li>
  * </ul>
  * Every subject it was asked to judge is recorded, so a test can see what reached the reviewer (the
  * frozen deliverable, not the Agent's link). One JVM-wide instance, shared by every Spring context.
@@ -35,7 +37,11 @@ public final class ScriptedAiReviewer implements AiReviewerPort {
         if (subject.criteria().stream().anyMatch(c -> c.contains("#error"))) {
             throw new AiReviewerUnavailableException("scripted outage");
         }
+        if (subject.criteria().stream().anyMatch(c -> c.contains("#malformed"))) {
+            throw AiReviewerUnavailableException.unusableAnswer("scripted malformed answer");
+        }
         return new Answer(subject.criteria().stream()
+                .filter(c -> !c.contains("#partial")) // a verdict that leaves a criterion unjudged
                 .map(c -> new CriterionVerdict(c, !c.contains("#fail"),
                         c.contains("#fail") ? "The deliverable does not show this." : "Seen in the deliverable."))
                 .toList(), MODEL);
