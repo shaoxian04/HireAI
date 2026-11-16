@@ -284,6 +284,44 @@ export interface TaskDTO {
    * AI_REVIEW_UNAVAILABLE (a decisive AI Review gave no usable verdict). Absent otherwise.
    */
   reviewReason?: "ANOMALY" | "UNDECIDED" | "AI_REVIEW_UNAVAILABLE";
+  /** What requirement extraction made of the description, on a description-only submit (#100). */
+  extraction?: ExtractionDTO | null;
+}
+
+/**
+ * One requirement found in a task's description (#100, spec S6): `mapped` onto an automatic check
+ * (`check`, with the Contract `params` it sets), or not, with `unmappedReason`. An unmapped one is not
+ * checked automatically: the Client judges it (or AI Review, or arbitration as evidence).
+ */
+export interface RequirementDTO {
+  text: string;
+  mapped: boolean;
+  check?: string;
+  params?: Record<string, ContractValue>;
+  unmappedReason?: string;
+}
+
+/** UNAVAILABLE: the extractor could not answer, so the Template's defaults apply and nothing was mapped. */
+export type ExtractionStatus = "EXTRACTED" | "UNAVAILABLE";
+
+export interface ExtractionDTO {
+  template: string;
+  version: number;
+  status: ExtractionStatus;
+  requirements: RequirementDTO[];
+}
+
+/** `POST /contracts/draft`: the Contract a description would be held to. Creates and freezes nothing. */
+export interface ContractDraftDTO {
+  contract: ContractDTO;
+  extraction: ExtractionDTO;
+}
+
+/** `GET /catalogue/review-windows`: the windows every booking agrees to, in seconds. */
+export interface ReviewWindowsDTO {
+  reviewSeconds: number;
+  agentResponseSeconds: number;
+  clientDecisionSeconds: number;
 }
 
 /** An Item's own state inside a multi-Item Task. */

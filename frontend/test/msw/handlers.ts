@@ -291,6 +291,18 @@ export const handlers = [
     return ok([CARD]);
   }),
   http.get("*/api/catalogue/templates", () => ok(TEMPLATES)),
+  http.get("*/api/catalogue/review-windows", () =>
+    ok({ reviewSeconds: 86400, agentResponseSeconds: 7200, clientDecisionSeconds: 86400 }),
+  ),
+  // Requirement extraction (#100): by default it finds nothing, so the base Contract comes back as is.
+  http.post("*/api/contracts/draft", async ({ request }) => {
+    const body = (await request.json()) as { template?: string };
+    const template = body.template ?? "text_basic";
+    return ok({
+      contract: { template, version: 1, params: {} },
+      extraction: { template, version: 1, status: "EXTRACTED", requirements: [] },
+    });
+  }),
   http.get("*/api/catalogue/categories", () =>
     ok([
       { category: "summarisation", label: "Summarisation", agentCount: 1 },

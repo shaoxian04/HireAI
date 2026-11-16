@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { server, ok } from "../../../../test/msw/handlers";
@@ -549,5 +549,215 @@ describe("submit task — output terms (#91)", () => {
     fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
     await waitFor(() => expect(sent).not.toBeNull());
     expect(sent).not.toHaveProperty("contract");
+  });
+});
+
+// ---- #101: requirement extraction runs before the search; the booking card says what is checked ----
+
+const TEXT_TEMPLATES = [
+  {
+    key: "text_basic", version: 1, title: "Text", description: "A plain-text result.", outputShape: "TEXT",
+    checks: ["TEXT_MAX_LENGTH"], expectationMode: "NONE",
+    parameters: [
+      { name: "max_length", label: "Longest text accepted", description: null, comparison: "max",
+        bounds: { minimum: 1, maximum: 100000 } },
+    ],
+    rulingSettlement: { FULFILLED: 1, PARTIALLY_FULFILLED: 0.5, NOT_FULFILLED: 0 },
+    status: "ACTIVE", publishedAt: "2026-11-15T00:00:00Z",
+  },
+];
+
+const EXTRACTED = {
+  contract: { template: "text_basic", version: 1, params: { max_length: 800 } },
+  extraction: {
+    template: "text_basic", version: 1, status: "EXTRACTED",
+    requirements: [
+      { text: "No more than 800 characters", mapped: true, check: "TEXT_MAX_LENGTH", params: { max_length: 800 } },
+      { text: "Keep it upbeat", mapped: false,
+        unmappedReason: "No automatic check fits it unambiguously, so it is not checked automatically." },
+    ],
+  },
+};
+
+describe("submit task — extracted checks (#101)", () => {
+  async function searchAndPick() {
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    await screen.findByRole("dialog", { name: /pick your agent/i });
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    return screen.findByRole("region", { name: /what booking agrees to/i });
+  }
+
+  it("extracts the description before the search and books the extracted terms", async () => {
+    const order: string[] = [];
+    let draftSent: Record<string, unknown> | null = null;
+    let previewSent: Record<string, unknown> | null = null;
+    let booked: Record<string, unknown> | null = null;
+    server.use(
+      http.get("*/api/catalogue/templates", () => ok(TEXT_TEMPLATES)),
+      http.post("*/api/contracts/draft", async ({ request }) => {
+        order.push("draft");
+        draftSent = (await request.json()) as Record<string, unknown>;
+        return ok(EXTRACTED);
+      }),
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        order.push("preview");
+        previewSent = (await request.json()) as Record<string, unknown>;
+        return ok(previewBody);
+      }),
+      http.post("*/api/tasks/direct", async ({ request }) => {
+        booked = (await request.json()) as Record<string, unknown>;
+        return ok({ id: "t-1", status: "SUBMITTED" });
+      }),
+    );
+    const checks = await searchAndPick();
+
+    expect(order).toEqual(["draft", "preview"]);
+    expect(draftSent).toEqual({ title: "Summarise", description: "the report" });
+    expect(previewSent!.contract).toEqual(EXTRACTED.contract);
+    expect(screen.getByText(/held to the terms read from your description: text/i)).toBeInTheDocument();
+    // The mapped requirement is checked automatically, in plain words.
+    const automatic = within(checks).getByRole("list", { name: /^checked automatically/i });
+    expect(automatic).toHaveTextContent(/longest text accepted/i);
+    expect(automatic).toHaveTextContent("800");
+    expect(automatic).toHaveTextContent(/no more than 800 characters/i);
+    // The unmapped one is listed so the Client knows nobody checks it automatically.
+    const yours = within(checks).getByRole("list", { name: /not checked automatically/i });
+    expect(yours).toHaveTextContent(/keep it upbeat/i);
+    expect(automatic).not.toHaveTextContent(/keep it upbeat/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /confirm & book/i }));
+    await waitFor(() => expect(booked).not.toBeNull());
+    expect(booked!.contract).toEqual(EXTRACTED.contract);
+  });
+
+  it("keeps the Client's own output terms over an extracted value for the same term", async () => {
+    let draftSent: Record<string, unknown> | null = null;
+    let previewSent: Record<string, unknown> | null = null;
+    server.use(
+      http.post("*/api/contracts/draft", async ({ request }) => {
+        draftSent = (await request.json()) as Record<string, unknown>;
+        return ok({
+          contract: { template: "file_basic", version: 1, params: { max_bytes: 999 } },
+          extraction: { template: "file_basic", version: 1, status: "EXTRACTED", requirements: [
+            { text: "Under 999 bytes", mapped: true, check: "FILE_MAX_BYTES", params: { max_bytes: 999 } },
+          ] },
+        });
+      }),
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        previewSent = (await request.json()) as Record<string, unknown>;
+        return ok(previewBody);
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    const terms = await screen.findByLabelText(/output terms/i);
+    await screen.findByRole("option", { name: "File" });
+    fireEvent.change(terms, { target: { value: "file_basic@1" } });
+    fireEvent.change(await screen.findByLabelText(/largest file accepted/i), { target: { value: "5000" } });
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    await screen.findByRole("dialog", { name: /pick your agent/i });
+
+    expect(draftSent!.template).toBe("file_basic");
+    expect(previewSent!.contract).toEqual({ template: "file_basic", version: 1, params: { max_bytes: 5000 } });
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    const checks = await screen.findByRole("region", { name: /what booking agrees to/i });
+    expect(within(checks).getByRole("list", { name: /not checked automatically/i }))
+      .toHaveTextContent(/under 999 bytes.*your output terms set this differently/i);
+  });
+
+  it("says nothing is checked from the description when extraction is unavailable, and still searches", async () => {
+    let previewSent: Record<string, unknown> | null = null;
+    server.use(
+      http.post("*/api/contracts/draft", () => ok({
+        contract: { template: "text_basic", version: 1, params: {} },
+        extraction: { template: "text_basic", version: 1, status: "UNAVAILABLE", requirements: [] },
+      })),
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        previewSent = (await request.json()) as Record<string, unknown>;
+        return ok(previewBody);
+      }),
+    );
+    const checks = await searchAndPick();
+    expect(previewSent).not.toHaveProperty("contract");
+    expect(checks).toHaveTextContent(/couldn.t read the requirements in your description/i);
+    expect(checks).toHaveTextContent(/agent.s own output terms/i);
+  });
+
+  it("treats a failed extraction call like an unavailable one", async () => {
+    let searched = false;
+    server.use(
+      http.post("*/api/contracts/draft", () => HttpResponse.json(
+        { success: false, code: "INTERNAL_ERROR", message: "boom", data: null }, { status: 500 })),
+      http.post("*/api/tasks/match-preview", () => {
+        searched = true;
+        return ok(previewBody);
+      }),
+    );
+    const checks = await searchAndPick();
+    expect(searched).toBe(true);
+    expect(checks).toHaveTextContent(/couldn.t read the requirements in your description/i);
+  });
+
+  it("says so when the description holds no specific requirement", async () => {
+    server.use(http.post("*/api/tasks/match-preview", () => ok(previewBody)));
+    const checks = await searchAndPick();
+    expect(checks).toHaveTextContent(/no specific requirement/i);
+    expect(within(checks).queryByRole("list", { name: /not checked automatically/i })).toBeNull();
+  });
+
+  it("drops an extracted term only when the Client relaxes it, without extracting again", async () => {
+    let drafts = 0;
+    const sent: Record<string, unknown>[] = [];
+    server.use(
+      http.get("*/api/catalogue/templates", () => ok(TEXT_TEMPLATES)),
+      http.post("*/api/contracts/draft", () => {
+        drafts += 1;
+        return ok(EXTRACTED);
+      }),
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        sent.push((await request.json()) as Record<string, unknown>);
+        if (sent.length === 1) {
+          return ok({
+            shortlist: [], nearMisses: [], noCloseMatch: false,
+            noMatch: {
+              summary: "No eligible Agent: parameter max_length excluded 1 Agent.",
+              exclusions: [{ blocker: "PARAMETER", parameter: "max_length", agents: 1 }],
+              suggestions: [{ parameter: "max_length", agents: 1 }],
+            },
+          });
+        }
+        return ok(previewBody);
+      }),
+    );
+    renderPage();
+    fillBasics("30");
+    await pickCategory();
+    fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /drop longest text accepted → 1 agent/i }));
+    await waitFor(() => expect(sent).toHaveLength(2));
+    expect(sent[1]).not.toHaveProperty("contract");
+    expect(drafts).toBe(1);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Select" }));
+    const checks = await screen.findByRole("region", { name: /what booking agrees to/i });
+    expect(within(checks).getByRole("list", { name: /not checked automatically/i }))
+      .toHaveTextContent(/no more than 800 characters.*you dropped this term/i);
+  });
+
+  it("states the review and response windows the booking agrees to", async () => {
+    server.use(
+      http.get("*/api/catalogue/review-windows", () =>
+        ok({ reviewSeconds: 172800, agentResponseSeconds: 3600, clientDecisionSeconds: 1800 })),
+      http.post("*/api/tasks/match-preview", () => ok(previewBody)),
+    );
+    const checks = await searchAndPick();
+    const windows = await within(checks).findByText(/48 hours to accept or reject/i);
+    expect(windows).toHaveTextContent(/accepted and paid for you/i);
+    expect(checks).toHaveTextContent(/agent has 1 hour to respond/i);
+    expect(checks).toHaveTextContent(/30 minutes to accept it or ask for arbitration/i);
   });
 });

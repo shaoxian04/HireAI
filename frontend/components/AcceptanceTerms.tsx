@@ -73,7 +73,7 @@ function TextValue({ value }: { value: string }) {
   );
 }
 
-function ContractValueView({ name, value }: { name: string; value: ContractValue }) {
+export function ContractValueView({ name, value }: { name: string; value: ContractValue }) {
   if (typeof value === "number") return <span className="tabular text-fg">{formatNumber(name, value)}</span>;
   if (typeof value === "boolean") return <span className="text-fg">{value ? "Yes" : "No"}</span>;
   if (Array.isArray(value)) return <span className="text-fg">{value.length ? value.join(", ") : "None"}</span>;

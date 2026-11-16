@@ -73,6 +73,17 @@ class ReviewWindowIntegrationTest extends WholeAppIntegrationTest {
         assertThat(Instant.parse(task.get("reviewDeadline").asText())).isEqualTo(start.plus(Duration.ofHours(24)));
     }
 
+    /** The booking screen states the windows a booking agrees to (#101), read from config, never restated. */
+    @Test
+    void theReviewAndResponseWindowsABookingAgreesToAreReadable() throws Exception {
+        String body = new RestTemplate().getForObject(platformUrl("/api/catalogue/review-windows"), String.class);
+        JsonNode windows = objectMapper.readTree(body).get("data");
+
+        assertThat(windows.get("reviewSeconds").asLong()).isEqualTo(Duration.ofHours(24).toSeconds());
+        assertThat(windows.get("agentResponseSeconds").asLong()).isEqualTo(Duration.ofHours(2).toSeconds());
+        assertThat(windows.get("clientDecisionSeconds").asLong()).isEqualTo(Duration.ofHours(24).toSeconds());
+    }
+
     @Test
     void anUnreviewedResultIsAcceptedAndSettledOnceItsWindowCloses() throws Exception {
         UUID taskId = taskAwaitingReview();

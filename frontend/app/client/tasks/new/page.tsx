@@ -14,10 +14,19 @@ import { CategoryCombobox } from "@/components/CategoryCombobox";
 import { ContractTermsField, parameterLabel, withoutParameter } from "@/components/ContractTermsField";
 import { refOf, useTemplates } from "@/components/AcceptanceTerms";
 import { fetchMatchPreview } from "@/lib/rebook";
+import { BookingChecks } from "@/components/BookingChecks";
+import {
+  draftKey,
+  draftRequest,
+  effectiveContract,
+  requirementFates,
+  type DraftState,
+} from "@/lib/extraction";
 import { DEADLINE_UNITS, toDeadlineSeconds, type DeadlineUnit } from "@/lib/deadline";
 import type {
   AgentOptionDTO,
   ContractDTO,
+  ContractDraftDTO,
   DirectBookRequest,
   MatchPreviewDTO,
   TaskDTO,
@@ -58,8 +67,14 @@ function SubmitTask() {
   // The output terms the shortlist must accept and the booking freezes (#91); null = the agent's own.
   const [contract, setContract] = useState<ContractDTO | null>(null);
   const templates = useTemplates(true);
+  // Requirement extraction (#101): the draft made of the description before the search, which request
+  // it answered (so a re-search after a relax reuses it), and the terms the Client dropped since.
+  const [draft, setDraft] = useState<{ key: string; state: DraftState } | null>(null);
+  const [dropped, setDropped] = useState<string[]>([]);
+  const terms = effectiveContract(draft?.state ?? null, contract, dropped);
+  const fates = requirementFates(draft?.state ?? null, terms, dropped);
   const contractTemplate =
-    contract && templates.status === "ready" ? templates.byRef.get(refOf(contract.template, contract.version)) : undefined;
+    terms && templates.status === "ready" ? templates.byRef.get(refOf(terms.template, terms.version)) : undefined;
   const [preview, setPreview] = useState<MatchPreviewDTO | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [selected, setSelected] = useState<AgentOptionDTO | null>(null);
@@ -68,6 +83,7 @@ function SubmitTask() {
   // A field error clears the moment that field (or any other) is edited, so it never goes stale.
   const clearFieldError = () => setError((er) => (er?.field ? null : er));
   const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<"reading" | "searching">("searching");
   useFocusOnFieldError(error, { deadlineSeconds: "deadline" });
   const firstPersist = useRef(true);
   // Built here rather than in onBook so the idempotency signature is derived from the very
@@ -77,7 +93,7 @@ function SubmitTask() {
     ? {
         title, description, budget: selected.price, agentId: selected.agentId, // the agent's price, not the typed budget
         ...(typeof deadlineSeconds === "number" ? { deadlineSeconds } : {}),
-        ...(contract ? { contract } : {}),
+        ...(terms ? { contract: terms } : {}),
       }
     : null;
   const getIdempotencyKey = useIdempotencyKey(directBookSignature(bookingBody));
@@ -172,11 +188,36 @@ function SubmitTask() {
       setError({ field: "deadlineSeconds", message: "Enter the deadline as a whole number, up to 30 days, or leave it empty" });
       return;
     }
-    await search(budgetNum, contract);
+    setLoading(true);
+    const key = draftKey(title, description, contract);
+    let state = draft?.key === key ? draft.state : null;
+    let relaxed = draft?.key === key ? dropped : [];
+    if (!state) {
+      setPhase("reading");
+      state = await extract();
+      relaxed = [];
+      setDraft({ key, state });
+      setDropped([]);
+    }
+    await search(budgetNum, effectiveContract(state, contract, relaxed));
+  }
+
+  /** Extraction runs on the description before the search; any failure leaves the description unread. */
+  async function extract(): Promise<DraftState> {
+    try {
+      const result = await api<ContractDraftDTO>("/contracts/draft", {
+        method: "POST",
+        body: JSON.stringify(draftRequest(title, description, contract)),
+      });
+      return { kind: "ready", draft: result };
+    } catch {
+      return { kind: "unavailable" };
+    }
   }
 
   async function search(budgetNum: number, terms: ContractDTO | null) {
     setLoading(true);
+    setPhase("searching");
     try {
       const result = await fetchMatchPreview({
         title, description, category, budget: budgetNum, exclude: excluded,
@@ -194,11 +235,13 @@ function SubmitTask() {
 
   /** The Client chose a relax suggestion: drop that term and search again with the rest. */
   function onRelax(parameter: string) {
-    if (!contract) return;
-    const relaxed = withoutParameter(contract, parameter);
-    setContract(relaxed);
+    if (!terms) return;
+    const own = contract && parameter in contract.params ? withoutParameter(contract, parameter) : contract;
+    const nowDropped = dropped.includes(parameter) ? dropped : [...dropped, parameter];
+    setContract(own);
+    setDropped(nowDropped);
     setSelected(null);
-    void search(Number(budget), relaxed);
+    void search(Number(budget), effectiveContract(draft?.state ?? null, own, nowDropped));
   }
 
   async function onBook() {
@@ -329,7 +372,7 @@ function SubmitTask() {
               disabled={loading || !category}
               className="w-full"
             >
-              {loading ? "Searching…" : "Find agents"}
+              {loading ? (phase === "reading" ? "Reading your requirements…" : "Searching…") : "Find agents"}
             </Button>
           </div>
         </form>
@@ -389,15 +432,18 @@ function SubmitTask() {
             )}
           </p>
           <p className="mt-1 text-sm text-muted">
-            {contractTemplate
-              ? <>The agent is held to your output terms: {contractTemplate.title}.</>
-              : "The agent works under its own output terms."}
+            {!contractTemplate
+              ? "The agent works under its own output terms."
+              : contract
+                ? <>The agent is held to your output terms: {contractTemplate.title}.</>
+                : <>The agent is held to the terms read from your description: {contractTemplate.title}.</>}
           </p>
           {contractTemplate && preview?.fallback && (
             <div className="mt-3">
               <VersionFallbackNotice fallback={preview.fallback} templateTitle={contractTemplate.title} context="booking" />
             </div>
           )}
+          <BookingChecks contract={terms} template={contractTemplate} draft={draft?.state ?? null} fates={fates} />
           <div className="mt-4 flex items-center gap-4">
             <Button onClick={onBook} disabled={loading}>
               {loading ? "Booking…" : "Confirm & book"}
