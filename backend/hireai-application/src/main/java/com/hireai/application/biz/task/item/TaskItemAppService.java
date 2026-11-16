@@ -43,6 +43,12 @@ public interface TaskItemAppService {
      */
     void acceptAllAwaitingReview(TaskModel pendingReview, boolean automatically);
 
+    /**
+     * The sample accepted the lot (spec S8): accepts every Item awaiting review except those a check sent
+     * to the reviewer (D7), which wait for their own judgement; resolves the Task once all have settled.
+     */
+    void acceptLot(TaskModel pendingReview);
+
     /** The Items of one Task, in Item order; empty for a single-deliverable Task. */
     TaskItems itemsOf(UUID taskId);
 

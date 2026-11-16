@@ -1,5 +1,7 @@
 package com.hireai.domain.biz.task.item.model;
 
+import com.hireai.domain.biz.acceptance.check.model.Finding;
+import com.hireai.domain.biz.acceptance.check.model.SelfReportedAnomaly;
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
 import com.hireai.domain.shared.model.Money;
 import com.hireai.utility.exception.DomainException;
@@ -26,10 +28,20 @@ import java.util.UUID;
  */
 public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Money price, ItemStatus status,
                             String agentStatus, String resultPayload, String resultUrl,
-                            List<ItemCheck> checks, boolean autoAccepted, UUID sourceSnapshotId, Money paidAmount) {
+                            List<ItemCheck> checks, boolean autoAccepted, UUID sourceSnapshotId, Money paidAmount,
+                            List<Finding> findings, List<SelfReportedAnomaly> anomalies) {
 
     public TaskItemModel {
         checks = checks == null ? List.of() : List.copyOf(checks);
+        findings = findings == null ? List.of() : List.copyOf(findings);
+        anomalies = anomalies == null ? List.of() : List.copyOf(anomalies);
+    }
+
+    public TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Money price, ItemStatus status,
+                         String agentStatus, String resultPayload, String resultUrl, List<ItemCheck> checks,
+                         boolean autoAccepted, UUID sourceSnapshotId, Money paidAmount) {
+        this(id, taskId, itemNo, input, price, status, agentStatus, resultPayload, resultUrl, checks, autoAccepted,
+                sourceSnapshotId, paidAmount, List.of(), List.of());
     }
 
     static TaskItemModel create(UUID taskId, int itemNo, String input, Money price, UUID sourceSnapshotId) {
@@ -38,14 +50,35 @@ public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Mone
     }
 
     /**
-     * AWAITING_RESULT → PENDING_REVIEW when every check passed, else SPEC_VIOLATION (refunded).
+     * AWAITING_RESULT → PENDING_REVIEW when no check rejected (a check that sent it to review makes it
+     * {@link #needsReview()}), else SPEC_VIOLATION (refunded).
      */
     public TaskItemModel recordResult(String agentStatus, String payload, String url, List<ItemCheck> checks) {
+        return recordResult(agentStatus, payload, url, new ItemAcceptance(checks, List.of(), List.of()));
+    }
+
+    /** {@link #recordResult(String, String, String, List)} keeping the Findings and anomalies reported with it (D7). */
+    public TaskItemModel recordResult(String agentStatus, String payload, String url, ItemAcceptance acceptance) {
         requireStatus(ItemStatus.AWAITING_RESULT, "recordResult");
         requireHttpsResultUrl(itemNo, url);
-        boolean passed = checks != null && !checks.isEmpty() && checks.stream().allMatch(ItemCheck::passed);
-        return with(passed ? ItemStatus.PENDING_REVIEW : ItemStatus.SPEC_VIOLATION,
-                agentStatus, payload, url, checks, false, null);
+        return judged(agentStatus, payload, url, acceptance);
+    }
+
+    private TaskItemModel judged(String nextAgentStatus, String payload, String url, ItemAcceptance acceptance) {
+        List<ItemCheck> newChecks = acceptance.checks();
+        boolean passed = !newChecks.isEmpty() && newChecks.stream().noneMatch(ItemCheck::rejects);
+        return new TaskItemModel(id, taskId, itemNo, input, price,
+                passed ? ItemStatus.PENDING_REVIEW : ItemStatus.SPEC_VIOLATION, nextAgentStatus, payload, url,
+                newChecks, false, sourceSnapshotId, null, acceptance.findings(), acceptance.anomalies());
+    }
+
+    /**
+     * True when a check could not decide, or an anomaly the Agent reported sent this Item to review (D7):
+     * it is paid only when the buyer's reviewer confirms it (refunded if nobody does in the window), so it is held
+     * out of the sampled lot and is never accepted, reworked or settled pro rata with the lot.
+     */
+    public boolean needsReview() {
+        return checks.stream().anyMatch(ItemCheck::sendsToReview);
     }
 
     /**
@@ -87,6 +120,19 @@ public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Mone
         return with(accepted.status(), agentStatus, resultPayload, resultUrl, checks, true, null);
     }
 
+    /**
+     * PENDING_REVIEW -> UNREVIEWED: a check sent this Item to review (D7) and the review window closed with
+     * nobody judging it. It is refunded rather than accepted on silence (owner decision on #87).
+     */
+    public TaskItemModel refundUnreviewed() {
+        requireStatus(ItemStatus.PENDING_REVIEW, "refundUnreviewed");
+        if (!needsReview()) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Item " + itemNo + ": only an Item a check sent to review is refunded unreviewed");
+        }
+        return with(ItemStatus.UNREVIEWED, agentStatus, resultPayload, resultUrl, checks, true, null);
+    }
+
     /** PENDING_REVIEW -> REJECTED: the buyer's reviewer found it wrong; its rejection response path opens. */
     public TaskItemModel rejectByReviewer() {
         requireStatus(ItemStatus.PENDING_REVIEW, "rejectByReviewer");
@@ -113,11 +159,14 @@ public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Mone
      * judges it again), else SPEC_VIOLATION (refunded).
      */
     public TaskItemModel revise(String payload, String url, List<ItemCheck> newChecks) {
+        return revise(payload, url, new ItemAcceptance(newChecks, List.of(), List.of()));
+    }
+
+    /** {@link #revise(String, String, List)} keeping what was reported with the revision. */
+    public TaskItemModel revise(String payload, String url, ItemAcceptance acceptance) {
         requireStatus(ItemStatus.REJECTED, "revise");
         requireHttpsResultUrl(itemNo, url);
-        boolean passed = newChecks != null && !newChecks.isEmpty() && newChecks.stream().allMatch(ItemCheck::passed);
-        return with(passed ? ItemStatus.PENDING_REVIEW : ItemStatus.SPEC_VIOLATION,
-                "COMPLETED", payload, url, newChecks, false, null);
+        return judged("COMPLETED", payload, url, acceptance);
     }
 
     /** PENDING_REVIEW -> AWAITING_RESULT: the sample failed and the whole Task goes back for its one rework. */
@@ -142,8 +191,11 @@ public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Mone
 
     private TaskItemModel with(ItemStatus next, String nextAgentStatus, String payload, String url,
                                List<ItemCheck> nextChecks, boolean auto, Money paid) {
+        // A result taken back (the whole-Task rework) also drops what was reported with it.
+        boolean sameResult = nextChecks == checks;
         return new TaskItemModel(id, taskId, itemNo, input, price, next, nextAgentStatus, payload, url,
-                nextChecks, auto, sourceSnapshotId, paid);
+                nextChecks, auto, sourceSnapshotId, paid, sameResult ? findings : List.of(),
+                sameResult ? anomalies : List.of());
     }
 
     public boolean isSettled() {

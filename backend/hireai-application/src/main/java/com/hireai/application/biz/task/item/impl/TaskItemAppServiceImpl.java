@@ -6,6 +6,11 @@ import com.hireai.domain.biz.acceptance.delivery.model.DeliveryOutcome;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.item.TaskItemAppService;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
+import com.hireai.domain.biz.acceptance.check.model.AcceptanceEvidence;
+import com.hireai.domain.biz.acceptance.check.model.FindingFacts;
+import com.hireai.domain.biz.acceptance.check.model.InvoiceReading;
+import com.hireai.domain.biz.acceptance.check.model.SelfReportedAnomaly;
+import com.hireai.domain.biz.acceptance.check.service.InvoiceReader;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
 import com.hireai.domain.biz.adjudication.service.ValidationDomainService;
@@ -15,6 +20,7 @@ import com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository;
 import com.hireai.domain.biz.task.info.AgentResultInfo;
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
 import com.hireai.domain.biz.task.item.info.AgentItemResultInfo;
+import com.hireai.domain.biz.task.item.model.ItemAcceptance;
 import com.hireai.domain.biz.task.item.model.ItemCheck;
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
 import com.hireai.domain.biz.task.item.info.ItemInput;
@@ -66,6 +72,8 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
     private final Clock clock;
     /** Freezes an Item's file deliverable before its checks run (D24), keyed by the Item's id. */
     private final DeliverySnapshotAppService deliverySnapshotAppService;
+    /** Reads an invoice result for the ap_invoice_extraction checks (#106). */
+    private final InvoiceReader invoiceReader;
 
     @Override
     public void createForSubmit(UUID taskId, List<ItemInput> inputs, Money price) {
@@ -109,9 +117,10 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
             TaskItemModel next = itemResult == null || !"COMPLETED".equalsIgnoreCase(itemResult.agentStatus())
                     ? item.recordFailure(itemResult == null ? "MISSING" : itemResult.agentStatus())
                     : item.recordResult(itemResult.agentStatus().trim(), payloadOf(itemResult.resultPayloadJson()),
-                            itemResult.resultUrl(), checksFor(item, attemptId(item, reworked ? "rework" : null),
-                                    itemResult.agentStatus().trim(), itemResult.resultPayloadJson(),
-                                    itemResult.resultUrl(), contract));
+                            itemResult.resultUrl(), acceptanceFor(recorded, item,
+                                    attemptId(item, reworked ? "rework" : null), itemResult.agentStatus().trim(),
+                                    itemResult.resultPayloadJson(), itemResult.resultUrl(), contract,
+                                    itemResult.anomalies()));
             taskItemRepository.update(next);
             if (next.status() == ItemStatus.SPEC_VIOLATION || next.status() == ItemStatus.FAILED) {
                 // Refunded at once: one bad Item never holds the others back (D14).
@@ -135,8 +144,13 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
         TaskModel gated = recorded.passValidation();
         taskRepository.save(gated);
         if (apiKeyTaskRepository.findApiKeyIdByTask(gated.id()).isPresent()) {
-            // Programmatic channel: passing Items settle at once, deterministically, as single Tasks do.
-            return acceptAndResolve(gated, outcome, true);
+            // Programmatic channel: passing Items settle at once, deterministically, as single Tasks do. An
+            // Item a check sent to review is paid only when the Client confirms it (D7), so it waits.
+            TaskModel settled = acceptAndResolve(gated, outcome, true, true);
+            if (settled.status() == TaskStatus.PENDING_REVIEW) {
+                taskRepository.stampReviewDeadline(gated.id(), reviewWindow.closesAtCountingBusinessDays(clock.instant()));
+            }
+            return settled;
         }
         // Web channel: multi-Item Tasks count their review window in business days (spec S7/D10).
         Instant reviewDeadline = reviewWindow.closesAtCountingBusinessDays(clock.instant());
@@ -170,14 +184,30 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
 
     @Override
     public void acceptAllAwaitingReview(TaskModel pendingReview, boolean automatically) {
-        acceptAndResolve(pendingReview, taskItemRepository.findByTaskId(pendingReview.id()), automatically);
+        acceptAndResolve(pendingReview, taskItemRepository.findByTaskId(pendingReview.id()), automatically, false);
     }
 
-    private TaskModel acceptAndResolve(TaskModel pendingReview, TaskItems items, boolean automatically) {
+    @Override
+    public void acceptLot(TaskModel pendingReview) {
+        acceptAndResolve(pendingReview, taskItemRepository.findByTaskId(pendingReview.id()), false, true);
+    }
+
+    /** Accepts the Items awaiting review ({@code lotOnly}: not those a check sent to the reviewer, D7). */
+    private TaskModel acceptAndResolve(TaskModel pendingReview, TaskItems items, boolean automatically,
+                                       boolean lotOnly) {
         TaskItems after = items;
         UUID builderId = builderOf(pendingReview);
         List<TaskItemModel> accepted = new ArrayList<>();
-        for (TaskItemModel item : items.awaitingReview()) {
+        if (automatically && !lotOnly) {
+            // The review window closed (owner decision on #87, 2026-11-16): an Item a check sent to review
+            // that nobody judged is refunded, not accepted on silence; its Agent is not penalised for it.
+            for (TaskItemModel item : items.flaggedForReview()) {
+                TaskItemModel refunded = item.refundUnreviewed();
+                settleRefunded(pendingReview, refunded);
+                after = replace(after, refunded);
+            }
+        }
+        for (TaskItemModel item : automatically || lotOnly ? items.lot() : items.awaitingReview()) {
             TaskItemModel next = automatically ? item.acceptAutomatically() : item.accept();
             settlementWriteAppService.settleItemAccepted(pendingReview.id(), next.id(), next.itemNo(),
                     pendingReview.clientId(), builderId, next.price());
@@ -241,8 +271,14 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
     }
 
     private void recordReputation(TaskModel task, TaskItems settled) {
+        // Items refunded because nobody judged them never count against the Agent (owner decision on #87).
+        int judged = settled.reputationCount();
+        if (judged == 0) {
+            log.info("Task {}: no Item was judged, so it writes no reputation event", task.id());
+            return;
+        }
         reputationWriteAppService.recordItemsOutcome(task.id(), task.agentVersionId(), task.clientId(),
-                settled.creditedCount(), settled.count());
+                settled.creditedCount(), judged);
     }
 
     @Override
@@ -250,9 +286,9 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
                                         int round) {
         Contract contract = task.contract() != null ? task.contract() : task.outputSpec().toContract();
         TaskItemModel.requireHttpsResultUrl(rejected.itemNo(), url);
-        List<ItemCheck> checks = checksFor(rejected, attemptId(rejected, "revision-" + round), "COMPLETED",
-                payload, url, contract);
-        TaskItemModel revised = rejected.revise(payloadOf(payload), url, checks);
+        ItemAcceptance acceptance = acceptanceFor(task, rejected, attemptId(rejected, "revision-" + round),
+                "COMPLETED", payload, url, contract, List.of());
+        TaskItemModel revised = rejected.revise(payloadOf(payload), url, acceptance);
         if (revised.status() == ItemStatus.SPEC_VIOLATION) {
             settleRefunded(task, revised); // a revision that fails the Contract's checks is refunded (D17)
         } else {
@@ -275,17 +311,30 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
                 : UUID.nameUUIDFromBytes((item.id() + "#" + attempt).getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
-    private List<ItemCheck> checksFor(TaskItemModel item, UUID resultId, String agentStatus, String payload,
-                                      String url, Contract contract) {
+    /**
+     * Runs the Contract's checks on one Item's result (spec S5): fetches and freezes a file first (D24),
+     * reads an invoice (#106), gathers the client's own earlier Items for the duplicate Findings (D45),
+     * and keeps the Findings and the Agent's anomalies beside the checks.
+     */
+    private ItemAcceptance acceptanceFor(TaskModel task, TaskItemModel item, UUID resultId, String agentStatus,
+                                         String payload, String url, Contract contract,
+                                         List<SelfReportedAnomaly> anomalies) {
         TaskResultModel asResult = TaskResultModel.rehydrate(resultId, item.taskId(), agentStatus,
                 payloadOf(payload), url, clock.instant());
         DeliveryOutcome delivery = validationDomainService.needsDelivery(contract, asResult)
                 ? deliverySnapshotAppService.capture(contract, asResult)
                 : null;
-        ValidationReportModel report = validationDomainService.validate(contract, asResult, delivery, FIRST_ATTEMPT);
-        return report.checks().stream()
-                .map(c -> new ItemCheck(c.rule(), c.passed(), c.detail()))
-                .toList();
+        InvoiceReading invoice = validationDomainService.needsInvoice(contract) ? invoiceReader.read(payload) : null;
+        FindingFacts facts = FindingFacts.NONE;
+        if (invoice != null) {
+            String key = invoice instanceof InvoiceReading.Read read ? read.invoice().duplicateKey().orElse(null) : null;
+            facts = new FindingFacts(List.of(), taskItemRepository.findEarlierItemsWithSameDocument(item, task.clientId()),
+                    key == null ? List.of() : taskItemRepository.findOtherItemsWithInvoiceKey(task.clientId(), key, item.id()));
+            taskItemRepository.recordInvoiceKey(item, task.clientId(), key);
+        }
+        ValidationReportModel report = validationDomainService.judge(contract, asResult,
+                new AcceptanceEvidence(delivery, null, anomalies, facts, invoice), FIRST_ATTEMPT);
+        return ItemAcceptance.fromReport(report);
     }
 
     /** Refuses (400) a callback naming an Item twice or an Item the Task does not have. */

@@ -12,6 +12,8 @@ package com.hireai.domain.biz.task.item.enums;
  *       path, its escrow still held.</li>
  *   <li>{@code CONCEDED}: the Agent conceded the reviewer's rejection; refunded.</li>
  *   <li>{@code PRO_RATA}: settled by extrapolation after a failed resample (D19); paid in part.</li>
+ *   <li>{@code UNREVIEWED}: a check sent it to the buyer's review (D7) and nobody judged it before the review
+ *       window closed; refunded, and it does not count towards the Agent's reputation (owner decision on #87).</li>
  * </ul>
  */
 public enum ItemStatus {
@@ -22,15 +24,17 @@ public enum ItemStatus {
     FAILED,
     REJECTED,
     CONCEDED,
-    PRO_RATA;
+    PRO_RATA,
+    UNREVIEWED;
 
     /** Whether this Item's escrow share has left escrow (paid, refunded, or both in part). */
     public boolean isSettled() {
-        return this == ACCEPTED || this == SPEC_VIOLATION || this == FAILED || this == CONCEDED || this == PRO_RATA;
+        return this == ACCEPTED || this == SPEC_VIOLATION || this == FAILED || this == CONCEDED || this == PRO_RATA
+                || this == UNREVIEWED;
     }
 
     /** Settled with nothing paid to the builder. */
     public boolean isRefunded() {
-        return this == SPEC_VIOLATION || this == FAILED || this == CONCEDED;
+        return this == SPEC_VIOLATION || this == FAILED || this == CONCEDED || this == UNREVIEWED;
     }
 }

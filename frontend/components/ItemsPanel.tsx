@@ -7,6 +7,7 @@ import type { ItemStatus, TaskDTO, TaskItemDTO, TaskStatus } from "@/lib/types";
 import { Badge, Button, ConfirmDialog } from "@/components/ui";
 import { ResultView } from "@/components/ResultView";
 import { ruleText } from "@/components/InspectionReport";
+import { ItemNotes } from "@/components/ItemNotes";
 import { ReviewWindowNotice, reviewWindowClosed, useNow } from "@/components/ReviewWindowNotice";
 
 interface Props {
@@ -42,19 +43,21 @@ function cr(amount: number | null | undefined): string {
 function ItemBadge({ item, taskStatus }: { item: TaskItemDTO; taskStatus: TaskStatus }) {
   const label: Record<ItemStatus, string> = {
     AWAITING_RESULT: ENDED.has(taskStatus) ? "Not delivered" : "Waiting for the agent",
-    PENDING_REVIEW: "Needs your review",
+    PENDING_REVIEW: item.needsReview ? "Needs your own check" : "Needs your review",
     ACCEPTED: item.autoAccepted ? "Accepted automatically" : "Accepted",
     SPEC_VIOLATION: "Failed its checks",
     FAILED: "Agent couldn't do it",
     REJECTED: "Rejected · being answered",
     CONCEDED: "Wrong · refunded",
     PRO_RATA: "Paid pro rata",
+    UNREVIEWED: "Not checked in time · refunded",
   };
   const COLOUR: Partial<Record<ItemStatus, string>> = {
     ACCEPTED: "RESOLVED",
     REJECTED: "AWAITING_AGENT_RESPONSE",
     CONCEDED: "FAILED",
     PRO_RATA: "PARTIALLY_ACCEPTED",
+    UNREVIEWED: "CANCELLED",
   };
   const colour = item.status === "AWAITING_RESULT" && ENDED.has(taskStatus) ? "CANCELLED" : item.status === "AWAITING_RESULT" ? "QUEUED" : COLOUR[item.status] ?? item.status;
   return <Badge status={colour}>{label[item.status]}</Badge>;
@@ -92,7 +95,7 @@ function ItemRow({ item, task, canDecide, busy, onAccept }: {
   busy: boolean;
   onAccept: (itemNo: number) => void;
 }) {
-  const failed = (item.checks ?? []).filter((c) => !c.passed);
+  const failed = (item.checks ?? []).filter((c) => !c.passed && c.outcome !== "REVIEW");
   const hasResult = item.resultPayload != null && item.resultPayload !== "";
   return (
     <li className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 px-5 py-4 sm:grid-cols-[auto_1fr_auto]">
@@ -120,6 +123,7 @@ function ItemRow({ item, task, canDecide, busy, onAccept }: {
             ))}
           </div>
         )}
+        <ItemNotes item={item} />
         {hasResult && (
           <details className="group rounded-lg border border-line bg-surface-2 px-3 py-2">
             <summary className="cursor-pointer text-xs font-semibold text-muted group-open:mb-2">Agent&apos;s result</summary>
@@ -164,7 +168,7 @@ export function ItemsPanel({ task, now, onChange }: Props) {
 
   const awaiting = items.filter((i) => i.status === "PENDING_REVIEW");
   const accepted = items.filter((i) => i.status === "ACCEPTED").length;
-  const refunded = items.filter((i) => i.status === "SPEC_VIOLATION" || i.status === "FAILED" || i.status === "CONCEDED").length;
+  const refunded = items.filter((i) => i.status === "SPEC_VIOLATION" || i.status === "FAILED" || i.status === "CONCEDED" || i.status === "UNREVIEWED").length;
   const proRata = items.filter((i) => i.status === "PRO_RATA").length;
   const rejected = items.filter((i) => i.status === "REJECTED").length;
   const reviewing = task.status === "PENDING_REVIEW";
@@ -210,6 +214,11 @@ export function ItemsPanel({ task, now, onChange }: Props) {
       {reviewing && (
         <div className="space-y-3">
           <ReviewWindowNotice deadline={task.reviewDeadline} now={current} subject="items" />
+          {awaiting.some((i) => i.needsReview) && (
+            <p className="text-xs text-muted">
+              {"Items marked “Needs your own check” are the exception: if nobody checks them by then, they are refunded to you, not accepted."}
+            </p>
+          )}
           {canDecide && awaiting.length > 0 && (
             <div className="flex flex-wrap items-center gap-3">
               <Button variant="secondary" disabled={busy} onClick={() => setConfirmingAll(true)}>

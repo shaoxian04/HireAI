@@ -8,6 +8,7 @@ import com.hireai.domain.biz.acceptance.check.model.DecodedImage;
 import com.hireai.domain.biz.acceptance.check.model.FindingFacts;
 import com.hireai.domain.biz.acceptance.check.model.SelfReportedAnomaly;
 import com.hireai.domain.biz.acceptance.check.service.ImageDecoder;
+import com.hireai.domain.biz.acceptance.check.service.InvoiceReader;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.adjudication.model.ReworkPolicy;
 import com.hireai.domain.biz.task.routing.info.ReworkRequest;
@@ -59,6 +60,8 @@ public class ValidationAppServiceImpl implements ValidationAppService {
     private final com.hireai.application.biz.acceptance.aireview.AiReviewAppService aiReviewAppService;
     /** The app's Clock bean (ClockConfig): the review window opens at this instant. */
     private final Clock clock;
+    /** Reads an ap_invoice_extraction result (#106). */
+    private final InvoiceReader invoiceReader;
 
     @Override
     public TaskModel validateAndGate(TaskModel task) {
@@ -79,8 +82,12 @@ public class ValidationAppServiceImpl implements ValidationAppService {
         DeliveryOutcome delivery = validationDomainService.needsDelivery(contract, task.result())
                 ? deliverySnapshotAppService.capture(contract, task.result())
                 : null;
+        // A single invoice Task has no document of its own (documents come as Items under an Engagement), so
+        // its only outside facts are the brief's; the duplicate Findings are gathered for Items.
         AcceptanceEvidence evidence = new AcceptanceEvidence(delivery, pixelsOf(contract, delivery), anomalies,
-                validationDomainService.needsFindingFacts(contract) ? findingFactsFor(task) : FindingFacts.NONE);
+                validationDomainService.needsFindingFacts(contract) ? findingFactsFor(task) : FindingFacts.NONE,
+                validationDomainService.needsInvoice(contract)
+                        ? invoiceReader.read(task.result().resultPayloadJson()) : null);
         ValidationReportModel report = validationDomainService.judge(contract, task.result(), evidence, attempt);
         reportRepository.save(report);
 

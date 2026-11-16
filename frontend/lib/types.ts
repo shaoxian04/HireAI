@@ -336,7 +336,9 @@ export type ItemStatus =
   /** The agent conceded the reviewer's rejection; refunded. */
   | "CONCEDED"
   /** Settled by extrapolation after a failed resample: paid price x (1 - error rate), the rest refunded. */
-  | "PRO_RATA";
+  | "PRO_RATA"
+  /** A check sent it to your review and nobody judged it before the window closed: refunded (#106). */
+  | "UNREVIEWED";
 
 /** One Item of a multi-Item Task and its outcome; amounts appear once it settled. */
 export interface TaskItemDTO {
@@ -346,13 +348,22 @@ export interface TaskItemDTO {
   price: number;
   resultPayload?: string | null;
   resultUrl?: string | null;
-  checks?: { rule: string; passed: boolean; detail?: string | null }[] | null;
+  checks?: { rule: string; passed: boolean; detail?: string | null; outcome?: CheckOutcome }[] | null;
   autoAccepted?: boolean | null;
   payoutAmount?: number | null;
   commissionAmount?: number | null;
   refundAmount?: number | null;
   /** The document this Item's input is (an Engagement's SourceSnapshot); absent for a text Item. */
   sourceId?: string | null;
+  /**
+   * A check sent this Item to your review (#106, D7): you judge it on its own, outside the sample, and it is
+   * paid only when you confirm it (or when the review window closes).
+   */
+  needsReview?: boolean | null;
+  /** Facts about the Item's input (duplicates, figures that don't add up); they never change the pay. */
+  findings?: FindingDTO[] | null;
+  /** What the agent reported about this Item's source with its result. */
+  anomalies?: AnomalyDTO[] | null;
 }
 
 /** What the agent did with an A/B/C rejection (task/rejection/enums/AgentResponse.java). */
