@@ -26,19 +26,21 @@ function usable(state: DraftState | null): ContractDraftDTO | null {
 
 /**
  * The Contract to search and book with: the extracted terms, with the Client's own terms on top (a term
- * they set themselves wins), minus the terms they dropped to find agents. Null keeps the agent's own
- * terms: nothing was chosen and nothing was extracted.
+ * they set themselves wins), minus the terms they dropped to find agents. Null keeps each agent's own
+ * terms. Extraction shapes the Contract only on the Template the Client chose in Output terms: with
+ * none chosen it is advice (listed, never checked), because the platform never rules an Agent out by a
+ * Template the Client didn't choose (the draft is then read against the text default, while the
+ * description may well ask for JSON or a file).
  */
 export function effectiveContract(state: DraftState | null, own: ContractDTO | null, dropped: string[]): ContractDTO | null {
   const draft = usable(state);
-  if (!draft) return own;
+  if (!draft || !own) return own;
   const base = draft.contract;
   if (own && (own.template !== base.template || own.version !== base.version)) return own;
   // A dropped term is dropped from the extracted ones only: one the Client sets again is theirs.
   const extracted: Record<string, ContractValue> = { ...base.params };
   for (const name of dropped) delete extracted[name];
   const params: Record<string, ContractValue> = { ...extracted, ...(own?.params ?? {}) };
-  if (!own && Object.keys(params).length === 0) return null;
   return { template: base.template, version: base.version, params };
 }
 
@@ -67,6 +69,9 @@ export function requirementFates(state: DraftState | null, booked: ContractDTO |
       booked.template === draft.contract.template &&
       set.every(([name, value]) => sameValue(booked.params[name], value));
     if (kept) return { kind: "checked", requirement };
+    if (!booked) {
+      return { kind: "yours", requirement, why: "You kept each agent's own output terms, so it isn't checked automatically. Choose Output terms to have it checked." };
+    }
     const why = set.some(([name]) => dropped.includes(name))
       ? "You dropped this term to find agents, so it is not checked automatically."
       : "Your output terms set this differently, and yours are the ones checked.";
