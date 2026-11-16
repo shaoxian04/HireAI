@@ -46,10 +46,13 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
     private final Clock clock;
     /** A multi-Item Task is accepted Item by Item (spec S3). */
     private final TaskItemAppService taskItemAppService;
+    /** A decisive AI Review settles its Task alone (spec D38). */
+    private final com.hireai.application.biz.acceptance.aireview.AiReviewAppService aiReviewAppService;
 
     @Override
     public UUID accept(UUID taskId, UUID clientId) {
         TaskModel task = loadOwned(taskId, clientId);
+        requireNotDecidedByAiReview(taskId);
         if (taskItemAppService.hasItems(taskId)) {
             requirePendingReview(task);
             taskItemAppService.acceptAllAwaitingReview(task, false); // every Item still awaiting review
@@ -103,6 +106,14 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
         log.info("Task {} auto-accepted: review window closed at {} without a review", taskId, deadline);
     }
 
+    /** A decisive AI Review (API/MCP, D38) settles the Task itself, and is final: no one else decides it. */
+    private void requireNotDecidedByAiReview(UUID taskId) {
+        if (aiReviewAppService.isDeciding(taskId)) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Task " + taskId + " is being settled by the AI Review you chose; its verdict is final");
+        }
+    }
+
     private Instant reviewDeadline(UUID taskId) {
         return taskRepository.findReviewWindow(taskId).map(ReviewWindowState::deadline).orElse(null);
     }
@@ -113,6 +124,7 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "A reject reason category is required");
         }
         TaskModel task = loadOwned(taskId, clientId);
+        requireNotDecidedByAiReview(taskId);
         if (taskItemAppService.hasItems(taskId)) {
             // Rejecting single Items comes with the reviewer flow (spec S8, D17'); until then a
             // multi-Item Task's Items are accepted, or accepted automatically when the window closes.

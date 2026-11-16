@@ -36,6 +36,15 @@ public interface SettlementWriteAppService {
      * from the Client's balance (after its refund) and the Builder's earnings wallet; the platform
      * covers the rest. Writes the ledger debits and the append-only fee record. Run after the settlement.
      */
+    /**
+     * The Client's frozen AI Review fee, released from escrow to the platform (AI_REVIEW_FEE) once a
+     * verdict exists (spec S10). Correlation {@code ai-review-<task>}, like its freeze.
+     */
+    void chargeAiReviewFee(UUID taskId, UUID clientId, Money fee);
+
+    /** The frozen AI Review fee back to the Client: the reviewer failed, or nothing was ever reviewed. */
+    void refundAiReviewFee(UUID taskId, UUID clientId, Money fee);
+
     DisputeFeeCharge chargeDisputeFee(UUID disputeId, UUID taskId, UUID clientId, UUID builderId,
                                       DisputeFeeType type, Money fullCost, Money itemPrice, Set<DisputeParty> payers);
 }

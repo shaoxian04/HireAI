@@ -20,18 +20,34 @@ import java.util.UUID;
  * booking. With Items, {@code budget} is the per-Item price (it must cover the Agent's price) and the
  * Task freezes {@link #escrow()}. {@code engagementId} books under the Client's Engagement with this
  * Agent (ADR 0010): only then may an Item's input be a SourceSnapshot (a confidential document).
+ *
+ * <p>{@code aiReviewCriteria} are the criteria the Client wants an AI Review to judge (spec S10),
+ * empty for none. The booking prices the review, checks it is offered and freezes it in the Contract.
  */
 public record DirectBookingInfo(UUID clientId, String title, String description,
                                 Money budget, UUID agentId, String category, Long deadlineSeconds,
-                                Contract contract, List<ItemInput> items, UUID engagementId) {
+                                Contract contract, List<ItemInput> items, UUID engagementId,
+                                List<String> aiReviewCriteria) {
 
     public DirectBookingInfo {
         items = items == null ? List.of() : List.copyOf(items);
+        aiReviewCriteria = aiReviewCriteria == null ? List.of() : List.copyOf(aiReviewCriteria);
+    }
+
+    public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,
+                             String category, Long deadlineSeconds, Contract contract, List<ItemInput> items,
+                             UUID engagementId) {
+        this(clientId, title, description, budget, agentId, category, deadlineSeconds, contract, items,
+                engagementId, List.of());
     }
 
     public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,
                              String category, Long deadlineSeconds, Contract contract, List<ItemInput> items) {
         this(clientId, title, description, budget, agentId, category, deadlineSeconds, contract, items, null);
+    }
+
+    public boolean wantsAiReview() {
+        return !aiReviewCriteria.isEmpty();
     }
 
     /** Whether any Item's input is a SourceSnapshot (allowed only under an Engagement, ADR 0010). */
@@ -42,13 +58,13 @@ public record DirectBookingInfo(UUID clientId, String title, String description,
     /** This booking with {@code chosen} as its Contract. */
     public DirectBookingInfo withContract(Contract chosen) {
         return new DirectBookingInfo(clientId, title, description, budget, agentId, category, deadlineSeconds,
-                chosen, items, engagementId);
+                chosen, items, engagementId, aiReviewCriteria);
     }
 
     /** This booking with its Items replaced (a document Item's blank input becomes its file name). */
     public DirectBookingInfo withItems(List<ItemInput> replaced) {
         return new DirectBookingInfo(clientId, title, description, budget, agentId, category, deadlineSeconds,
-                contract, replaced, engagementId);
+                contract, replaced, engagementId, aiReviewCriteria);
     }
 
     public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,

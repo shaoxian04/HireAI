@@ -34,6 +34,8 @@ class TaskReviewRejectGateTest {
     DisputeAppService disputeAppService;
     ReputationWriteAppService reputationWriteAppService;
     TaskReviewAppServiceImpl service;
+    com.hireai.application.biz.acceptance.aireview.AiReviewAppService aiReview =
+            mock(com.hireai.application.biz.acceptance.aireview.AiReviewAppService.class);
 
     UUID clientId = UUID.randomUUID();
     UUID builderId = UUID.randomUUID();
@@ -54,7 +56,8 @@ class TaskReviewRejectGateTest {
                 new com.hireai.domain.biz.task.rejection.model.RejectionWindows(
                         java.time.Duration.ofHours(2), java.time.Duration.ofHours(24)),
                 mock(org.springframework.context.ApplicationEventPublisher.class),
-                java.time.Clock.systemUTC(), mock(com.hireai.application.biz.task.item.TaskItemAppService.class));
+                java.time.Clock.systemUTC(), mock(com.hireai.application.biz.task.item.TaskItemAppService.class),
+                aiReview);
 
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         when(agentRepository.findOwnerByVersionId(agentVersionId)).thenReturn(Optional.of(builderId));
@@ -86,6 +89,17 @@ class TaskReviewRejectGateTest {
         ArgumentCaptor<TaskModel> cap = ArgumentCaptor.forClass(TaskModel.class);
         verify(taskRepository).save(cap.capture());
         assertThat(cap.getValue().status()).isEqualTo(TaskStatus.AWAITING_AGENT_RESPONSE);
+    }
+
+    @Test
+    void aTaskADecisiveAiReviewIsSettlingCanBeNeitherAcceptedNorRejected() {
+        when(taskRepository.findById(pendingReview.id())).thenReturn(Optional.of(pendingReview));
+        when(aiReview.isDeciding(pendingReview.id())).thenReturn(true);
+        assertThatThrownBy(() -> service.reject(pendingReview.id(), clientId, RejectReason.D_CHANGED_MIND, "x"))
+                .isInstanceOf(DomainException.class).hasMessageContaining("verdict is final");
+        assertThatThrownBy(() -> service.accept(pendingReview.id(), clientId))
+                .isInstanceOf(DomainException.class).hasMessageContaining("verdict is final");
+        verifyNoInteractions(settlement);
     }
 
     @Test

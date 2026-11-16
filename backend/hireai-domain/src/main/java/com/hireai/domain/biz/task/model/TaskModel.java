@@ -378,6 +378,20 @@ public final class TaskModel {
         return resolved(allItemsAccepted ? TaskResolution.ACCEPTED : TaskResolution.PARTIALLY_ACCEPTED, null);
     }
 
+    /**
+     * PENDING_REVIEW → RESOLVED: a decisive AI Review (API/MCP, spec D38) settled the result. The
+     * resolution follows the verdict's ruling category, as a dispute ruling's would.
+     */
+    public TaskModel resolveByAiReview(com.hireai.domain.biz.adjudication.enums.RulingCategory category) {
+        requireStatus(TaskStatus.PENDING_REVIEW, "resolveByAiReview");
+        requirePresent(category, "ruling category");
+        return resolved(switch (category) {
+            case FULFILLED -> TaskResolution.ACCEPTED;
+            case PARTIALLY_FULFILLED -> TaskResolution.PARTIALLY_ACCEPTED;
+            case NOT_FULFILLED -> TaskResolution.REJECTED;
+        }, null);
+    }
+
     /** PENDING_REVIEW → RESOLVED (REJECTED): the client rejected the result. Reason optional, ≤500 chars. */
     public TaskModel reject(String reason) {
         requireStatus(TaskStatus.PENDING_REVIEW, "reject");

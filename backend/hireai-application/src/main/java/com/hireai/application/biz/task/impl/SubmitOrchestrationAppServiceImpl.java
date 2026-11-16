@@ -109,7 +109,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
                 : new DirectBookingInfo(booked.clientId(), booked.title(), booked.description(),
                         booked.budget(), booked.agentId(),
                         categoryRepository.load().requireKnown(booked.category()), booked.deadlineSeconds(),
-                        booked.contract(), booked.items(), booked.engagementId());
+                        booked.contract(), booked.items(), booked.engagementId(), booked.aiReviewCriteria());
         try {
             return self().submitDirectTx(ctx, info);
         } catch (IdempotencyRaceException e) {
@@ -199,7 +199,18 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         return SubmitFingerprint.of(info.title(), info.description(),
                 info.agentId().toString(), info.budget().value(), kind + deadlinePart(info.deadlineSeconds())
                         + contractPart(info.contract()) + itemsPart(info.items())
-                        + (info.engagementId() == null ? "" : "|engagement=" + info.engagementId()));
+                        + (info.engagementId() == null ? "" : "|engagement=" + info.engagementId())
+                        + aiReviewPart(info.aiReviewCriteria()));
+    }
+
+    /** AI Review criteria join the fingerprint (spec S10); without any it stays as before. */
+    private static String aiReviewPart(java.util.List<String> criteria) {
+        if (criteria.isEmpty()) {
+            return "";
+        }
+        StringBuilder part = new StringBuilder("|aiReview=").append(criteria.size());
+        criteria.forEach(c -> part.append('|').append(c.length()).append(':').append(c));
+        return part.toString();
     }
 
     /**

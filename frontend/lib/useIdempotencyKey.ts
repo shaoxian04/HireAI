@@ -24,7 +24,8 @@ export function directBookSignature(body: DirectBookRequest | null): string {
     .map((i) => (typeof i === "string" ? i : `@${i.sourceId}:${i.input ?? ""}`))
     .join(SEP);
   return [body.title, body.description, body.budget, body.agentId, body.deadlineSeconds ?? "",
-    body.engagementId ?? "", items].join(SEP);
+    body.engagementId ?? "", items,
+    ...(body.aiReview ? ["ai-review", ...body.aiReview.criteria] : [])].join(SEP);
 }
 
 /**

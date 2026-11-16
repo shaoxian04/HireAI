@@ -11,6 +11,8 @@ import { errorFor, toFormError, useFocusOnFieldError, validateForm, type FormErr
 import type { AgentProfileDTO, DirectBookRequest, TaskDTO } from "@/lib/types";
 import { directBookSignature, useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { PageHeader } from "@/components/PageHeader";
+import { AiReviewOption, filledCriteria } from "@/components/AiReviewOption";
+import type { AiReviewQuoteDTO } from "@/lib/types";
 import { EngagementDocuments, type DocumentSelection } from "@/components/EngagementDocuments";
 
 /** A multi-Item Task holds two Items or more; a single piece of work is described in the brief. */
@@ -25,6 +27,9 @@ function BookingForm() {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  // AI Review (spec S10): null while off; the quote is the fee to freeze, null until priced and offered.
+  const [aiCriteria, setAiCriteria] = useState<string[] | null>(null);
+  const [aiQuote, setAiQuote] = useState<AiReviewQuoteDTO | null>(null);
 
   const [error, setError] = useState<FormError | null>(null);
   // A field error clears the moment that field (or any other) is edited, so it never goes stale.
@@ -37,6 +42,7 @@ function BookingForm() {
   // object that gets sent: retrying the same booking reuses one key (deduped server-side),
   // while an edited title or description starts a fresh one.
   const itemCount = documents.engagementId ? documents.sourceIds.length : 0;
+  const aiReview = aiCriteria ? filledCriteria(aiCriteria) : [];
   const bookingBody: DirectBookRequest | null = profile
     ? {
         title, description, budget: profile.card.price, agentId: id,
@@ -44,6 +50,7 @@ function BookingForm() {
         ...(itemCount > 0 && documents.engagementId
           ? { engagementId: documents.engagementId, items: documents.sourceIds.map((sourceId) => ({ sourceId })) }
           : {}),
+        ...(aiCriteria ? { aiReview: { criteria: aiReview } } : {}),
       }
     : null;
   const getIdempotencyKey = useIdempotencyKey(directBookSignature(bookingBody));
@@ -74,9 +81,14 @@ function BookingForm() {
     return <SkeletonRows label="Loading agent profile…" rows={3} />;
 
   const { card } = profile;
-  const total = itemCount > 0 ? Math.round(card.price * itemCount * 100) / 100 : card.price;
-
   const bookErrors = { title: "Title", description: "Description" };
+  const fee = aiCriteria && aiQuote ? aiQuote.fee : 0;
+  // The price as the agent set it; price × documents for a batch; or price + fee to the cent once an
+  // AI Review is priced (AI Review is not offered on a batch).
+  const total = itemCount > 0 ? String(Math.round(card.price * itemCount * 100) / 100)
+    : fee > 0 ? (Math.round((card.price + fee) * 100) / 100).toFixed(2) : String(card.price);
+  // With AI Review on, book only once it is priced, offered and has a criterion to judge.
+  const aiReviewBlocks = aiCriteria !== null && (aiQuote === null || aiReview.length === 0);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -89,6 +101,15 @@ function BookingForm() {
     if (itemCount > 0 && itemCount < MIN_ITEMS) {
       setError({ field: null, message: "Choose at least two documents: each document is one Item, and a batch holds two or more. "
         + "For a single piece of work, untick the document and describe it in the brief." });
+      return;
+    }
+    if (aiCriteria !== null && itemCount > 0) {
+      setError({ field: null, message: "AI Review is not offered on a batch of documents. Turn AI Review off, "
+        + "or untick the documents." });
+      return;
+    }
+    if (aiCriteria !== null && aiReview.length === 0) {
+      setError({ field: null, message: "Write at least one AI Review criterion, or turn AI Review off." });
       return;
     }
     setSubmitting(true);
@@ -156,15 +177,27 @@ function BookingForm() {
           </Field>
 
           <EngagementDocuments agentId={id} agentName={card.name} onChange={onDocumentsChange} />
+          <h2 className="eyebrow pt-2">Review</h2>
+          <AiReviewOption
+            agentId={id}
+            budget={card.price}
+            offerAccepts={profile.offer?.acceptsAiReview ?? false}
+            criteria={aiCriteria}
+            onChange={(c) => { setAiCriteria(c); clearFieldError(); }}
+            onQuote={setAiQuote}
+          />
 
           <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line text-sm">
             <div className="bg-surface px-4 py-3">
               <dt className="text-xs text-dim">You&apos;ll pay</dt>
-              <dd className="display tabular mt-0.5 text-2xl text-accent">{total} cr</dd>
+              <dd className="display tabular mt-0.5 text-2xl text-accent">{`${total} cr`}</dd>
               {itemCount > 0 && (
                 <dd className="tabular text-xs text-dim">
                   {card.price} cr × {itemCount} {itemCount === 1 ? "document" : "documents"}
                 </dd>
+              )}
+              {itemCount === 0 && fee > 0 && (
+                <dd className="tabular mt-0.5 text-xs text-dim">{`${card.price.toFixed(2)} price + ${fee.toFixed(2)} AI Review`}</dd>
               )}
             </div>
             <div className="bg-surface px-4 py-3">
@@ -185,7 +218,7 @@ function BookingForm() {
               {error.message}
             </p>
           )}
-          <Button type="submit" disabled={submitting} className="w-full">
+          <Button type="submit" disabled={submitting || aiReviewBlocks} className="w-full">
             {submitting ? "Booking…" : `Book and freeze ${total} cr`}
           </Button>
         </form>

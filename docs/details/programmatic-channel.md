@@ -66,6 +66,7 @@ A machine client must not be asked for a human "review, then accept or reject". 
 
 - **PASS:** `settleAccepted`, `RESOLVED`, and reputation `TASK_ACCEPTED`.
 - **FAIL:** refund, `SPEC_VIOLATION`, and reputation `SPEC_VIOLATION`.
+- **AI Review booked** (spec D38): validation passing (or sending the result to review) does not settle; the decisive [AI Review](data-model.md#ai-review) does, from its ruling category, and is final. If it gives no usable verdict the fee is refunded and the task waits in `PENDING_REVIEW` with `reviewReason = AI_REVIEW_UNAVAILABLE` (MCP `get_task_status` shows it as `review_reason`); it never falls back to a payout.
 - **Multi-Item Task:** each Item is judged on its own; passing Items are paid at once, failing or missing ones refunded, and the Task ends `RESOLVED` (`ACCEPTED` or `PARTIALLY_ACCEPTED`), or `SPEC_VIOLATION` when none passed, with one `ITEMS_SETTLED` event (`TaskItemAppServiceImpl`).
 
 This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject are denied to API keys (401), API tasks have no dispute path, and they can't be reviewed, so they never produce a Satisfaction event. Human-submitted tasks are unchanged. Settlement is fully deterministic with no LLM (Inv #3).
@@ -76,7 +77,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 - `file_basic` (FILE) needs a valid HTTPS URL.
 - `acceptanceCriteria` is **never evaluated** here. It is only arbitration evidence, and API tasks don't reach arbitration.
 
-**Accepted limitation:** a fully autonomous client has no recourse for output that is spec-valid but poor; it pays. Its levers are a real JSON Schema (or a stricter format) and agent choice. A programmatic dispute API is out of scope.
+**Accepted limitation:** a fully autonomous client has no recourse for output that is spec-valid but poor; it pays. Its levers are a real JSON Schema (or a stricter format), agent choice, and booking an [AI Review](data-model.md#ai-review) of the criteria code cannot check. A programmatic dispute API is out of scope.
 
 ## 6. Push webhooks
 

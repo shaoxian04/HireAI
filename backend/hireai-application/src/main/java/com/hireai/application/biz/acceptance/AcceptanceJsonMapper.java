@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.hireai.domain.biz.acceptance.aireview.model.AiReviewTerms;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.acceptance.contract.model.ParameterValue;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
@@ -17,6 +18,7 @@ import com.hireai.domain.biz.acceptance.template.model.ParameterBounds;
 import com.hireai.domain.biz.acceptance.template.model.TemplateModel;
 import com.hireai.domain.biz.acceptance.template.model.TemplateParameter;
 import com.hireai.domain.biz.acceptance.template.model.TemplateRef;
+import com.hireai.domain.shared.model.Money;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 import org.springframework.stereotype.Component;
@@ -55,6 +57,12 @@ public class AcceptanceJsonMapper {
         ObjectNode root = refNode(contract.template());
         ObjectNode params = root.putObject("params");
         contract.params().forEach((name, value) -> params.set(name, valueNode(value)));
+        if (contract.aiReview() != null) {
+            ObjectNode aiReview = root.putObject("aiReview");
+            ArrayNode criteria = aiReview.putArray("criteria");
+            contract.aiReview().criteria().forEach(criteria::add);
+            aiReview.put("fee", contract.aiReview().fee().value());
+        }
         return write(root);
     }
 
@@ -62,7 +70,14 @@ public class AcceptanceJsonMapper {
         JsonNode root = read(json);
         Map<String, ParameterValue> params = new LinkedHashMap<>();
         root.path("params").fields().forEachRemaining(e -> params.put(e.getKey(), value(e.getKey(), e.getValue())));
-        return new Contract(ref(root), params);
+        AiReviewTerms aiReview = null;
+        JsonNode review = root.path("aiReview");
+        if (review.isObject()) {
+            List<String> criteria = new ArrayList<>();
+            review.path("criteria").forEach(c -> criteria.add(c.asText()));
+            aiReview = new AiReviewTerms(criteria, Money.of(review.path("fee").decimalValue()));
+        }
+        return new Contract(ref(root), params, aiReview);
     }
 
     private JsonNode valueNode(ParameterValue value) {
@@ -101,6 +116,9 @@ public class AcceptanceJsonMapper {
             term.params().forEach((name, range) -> params.set(name, rangeNode(range)));
             terms.add(termNode);
         }
+        if (offer.acceptsAiReview()) {
+            root.put("acceptsAiReview", true);
+        }
         return write(root);
     }
 
@@ -113,7 +131,7 @@ public class AcceptanceJsonMapper {
                     .forEachRemaining(e -> params.put(e.getKey(), range(e.getKey(), e.getValue())));
             terms.add(new OfferTerm(ref(termNode), params));
         }
-        return new Offer(terms);
+        return new Offer(terms, root.path("acceptsAiReview").asBoolean(false));
     }
 
     private JsonNode rangeNode(ParameterRange range) {

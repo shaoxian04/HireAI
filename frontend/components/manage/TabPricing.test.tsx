@@ -164,7 +164,21 @@ describe("TabPricing — Offer editor", () => {
           params: { max_bytes: { bound: 10485760 }, media_types: { oneOf: ["application/pdf"] } },
         },
       ],
+      acceptsAiReview: false, // not ticked: the Offer keeps refusing AI Review
     });
+  });
+
+  it("publishes the Builder's consent to AI Review with the edited Offer", async () => {
+    apiMock.mockResolvedValue(AGENT);
+    render(<TabPricing agentId="a-1" agent={AGENT} onAgentChange={() => {}} />);
+    expect(screen.getByText(/Doesn't accept AI Review/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /edit offer/i }));
+    await screen.findByRole("group", { name: /JSON with your schema/ });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Accept AI Review/ }));
+    fireEvent.click(screen.getByRole("button", { name: /publish version/i }));
+    await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(1));
+    expect(bodyOfPublish().offer.acceptsAiReview).toBe(true);
   });
 
   it("keeps the Agent's own schema in a narrowed list", async () => {

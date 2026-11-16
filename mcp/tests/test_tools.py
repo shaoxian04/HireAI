@@ -71,7 +71,7 @@ async def test_submit_task_routed_requires_category(fake):
 async def test_get_task_status_shapes_output(fake):
     out = await server.get_task_status("t9")
     assert json.loads(out) == {"task_id": "t9", "status": "WORKING", "resolution": None,
-                               "failure_reason": None}
+                               "failure_reason": None, "review_reason": None}
 
 
 async def test_get_task_status_shows_why_a_task_failed(monkeypatch, fake):
@@ -82,7 +82,18 @@ async def test_get_task_status_shows_why_a_task_failed(monkeypatch, fake):
     monkeypatch.setattr(fake, "get_task", failed_task)
     out = await server.get_task_status("t9")
     assert json.loads(out) == {"task_id": "t9", "status": "FAILED", "resolution": None,
-                               "failure_reason": "AGENT_UNREACHABLE"}
+                               "failure_reason": "AGENT_UNREACHABLE", "review_reason": None}
+
+
+async def test_get_task_status_says_why_a_result_waits_for_a_human(monkeypatch, fake):
+    async def waiting(task_id):
+        # A booked AI Review gave no usable verdict (#107): nothing settled, the Client decides.
+        return {"id": task_id, "status": "PENDING_REVIEW", "reviewReason": "AI_REVIEW_UNAVAILABLE"}
+
+    monkeypatch.setattr(fake, "get_task", waiting)
+    out = json.loads(await server.get_task_status("t9"))
+    assert out["status"] == "PENDING_REVIEW"
+    assert out["review_reason"] == "AI_REVIEW_UNAVAILABLE"
 
 
 def _no_result_yet(monkeypatch, fake, status, failure_reason=None):

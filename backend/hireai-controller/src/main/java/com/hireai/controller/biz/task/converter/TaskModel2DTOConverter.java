@@ -118,7 +118,7 @@ public final class TaskModel2DTOConverter {
                 multiItem ? items.count() : null,
                 multiItem ? items.all().get(0).price().value() : null,
                 multiItem && listItems ? items.all().stream().map(TaskModel2DTOConverter::toItemDTO).toList() : null,
-                null);
+                null, null);
     }
 
     private static TaskItemDTO toItemDTO(TaskItemModel item) {

@@ -55,6 +55,8 @@ public class ValidationAppServiceImpl implements ValidationAppService {
     private final ReworkPolicy reworkPolicy;
     private final RoutingAppService routingAppService;
     private final ImageDecoder imageDecoder;
+    /** Requests a booked AI Review once a result passed the deterministic checks (spec S10). */
+    private final com.hireai.application.biz.acceptance.aireview.AiReviewAppService aiReviewAppService;
     /** The app's Clock bean (ClockConfig): the review window opens at this instant. */
     private final Clock clock;
 
@@ -84,10 +86,19 @@ public class ValidationAppServiceImpl implements ValidationAppService {
 
         if (!report.isRejected()) {
             TaskModel gated = task.passValidation(); // -> PENDING_REVIEW
+            boolean apiChannel = apiKeyTaskRepository.findApiKeyIdByTask(task.id()).isPresent();
+            // A booked AI Review (spec S10) judges the criteria code cannot check, after the commit.
+            // On API/MCP its verdict settles the Task and is final (D38): the result waits for it,
+            // with no review window. On the web it is an advisory report beside the Client's review.
+            if (aiReviewAppService.requestIfFrozen(task, apiChannel) && apiChannel) {
+                taskRepository.save(gated);
+                log.info("API task {} {} validation -> PENDING_REVIEW, awaiting its decisive AI Review",
+                        task.id(), report.isPass() ? "passed" : "was sent to review by");
+                return gated;
+            }
             // A result sent to review (an undecidable check, a self-reported anomaly) always waits
             // for the Client, on either channel: it is paid only when the Client confirms it (D7).
-            boolean apiSubmitted = report.isPass()
-                    && apiKeyTaskRepository.findApiKeyIdByTask(task.id()).isPresent();
+            boolean apiSubmitted = report.isPass() && apiChannel;
             if (apiSubmitted) {
                 // Programmatic channel: deterministic immediate auto-settle. Reuse the accept settlement
                 // (Invariant #3 — same money path, no LLM/human). Disputes stay human-channel only.
@@ -138,6 +149,7 @@ public class ValidationAppServiceImpl implements ValidationAppService {
         TaskModel gated = task.failValidation();
         taskRepository.save(gated);
         settlementWriteAppService.settleRejected(task.id(), task.clientId(), task.budget());
+        aiReviewAppService.releaseIfUnused(task.id()); // nothing passed, so nothing was reviewed: fee back
         // The output missed the contract the builder declared (Invariant #4) — a zero-quality
         // sample against Reliability.
         reputationWriteAppService.recordOutcome(task.id(), task.agentVersionId(),

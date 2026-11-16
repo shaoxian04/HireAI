@@ -135,7 +135,8 @@ public class TaskController extends BaseController {
                         Money.of(request.budget()), request.agentId(),
                         request.category() == null || request.category().isBlank() ? null : request.category(),
                         request.deadlineSeconds(), ContractRequest2ModelConverter.toModel(request.contract()),
-                        request.itemInputs(), request.engagementId()));
+                        request.itemInputs(), request.engagementId(),
+                        request.aiReview() == null ? List.of() : request.aiReview().criteria()));
         return ok(withTemplateFallback(readAppService.getForClient(taskId, clientId)));
     }
 
@@ -168,7 +169,8 @@ public class TaskController extends BaseController {
                 rejectionAppService.findLatest(task.id()).orElse(null),
                 readAppService.findFailureDetail(task).orElse(null), readAppService.findItems(task), true)
                 .withTemplateFallback(Acceptance2DTOConverter.toDTO(
-                        readAppService.findTemplateFallback(task).orElse(null))));
+                        readAppService.findTemplateFallback(task).orElse(null)))
+                .withReviewReason(readAppService.findReviewReason(task).orElse(null)));
     }
 
     @GetMapping("/{taskId}/result")

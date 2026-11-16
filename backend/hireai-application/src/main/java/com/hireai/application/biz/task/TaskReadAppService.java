@@ -48,6 +48,9 @@ public interface TaskReadAppService {
      */
     Optional<ReviewWindowState> findReviewWindow(@NonNull TaskModel task);
 
+    /** Why the result waits for the Client's review (ANOMALY, UNDECIDED, AI_REVIEW_UNAVAILABLE); empty otherwise. */
+    Optional<String> findReviewReason(@NonNull TaskModel task);
+
     /**
      * Why no Agent matched a task the caller has already loaded for its owner (#91): shown while it
      * waits AWAITING_AGENT and once it ended NO_ELIGIBLE_AGENT, empty otherwise.

@@ -17,8 +17,14 @@ import java.util.Map;
  * Bounds are checked against the Templates by the service.
  */
 public record OfferRequest(
-        @NotEmpty @Size(max = 16) List<@NotNull @Valid TermRequest> terms
+        @NotEmpty @Size(max = 16) List<@NotNull @Valid TermRequest> terms,
+        /** Optional (spec S10, D38): accept AI Review on this Agent's results; default false. */
+        Boolean acceptsAiReview
 ) {
+
+    public OfferRequest(List<TermRequest> terms) {
+        this(terms, null);
+    }
 
     public record TermRequest(
             @NotBlank @Size(max = 64) String template,

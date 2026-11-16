@@ -61,6 +61,8 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     /** Reads the active Agents' Offers, to choose a routed task's Template version (spec D36). */
     private final AgentRepository agentRepository;
     private final OfferCoverageDomainService offerCoverageDomainService;
+    /** Freezes a booked AI Review's fee in the submit transaction (spec S10). */
+    private final com.hireai.application.biz.acceptance.aireview.AiReviewAppService aiReviewAppService;
 
     @Override
     public UUID submit(TaskSubmitInfo taskSubmitInfo) {
@@ -140,6 +142,10 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
                     ClientDeadline.after(clock.instant(), taskSubmitInfo.deadlineSeconds()).at());
         }
         walletWriteAppService.freeze(taskSubmitInfo.clientId(), escrow, taskId, correlationId);
+        if (task.contract() != null && task.contract().aiReview() != null) {
+            // The AI Review fee is frozen beside the price, under its own correlation (spec S10).
+            aiReviewAppService.freezeAtSubmit(taskId, taskSubmitInfo.clientId(), task.contract().aiReview());
+        }
         eventPublisher.publishEvent(new TaskSubmittedDomainEvent(
                 taskId, taskSubmitInfo.clientId(), escrow, task.createdAt(),
                 directAgentVersionId));

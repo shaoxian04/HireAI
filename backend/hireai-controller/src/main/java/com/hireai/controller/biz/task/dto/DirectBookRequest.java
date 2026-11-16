@@ -45,8 +45,21 @@ public record DirectBookRequest(
          * Optional: book under your Engagement with this Agent (ADR 0010). Only then may an Item's input be
          * a document you uploaded to it ({@code {"sourceId": ...}}).
          */
-        UUID engagementId
+        UUID engagementId,
+        /**
+         * Optional (spec S10): an AI Review of these criteria, priced and frozen at booking. Offered
+         * only when the Agent's Offer accepts it and the fee is at most 10% of the price.
+         */
+        @Valid AiReviewRequest aiReview
 ) {
+
+    /** The criteria code cannot check, in the Client's words. */
+    public record AiReviewRequest(
+            @NotNull @Size(min = 1, max = 10, message = "aiReview.criteria: 1 to 10 criteria")
+            List<@NotBlank(message = "aiReview.criteria: a criterion must not be blank")
+                 @Size(max = 300, message = "aiReview.criteria: a criterion must have at most 300 characters")
+                 String> criteria) {
+    }
 
     /**
      * One Item: a string (its text input), or {@code {"input": "...", "sourceId": "<document id>"}} for

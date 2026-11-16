@@ -82,7 +82,7 @@ _Avoid_: rules engine, validators
 A fact about the Task's *input* noticed while accepting it — a duplicate invoice, a source document that does not add up, a supplier missing from the buyer's records. Reported to the client; it never changes what the Agent is paid.
 _Avoid_: error, violation, exception (none of these are the Agent's fault)
 
-**AI Review**:
+**AI Review** _(built, #107)_:
 An optional, client-paid acceptance step in which a model judges the criteria code cannot check. Chosen and priced at submission, never switched on mid-task. For a human client it is a pre-review report; for a machine client it decides settlement.
 _Avoid_: LLM validation, AI check
 

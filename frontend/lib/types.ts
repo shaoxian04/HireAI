@@ -137,6 +137,34 @@ export interface ContractDTO {
   template: string;
   version: number;
   params: Record<string, ContractValue>;
+  /** The AI Review booked with the task and its fee, frozen at booking (absent when none). */
+  aiReview?: { criteria: string[]; fee: number };
+}
+
+/** What an AI Review would cost on a booking, and whether it is offered (`reason` says why not). */
+export interface AiReviewQuoteDTO {
+  fee: number;
+  /** The gate: an AI Review may cost at most this (10% of the price). */
+  maxFee: number;
+  available: boolean;
+  reason: string | null;
+  maxCriteria: number;
+}
+
+export type AiReviewStatus = "FROZEN" | "REQUESTED" | "COMPLETED" | "FAILED" | "RELEASED";
+
+/** A task's AI Review: an advisory report on the web, the final verdict on API/MCP (`decisive`). */
+export interface AiReviewDTO {
+  status: AiReviewStatus;
+  decisive: boolean;
+  fee: number;
+  criteria: string[];
+  verdicts: { criterion: string; passed: boolean; reason: string }[];
+  rulingCategory: "FULFILLED" | "PARTIALLY_FULFILLED" | "NOT_FULFILLED" | null;
+  model: string | null;
+  attempts: number;
+  requestedAt: string | null;
+  completedAt: string | null;
 }
 
 /** The range an Offer accepts for one parameter. */
@@ -146,6 +174,8 @@ export type OfferRange = { bound: number } | { oneOf: string[] } | { any: true }
 export interface OfferDTO {
   price: number;
   terms: { template: string; version: number; params: Record<string, OfferRange> }[];
+  /** Clients may book an AI Review of this agent's results (final on API/MCP). */
+  acceptsAiReview?: boolean;
 }
 
 // ── Agents ──
@@ -247,6 +277,11 @@ export interface TaskDTO {
   items?: TaskItemDTO[] | null;
   /** The frozen Contract uses the previous Template version during its transition (no agent covered the current one). */
   templateFallback?: VersionFallbackDTO | null;
+  /**
+   * Why a result no machine could pass waits for the client: ANOMALY, UNDECIDED, or
+   * AI_REVIEW_UNAVAILABLE (a decisive AI Review gave no usable verdict). Absent otherwise.
+   */
+  reviewReason?: "ANOMALY" | "UNDECIDED" | "AI_REVIEW_UNAVAILABLE";
 }
 
 /** An Item's own state inside a multi-Item Task. */
@@ -420,6 +455,8 @@ export interface DirectBookRequest {
   items?: (string | { sourceId: string; input?: string })[];
   /** Optional: book under your Engagement with this agent; required for document Items (ADR 0010). */
   engagementId?: string;
+  /** Optional: an AI Review of these criteria, priced and frozen at booking. */
+  aiReview?: { criteria: string[] };
 }
 
 /** An Engagement's lifecycle (acceptance/engagement/enums/EngagementStatus.java). */

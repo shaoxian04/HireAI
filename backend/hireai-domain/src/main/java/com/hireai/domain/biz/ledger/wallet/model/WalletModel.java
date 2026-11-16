@@ -70,7 +70,8 @@ public final class WalletModel {
      * see {@link LedgerEntryModel} for the reconstruction semantics.
      */
     public void release(Money amount, UUID taskId, LedgerEntryType type, String correlationId) {
-        requireType(type, LedgerEntryType.PAYOUT, LedgerEntryType.COMMISSION, LedgerEntryType.SPLIT);
+        requireType(type, LedgerEntryType.PAYOUT, LedgerEntryType.COMMISSION, LedgerEntryType.SPLIT,
+                LedgerEntryType.AI_REVIEW_FEE);
         requirePositive(amount);
         if (amount.isGreaterThan(escrow)) {
             throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
