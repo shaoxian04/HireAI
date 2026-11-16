@@ -46,7 +46,7 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 
 ### AI Review (#107)
 - **A convincing deliverable can still sway a final API verdict (accepted residual risk).** The reviewer's evidence is fenced with a per-run nonce, forged markers are redacted and the prompt treats instructions inside it as manipulation, but the model still reads text inside images and PDFs. On API/MCP the verdict settles and is final (D38): that is the opt-in trade-off both sides accepted. Unusable answers fail closed (never a payout) and money only moves from the ruling category (Inv #3).
-- **Booked only on the agent booking page and `POST /api/tasks/direct`.** The routed submit, the submit form's shortlist "Confirm & book" and MCP `submit_task` can't add one yet; nor can a multi-Item Task (D5: never per Item by default).
+- **Booked only on the agent booking page and `POST /api/tasks/direct`.** The routed submit, the submit form's shortlist "Confirm & book" and MCP `submit_task` can't add one yet (#117); nor can a multi-Item Task (D5: never per Item by default).
 - **One review per Task:** a result revised after a rejection (#95) is not reviewed again.
 
 ### Items (multi-Item Tasks, #103)

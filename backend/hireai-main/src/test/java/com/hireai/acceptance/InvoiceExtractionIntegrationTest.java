@@ -199,6 +199,10 @@ class InvoiceExtractionIntegrationTest extends WholeAppIntegrationTest {
         assertThat(flaggedReceipt).isNotNull();
         assertThat(flaggedReceipt.get("checks").get("verdict").asText()).isEqualTo("REVIEW");
         assertThat(flaggedReceipt.get("settlement").get("outcome").asText()).isEqualTo("ACCEPT");
+        // The source document's hash (S11), and the Item's Findings, are stated too.
+        assertThat(flaggedReceipt.get("source").get("sha256").asText()).hasSize(64);
+        assertThat(flaggedReceipt.get("source").get("mediaType").asText()).isEqualTo("application/pdf");
+        assertThat(flaggedReceipt.get("findings").get(0).get("code").asText()).isEqualTo("INVOICE_ARITHMETIC");
     }
 
     @Test
