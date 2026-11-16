@@ -259,6 +259,31 @@ class TaskExecutionPortImplTest {
     }
 
     @Test
+    void aLateMarkExecutingFromAnEarlierWorkOrderLeavesAReworkStillQueued() {
+        TaskModel task = queuedTask();
+        locked(task);
+        java.time.Instant sent = java.time.Instant.parse("2026-11-16T10:00:00Z");
+        when(taskRepository.findExecutionDeadline(task.id())).thenReturn(java.util.Optional.of(sent.plusSeconds(60)));
+
+        port().markExecuting(task.id(), sent);
+
+        verify(taskRepository, never()).save(any());
+    }
+
+    @Test
+    void theCurrentWorkOrdersMarkExecutingMovesTheTask() {
+        TaskModel task = queuedTask();
+        locked(task);
+        java.time.Instant sent = java.time.Instant.parse("2026-11-16T10:00:00Z");
+        when(taskRepository.findExecutionDeadline(task.id())).thenReturn(java.util.Optional.of(sent));
+        when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+        port().markExecuting(task.id(), sent);
+
+        verify(taskRepository).save(any());
+    }
+
+    @Test
     void markTimedOutTransitionsExecutingToTimedOutAndRefunds() {
         TaskModel executing = queuedTask().markExecuting();
         locked(executing);

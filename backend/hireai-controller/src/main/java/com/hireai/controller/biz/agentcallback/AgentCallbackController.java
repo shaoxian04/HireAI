@@ -9,6 +9,7 @@ import com.hireai.controller.base.BaseController;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.agentcallback.dto.AgentRejectionResponseRequest;
+import com.hireai.domain.biz.acceptance.check.model.SelfReportedAnomaly;
 import com.hireai.controller.biz.agentcallback.dto.AgentResultCallbackRequest;
 import com.hireai.domain.biz.task.info.AgentRejectionResponseInfo;
 import com.hireai.domain.biz.task.info.AgentResultInfo;
@@ -76,12 +77,16 @@ public class AgentCallbackController extends BaseController {
             throw new DispatchTokenInvalidException(
                     "Signed callback body is for task " + request.taskId() + ", not " + taskId);
         }
+        List<SelfReportedAnomaly> anomalies = request.anomalies() == null ? List.of()
+                : request.anomalies().stream().map(a -> new SelfReportedAnomaly(a.check(), a.description())).toList();
         AgentResultInfo result = new AgentResultInfo(
                 request.agentStatus(), payloadOf(request), request.resultUrl(), request.message(),
                 request.hasItems() ? request.items().stream()
                         .map(i -> new AgentItemResultInfo(i.itemNo(), i.agentStatus(), i.resultPayloadJson(),
                                 i.resultUrl()))
-                        .toList() : List.of());
+                        .toList() : List.of(),
+                anomalies);
+
         agentCallbackAppService.recordResult(taskId, token, result);
         return ok();
     }

@@ -18,7 +18,7 @@ import static org.mockito.Mockito.when;
 class ValidationReadAppServiceImplTest {
 
     private final ValidationReportRepository repo = mock(ValidationReportRepository.class);
-    private final ValidationReadAppServiceImpl service = new ValidationReadAppServiceImpl(repo);
+    private final ValidationReadAppServiceImpl service = new ValidationReadAppServiceImpl(repo, new com.hireai.domain.biz.adjudication.model.ReworkPolicy(2));
 
     @Test
     void returnsTheLatestReportForTheTask() {

@@ -74,11 +74,11 @@ _Avoid_: validation rule, business rule (a check that looks outside the Task is 
 One deliverable unit inside a Task, accepted and settled on its own. A marketplace Task has one Item; a batch of 500 invoices is one Task with 500 Items, so one bad invoice never drags the other 499 down with it.
 _Avoid_: batch (a batch is just a Task with many Items), document, line, sub-task
 
-**Check Library**:
+**Check Library** _(built, #98)_:
 The platform-curated catalogue of Acceptance Checks a Contract may use, each with fixed meaning and adjustable parameters ("background colour is red, within this hue range"). A natural-language requirement either maps onto an entry or is not automatically checked — no check is invented at submission.
 _Avoid_: rules engine, validators
 
-**Finding**:
+**Finding** _(built, #98)_:
 A fact about the Task's *input* noticed while accepting it — a duplicate invoice, a source document that does not add up, a supplier missing from the buyer's records. Reported to the client; it never changes what the Agent is paid.
 _Avoid_: error, violation, exception (none of these are the Agent's fault)
 

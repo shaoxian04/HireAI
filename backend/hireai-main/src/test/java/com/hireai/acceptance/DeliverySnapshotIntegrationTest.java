@@ -287,15 +287,19 @@ class DeliverySnapshotIntegrationTest extends WholeAppIntegrationTest {
                 assertThat(get("/api/tasks/" + taskId).path("status").asText()).isEqualTo(status));
     }
 
+    /** The latest attempt's checks: a failing result is reworked (#98), so a task can have several reports. */
     private List<String> checks(String taskId) {
         return jdbc.queryForList("SELECT c ->> 'rule' || ':' || (c ->> 'passed') FROM validation_reports r, "
-                + "jsonb_array_elements(r.checks) WITH ORDINALITY AS x(c, n) WHERE r.task_id = ?::uuid ORDER BY n",
+                + "jsonb_array_elements(r.checks) WITH ORDINALITY AS x(c, n) WHERE r.task_id = ?::uuid "
+                + "AND r.attempt_no = (SELECT max(attempt_no) FROM validation_reports WHERE task_id = r.task_id) ORDER BY n",
                 String.class, taskId);
     }
 
     private String detail(String taskId, String rule) {
         return jdbc.queryForObject("SELECT c ->> 'detail' FROM validation_reports r, jsonb_array_elements(r.checks) c "
-                + "WHERE r.task_id = ?::uuid AND c ->> 'rule' = ?", String.class, taskId, rule);
+                + "WHERE r.task_id = ?::uuid AND c ->> 'rule' = ? "
+                + "AND r.attempt_no = (SELECT max(attempt_no) FROM validation_reports WHERE task_id = r.task_id)",
+                String.class, taskId, rule);
     }
 
     private void assertDownloadIs(String taskId, byte[] expected) throws Exception {

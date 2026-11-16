@@ -31,11 +31,29 @@ public interface TaskRepository {
     /** Operational column write (unmapped on the entity — see plan Global Constraints). */
     void stampExecutionDeadline(UUID taskId, java.time.Instant deadline);
 
+    /** The execution deadline stamped at the latest assignment, failover or rework; empty if none. */
+    Optional<java.time.Instant> findExecutionDeadline(UUID taskId);
+
     /**
      * Operational column write (unmapped on the entity): when the Client's review window closes,
      * set once as the task enters PENDING_REVIEW (#94).
      */
     void stampReviewDeadline(UUID taskId, java.time.Instant deadline);
+
+    /**
+     * The same Client's other Tasks, submitted before {@code taskId}, with exactly this title and
+     * description: the outside data the duplicate-brief Finding reads (spec D7). Oldest first.
+     */
+    /**
+     * Operational column write (unmapped on the entity): why a result awaits review although no
+     * check rejected it, {@code ANOMALY} or {@code UNDECIDED}, stamped as it enters PENDING_REVIEW.
+     */
+    void stampReviewReason(UUID taskId, String reason);
+
+    /** The task's review reason; empty for a result every check passed. */
+    Optional<String> findReviewReason(UUID taskId);
+
+    List<UUID> findEarlierTaskIdsWithSameBrief(UUID taskId, UUID clientId, String title, String description);
 
     /** Operational column write (unmapped on the entity): the platform accepted on the Client's behalf. */
     void markReviewAutoAccepted(UUID taskId);

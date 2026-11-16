@@ -24,6 +24,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.hireai.application.biz.task.routing.RoutingAppService;
+import com.hireai.domain.biz.acceptance.check.model.AcceptanceEvidence;
+import com.hireai.domain.biz.acceptance.check.service.ImageDecoder;
+import com.hireai.domain.biz.adjudication.model.ReworkPolicy;
+import com.hireai.domain.biz.task.routing.info.ReworkRequest;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -46,10 +52,12 @@ class ValidationAppServiceImplTest {
     private final com.hireai.application.biz.reputation.ReputationWriteAppService reputationWrite =
             mock(com.hireai.application.biz.reputation.ReputationWriteAppService.class);
     private final DeliverySnapshotAppService snapshots = mock(DeliverySnapshotAppService.class);
+    private final RoutingAppService routing = mock(RoutingAppService.class);
+    private final ImageDecoder decoder = mock(ImageDecoder.class);
     private final ValidationAppServiceImpl svc = new ValidationAppServiceImpl(domain, snapshots, reports, tasks, settlement,
             agentRepository, apiKeyTaskRepository, webhookOutbox, reputationWrite,
             new com.hireai.domain.biz.task.model.ReviewWindow(java.time.Duration.ofHours(24)),
-            java.time.Clock.systemUTC());
+            new ReworkPolicy(2), routing, decoder, java.time.Clock.systemUTC());
 
     /** Build a RESULT_RECEIVED TaskModel via the canonical transition chain. */
     private TaskModel resultReceivedTask() {
@@ -76,7 +84,7 @@ class ValidationAppServiceImplTest {
     void passMovesToPendingReviewNoRefund() {
         TaskModel task = resultReceivedTask();
         when(tasks.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(domain.validate(ArgumentMatchers.<Contract>any(), any(), any(), eq(1))).thenReturn(passingReport(task.id()));
+        when(domain.judge(ArgumentMatchers.<Contract>any(), any(), any(), eq(1))).thenReturn(passingReport(task.id()));
         when(apiKeyTaskRepository.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
 
         TaskModel gated = svc.validateAndGate(task);
@@ -93,7 +101,7 @@ class ValidationAppServiceImplTest {
     void failMovesToSpecViolationAndRefunds() {
         TaskModel task = resultReceivedTask();
         when(tasks.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(domain.validate(ArgumentMatchers.<Contract>any(), any(), any(), eq(1)))
+        when(domain.judge(ArgumentMatchers.<Contract>any(), any(), any(), eq(1)))
                 .thenReturn(ValidationReportModel.of(task.id(), 1,
                         List.of(new CheckResult("FORMAT_TEXT_NON_EMPTY", false, "empty payload"))));
         when(apiKeyTaskRepository.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
@@ -121,7 +129,7 @@ class ValidationAppServiceImplTest {
         TaskModel resolved = mock(TaskModel.class);
         when(task.passValidation()).thenReturn(pending);
         when(pending.accept()).thenReturn(resolved);
-        when(domain.validate(ArgumentMatchers.<Contract>any(), any(), any(), anyInt())).thenReturn(passingReport(taskId));
+        when(domain.judge(ArgumentMatchers.<Contract>any(), any(), any(), anyInt())).thenReturn(passingReport(taskId));
         when(apiKeyTaskRepository.findApiKeyIdByTask(taskId)).thenReturn(Optional.of(UUID.randomUUID()));
         when(agentRepository.findOwnerByVersionId(versionId)).thenReturn(Optional.of(builderId));
 
@@ -145,7 +153,7 @@ class ValidationAppServiceImplTest {
         when(task.outputSpec()).thenReturn(new OutputSpec(OutputFormat.TEXT, null, null));
         TaskModel pending = mock(TaskModel.class);
         when(task.passValidation()).thenReturn(pending);
-        when(domain.validate(ArgumentMatchers.<Contract>any(), any(), any(), anyInt())).thenReturn(passingReport(taskId));
+        when(domain.judge(ArgumentMatchers.<Contract>any(), any(), any(), anyInt())).thenReturn(passingReport(taskId));
         when(apiKeyTaskRepository.findApiKeyIdByTask(taskId)).thenReturn(Optional.of(UUID.randomUUID()));
         when(agentRepository.findOwnerByVersionId(versionId)).thenReturn(Optional.empty()); // no owner
 
@@ -161,7 +169,7 @@ class ValidationAppServiceImplTest {
     void failEnqueuesFailedSpecViolation() {
         TaskModel task = resultReceivedTask();
         when(tasks.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(domain.validate(ArgumentMatchers.<Contract>any(), any(), any(), eq(1)))
+        when(domain.judge(ArgumentMatchers.<Contract>any(), any(), any(), eq(1)))
                 .thenReturn(ValidationReportModel.of(task.id(), 1,
                         List.of(new CheckResult("FORMAT_TEXT_NON_EMPTY", false, "empty payload"))));
         when(apiKeyTaskRepository.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
@@ -175,12 +183,12 @@ class ValidationAppServiceImplTest {
     void aTaskIsJudgedAgainstTheContractItFroze() {
         TaskModel task = resultReceivedTask();
         when(tasks.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(domain.validate(ArgumentMatchers.<Contract>any(), any(), any(), eq(1))).thenReturn(passingReport(task.id()));
+        when(domain.judge(ArgumentMatchers.<Contract>any(), any(), any(), eq(1))).thenReturn(passingReport(task.id()));
         when(apiKeyTaskRepository.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
 
         svc.validateAndGate(task);
 
-        verify(domain).validate(eq(task.contract()), eq(task.result()), isNull(), eq(1));
+        verify(domain).judge(eq(task.contract()), eq(task.result()), ArgumentMatchers.<AcceptanceEvidence>argThat(e -> e.delivery() == null), eq(1));
     }
 
     @Test
@@ -192,12 +200,12 @@ class ValidationAppServiceImplTest {
         when(legacy.outputSpec()).thenReturn(spec);
         when(legacy.result()).thenReturn(result);
         when(legacy.passValidation()).thenReturn(mock(TaskModel.class));
-        when(domain.validate(eq(spec.toContract()), eq(result), isNull(), eq(1))).thenReturn(passingReport(UUID.randomUUID()));
+        when(domain.judge(eq(spec.toContract()), eq(result), ArgumentMatchers.<AcceptanceEvidence>argThat(e -> e.delivery() == null), eq(1))).thenReturn(passingReport(UUID.randomUUID()));
         when(apiKeyTaskRepository.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
 
         svc.validateAndGate(legacy);
 
-        verify(domain).validate(eq(spec.toContract()), eq(result), isNull(), eq(1));
+        verify(domain).judge(eq(spec.toContract()), eq(result), ArgumentMatchers.<AcceptanceEvidence>argThat(e -> e.delivery() == null), eq(1));
     }
 
     @Test
@@ -211,23 +219,71 @@ class ValidationAppServiceImplTest {
         when(domain.needsDelivery(spec.toContract(), result)).thenReturn(true);
         DeliveryOutcome frozen = new DeliveryOutcome.Unavailable("the link answered 404");
         when(snapshots.capture(spec.toContract(), result)).thenReturn(frozen);
-        when(domain.validate(eq(spec.toContract()), eq(result), eq(frozen), eq(1))).thenReturn(passingReport(UUID.randomUUID()));
+        when(domain.judge(eq(spec.toContract()), eq(result), ArgumentMatchers.<AcceptanceEvidence>argThat(e -> e.delivery() == frozen), eq(1))).thenReturn(passingReport(UUID.randomUUID()));
         when(apiKeyTaskRepository.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
 
         svc.validateAndGate(task);
 
-        verify(domain).validate(eq(spec.toContract()), eq(result), eq(frozen), eq(1));
+        verify(domain).judge(eq(spec.toContract()), eq(result), ArgumentMatchers.<AcceptanceEvidence>argThat(e -> e.delivery() == frozen), eq(1));
     }
 
     @Test
     void aResultWithNothingToFetchTakesNoSnapshot() {
         TaskModel task = resultReceivedTask();
         when(tasks.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(domain.validate(ArgumentMatchers.<Contract>any(), any(), any(), eq(1))).thenReturn(passingReport(task.id()));
+        when(domain.judge(ArgumentMatchers.<Contract>any(), any(), any(), eq(1))).thenReturn(passingReport(task.id()));
         when(apiKeyTaskRepository.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
 
         svc.validateAndGate(task);
 
         verifyNoInteractions(snapshots);
+    }
+
+    @Test
+    void aRejectedResultGoesBackToTheSameAgentWithTheFailingChecksWhileReworksRemain() {
+        TaskModel task = resultReceivedTask();
+        when(domain.judge(ArgumentMatchers.<Contract>any(), any(), any(), eq(1)))
+                .thenReturn(ValidationReportModel.of(task.id(), 1,
+                        List.of(new CheckResult("FORMAT_TEXT_NON_EMPTY", false, "empty payload"))));
+        when(reports.countRejectedByTaskId(task.id())).thenReturn(2);
+        when(routing.redispatchForRework(eq(task.id()), eq(task.agentVersionId()), any())).thenReturn(true);
+        when(tasks.findById(task.id())).thenReturn(Optional.of(task));
+
+        svc.validateAndGate(task);
+
+        verify(routing).redispatchForRework(eq(task.id()), eq(task.agentVersionId()),
+                eq(new ReworkRequest(2, 2, List.of(new ReworkRequest.FailedCheck("FORMAT_TEXT_NON_EMPTY", "empty payload")))));
+        verifyNoInteractions(settlement, reputationWrite, webhookOutbox);
+    }
+
+    @Test
+    void aResultRejectedAfterTheLastReworkIsASpecViolation() {
+        TaskModel task = resultReceivedTask();
+        when(tasks.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(domain.judge(ArgumentMatchers.<Contract>any(), any(), any(), eq(1)))
+                .thenReturn(ValidationReportModel.of(task.id(), 1,
+                        List.of(new CheckResult("FORMAT_TEXT_NON_EMPTY", false, "empty payload"))));
+        when(reports.countRejectedByTaskId(task.id())).thenReturn(3);
+
+        TaskModel gated = svc.validateAndGate(task);
+
+        assertThat(gated.status()).isEqualTo(TaskStatus.SPEC_VIOLATION);
+        verifyNoInteractions(routing);
+        verify(settlement).settleRejected(eq(task.id()), eq(task.clientId()), eq(task.budget()));
+    }
+
+    @Test
+    void aResultSentToReviewWaitsForTheClientEvenOnTheApiChannel() {
+        TaskModel task = resultReceivedTask();
+        when(tasks.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(domain.judge(ArgumentMatchers.<Contract>any(), any(), any(), eq(1)))
+                .thenReturn(ValidationReportModel.of(task.id(), 1,
+                        List.of(CheckResult.review("SELF_REPORTED_ANOMALY", "two brand colours"))));
+        when(apiKeyTaskRepository.findApiKeyIdByTask(any())).thenReturn(Optional.of(UUID.randomUUID()));
+
+        TaskModel gated = svc.validateAndGate(task);
+
+        assertThat(gated.status()).isEqualTo(TaskStatus.PENDING_REVIEW);
+        verifyNoInteractions(settlement);
     }
 }

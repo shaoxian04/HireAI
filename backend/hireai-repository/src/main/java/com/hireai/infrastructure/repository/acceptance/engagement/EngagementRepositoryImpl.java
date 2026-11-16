@@ -20,7 +20,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-/** {@code engagements} (V48) with plain JDBC. The table's trigger freezes the parties, consent and variant. */
+/** {@code engagements} (V49) with plain JDBC. The table's trigger freezes the parties, consent and variant. */
 @Repository
 public class EngagementRepositoryImpl implements EngagementRepository {
 

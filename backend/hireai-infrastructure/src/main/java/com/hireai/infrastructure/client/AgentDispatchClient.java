@@ -211,7 +211,8 @@ public class AgentDispatchClient implements AgentNoticePort {
                                 item.source() == null ? null : new WebhookDispatchBody.Source(item.source().url(),
                                         item.source().sha256(), item.source().mediaType(), item.source().sizeBytes(),
                                         item.source().filename(), item.source().expiresAt().toString())))
-                        .toList());
+                        .toList(),
+                payload.rework());
     }
 
     private JsonNode readJson(String json) {

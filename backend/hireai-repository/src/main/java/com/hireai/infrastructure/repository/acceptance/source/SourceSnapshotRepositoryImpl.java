@@ -21,7 +21,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * {@code source_snapshots} and {@code source_downloads} (V48) with plain JDBC. The tables' triggers
+ * {@code source_snapshots} and {@code source_downloads} (V49) with plain JDBC. The tables' triggers
  * freeze an uploaded snapshot (only its retention fields move) and keep the download log append-only.
  */
 @Repository
