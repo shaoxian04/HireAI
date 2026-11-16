@@ -1,5 +1,6 @@
 package com.hireai.application.biz.task;
 
+import com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
@@ -25,6 +26,13 @@ public interface TaskWriteAppService {
 
     /** Direct booking: identical atomic submit+freeze, but routing is pinned to agentVersionId. */
     UUID submitDirectlyBooked(@NonNull TaskSubmitInfo taskSubmitInfo, @NonNull UUID agentVersionId);
+
+    /**
+     * Records what requirement extraction made of a mode-1 submit (spec S6). Joins the submit
+     * transaction (REQUIRED), so the record and the Task commit together.
+     */
+    void recordExtraction(@NonNull UUID taskId,
+                          @NonNull ExtractionRecord extraction);
 
     /**
      * SUBMITTED/AWAITING_AGENT -> QUEUED, and stamps the execution deadline

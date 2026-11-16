@@ -23,6 +23,10 @@ import com.hireai.controller.biz.task.dto.MatchPreviewDTO;
 import com.hireai.controller.biz.task.dto.MatchPreviewRequest;
 import com.hireai.controller.biz.acceptance.converter.Acceptance2DTOConverter;
 import com.hireai.controller.biz.acceptance.converter.ContractRequest2ModelConverter;
+import com.hireai.controller.biz.acceptance.dto.ContractRequest;
+import com.hireai.application.biz.acceptance.TemplateReadAppService;
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.controller.biz.task.dto.RejectTaskRequest;
 import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
 import com.hireai.controller.biz.task.dto.TaskDTO;
@@ -80,6 +84,8 @@ public class TaskController extends BaseController {
     /** The client's star rating — distinct from reviewAppService, which is accept/reject. */
     private final ReviewAppService ratingAppService;
     private final RejectionAppService rejectionAppService;
+    /** Checks the checks a structured Contract names (spec D15). */
+    private final TemplateReadAppService templateReadAppService;
 
     public TaskController(SubmitOrchestrationAppService submitOrchestrationAppService,
                           TaskReadAppService readAppService,
@@ -89,7 +95,8 @@ public class TaskController extends BaseController {
                           MatchPreviewAppService matchPreviewAppService,
                           ValidationReadAppService validationReadAppService,
                           ReviewAppService ratingAppService,
-                          RejectionAppService rejectionAppService) {
+                          RejectionAppService rejectionAppService,
+                          TemplateReadAppService templateReadAppService) {
         this.submitOrchestrationAppService = submitOrchestrationAppService;
         this.readAppService = readAppService;
         this.currentUser = currentUser;
@@ -99,27 +106,50 @@ public class TaskController extends BaseController {
         this.validationReadAppService = validationReadAppService;
         this.ratingAppService = ratingAppService;
         this.rejectionAppService = rejectionAppService;
+        this.templateReadAppService = templateReadAppService;
     }
 
+    /**
+     * Submits a routed task in one of two modes (spec S6, D28). Without {@code contract} (mode 1) the
+     * description is extracted onto the output spec's Template and the result adopted: submitting is
+     * acceptance, and the response's {@code extraction} says how each requirement was mapped. With a
+     * {@code contract} (mode 2) nothing is extracted. Either way the response carries the frozen Contract.
+     */
     @PostMapping
     public WebResult<TaskDTO> submit(@Valid @RequestBody SubmitTaskRequest request,
                                      @RequestHeader(value = "Idempotency-Key", required = false)
                                      String idempotencyKey) {
         UUID clientId = currentUser.currentUserId();
+        Contract contract = contractOf(request.contract());
         SubmitTaskRequest.OutputSpecRequest specRequest = request.outputSpec();
+        OutputSpec outputSpec = specRequest != null
+                ? new OutputSpec(specRequest.format(), specRequest.schema(), specRequest.acceptanceCriteria())
+                // Mode 1 without an output spec extracts onto text_basic; mode 2 takes the Contract's shape.
+                : contract == null ? new OutputSpec(OutputFormat.TEXT, null, null) : null;
         TaskSubmitInfo info = new TaskSubmitInfo(
                 clientId,
                 request.title(),
                 request.description(),
                 Money.of(request.budget()),
-                new OutputSpec(specRequest.format(), specRequest.schema(), specRequest.acceptanceCriteria()),
+                outputSpec,
                 request.category(),
                 request.deadlineSeconds(),
-                null, // routed submit has no explicit Contract yet (#100)
+                contract,
                 request.items());
         UUID taskId = submitOrchestrationAppService.submitRouted(
                 submitContext(clientId, idempotencyKey), info);
-        return ok(withTemplateFallback(readAppService.getForClient(taskId, clientId)));
+        TaskModel task = readAppService.getForClient(taskId, clientId);
+        return ok(withTemplateFallback(task).withExtraction(
+                Acceptance2DTOConverter.toDTO(readAppService.findContractExtraction(task).orElse(null))));
+    }
+
+    /** The request's structured Contract (null when none), after checking the checks it names. */
+    private Contract contractOf(ContractRequest request) {
+        Contract contract = ContractRequest2ModelConverter.toModel(request);
+        if (contract != null) {
+            templateReadAppService.requireNamedChecks(contract, request.checks());
+        }
+        return contract;
     }
 
     @PostMapping("/direct")
@@ -132,7 +162,7 @@ public class TaskController extends BaseController {
                 new DirectBookingInfo(clientId, request.title(), request.description(),
                         Money.of(request.budget()), request.agentId(),
                         request.category() == null || request.category().isBlank() ? null : request.category(),
-                        request.deadlineSeconds(), ContractRequest2ModelConverter.toModel(request.contract()),
+                        request.deadlineSeconds(), contractOf(request.contract()),
                         request.items()));
         return ok(withTemplateFallback(readAppService.getForClient(taskId, clientId)));
     }
@@ -166,7 +196,9 @@ public class TaskController extends BaseController {
                 rejectionAppService.findLatest(task.id()).orElse(null),
                 readAppService.findFailureDetail(task).orElse(null), readAppService.findItems(task), true)
                 .withTemplateFallback(Acceptance2DTOConverter.toDTO(
-                        readAppService.findTemplateFallback(task).orElse(null))));
+                        readAppService.findTemplateFallback(task).orElse(null)))
+                .withExtraction(Acceptance2DTOConverter.toDTO(
+                        readAppService.findContractExtraction(task).orElse(null))));
     }
 
     @GetMapping("/{taskId}/result")
@@ -290,7 +322,7 @@ public class TaskController extends BaseController {
     public WebResult<MatchPreviewDTO> matchPreview(@Valid @RequestBody MatchPreviewRequest request) {
         return ok(MatchPreview2DTOConverter.toDTO(matchPreviewAppService.preview(
                 request.title(), request.description(), request.category(), Money.of(request.budget()), excludedAgents(request.exclude()),
-                request.deadlineSeconds(), ContractRequest2ModelConverter.toModel(request.contract()))));
+                request.deadlineSeconds(), contractOf(request.contract()))));
     }
 
     private static Set<UUID> excludedAgents(List<UUID> exclude) {

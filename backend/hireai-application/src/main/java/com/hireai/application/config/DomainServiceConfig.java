@@ -19,6 +19,8 @@ import com.hireai.domain.biz.task.routing.service.MatchingPolicy;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
 import com.hireai.domain.biz.acceptance.coverage.service.OfferCoverageDomainService;
 import com.hireai.domain.biz.acceptance.coverage.service.impl.OfferCoverageDomainServiceImpl;
+import com.hireai.domain.biz.acceptance.extraction.service.RequirementExtractionDomainService;
+import com.hireai.domain.biz.acceptance.extraction.service.impl.RequirementExtractionDomainServiceImpl;
 import com.hireai.domain.biz.task.routing.service.impl.RoutingMatchDomainServiceImpl;
 import com.hireai.domain.biz.task.routing.service.RoutedFailoverDomainService;
 import com.hireai.domain.biz.task.routing.service.impl.RoutedFailoverDomainServiceImpl;
@@ -87,6 +89,11 @@ public class DomainServiceConfig {
     @Bean
     public OfferCoverageDomainService offerCoverageDomainService() {
         return new OfferCoverageDomainServiceImpl();
+    }
+
+    @Bean
+    public RequirementExtractionDomainService requirementExtractionDomainService() {
+        return new RequirementExtractionDomainServiceImpl();
     }
 
     @Bean

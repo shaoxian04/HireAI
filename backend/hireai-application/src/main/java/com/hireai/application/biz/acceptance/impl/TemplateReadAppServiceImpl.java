@@ -3,6 +3,7 @@ package com.hireai.application.biz.acceptance.impl;
 import com.hireai.application.biz.acceptance.TemplateReadAppService;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.acceptance.coverage.info.ContractTerms;
+import com.hireai.domain.biz.acceptance.extraction.service.RequirementExtractionDomainService;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
 import com.hireai.domain.biz.acceptance.offer.model.OfferTerm;
 import com.hireai.domain.biz.acceptance.template.info.ContractResolution;
@@ -45,6 +46,7 @@ public class TemplateReadAppServiceImpl implements TemplateReadAppService {
     private final TemplateTransition templateTransition;
     /** The app's Clock bean: the transition is measured from now. */
     private final Clock clock;
+    private final RequirementExtractionDomainService requirementExtractionDomainService;
 
     @Override
     public List<TemplateModel> list() {
@@ -72,10 +74,25 @@ public class TemplateReadAppServiceImpl implements TemplateReadAppService {
     }
 
     @Override
+    public TemplateModel current(String key) {
+        List<TemplateModel> line = templateRepository.findVersions(key);
+        return TemplateVersions.of(line, templateTransition.period()).current()
+                .orElseThrow(() -> new DomainException(ResultCode.VALIDATION_ERROR, line.isEmpty()
+                        ? "Unknown Template " + key : "Template " + key + " takes no new Contracts"));
+    }
+
+    @Override
     public void requireValid(Contract contract) {
         known(contract.template()).requireValid(contract);
         versionsOf(contract.template()).requireTakesNewContracts(contract.template(), clock.instant());
         validationDomainService.requireCheckable(contract);
+    }
+
+    @Override
+    public void requireNamedChecks(Contract contract, List<String> checks) {
+        if (checks != null) {
+            requirementExtractionDomainService.requireNamedChecks(known(contract.template()), contract, checks);
+        }
     }
 
     @Override

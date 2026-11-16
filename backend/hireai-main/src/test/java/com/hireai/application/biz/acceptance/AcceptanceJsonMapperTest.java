@@ -37,6 +37,23 @@ class AcceptanceJsonMapperTest {
     }
 
     @Test
+    void anExtractionRecordRoundTripsInTheV49Shape() {
+        var record = new com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord(ref,
+                com.hireai.domain.biz.acceptance.extraction.enums.ExtractionStatus.EXTRACTED, java.util.List.of(
+                        com.hireai.domain.biz.acceptance.extraction.model.ExtractedRequirement.mapped("At most 12 pages",
+                                "PAGE_COUNT", Map.of("max_pages", new ParameterValue.Number(new BigDecimal("12")))),
+                        com.hireai.domain.biz.acceptance.extraction.model.ExtractedRequirement.unmapped("Be witty",
+                                "No automatic check fits it.")));
+
+        String json = mapper.toJson(record);
+
+        assertThat(json).isEqualTo("{\"template\":\"demo_work\",\"version\":2,\"status\":\"EXTRACTED\",\"requirements\":["
+                + "{\"text\":\"At most 12 pages\",\"check\":\"PAGE_COUNT\",\"params\":{\"max_pages\":12}},"
+                + "{\"text\":\"Be witty\",\"unmappedReason\":\"No automatic check fits it.\"}]}");
+        assertThat(mapper.extractionFromJson(json)).isEqualTo(record);
+    }
+
+    @Test
     void anOfferOfEveryRangeKindRoundTripsAsTaggedObjects() {
         Offer offer = Offer.of(new OfferTerm(ref, Map.of(
                 "max_pages", new ParameterRange.Bound(new BigDecimal("40")),

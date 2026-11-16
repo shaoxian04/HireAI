@@ -31,12 +31,25 @@ public interface TemplateReadAppService {
     TemplateModel get(TemplateRef ref);
 
     /**
+     * The current version of the Template {@code key} (its newest ACTIVE version, spec D36);
+     * VALIDATION_ERROR when the key is unknown or its line is retired.
+     */
+    TemplateModel current(String key);
+
+    /**
      * The Contract names an existing Template version that takes new Contracts (the current one, or
      * the previous one during its transition), every parameter is inside its bounds, and its terms can
      * be checked (a schema must be a valid JSON Schema, spec D8); VALIDATION_ERROR otherwise (an
      * unknown Template included).
      */
     void requireValid(Contract contract);
+
+    /**
+     * A structured Contract that names the Check Library entries it relies on (spec D15): each must be
+     * an entry its Template lists, switched on by the Contract's parameters; VALIDATION_ERROR otherwise
+     * (an unknown Template included). Null {@code checks} checks nothing.
+     */
+    void requireNamedChecks(Contract contract, List<String> checks);
 
     /**
      * Makes a new Contract from {@code requested} (spec D36): it uses the current version of the

@@ -156,6 +156,17 @@ public class TaskRepositoryImpl implements TaskRepository {
     }
 
     @Override
+    public void stampContractExtraction(UUID taskId,
+                                        com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord extraction) {
+        taskJpa.stampContractExtraction(taskId, acceptanceJsonMapper.toJson(extraction));
+    }
+
+    @Override
+    public Optional<com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord> findContractExtraction(UUID taskId) {
+        return taskJpa.findContractExtraction(taskId).map(acceptanceJsonMapper::extractionFromJson);
+    }
+
+    @Override
     public void pinAgentVersion(UUID taskId, UUID agentVersionId) {
         taskJpa.pinAgentVersion(taskId, agentVersionId);
     }

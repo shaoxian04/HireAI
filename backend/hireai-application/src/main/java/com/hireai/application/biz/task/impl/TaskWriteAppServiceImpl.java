@@ -28,6 +28,9 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord;
+import com.hireai.domain.biz.acceptance.template.enums.OutputShape;
+import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.acceptance.coverage.service.OfferCoverageDomainService;
 import com.hireai.domain.biz.acceptance.template.info.ContractResolution;
 import com.hireai.domain.biz.offering.agent.info.AgentCandidate;
@@ -77,6 +80,7 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
             return info; // the domain submit refuses it ("output spec is required")
         }
         Contract requested = info.contract() != null ? info.contract() : info.outputSpec().toContract();
+        OutputSpec outputSpec = outputSpecFor(info, requested);
         Supplier<List<AgentCandidate>> candidates = memoize(() -> agentRepository.findActiveCandidates(
                 info.category() == null ? null : info.category().trim().toLowerCase(), info.budget().value()));
         ContractResolution resolution = templateReadAppService.resolveNew(requested, terms ->
@@ -86,8 +90,29 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
             log.info("Routed task by client {} falls back: {}", info.clientId(), resolution.fallback().summary());
         }
         return new TaskSubmitInfo(info.clientId(), info.title(), info.description(), info.budget(),
-                info.outputSpec(), info.category(), info.deadlineSeconds(), resolution.terms().contract(),
+                outputSpec, info.category(), info.deadlineSeconds(), resolution.terms().contract(),
                 info.items());
+    }
+
+    /**
+     * The output spec a routed task records while output_spec still exists (#110 retires it): the
+     * Client's, which must then be of the Contract's Template's shape, else the one the Contract implies
+     * (a structured Contract submitted alone, spec S6 mode 2).
+     */
+    private OutputSpec outputSpecFor(TaskSubmitInfo info, Contract contract) {
+        if (info.contract() == null) {
+            return info.outputSpec();
+        }
+        OutputShape shape = templateReadAppService.termsFor(contract).template().outputShape();
+        if (info.outputSpec() == null) {
+            return OutputSpec.forContract(shape, contract, null);
+        }
+        if (!info.outputSpec().format().name().equals(shape.name())) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "outputSpec.format " + info.outputSpec().format()
+                    + " does not fit the Contract's Template " + contract.template() + ", which delivers " + shape
+                    + "; leave outputSpec out when you send a Contract");
+        }
+        return info.outputSpec();
     }
 
     private static <T> Supplier<T> memoize(Supplier<T> source) {
@@ -102,6 +127,11 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
                 return value;
             }
         };
+    }
+
+    @Override
+    public void recordExtraction(UUID taskId, ExtractionRecord extraction) {
+        taskRepository.stampContractExtraction(taskId, extraction);
     }
 
     @Override

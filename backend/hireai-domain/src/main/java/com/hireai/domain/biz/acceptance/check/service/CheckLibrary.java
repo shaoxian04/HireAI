@@ -6,6 +6,7 @@ import com.hireai.domain.biz.acceptance.check.model.FindingFacts;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.acceptance.contract.model.ParameterValue;
 import com.hireai.domain.biz.acceptance.delivery.model.DeliverySnapshot;
+import com.hireai.domain.biz.acceptance.template.model.GenericTemplates;
 import com.hireai.domain.biz.adjudication.model.CheckResult;
 
 import java.math.BigDecimal;
@@ -49,6 +50,31 @@ import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTem
  */
 public final class CheckLibrary {
 
+    /**
+     * The Template parameters one entry reads ({@code reads}), and which of them switch it on
+     * ({@code activatedBy}; empty = it always runs). Requirement extraction (spec S6) may map a
+     * requirement onto an entry only by setting parameters it reads, and a client naming an entry
+     * must set one that switches it on.
+     */
+    public record EntryParameters(Set<String> reads, Set<String> activatedBy) {
+        public EntryParameters {
+            reads = Set.copyOf(reads);
+            activatedBy = Set.copyOf(activatedBy);
+        }
+
+        public boolean alwaysRuns() {
+            return activatedBy.isEmpty();
+        }
+
+        static EntryParameters always() {
+            return new EntryParameters(Set.of(), Set.of());
+        }
+
+        static EntryParameters on(String... params) {
+            return new EntryParameters(Set.of(params), Set.of(params));
+        }
+    }
+
     /** What a pixel check judges: the Contract and the frozen copy, with its pixels when decodable. */
     public record Subject(Contract contract, DeliverySnapshot snapshot, DecodedImage image) {
     }
@@ -59,12 +85,35 @@ public final class CheckLibrary {
 
     private static final Map<String, Function<Subject, Optional<CheckResult>>> CHECKS = new LinkedHashMap<>();
     private static final Map<String, BiFunction<Subject, FindingFacts, Optional<Finding>>> FINDINGS = new LinkedHashMap<>();
+    /** Every named entry, the generic Templates' hard-coded checks included, with the parameters it reads. */
+    private static final Map<String, EntryParameters> PARAMETERS = new LinkedHashMap<>();
 
     static {
         CHECKS.put(IMAGE_FORMAT, CheckLibrary::imageFormat);
         CHECKS.put(IMAGE_DIMENSIONS, CheckLibrary::imageDimensions);
         CHECKS.put(IMAGE_BACKGROUND_COLOUR, CheckLibrary::backgroundColour);
         FINDINGS.put(DUPLICATE_BRIEF, CheckLibrary::duplicateBrief);
+
+        PARAMETERS.put("FORMAT_TEXT_NON_EMPTY", EntryParameters.always());
+        PARAMETERS.put("TEXT_MIN_LENGTH", EntryParameters.on(GenericTemplates.MIN_LENGTH));
+        PARAMETERS.put("TEXT_MAX_LENGTH", EntryParameters.on(GenericTemplates.MAX_LENGTH));
+        PARAMETERS.put("FORMAT_JSON_PARSEABLE", EntryParameters.always());
+        PARAMETERS.put("SCHEMA_MATCH", EntryParameters.on(GenericTemplates.SCHEMA));
+        PARAMETERS.put("FORMAT_FILE_HTTPS_URL", EntryParameters.always());
+        PARAMETERS.put("FILE_FETCHED", EntryParameters.always());
+        PARAMETERS.put("FILE_MEDIA_TYPE", EntryParameters.on(GenericTemplates.MEDIA_TYPES));
+        PARAMETERS.put("FILE_MAX_BYTES", EntryParameters.on(GenericTemplates.MAX_BYTES));
+        // IMAGE_FORMAT always runs: unset formats accept every image type.
+        PARAMETERS.put(IMAGE_FORMAT, new EntryParameters(Set.of(FORMATS), Set.of()));
+        PARAMETERS.put(IMAGE_DIMENSIONS, EntryParameters.on(WIDTH, HEIGHT));
+        PARAMETERS.put(IMAGE_BACKGROUND_COLOUR,
+                new EntryParameters(Set.of(BACKGROUND_COLOUR, COLOUR_TOLERANCE), Set.of(BACKGROUND_COLOUR)));
+        PARAMETERS.put(DUPLICATE_BRIEF, EntryParameters.always());
+    }
+
+    /** The parameters an entry reads; empty when the Check Library has no entry of that name. */
+    public static Optional<EntryParameters> parametersOf(String entry) {
+        return Optional.ofNullable(PARAMETERS.get(entry));
     }
 
     private CheckLibrary() {

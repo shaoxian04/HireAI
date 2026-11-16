@@ -60,6 +60,10 @@ public interface TaskReadAppService {
      */
     Optional<VersionFallback> findTemplateFallback(@NonNull TaskModel task);
 
+    /** What requirement extraction made of the task's description (mode 1, spec S6); empty when none ran. */
+    Optional<com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord> findContractExtraction(
+            @NonNull TaskModel task);
+
     TaskResultModel getResult(@NonNull UUID taskId, @NonNull UUID clientId);
 
     /** The result's DeliverySnapshot (D24), or empty when it has none (not a file, or not fetched). */

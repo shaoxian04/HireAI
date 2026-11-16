@@ -1,6 +1,9 @@
 package com.hireai.application.biz.task.impl;
 
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.acceptance.extraction.model.ContractExtraction;
+import com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord;
+import com.hireai.application.biz.acceptance.extraction.ContractDraftAppService;
 
 import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.SubmitContext;
@@ -59,6 +62,8 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
     private final SpendReadPort spendReadPort;
     private final CategoryRepository categoryRepository;
     private final Clock clock;
+    /** Requirement extraction for a mode-1 (description-only) submit (spec S6). */
+    private final ContractDraftAppService contractDraftAppService;
 
     /** The Spring proxy of THIS bean (so the {@code @Transactional} {@code *Tx}/re-read methods are
      *  entered through the proxy). {@code null} when constructed directly in a unit test. */
@@ -72,7 +77,8 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
                                              ApiKeyTaskRepository apiKeyTaskRepository,
                                              SpendReadPort spendReadPort,
                                              CategoryRepository categoryRepository,
-                                             Clock clock) {
+                                             Clock clock,
+                                             ContractDraftAppService contractDraftAppService) {
         this.taskWriteAppService = taskWriteAppService;
         this.directBookingAppService = directBookingAppService;
         this.idempotencyRepository = idempotencyRepository;
@@ -80,6 +86,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         this.spendReadPort = spendReadPort;
         this.categoryRepository = categoryRepository;
         this.clock = clock;
+        this.contractDraftAppService = contractDraftAppService;
     }
 
     /** The proxied bean in production; {@code this} in a direct-construction unit test. */
@@ -87,6 +94,13 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         return self != null ? self : this;
     }
 
+    /**
+     * Mode 1 (no Contract, spec S6 D28): the description is extracted onto the output spec's Template
+     * (outside any transaction: the LLM call may take seconds) and the result is adopted; submitting is
+     * acceptance. Mode 2 (a Contract): no extraction, the Contract is the only basis for acceptance. The
+     * idempotency fingerprint is the CLIENT's request, so a mode-1 retry matches even though extraction
+     * is not deterministic, and a replay returns the first Task without extracting again.
+     */
     @Override
     public UUID submitRouted(SubmitContext ctx, TaskSubmitInfo submitted) {
         // An unknown slug is a 400 naming the valid ones, before anything is frozen (#80).
@@ -94,8 +108,22 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         TaskSubmitInfo info = new TaskSubmitInfo(submitted.clientId(), submitted.title(),
                 submitted.description(), submitted.budget(), submitted.outputSpec(), category,
                 submitted.deadlineSeconds(), submitted.contract(), submitted.items());
+        String fingerprint = fingerprint(info);
+        ContractExtraction extraction = null;
+        if (info.contract() == null && info.outputSpec() != null) {
+            if (ctx.hasIdempotencyKey()) {
+                Optional<IdempotencyRecord> existing = idempotencyRepository.find(ctx.ownerId(), ctx.idempotencyKey());
+                if (existing.isPresent()) {
+                    return resolveExisting(existing.get(), fingerprint);
+                }
+            }
+            extraction = contractDraftAppService.draft(info.title(), info.description(),
+                    info.outputSpec().acceptanceCriteria(), info.outputSpec().toContract());
+            info = new TaskSubmitInfo(info.clientId(), info.title(), info.description(), info.budget(),
+                    info.outputSpec(), info.category(), info.deadlineSeconds(), extraction.contract(), info.items());
+        }
         try {
-            return self().submitRoutedTx(ctx, info);
+            return self().submitRoutedTx(ctx, info, fingerprint, extraction == null ? null : extraction.record());
         } catch (IdempotencyRaceException e) {
             return self().resolveRaceWinner(ctx.ownerId(), ctx.idempotencyKey(), e.fingerprint());
         }
@@ -117,10 +145,15 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
     }
 
     @Transactional
-    public UUID submitRoutedTx(SubmitContext ctx, TaskSubmitInfo info) {
+    public UUID submitRoutedTx(SubmitContext ctx, TaskSubmitInfo info, String fingerprint, ExtractionRecord extraction) {
         // Spend caps count what is frozen: for a multi-Item Task, the per-Item price × the Item count.
-        return orchestrate(ctx, fingerprint(info), info.escrow().value(),
-                () -> taskWriteAppService.submit(info));
+        return orchestrate(ctx, fingerprint, info.escrow().value(), () -> {
+            UUID taskId = taskWriteAppService.submit(info);
+            if (extraction != null) {
+                taskWriteAppService.recordExtraction(taskId, extraction);
+            }
+            return taskId;
+        });
     }
 
     @Transactional
@@ -188,7 +221,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
     private String fingerprint(TaskSubmitInfo info) {
         return SubmitFingerprint.of(info.title(), info.description(), info.category(),
                 info.budget().value(), specJson(info.outputSpec()) + deadlinePart(info.deadlineSeconds())
-                        + itemsPart(info.items()));
+                        + contractPart(info.contract()) + itemsPart(info.items()));
     }
 
     private String fingerprintDirect(DirectBookingInfo info) {

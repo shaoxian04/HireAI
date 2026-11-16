@@ -80,7 +80,8 @@ public class SecurityConfig {
                         // match-preview is a POST (task text in the body), so it needs its own matcher:
                         // no GET wildcard covers it.
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
-                                "/api/tasks", "/api/tasks/direct", "/api/tasks/match-preview")
+                                "/api/tasks", "/api/tasks/direct", "/api/tasks/match-preview",
+                                "/api/contracts/draft")
                                 .hasAnyRole("CLIENT", "API_CLIENT")
                         .requestMatchers(org.springframework.http.HttpMethod.GET,
                                 "/api/tasks", "/api/tasks/*", "/api/tasks/*/result",
