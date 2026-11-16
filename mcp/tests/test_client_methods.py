@@ -46,13 +46,59 @@ async def test_submit_direct_posts_agentid_and_idempotency_key():
 
 
 @respx.mock
-async def test_submit_routed_posts_output_spec():
+async def test_submit_routed_mode_1_posts_the_description_without_output_spec_or_contract():
     route = respx.post(f"{BASE}/api/tasks").mock(return_value=ok({"id": "t2", "status": "SUBMITTED"}))
-    await client().submit_routed(title="T", description="d", category="summarization",
-                                 budget=50, output_format="TEXT", acceptance_criteria="concise")
+    await client().submit_routed(title="T", description="d", category="summarization", budget=50)
     body = json.loads(route.calls.last.request.content)
-    assert body["category"] == "summarization"
-    assert body["outputSpec"] == {"format": "TEXT", "schema": "", "acceptanceCriteria": "concise"}
+    assert body == {"title": "T", "description": "d", "category": "summarization", "budget": 50}
+
+
+@respx.mock
+async def test_submit_routed_with_a_schema_asks_for_json_conforming_to_it():
+    route = respx.post(f"{BASE}/api/tasks").mock(return_value=ok({"id": "t2", "status": "SUBMITTED"}))
+    await client().submit_routed(title="T", description="d", category="summarization", budget=50,
+                                 schema='{"type":"object"}')
+    body = json.loads(route.calls.last.request.content)
+    assert body["outputSpec"] == {"format": "JSON", "schema": '{"type":"object"}'}
+    assert "contract" not in body
+
+
+@respx.mock
+async def test_submit_routed_mode_2_posts_the_contract():
+    route = respx.post(f"{BASE}/api/tasks").mock(return_value=ok({"id": "t2", "status": "SUBMITTED"}))
+    contract = {"template": "text_basic", "version": 1, "params": {"max_length": 500}}
+    await client().submit_routed(title="T", description="d", category="summarization", budget=50,
+                                 contract=contract)
+    body = json.loads(route.calls.last.request.content)
+    assert body["contract"] == contract
+    assert "outputSpec" not in body
+
+
+@respx.mock
+async def test_submit_direct_posts_the_contract_only_when_given():
+    route = respx.post(f"{BASE}/api/tasks/direct").mock(return_value=ok({"id": "t1", "status": "SUBMITTED"}))
+    contract = {"template": "text_basic", "version": 1, "params": {}}
+    await client().submit_direct(title="T", description="d", budget=50, agent_id="a1", contract=contract)
+    assert json.loads(route.calls.last.request.content)["contract"] == contract
+
+
+@respx.mock
+async def test_draft_contract_posts_the_description_and_template():
+    draft = {"contract": {"template": "image_generation", "version": 1, "params": {}}, "extraction": {}}
+    route = respx.post(f"{BASE}/api/contracts/draft").mock(return_value=ok(draft))
+    out = await client().draft_contract(description="a 512x512 logo", template="image_generation")
+    assert out == draft
+    assert json.loads(route.calls.last.request.content) == {"description": "a 512x512 logo",
+                                                            "template": "image_generation"}
+    assert route.calls.last.request.headers["Authorization"] == "ApiKey hk_live_testkey"
+
+
+@respx.mock
+async def test_draft_contract_with_a_schema_drafts_onto_json():
+    route = respx.post(f"{BASE}/api/contracts/draft").mock(return_value=ok({"contract": {}, "extraction": {}}))
+    await client().draft_contract(description="d", title="T", schema='{"type":"object"}')
+    assert json.loads(route.calls.last.request.content) == {
+        "description": "d", "title": "T", "outputSpec": {"format": "JSON", "schema": '{"type":"object"}'}}
 
 
 @respx.mock
@@ -60,13 +106,12 @@ async def test_submit_sends_the_deadline_only_when_given():
     routed = respx.post(f"{BASE}/api/tasks").mock(return_value=ok({"id": "t2", "status": "SUBMITTED"}))
     direct = respx.post(f"{BASE}/api/tasks/direct").mock(return_value=ok({"id": "t1", "status": "SUBMITTED"}))
     await client().submit_routed(title="T", description="d", category="summarisation",
-                                 budget=50, output_format="TEXT", deadline_seconds=600)
+                                 budget=50, deadline_seconds=600)
     await client().submit_direct(title="T", description="d", budget=50, agent_id="a1", deadline_seconds=900)
     assert json.loads(routed.calls.last.request.content)["deadlineSeconds"] == 600
     assert json.loads(direct.calls.last.request.content)["deadlineSeconds"] == 900
 
-    await client().submit_routed(title="T", description="d", category="summarisation",
-                                 budget=50, output_format="TEXT")
+    await client().submit_routed(title="T", description="d", category="summarisation", budget=50)
     assert "deadlineSeconds" not in json.loads(routed.calls.last.request.content)
 
 

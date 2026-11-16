@@ -110,7 +110,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 
 ## 6a. MCP server facade
 
-`mcp/` (official MCP SDK, stdio) exposes this channel as five tools with no business logic, authenticating with an API key from env. `list_categories` returns the [category list](data-model.md#categories) from `GET /api/catalogue/categories`, so an LLM caller picks a real slug. `get_task_status` passes the task's `failureReason` through as `failure_reason`. Tools, arguments and caveats: [`mcp/README.md`](../../mcp/README.md). springdoc publishes the REST surface as the `programmatic` group at `/v3/api-docs/programmatic`, with Swagger UI at `/swagger-ui/index.html`.
+`mcp/` (official MCP SDK, stdio) exposes this channel as six tools with no business logic, authenticating with an API key from env. `submit_task` takes a description and an optional `contract`, i.e. the [two submit modes](#4a-requirement-extraction-and-the-two-open-submit-modes), and returns the frozen `contract` and `extraction`; `draft_contract` wraps `POST /api/contracts/draft`. `list_categories` returns the [category list](data-model.md#categories) from `GET /api/catalogue/categories`, so an LLM caller picks a real slug. `get_task_status` passes the task's `failureReason` through as `failure_reason`. Tools, arguments and caveats: [`mcp/README.md`](../../mcp/README.md). springdoc publishes the REST surface as the `programmatic` group at `/v3/api-docs/programmatic`, with Swagger UI at `/swagger-ui/index.html`.
 
 ## 7. Endpoint catalog
 

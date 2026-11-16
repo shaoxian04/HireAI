@@ -68,21 +68,41 @@ class HireAIClient:
         return await self._request("GET", "/api/catalogue/categories")
 
     async def submit_routed(self, *, title: str, description: str, category: str, budget: float,
-                            output_format: str, schema: str = "", acceptance_criteria: str = "",
+                            schema: str = "", contract: dict | None = None,
                             deadline_seconds: int | None = None) -> dict:
-        body = {"title": title, "description": description, "category": category, "budget": budget,
-                "outputSpec": {"format": output_format, "schema": schema,
-                               "acceptanceCriteria": acceptance_criteria}}
+        """Routed submit. Without `contract` the backend extracts the description's requirements
+        (mode 1; onto JSON when `schema` is given, else text); with it, the Contract is frozen as
+        given (mode 2)."""
+        body = {"title": title, "description": description, "category": category, "budget": budget}
+        if schema:
+            body["outputSpec"] = _json_spec(schema)
+        if contract is not None:
+            body["contract"] = contract
         return await self._request(
             "POST", "/api/tasks", json=_with_deadline(body, deadline_seconds),
             extra_headers={"Idempotency-Key": str(uuid.uuid4())})
 
     async def submit_direct(self, *, title: str, description: str, budget: float, agent_id: str,
-                            deadline_seconds: int | None = None) -> dict:
+                            deadline_seconds: int | None = None, contract: dict | None = None) -> dict:
         body = {"title": title, "description": description, "budget": budget, "agentId": agent_id}
+        if contract is not None:
+            body["contract"] = contract
         return await self._request(
             "POST", "/api/tasks/direct", json=_with_deadline(body, deadline_seconds),
             extra_headers={"Idempotency-Key": str(uuid.uuid4())})
+
+    async def draft_contract(self, *, description: str, title: str = "", template: str = "",
+                             schema: str = "") -> dict:
+        """The Contract the description would be held to, and how each requirement mapped. Creates
+        nothing."""
+        body: dict = {"description": description}
+        if title:
+            body["title"] = title
+        if template:
+            body["template"] = template
+        if schema:
+            body["outputSpec"] = _json_spec(schema)
+        return await self._request("POST", "/api/contracts/draft", json=body)
 
     async def get_task(self, task_id: str) -> dict:
         return await self._request("GET", f"/api/tasks/{task_id}")
@@ -94,6 +114,11 @@ class HireAIClient:
             if exc.code == "NOT_FOUND":
                 raise ResultNotReady() from exc
             raise
+
+
+def _json_spec(schema: str) -> dict:
+    """The output spec asking for a JSON result that conforms to `schema`."""
+    return {"format": "JSON", "schema": schema}
 
 
 def _with_deadline(body: dict, deadline_seconds: int | None) -> dict:
