@@ -4,10 +4,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 /**
- * How many of a Task's Items a check may send to the reviewer's own judgement (D7) and so hold out of the
- * sampled lot (spec S8): {@code share} of the Items, rounded down, but at least {@code minimum}. Flagged
- * Items beyond the cap stay in the random lot, so an Agent cannot shrink the sample, or move Items it is
- * unsure of out of it, by flagging them (owner decision on #87).
+ * How many of a Task's flagged Items (a check sent them to review, D7) are held out of the population the
+ * random sample is drawn from (spec S8): {@code share} of the Items, rounded down, but at least {@code minimum}.
+ * Flagged Items beyond the cap can be drawn like any other, so an Agent cannot shrink the sample, or move
+ * Items it is unsure of out of it, by flagging them (owner decision on #87). The cap decides sample
+ * membership only: a flagged Item is never paid with the lot, whatever the cap.
  */
 public record FlaggedShareCap(BigDecimal share, int minimum) {
 

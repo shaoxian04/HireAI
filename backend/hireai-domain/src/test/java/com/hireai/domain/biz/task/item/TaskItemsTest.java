@@ -58,8 +58,9 @@ class TaskItemsTest {
         assertThat(flagged.findings()).containsExactly(duplicate);
         assertThat(broken.status()).isEqualTo(ItemStatus.SPEC_VIOLATION);
         TaskItems items = new TaskItems(List.of(flagged, clean, broken));
-        assertThat(items.lot(CAP)).extracting(TaskItemModel::itemNo).containsExactly(2);
-        assertThat(items.flaggedForReview(CAP)).extracting(TaskItemModel::itemNo).containsExactly(1);
+        assertThat(items.lot()).extracting(TaskItemModel::itemNo).containsExactly(2);
+        assertThat(items.sampleable(CAP)).extracting(TaskItemModel::itemNo).containsExactly(2);
+        assertThat(items.flaggedForReview()).extracting(TaskItemModel::itemNo).containsExactly(1);
         assertThat(items.awaitingReview()).hasSize(2);
         // Accepting keeps what was reported; a whole-Task rework takes the result, and its Findings, back.
         assertThat(flagged.accept().findings()).containsExactly(duplicate);
@@ -147,19 +148,23 @@ class TaskItemsTest {
     }
 
     @Test
-    void theFlaggedShareIsCappedSoOverFlaggingCannotShrinkTheSampledLot() {
-        // 20 Items, every one flagged: 10% (2) are held out for the reviewer; the other 18 stay in the lot.
+    void theFlaggedShareIsCappedSoOverFlaggingCannotShrinkTheSamplePopulation() {
+        // 20 Items, every one flagged: 10% (2) are the reviewer's own checks; the other 18 can still be drawn.
         TaskItems submitted = TaskItems.submit(taskId, Collections.nCopies(20, "x"), Money.of("1.00"));
         TaskItems allFlagged = new TaskItems(submitted.all().stream()
                 .map(i -> i.recordResult("COMPLETED", "{}", null, REVIEW)).toList());
 
-        assertThat(allFlagged.flaggedForReview(CAP)).extracting(TaskItemModel::itemNo).containsExactly(1, 2);
-        assertThat(allFlagged.lot(CAP)).hasSize(18);
-        // The same lot as if only the capped share had been flagged: the sample size cannot move.
+        assertThat(allFlagged.sampleable(CAP)).extracting(TaskItemModel::itemNo)
+                .doesNotContain(1, 2).hasSize(18);
+        // The same population as if only the capped share had been flagged: the sample size cannot move.
         TaskItems twoFlagged = new TaskItems(submitted.all().stream()
                 .map(i -> i.recordResult("COMPLETED", "{}", null, i.itemNo() <= 2 ? REVIEW : PASSED)).toList());
-        assertThat(allFlagged.lot(CAP)).extracting(TaskItemModel::itemNo)
-                .isEqualTo(twoFlagged.lot(CAP).stream().map(TaskItemModel::itemNo).toList());
+        assertThat(allFlagged.sampleable(CAP)).extracting(TaskItemModel::itemNo)
+                .isEqualTo(twoFlagged.sampleable(CAP).stream().map(TaskItemModel::itemNo).toList());
+        // The cap decides sample membership only: no flagged Item is ever settled with the lot.
+        assertThat(allFlagged.lot()).isEmpty();
+        assertThat(twoFlagged.lot()).hasSize(18);
+        assertThat(allFlagged.flaggedForReview()).hasSize(20);
     }
 
     @Test
@@ -167,13 +172,13 @@ class TaskItemsTest {
         TaskItems submitted = TaskItems.submit(taskId, Collections.nCopies(10, "x"), Money.of("1.00"));
         TaskItems flagged = new TaskItems(submitted.all().stream()
                 .map(i -> i.recordResult("COMPLETED", "{}", null, i.itemNo() <= 3 ? REVIEW : PASSED)).toList());
-        assertThat(flagged.flaggedForReview(CAP)).extracting(TaskItemModel::itemNo).containsExactly(1);
+        assertThat(flagged.sampleable(CAP)).extracting(TaskItemModel::itemNo).doesNotContain(1).hasSize(9);
 
-        // The reviewer accepts the held-out Item: Items 2 and 3 do not move out of the lot.
+        // The reviewer accepts the held-out Item: Items 2 and 3 stay sampleable, Item 1 does not come back.
         TaskItems afterJudging = new TaskItems(flagged.all().stream()
                 .map(i -> i.itemNo() == 1 ? i.accept() : i).toList());
-        assertThat(afterJudging.flaggedForReview(CAP)).isEmpty();
-        assertThat(afterJudging.lot(CAP)).extracting(TaskItemModel::itemNo).contains(2, 3).hasSize(9);
+        assertThat(afterJudging.sampleable(CAP)).extracting(TaskItemModel::itemNo).contains(2, 3).hasSize(9);
+        assertThat(afterJudging.lot()).extracting(TaskItemModel::itemNo).doesNotContain(1, 2, 3).hasSize(7);
     }
 
     @Test

@@ -20,6 +20,14 @@ public record SamplingPlan(char codeLetter, int lotSize, int firstSampleSize, in
         return secondSampleSize > 0;
     }
 
+    /**
+     * How many Items stage {@code stage} draws. A single plan's second sample (D19: a failed first sample
+     * always draws a second) is as large as its first.
+     */
+    public int sampleSize(int stage) {
+        return stage == 1 || !isDouble() ? firstSampleSize : secondSampleSize;
+    }
+
     public StageVerdict judgeFirst(int defects) {
         if (defects <= firstAccept) {
             return StageVerdict.ACCEPT;

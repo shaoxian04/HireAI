@@ -20,7 +20,6 @@ import com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository;
 import com.hireai.domain.biz.task.info.AgentResultInfo;
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
 import com.hireai.domain.biz.task.item.info.AgentItemResultInfo;
-import com.hireai.domain.biz.task.item.model.FlaggedShareCap;
 import com.hireai.domain.biz.task.item.model.ItemAcceptance;
 import com.hireai.domain.biz.task.item.model.ItemCheck;
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
@@ -75,8 +74,6 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
     private final DeliverySnapshotAppService deliverySnapshotAppService;
     /** Reads an invoice result for the ap_invoice_extraction checks (#106). */
     private final InvoiceReader invoiceReader;
-    /** How many flagged Items a Task holds out of the sampled lot (owner decision on #87). */
-    private final FlaggedShareCap flaggedShareCap;
 
     @Override
     public void createForSubmit(UUID taskId, List<ItemInput> inputs, Money price) {
@@ -196,7 +193,7 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
     }
 
     /**
-     * Accepts the Items awaiting review ({@code lotOnly}: not those a check held out for the reviewer, D7).
+     * Accepts the Items awaiting review ({@code lotOnly}: the lot only, never an Item a check flagged, D7).
      * When the review window closes every Item still awaiting review is accepted, a flagged one too: no
      * refund unless the Agent is shown wrong (owner decision on #87, revised 2026-11-16).
      */
@@ -205,7 +202,7 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
         TaskItems after = items;
         UUID builderId = builderOf(pendingReview);
         List<TaskItemModel> accepted = new ArrayList<>();
-        for (TaskItemModel item : lotOnly ? items.lot(flaggedShareCap) : items.awaitingReview()) {
+        for (TaskItemModel item : lotOnly ? items.lot() : items.awaitingReview()) {
             TaskItemModel next = automatically ? item.acceptAutomatically() : item.accept();
             settlementWriteAppService.settleItemAccepted(pendingReview.id(), next.id(), next.itemNo(),
                     pendingReview.clientId(), builderId, next.price());

@@ -14,11 +14,14 @@ D19, D21 in the [decision log](../superpowers/specs/2026-11-15-acceptance-contra
   The reviewer judges it on its own, like an extra check (never counted), on the reviewer page's "Flagged for your
   own check" list. An Agent's anomaly holds an Item out only by softening a failed anomaly-eligible check on it; one
   that explains nothing is ignored here. **The flagged-share cap** (`FlaggedShareCap`,
-  `hireai.acceptance.flagged-share` / `flagged-minimum`) limits how many flagged Items are held out: the first ones
-  in Item order up to that share of the Task's Items; flagged Items beyond it stay in the random lot, so an Agent
-  cannot shrink the sample or move Items it is unsure of out of it by flagging them. When the review window
-  closes, a flagged Item nobody judged is **accepted and paid** like any other (owner decision on #87: no refund
-  unless the Agent is shown wrong) and counts as accepted in the reputation event.
+  `hireai.acceptance.flagged-share` / `flagged-minimum`) decides sample membership only: the first flagged Items
+  in Item order, up to that share of the Task's Items, are never drawn; flagged Items beyond it can be drawn
+  (`TaskItems.sampleable`) and then count in the error rate like any sampled Item, so an Agent cannot shrink the
+  sample or move Items it is unsure of out of it by flagging them. Whatever the cap, a flagged Item is never
+  settled with the lot (`TaskItems.lot`: not accepted with it, at once on the API channel, reworked with it or
+  settled pro rata): the reviewer judges it, or when the review window closes it is **accepted and paid** like
+  any other (owner decision on #87: no refund unless the Agent is shown wrong) and counts as accepted in the
+  reputation event.
 - **One table for every Template** (`SampleSizeTable`, D21): ISO 2859-1 Table I gives the code letter for
   the lot size and inspection level; Table III-A gives the double sampling plan for that letter at
   **AQL 2.5**, normal inspection. Where the table has no double plan (its single plan accepts on zero
@@ -56,14 +59,18 @@ candidates are the lot Items awaiting review outside the first sample.
   revision that failed the checks).
 - **Only the random sample feeds the error rate** (D19). The reviewer may judge any other Item while the
   window is open (a full check is allowed); those are handled one by one and never counted.
-- **Double sampling:** d1 ≤ Ac1 accepts the lot; d1 ≥ Re1 fails it; in between the second sample is drawn,
-  and d1 + d2 ≤ Ac2 accepts, else it fails. Each draw restarts the review window.
+- **A first sample that does not accept the lot always draws the second** (D19 step 1; the spec's wording wins
+  over ISO 2859-1's early rejection at d1 ≥ Re1). Double plan: d1 ≤ Ac1 accepts the lot; otherwise the second
+  sample is drawn, and d1 + d2 ≤ Ac2 accepts, else it fails. Single plan: d1 ≤ Ac accepts; otherwise a second
+  sample of the same size is drawn and judged on its own (d2 ≤ Ac accepts, else it fails). When the first
+  sample was the whole lot there is nothing left to draw, and it is judged once more on its own. Each draw
+  restarts the review window.
 
 ## What a decision does (D19)
 
 | Decision | Effect |
 |---|---|
-| Lot accepted | every lot Item still awaiting review is accepted and paid |
+| Lot accepted | every lot Item still awaiting review is accepted and paid (a flagged Item waits for its own judgement or the window) |
 | Second sample | drawn from the rest of the lot |
 | Fails in round 1 | the whole Task is reworked once: every Item still awaiting review goes back (`AWAITING_RESULT`) in a rework WorkOrder carrying the failed check `SAMPLE_REJECTED`; when it returns, round 2 samples the new lot |
 | Fails in round 2 | each Item still awaiting review settles **pro rata**: paid `price × (1 − error rate)`, the rest refunded, with error rate = defects ÷ Items sampled in round 2 (4 dp) |

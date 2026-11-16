@@ -74,8 +74,8 @@ public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Mone
 
     /**
      * True when a check could not decide, or an anomaly the Agent reported sent this Item to review (D7):
-     * the buyer's reviewer judges it on its own (accepted, like any result, if nobody does in the window), so
-     * it is held out of the sampled lot within the Task's {@link FlaggedShareCap}.
+     * it is never settled with the lot: the buyer's reviewer judges it (it may be drawn into the sample beyond
+     * the Task's {@link FlaggedShareCap}), or it is accepted when the review window closes.
      */
     public boolean needsReview() {
         return checks.stream().anyMatch(ItemCheck::sendsToReview);

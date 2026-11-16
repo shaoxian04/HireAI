@@ -98,23 +98,32 @@ public record TaskItems(List<TaskItemModel> all) {
     }
 
     /**
-     * The sampled lot (spec S8): the Items awaiting review, less those a check sent to the reviewer's own
-     * judgement (D7) within the {@code cap}. A held-out Item is never drawn, accepted with the lot, reworked
-     * with it or settled pro rata; a flagged Item beyond the cap stays in the lot like any other.
+     * The lot the sample decides for (spec S8): the Items awaiting review that every check passed. Only these
+     * are ever settled without their own judgement: accepted with the lot (or at once on the API channel),
+     * reworked with it or settled pro rata. An Item a check sent to review ({@link TaskItemModel#needsReview()},
+     * D7) never is: the reviewer judges it, or it is accepted when the review window closes.
      */
-    public List<TaskItemModel> lot(FlaggedShareCap cap) {
-        List<TaskItemModel> heldOut = flaggedForReview(cap);
-        return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW && !heldOut.contains(i)).toList();
+    public List<TaskItemModel> lot() {
+        return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW && !i.needsReview()).toList();
     }
 
     /**
-     * The Items awaiting the reviewer's own judgement because a check sent them to review (D7): the first
-     * {@code cap.allowed(count())} flagged Items in Item order. The rank counts every flagged Item whatever its
-     * status, so judging a held-out Item never moves another flagged Item out of the lot.
+     * The Items the random sample is drawn from (spec S8): the {@link #lot()}, plus every flagged Item beyond
+     * the {@code cap}. A flagged Item within the cap (the first ones, in Item order) is the reviewer's own
+     * extra check and never drawn; one beyond it can be drawn and then counts in the error rate like any
+     * sampled Item. So flagging more Items cannot shrink the population, the sample or the measured error
+     * rate. The rank counts every flagged Item whatever its status, so judging one never moves another.
      */
-    public List<TaskItemModel> flaggedForReview(FlaggedShareCap cap) {
-        return all.stream().filter(TaskItemModel::needsReview).limit(cap.allowed(count()))
-                .filter(i -> i.status() == ItemStatus.PENDING_REVIEW).toList();
+    public List<TaskItemModel> sampleable(FlaggedShareCap cap) {
+        List<UUID> heldOut = all.stream().filter(TaskItemModel::needsReview).limit(cap.allowed(count()))
+                .map(TaskItemModel::id).toList();
+        return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW && !heldOut.contains(i.id()))
+                .toList();
+    }
+
+    /** The Items awaiting their own judgement because a check sent them to review (D7). */
+    public List<TaskItemModel> flaggedForReview() {
+        return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW && i.needsReview()).toList();
     }
 
     public boolean anyPassed() {

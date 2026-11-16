@@ -280,6 +280,41 @@ class InvoiceExtractionIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
+    void onTheApiChannelFlaggedItemsBeyondTheCapAreNeverPaidBeforeTheReviewWindowCloses() throws Exception {
+        FakeAgent agent = invoiceAgent(Duration.ofSeconds(2));
+        UUID agentId = seedInvoiceAgent(agent, "1.00");
+        UUID engagementId = openEngagement(agentId);
+        List<Map<String, Object>> items = List.of(
+                item(engagementId, "a.pdf", pdf("api-a"), "ok"),
+                item(engagementId, "b.pdf", pdf("api-b"), "ok"),
+                item(engagementId, "c.pdf", pdf("api-c"), "silent"),
+                item(engagementId, "d.pdf", pdf("api-d"), "silent"),
+                item(engagementId, "e.pdf", pdf("api-e"), "silent"));
+
+        UUID taskId = book(agentId, engagementId, items, null);
+        // Attribute the Task to an API key before the Agent answers: its passing Items then settle at once.
+        UUID keyId = UUID.randomUUID();
+        jdbc.update("INSERT INTO api_keys (id, user_id, key_hash, display_prefix) VALUES (?, ?, ?, 'hk_live_test')",
+                keyId, DEV_USER, "hash-" + keyId);
+        jdbc.update("INSERT INTO api_key_task (task_id, api_key_id, budget) VALUES (?, ?, 5.00)", taskId, keyId);
+        awaitStatus(taskId, "PENDING_REVIEW");
+
+        // 3 of 5 flagged, the cap (30%) is 1: two flagged Items are beyond it, yet none of the three is paid now.
+        JsonNode task = getTask(taskId);
+        assertThat(statuses(task)).containsExactly("ACCEPTED", "ACCEPTED", "PENDING_REVIEW", "PENDING_REVIEW",
+                "PENDING_REVIEW");
+        for (JsonNode i : task.get("items")) {
+            boolean flagged = i.path("needsReview").asBoolean(false);
+            // The flag the client sees is exactly what settlement does: flagged means not paid with the lot.
+            assertThat(flagged).as("Item %s", i.get("itemNo")).isEqualTo(i.get("payoutAmount") == null);
+        }
+
+        clock.set(Instant.parse(task.get("reviewDeadline").asText()));
+        taskReviewAppService.autoAcceptOne(taskId);
+        assertThat(statuses(getTask(taskId))).containsOnly("ACCEPTED");
+    }
+
+    @Test
     void aBookingUnderTheInvoiceContractNeedsAnAgentWhoseOfferCoversIt() throws Exception {
         FakeAgent agent = invoiceAgent();
         UUID agentId = seedInvoiceAgent(agent, "1.00");
@@ -296,6 +331,10 @@ class InvoiceExtractionIntegrationTest extends WholeAppIntegrationTest {
     // ---- the fake Agent: one invoice per Item, staged by the Item's input ----
 
     private FakeAgent invoiceAgent() {
+        return invoiceAgent(Duration.ofMillis(200));
+    }
+
+    private FakeAgent invoiceAgent(Duration replyAfter) {
         return fakeAgent().replyWith(FakeAgentReply.accepted().withCallback(AgentCallback.custom(order -> {
             if (order.field("event") != null) {
                 throw new IllegalStateException("a notice: the test answers it itself");
@@ -303,7 +342,7 @@ class InvoiceExtractionIntegrationTest extends WholeAppIntegrationTest {
             return CallbackRequest.post(order.callbackUrl())
                     .header("Authorization", "Bearer " + order.bearerToken())
                     .body(invoiceResults(order));
-        }).afterReply(Duration.ofMillis(200)).signedAt(() -> clock.instant())));
+        }).afterReply(replyAfter).signedAt(() -> clock.instant())));
     }
 
     private String invoiceResults(RecordedWorkOrder order) {

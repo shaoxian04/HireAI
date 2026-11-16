@@ -24,7 +24,7 @@ public record SampleDrawModel(UUID id, UUID taskId, int round, int stage, long s
     /** Draws stage {@code stage} of round {@code round} from {@code candidates} with {@code seed}. */
     public static SampleDrawModel draw(UUID taskId, int round, int stage, SamplingPlan plan, long seed,
                                        Collection<Integer> candidates, Instant now) {
-        int size = stage == 1 ? plan.firstSampleSize() : plan.secondSampleSize();
+        int size = plan.sampleSize(stage);
         List<Integer> drawn = SampleDraw.draw(seed, candidates, size);
         if (drawn.isEmpty()) {
             throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,

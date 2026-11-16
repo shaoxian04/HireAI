@@ -5,6 +5,8 @@ import com.hireai.domain.biz.task.sampling.enums.StageVerdict;
 import com.hireai.domain.biz.task.sampling.model.SampleSizeTable;
 import com.hireai.domain.biz.task.sampling.model.SamplingPlan;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -36,8 +38,14 @@ class SampleSizeTableTest {
             // letter J: 50+50, 2/5, 6/7
             "1000, II, 50, 50, 2, 5, 6, 7",
             "500, III, 50, 50, 2, 5, 6, 7",
-            // letter K: 80+80, 3/6, 8/9
-            "1000, III, 80, 80, 3, 6, 8, 9",
+            // letter K: 80+80, 3/6, 9/10
+            "1000, III, 80, 80, 3, 6, 9, 10",
+            // letter L: 125+125, 5/9, 12/13
+            "5000, II, 125, 125, 5, 9, 12, 13",
+            // letter M: 200+200, 7/11, 18/19
+            "20000, II, 200, 200, 7, 11, 18, 19",
+            // letter N: 315+315, 11/16, 26/27
+            "100000, II, 315, 315, 11, 16, 26, 27",
             // letter G: 20+20, 0/3, 3/4
             "200, II, 20, 20, 0, 3, 3, 4",
             // letter F: 13+13, 0/2, 1/2
@@ -109,5 +117,23 @@ class SampleSizeTableTest {
         SamplingPlan plan = SampleSizeTable.plan(40, InspectionLevel.II);
         assertThat(plan.judgeFirst(0)).isEqualTo(StageVerdict.ACCEPT);
         assertThat(plan.judgeFirst(1)).isEqualTo(StageVerdict.REJECT);
+    }
+
+    @Test
+    void everyDoublePlanIsOneOfTheStandardsFixedAcceptanceSequences() {
+        // ISO 2859-1 Table III-A pairs each first-stage Ac/Re with exactly one second-stage Ac/Re.
+        Map<String, String> standard = Map.of("0/2", "1/2", "0/3", "3/4", "1/3", "4/5", "2/5", "6/7",
+                "3/6", "9/10", "5/9", "12/13", "7/11", "18/19", "11/16", "26/27");
+        for (int lot = 2; lot <= 600_000; lot = lot < 2000 ? lot + 1 : lot + 997) {
+            for (InspectionLevel level : InspectionLevel.values()) {
+                SamplingPlan plan = SampleSizeTable.plan(lot, level);
+                if (!plan.isDouble()) {
+                    continue;
+                }
+                String first = plan.firstAccept() + "/" + plan.firstReject();
+                assertThat(plan.secondAccept() + "/" + plan.secondReject()).as("lot %d %s (%s)", lot, level, first)
+                        .isEqualTo(standard.get(first));
+            }
+        }
     }
 }
