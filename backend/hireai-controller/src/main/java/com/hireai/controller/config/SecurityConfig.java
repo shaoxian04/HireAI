@@ -111,6 +111,13 @@ public class SecurityConfig {
                                 "/api/webhooks/deliveries").hasAnyRole("CLIENT", "API_CLIENT")
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
                                 "/api/webhooks/deliveries/*/redeliver").hasAnyRole("CLIENT", "API_CLIENT")
+                        // Signed receipts (D40): the public keys are public, so anyone can verify a receipt.
+                        // The receipts themselves go to the task's Client (human or API key) and the
+                        // assigned Agent's Builder; the app service checks which (Hard Invariant #5).
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/receipt-keys").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET,
+                                "/api/tasks/*/receipts", "/api/receipts/*")
+                                .hasAnyRole("CLIENT", "BUILDER", "ADMIN", "API_CLIENT")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // Agent signing-secret rotation: the owning BUILDER only, JWT-only (a leaked API
                         // key cannot mint an agent secret). Ownership is then checked by the app service.
