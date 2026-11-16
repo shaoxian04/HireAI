@@ -76,7 +76,8 @@ function BookingForm() {
 
   const bookErrors = { title: "Title", description: "Description" };
   const fee = aiCriteria && aiQuote ? aiQuote.fee : 0;
-  const total = Math.round((card.price + fee) * 100) / 100;
+  // The price as the agent set it, or price + fee to the cent once an AI Review is priced.
+  const total = fee > 0 ? (Math.round((card.price + fee) * 100) / 100).toFixed(2) : String(card.price);
   // With AI Review on, book only once it is priced, offered and has a criterion to judge.
   const aiReviewBlocks = aiCriteria !== null && (aiQuote === null || aiReview.length === 0);
 
@@ -169,7 +170,7 @@ function BookingForm() {
           <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line text-sm">
             <div className="bg-surface px-4 py-3">
               <dt className="text-xs text-dim">You&apos;ll pay</dt>
-              <dd className="display tabular mt-0.5 text-2xl text-accent">{`${total.toFixed(2)} cr`}</dd>
+              <dd className="display tabular mt-0.5 text-2xl text-accent">{`${total} cr`}</dd>
               {fee > 0 && (
                 <dd className="tabular mt-0.5 text-xs text-dim">{`${card.price.toFixed(2)} price + ${fee.toFixed(2)} AI Review`}</dd>
               )}
@@ -192,7 +193,7 @@ function BookingForm() {
             </p>
           )}
           <Button type="submit" disabled={submitting || aiReviewBlocks} className="w-full">
-            {submitting ? "Booking…" : `Book and freeze ${total.toFixed(2)} cr`}
+            {submitting ? "Booking…" : `Book and freeze ${total} cr`}
           </Button>
         </form>
       </div>
