@@ -31,6 +31,7 @@ import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTem
 import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTemplate.IMAGE_DIMENSIONS;
 import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTemplate.IMAGE_FORMAT;
 import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTemplate.IMAGE_TYPES;
+import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTemplate.MAX_DIMENSION;
 import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTemplate.WIDTH;
 
 /**
@@ -52,6 +53,11 @@ public final class CheckLibrary {
     /** What a pixel check judges: the Contract and the frozen copy, with its pixels when decodable. */
     public record Subject(Contract contract, DeliverySnapshot snapshot, DecodedImage image) {
     }
+
+    /** Types the platform decodes: one that will not decode is broken, and rejected. */
+    private static final Set<String> DECODED_TYPES = Set.of("image/png", "image/jpeg");
+    /** Types the Template allows that the platform cannot decode: their pixel checks go to review. */
+    private static final Set<String> REVIEWED_TYPES = Set.of("image/webp");
 
     private static final Pattern HEX_COLOUR = Pattern.compile("^#[0-9a-fA-F]{6}$");
     /** Pixels at least this opaque count towards the background colour. */
@@ -108,8 +114,39 @@ public final class CheckLibrary {
         Set<String> accepted = asked != null ? asked : Set.copyOf(IMAGE_TYPES);
         String type = s.snapshot().mediaType();
         String list = accepted.stream().sorted().collect(Collectors.joining(", "));
-        return Optional.of(new CheckResult(IMAGE_FORMAT, accepted.contains(type),
-                "the file is " + type + "; accepted: " + list));
+        if (!accepted.contains(type)) {
+            return Optional.of(new CheckResult(IMAGE_FORMAT, false, "the file is " + type + "; accepted: " + list));
+        }
+        // A type the platform decodes must decode: a file whose header or pixel data is broken is not
+        // the image it claims to be. This fails closed, so a corrupt file is reworked, never reviewed.
+        if (DECODED_TYPES.contains(type) && (s.image() == null || s.image().isCorrupt())) {
+            return Optional.of(new CheckResult(IMAGE_FORMAT, false, "the file looks like " + type + " but "
+                    + (s.image() == null ? "its header" : "its pixel data") + " could not be read; accepted: " + list));
+        }
+        // The Template's own bound applies whatever the Contract asks: a canvas declared beyond it is
+        // never decoded, so it is rejected here rather than leaving its pixels unchecked.
+        DecodedImage image = s.image();
+        if (image != null && (image.width() > MAX_DIMENSION || image.height() > MAX_DIMENSION)) {
+            return Optional.of(new CheckResult(IMAGE_FORMAT, false, "the image declares " + image.width() + " x "
+                    + image.height() + " px; at most " + MAX_DIMENSION + " px a side is allowed"));
+        }
+        return Optional.of(new CheckResult(IMAGE_FORMAT, true, "the file is " + type + "; accepted: " + list));
+    }
+
+    /**
+     * When the pixels are missing: only a type the Template allows but the platform cannot decode
+     * (WebP) is left to the Client's review; anything else, including a PNG or JPEG that would not
+     * decode, is rejected, so a deliberately broken file can never reach review (and its silent
+     * auto-accept) instead of a rework.
+     */
+    private static CheckResult unreadable(String rule, Subject s, String asked) {
+        String type = s.snapshot().mediaType();
+        if (REVIEWED_TYPES.contains(type)) {
+            return CheckResult.review(rule, "the platform cannot read the pixels of a " + type
+                    + " file, so you judge it; " + asked + " asked");
+        }
+        return new CheckResult(rule, false, "the pixels of this " + type + " file could not be read; "
+                + asked + " asked");
     }
 
     private static Optional<CheckResult> imageDimensions(Subject s) {
@@ -122,9 +159,9 @@ public final class CheckLibrary {
                 + (height == null ? "any" : height.toPlainString()) + " px";
         DecodedImage image = s.image();
         if (image == null) {
-            return Optional.of(CheckResult.review(IMAGE_DIMENSIONS, "the platform cannot read the pixels of a "
-                    + s.snapshot().mediaType() + " file, so you judge the size (" + wanted + " asked)"));
+            return Optional.of(unreadable(IMAGE_DIMENSIONS, s, wanted));
         }
+        // A corrupt image still has the size its header declares: judge it on that.
         // compareTo, not intValueExact: a value that is no whole number is refused at submit, and
         // even one that slipped past would simply not match, never throw inside the gate.
         boolean ok = (width == null || width.compareTo(BigDecimal.valueOf(image.width())) == 0)
@@ -143,9 +180,13 @@ public final class CheckLibrary {
         String asked = wanted.toLowerCase(Locale.ROOT) + " (within " + tolerance.stripTrailingZeros().toPlainString()
                 + " per channel)";
         DecodedImage image = s.image();
+        if (image != null && image.pixels() == DecodedImage.Pixels.TOO_LARGE) {
+            // Never review: a canvas too large to decode could otherwise dodge this check.
+            return Optional.of(new CheckResult(IMAGE_BACKGROUND_COLOUR, false, "the image (" + image.width() + " x "
+                    + image.height() + " px) is too large for its background to be checked; " + asked + " asked"));
+        }
         if (image == null || !image.hasPixels()) {
-            return Optional.of(CheckResult.review(IMAGE_BACKGROUND_COLOUR, "the platform cannot read the pixels of "
-                    + "this " + s.snapshot().mediaType() + " file, so you judge the background; " + asked + " asked"));
+            return Optional.of(unreadable(IMAGE_BACKGROUND_COLOUR, s, asked));
         }
         long r = 0, g = 0, b = 0;
         int opaque = 0;
