@@ -1,6 +1,7 @@
 package com.hireai.domain.biz.task.item.model;
 
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
+import com.hireai.domain.biz.task.item.info.ItemInput;
 import com.hireai.domain.shared.model.Money;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
@@ -10,6 +11,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -36,8 +38,16 @@ public record TaskItems(List<TaskItemModel> all) {
         all = all.stream().sorted(Comparator.comparingInt(TaskItemModel::itemNo)).toList();
     }
 
-    /** New Items for a submitted Task, numbered from 1, each priced at {@code price}. */
+    /** New text-only Items for a submitted Task, numbered from 1, each priced at {@code price}. */
     public static TaskItems submit(UUID taskId, List<String> inputs, Money price) {
+        return submitInputs(taskId, inputs == null ? null : inputs.stream().map(ItemInput::text).toList(), price);
+    }
+
+    /**
+     * New Items for a submitted Task, numbered from 1, each priced at {@code price}. An Item may reference
+     * a SourceSnapshot; whether the Client may use it is the caller's check (Engagements only, ADR 0010).
+     */
+    public static TaskItems submitInputs(UUID taskId, List<ItemInput> inputs, Money price) {
         if (inputs == null || inputs.size() < MIN_ITEMS) {
             throw new DomainException(ResultCode.VALIDATION_ERROR,
                     "items: a multi-Item Task needs at least " + MIN_ITEMS + " Items; for one, leave items out "
@@ -54,12 +64,13 @@ public record TaskItems(List<TaskItemModel> all) {
         }
         List<TaskItemModel> items = new ArrayList<>(inputs.size());
         for (int i = 0; i < inputs.size(); i++) {
-            String input = inputs.get(i) == null ? "" : inputs.get(i).trim();
+            ItemInput given = inputs.get(i);
+            String input = given == null || given.input() == null ? "" : given.input().trim();
             if (input.isEmpty() || input.length() > MAX_INPUT_LENGTH) {
                 throw new DomainException(ResultCode.VALIDATION_ERROR,
                         "items: Item " + (i + 1) + " must have between 1 and " + MAX_INPUT_LENGTH + " characters");
             }
-            items.add(TaskItemModel.create(taskId, i + 1, input, price));
+            items.add(TaskItemModel.create(taskId, i + 1, input, price, given == null ? null : given.sourceSnapshotId()));
         }
         return new TaskItems(items);
     }
@@ -67,6 +78,11 @@ public record TaskItems(List<TaskItemModel> all) {
     /** What the Task freezes in escrow: the per-Item price times the Item count. */
     public static Money escrowFor(Money price, int itemCount) {
         return Money.of(price.value().multiply(BigDecimal.valueOf(itemCount)));
+    }
+
+    /** The distinct SourceSnapshots these Items reference, in Item order. */
+    public List<UUID> sourceSnapshotIds() {
+        return all.stream().map(TaskItemModel::sourceSnapshotId).filter(Objects::nonNull).distinct().toList();
     }
 
     public boolean isEmpty() {

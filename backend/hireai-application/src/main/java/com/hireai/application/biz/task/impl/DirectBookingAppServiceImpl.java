@@ -1,6 +1,11 @@
 package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.acceptance.TemplateReadAppService;
+import com.hireai.application.biz.acceptance.engagement.EngagementAppService;
+import com.hireai.application.biz.acceptance.source.SourceSnapshotAppService;
+import com.hireai.domain.biz.acceptance.engagement.model.EngagementModel;
+import com.hireai.domain.biz.acceptance.source.model.SourceSnapshotModel;
+import com.hireai.domain.biz.task.item.info.ItemInput;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.acceptance.coverage.info.ContractTerms;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
@@ -27,6 +32,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -53,9 +60,12 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
     private final ExecutionGrace executionGrace;
     /** Refuses a booking whose adopted schema could not be checked (spec D8). */
     private final ValidationDomainService validationDomainService;
+    private final EngagementAppService engagementAppService;
+    private final SourceSnapshotAppService sourceSnapshotAppService;
 
     @Override
-    public UUID book(DirectBookingInfo info) {
+    public UUID book(DirectBookingInfo booked) {
+        DirectBookingInfo info = booked;
         AgentModel agent = agentRepository.findById(info.agentId())
                 .orElseThrow(this::notFound);
 
@@ -87,22 +97,50 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
                     + "Its Builder needs to fix the schema.");
         }
 
-        // The Contract the booking freezes: the Client's own terms (#91), else the Agent's own spec's
-        // equivalent. New Contracts use the current Template version, or during a transition the
-        // previous one when this Agent's Offer covers only that (spec D36); either way the Agent's
-        // Offer must cover it, or the Agent would be held to terms it never offered.
-        Contract requested = info.contract() != null ? info.contract()
-                : agent.currentVersion().outputSpec().toContract();
-        Offer offer = agent.currentVersion().offer();
-        ContractResolution resolution = templateReadAppService.resolveNew(requested, t ->
-                offerCoverageDomainService.coverage(t.template(), t.contract(), offer).covered());
-        ContractTerms terms = resolution.terms();
-        Coverage coverage = offerCoverageDomainService.coverage(terms.template(), terms.contract(), offer);
-        if (!coverage.covered()) {
-            throw new DomainException(ResultCode.VALIDATION_ERROR, coverage.templateOffered()
-                    ? "This Agent's Offer does not cover the Contract's " + String.join(", ",
-                            coverage.blockingParameters())
-                    : "This Agent does not offer Template " + terms.contract().template());
+        // Under an Engagement (ADR 0010, D44) the Client chose this Agent and consented to send it its
+        // documents; only then may an Item's input be a SourceSnapshot.
+        EngagementModel engagement = null;
+        if (info.engagementId() != null) {
+            engagement = engagementAppService.getForClient(info.engagementId(), info.clientId());
+            engagement.requireActive();
+            engagement.requireAgent(agent.id());
+            if (info.contract() == null && engagement.agentAccepted(engagement.templateVariant())) {
+                // The Engagement's accepted Template variant is its default Contract.
+                info = info.withContract(engagement.templateVariant());
+            }
+        } else if (info.hasSources()) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "items: documents can be sent only under an "
+                    + "Engagement with this Agent; pass its engagementId");
+        }
+        if (info.hasSources()) {
+            info = info.withItems(attachSources(engagement, info.items()));
+        }
+
+        ContractTerms terms;
+        if (info.contract() != null && engagement != null && engagement.agentAccepted(info.contract())) {
+            // The Agent accepted exactly this Contract (Template version included) as the Engagement's
+            // Template variant (D1): its explicit acceptance stands in for Offer coverage, and the version is
+            // the one it accepted, never re-resolved. Its bounds are still checked.
+            templateReadAppService.requireValid(info.contract());
+            terms = templateReadAppService.termsFor(info.contract());
+        } else {
+            // The Contract the booking freezes: the Client's own terms (#91), else the Agent's own spec's
+            // equivalent. New Contracts use the current Template version, or during a transition the
+            // previous one when this Agent's Offer covers only that (spec D36); either way the Agent's
+            // Offer must cover it, or the Agent would be held to terms it never offered.
+            Contract requested = info.contract() != null ? info.contract()
+                    : agent.currentVersion().outputSpec().toContract();
+            Offer offer = agent.currentVersion().offer();
+            ContractResolution resolution = templateReadAppService.resolveNew(requested, t ->
+                    offerCoverageDomainService.coverage(t.template(), t.contract(), offer).covered());
+            terms = resolution.terms();
+            Coverage coverage = offerCoverageDomainService.coverage(terms.template(), terms.contract(), offer);
+            if (!coverage.covered()) {
+                throw new DomainException(ResultCode.VALIDATION_ERROR, coverage.templateOffered()
+                        ? "This Agent's Offer does not cover the Contract's " + String.join(", ",
+                                coverage.blockingParameters())
+                        : "This Agent does not offer Template " + terms.contract().template());
+            }
         }
 
         // Adopt the agent's declared output_spec as the task's binding contract (Invariant #4).
@@ -117,6 +155,22 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
         log.info("Task {} direct-booked to agent {} (version {})",
                 taskId, agent.id(), agent.currentVersionId());
         return taskId;
+    }
+
+    /**
+     * Locks the Items' documents (so retention cannot retire one under this booking) and checks each was
+     * uploaded under the Engagement and still holds its content. A document Item with no text input takes
+     * the document's file name as its input.
+     */
+    private List<ItemInput> attachSources(EngagementModel engagement, List<ItemInput> items) {
+        List<UUID> ids = items.stream().filter(ItemInput::hasSource).map(ItemInput::sourceSnapshotId)
+                .distinct().toList();
+        Map<UUID, SourceSnapshotModel> sources = sourceSnapshotAppService.attachForBooking(engagement, ids);
+        return items.stream()
+                .map(item -> item.hasSource() && (item.input() == null || item.input().isBlank())
+                        ? new ItemInput(sources.get(item.sourceSnapshotId()).filename(), item.sourceSnapshotId())
+                        : item)
+                .toList();
     }
 
     private boolean isListed(UUID agentId) {

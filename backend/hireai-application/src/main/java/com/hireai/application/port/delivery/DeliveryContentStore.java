@@ -3,14 +3,14 @@ package com.hireai.application.port.delivery;
 import java.util.Optional;
 
 /**
- * Private, content-addressed storage for DeliverySnapshot bytes (D24), keyed by the lowercase hex
- * SHA-256 of the content. Never public: the bytes are served only through owner-checked endpoints.
+ * Private, content-addressed storage for snapshot bytes, keyed by the lowercase hex SHA-256 of the
+ * content: DeliverySnapshots (D24) and SourceSnapshots (S4, D30). Never public: the bytes are served
+ * only through owner-checked endpoints or an Item's signed source link. It is NOT the public
+ * {@code MediaStoragePort} (D30).
  *
- * <p><b>Storage seam.</b> Today's adapter keeps the bytes in Postgres ({@code delivery_snapshot_contents}),
- * which bounds snapshots to {@code hireai.delivery.max-bytes}. A move to object storage (a private
- * bucket) replaces only this adapter; snapshots reference content by hash, not by location. The
- * same port is meant to hold SourceSnapshot bytes (S4) and to be where D32 retention deletes
- * content while the hashes stay. It is NOT the public {@code MediaStoragePort} (D30).
+ * <p><b>Storage seam.</b> Today's adapter keeps the bytes in Postgres ({@code delivery_snapshot_contents}).
+ * A move to object storage (a private bucket) replaces only this adapter; snapshots reference content
+ * by hash, not by location.
  */
 public interface DeliveryContentStore {
 
@@ -19,4 +19,11 @@ public interface DeliveryContentStore {
 
     /** The bytes stored under {@code sha256}, or empty when they were never stored or have been retired. */
     Optional<byte[]> get(String sha256);
+
+    /**
+     * D32 retention: deletes the bytes under {@code sha256} unless a DeliverySnapshot or a SourceSnapshot
+     * that still holds its content references them (the caller marks its own snapshot retired first, in
+     * the same transaction). The hashes stay. Returns whether the bytes were deleted.
+     */
+    boolean retire(String sha256);
 }

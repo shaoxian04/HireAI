@@ -131,7 +131,7 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     @Override
     public List<DispatchItem> workOrderItems(UUID taskId) {
         return taskItemRepository.findByTaskId(taskId).all().stream()
-                .map(item -> new DispatchItem(item.itemNo(), item.input()))
+                .map(item -> new DispatchItem(item.itemNo(), item.input(), item.id(), item.sourceSnapshotId(), null))
                 .toList();
     }
 

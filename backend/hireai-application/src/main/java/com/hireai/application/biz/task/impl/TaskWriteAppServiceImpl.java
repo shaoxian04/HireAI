@@ -64,6 +64,12 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
 
     @Override
     public UUID submit(TaskSubmitInfo taskSubmitInfo) {
+        if (taskSubmitInfo.hasSources()) {
+            // ADR 0010: the marketplace (routed) path takes public documents only; the platform, not the
+            // Client, would pick the Agent that receives them.
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "items: documents can be sent only under "
+                    + "an Engagement with an Agent you chose (book it directly with engagementId)");
+        }
         return doSubmit(withNewContract(taskSubmitInfo), null);
     }
 

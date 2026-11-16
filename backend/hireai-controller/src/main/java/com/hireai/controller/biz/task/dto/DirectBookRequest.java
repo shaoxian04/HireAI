@@ -1,6 +1,9 @@
 package com.hireai.controller.biz.task.dto;
 
 import com.hireai.controller.biz.acceptance.dto.ContractRequest;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.hireai.domain.biz.task.item.info.ItemInput;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -37,7 +40,41 @@ public record DirectBookRequest(
          * {@code budget} is the price of ONE Item and the Task freezes budget × the Item count.
          */
         @Size(max = 1000, message = "items: a Task can hold at most 1000 Items")
-        List<@NotBlank(message = "items: an Item must not be blank")
-             @Size(max = 5000, message = "items: an Item must have at most 5000 characters") String> items
+        List<@Valid @NotNull(message = "items: an Item must not be null") ItemRequest> items,
+        /**
+         * Optional: book under your Engagement with this Agent (ADR 0010). Only then may an Item's input be
+         * a document you uploaded to it ({@code {"sourceId": ...}}).
+         */
+        UUID engagementId
 ) {
+
+    /**
+     * One Item: a string (its text input), or {@code {"input": "...", "sourceId": "<document id>"}} for
+     * an Item whose input is a document uploaded to the Engagement (input optional: the file name).
+     */
+    public record ItemRequest(
+            @Size(max = 5000, message = "items: an Item must have at most 5000 characters") String input,
+            UUID sourceId) {
+
+        @JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
+        public ItemRequest(@JsonProperty("input") String input, @JsonProperty("sourceId") UUID sourceId) {
+            this.input = input;
+            this.sourceId = sourceId;
+        }
+
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+        public static ItemRequest text(String input) {
+            return new ItemRequest(input, null);
+        }
+
+        public ItemInput toInfo() {
+            return new ItemInput(input, sourceId);
+        }
+    }
+
+    /** The Items as the booking carries them. */
+    public List<ItemInput> itemInputs() {
+        return items == null ? null : items.stream().map(ItemRequest::toInfo).toList();
+    }
+
 }

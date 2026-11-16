@@ -265,6 +265,8 @@ export interface TaskItemDTO {
   payoutAmount?: number | null;
   commissionAmount?: number | null;
   refundAmount?: number | null;
+  /** The document this Item's input is (an Engagement's SourceSnapshot); absent for a text Item. */
+  sourceId?: string | null;
 }
 
 /** What the agent did with an A/B/C rejection (task/rejection/enums/AgentResponse.java). */
@@ -410,6 +412,65 @@ export interface DirectBookRequest {
   deadlineSeconds?: number;
   /** Optional: the Contract to book under; the agent's Offer must cover it, and it is frozen on the task. */
   contract?: ContractDTO;
+  /**
+   * Optional: a multi-Item Task's Items (2+). A string is a text Item; `{ sourceId }` is an Item whose
+   * input is a document uploaded to the Engagement (`input` defaults to its file name). With Items,
+   * `budget` is the price of one Item.
+   */
+  items?: (string | { sourceId: string; input?: string })[];
+  /** Optional: book under your Engagement with this agent; required for document Items (ADR 0010). */
+  engagementId?: string;
+}
+
+/** An Engagement's lifecycle (acceptance/engagement/enums/EngagementStatus.java). */
+export type EngagementStatus = "AWAITING_AGENT_ACCEPTANCE" | "ACTIVE" | "ENDED";
+
+/**
+ * A standing agreement with an agent you chose (spec S4, D44): it records your consent to send that agent
+ * confidential documents. Mirrors controller/biz/engagement/dto/EngagementDTOs.EngagementDTO.
+ */
+export interface EngagementDTO {
+  id: string;
+  clientId: string;
+  agentId: string;
+  status: EngagementStatus;
+  consentedAt: string;
+  templateVariant?: ContractDTO | null;
+  agentAcceptedAt?: string | null;
+  retentionDays: number;
+  createdAt: string;
+  endedAt?: string | null;
+}
+
+export interface OpenEngagementRequest {
+  agentId: string;
+  confidentialConsent: boolean;
+  templateVariant?: ContractDTO;
+  retentionDays?: number;
+}
+
+/** One attempt to fetch a document through an Item's signed link. */
+export interface SourceDownloadDTO {
+  at: string;
+  taskId: string;
+  itemNo: number;
+  outcome: "SERVED" | "EXPIRED" | "RETIRED";
+  remoteAddress?: string | null;
+}
+
+/** A document uploaded under an Engagement: a frozen, content-hashed SourceSnapshot. */
+export interface SourceDTO {
+  id: string;
+  engagementId: string;
+  filename: string;
+  mediaType: string;
+  sizeBytes: number;
+  sha256: string;
+  uploadedAt: string;
+  retentionStartedAt?: string | null;
+  /** Set once retention deleted the content; only the hash is kept. */
+  contentDeletedAt?: string | null;
+  downloads?: SourceDownloadDTO[] | null;
 }
 
 export type CatalogueSort = "hot" | "rating" | "price_asc" | "price_desc" | "newest";

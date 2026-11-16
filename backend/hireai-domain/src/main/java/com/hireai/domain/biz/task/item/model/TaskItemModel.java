@@ -14,19 +14,20 @@ import java.util.UUID;
  * One deliverable unit inside a multi-Item Task (spec S3, D3/D14), accepted and settled on its own.
  * Immutable: every transition returns a new copy and an illegal one throws. {@code price} is this
  * Item's share of the Task's escrow (the per-Item price); {@code checks} are the Contract's checks
- * as run against this Item's result (empty until a result arrives).
+ * as run against this Item's result (empty until a result arrives). {@code sourceSnapshotId} is the
+ * SourceSnapshot the Item's input is (spec S4, D30), only under an Engagement; null for a text Item.
  */
 public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Money price, ItemStatus status,
                             String agentStatus, String resultPayload, String resultUrl,
-                            List<ItemCheck> checks, boolean autoAccepted) {
+                            List<ItemCheck> checks, boolean autoAccepted, UUID sourceSnapshotId) {
 
     public TaskItemModel {
         checks = checks == null ? List.of() : List.copyOf(checks);
     }
 
-    static TaskItemModel create(UUID taskId, int itemNo, String input, Money price) {
+    static TaskItemModel create(UUID taskId, int itemNo, String input, Money price, UUID sourceSnapshotId) {
         return new TaskItemModel(UUID.randomUUID(), taskId, itemNo, input, price, ItemStatus.AWAITING_RESULT,
-                null, null, null, List.of(), false);
+                null, null, null, List.of(), false, sourceSnapshotId);
     }
 
     /**
@@ -38,7 +39,7 @@ public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Mone
         boolean passed = checks != null && !checks.isEmpty() && checks.stream().allMatch(ItemCheck::passed);
         return new TaskItemModel(id, taskId, itemNo, input, price,
                 passed ? ItemStatus.PENDING_REVIEW : ItemStatus.SPEC_VIOLATION,
-                agentStatus, payload, url, checks, false);
+                agentStatus, payload, url, checks, false, sourceSnapshotId);
     }
 
     /**
@@ -66,21 +67,21 @@ public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Mone
     public TaskItemModel recordFailure(String agentStatus) {
         requireStatus(ItemStatus.AWAITING_RESULT, "recordFailure");
         return new TaskItemModel(id, taskId, itemNo, input, price, ItemStatus.FAILED,
-                agentStatus, null, null, List.of(), false);
+                agentStatus, null, null, List.of(), false, sourceSnapshotId);
     }
 
     /** PENDING_REVIEW → ACCEPTED: the Client accepted it. */
     public TaskItemModel accept() {
         requireStatus(ItemStatus.PENDING_REVIEW, "accept");
         return new TaskItemModel(id, taskId, itemNo, input, price, ItemStatus.ACCEPTED,
-                agentStatus, resultPayload, resultUrl, checks, false);
+                agentStatus, resultPayload, resultUrl, checks, false, sourceSnapshotId);
     }
 
     /** PENDING_REVIEW → ACCEPTED because the review window closed (or the API channel settles at once). */
     public TaskItemModel acceptAutomatically() {
         TaskItemModel accepted = accept();
         return new TaskItemModel(id, taskId, itemNo, input, price, accepted.status(),
-                agentStatus, resultPayload, resultUrl, checks, true);
+                agentStatus, resultPayload, resultUrl, checks, true, sourceSnapshotId);
     }
 
     public boolean isSettled() {

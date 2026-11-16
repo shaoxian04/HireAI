@@ -53,6 +53,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import com.hireai.domain.biz.task.item.info.ItemInput;
 import com.hireai.domain.biz.task.item.model.TaskItems;
 import java.util.Optional;
 import java.util.Set;
@@ -116,7 +117,8 @@ public class TaskController extends BaseController {
                 request.category(),
                 request.deadlineSeconds(),
                 null, // routed submit has no explicit Contract yet (#100)
-                request.items());
+                // Text Items only: documents travel only under an Engagement (ADR 0010).
+                request.items() == null ? null : request.items().stream().map(ItemInput::text).toList());
         UUID taskId = submitOrchestrationAppService.submitRouted(
                 submitContext(clientId, idempotencyKey), info);
         return ok(withTemplateFallback(readAppService.getForClient(taskId, clientId)));
@@ -133,7 +135,7 @@ public class TaskController extends BaseController {
                         Money.of(request.budget()), request.agentId(),
                         request.category() == null || request.category().isBlank() ? null : request.category(),
                         request.deadlineSeconds(), ContractRequest2ModelConverter.toModel(request.contract()),
-                        request.items()));
+                        request.itemInputs(), request.engagementId()));
         return ok(withTemplateFallback(readAppService.getForClient(taskId, clientId)));
     }
 

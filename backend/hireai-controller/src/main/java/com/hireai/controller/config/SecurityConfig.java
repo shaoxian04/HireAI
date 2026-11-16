@@ -73,6 +73,9 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/auth/register").permitAll()
                         .requestMatchers("/api/agent-callbacks/**").permitAll()
                         .requestMatchers("/api/arbitration-callbacks/**").permitAll()
+                        // An Item's signed source link (spec S4, D31): the token in the path is the
+                        // credential, checked by the controller (unforged, unexpired, one Item).
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/source-links/*").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         // Public API documentation (springdoc / Swagger UI) — the programmatic OpenAPI group.
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
@@ -90,6 +93,14 @@ public class SecurityConfig {
                         // to document intent. An API_CLIENT key is denied (401 at the full app).
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
                                 "/api/tasks/*/accept", "/api/tasks/*/reject", "/api/tasks/*/arbitration").hasAnyRole("CLIENT", "BUILDER", "ADMIN")
+                        // Engagement documents: a machine buyer may upload and list them with its key.
+                        // Opening, ending or accepting an Engagement (consent) stays human-only (anyRequest).
+                        // Who may see or change which Engagement is the app service's owner check (404).
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/engagements/*/sources")
+                                .hasAnyRole("CLIENT", "BUILDER", "ADMIN", "API_CLIENT")
+                        .requestMatchers(org.springframework.http.HttpMethod.GET,
+                                "/api/engagements", "/api/engagements/*", "/api/engagements/*/sources")
+                                .hasAnyRole("CLIENT", "BUILDER", "ADMIN", "API_CLIENT")
                         // Key management is JWT-only (a leaked key cannot mint keys).
                         .requestMatchers("/api/keys/**").hasRole("CLIENT")
                         // Subscription management is JWT-only (a leaked key cannot repoint the callback).

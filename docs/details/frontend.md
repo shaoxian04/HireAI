@@ -88,7 +88,7 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   view (lifetime/pending totals from `GET /api/builder/earnings`, per-agent breakdown, payout
   history; amounts derived server-side from `SettlementPolicy`); `builder/agents/new` — register
   an agent (the form shows the WorkOrder acknowledgement contract, `components/AckContract.tsx`), then reveal its signing secret once (`RegisteredAgentDTO.signingSecret`) before routing to
-  `/builder`; `builder/agents/[id]` — manage console. Above the tabs, `components/manage/SigningSecretPanel.tsx`
+  `/builder`; `builder/agents/[id]` — manage console. Above the tabs, `components/manage/EngagementsPanel.tsx` lists buyers' Engagements with the agent (only when there are some) and accepts a waiting Template variant behind a confirm, `POST /engagements/{id}/accept`; and `components/manage/SigningSecretPanel.tsx`
   shows whether a signing secret is set (`AgentDTO.hasSigningSecret`; the value is never readable) and
   offers rotation behind a confirm dialog, `POST /agents/{id}/rotate-secret`, revealing the new value
   once in a modal. An agent without a secret gets an amber prompt to get one instead. Tabs: Storefront · Pricing (the output contract plus the version's Offer, `OfferPanel`, with "Edit offer" opening `OfferEditor`: a Template per card, a range per parameter, published as `offer` with the new version) · Stats ·
@@ -129,7 +129,14 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   webhooks console (register/replace an HTTPS callback per API key, reveal/rotate the signing secret, a
   delivery log with `DELIVERED`/`PENDING`/`DEAD` badges + an account-scoped `DEAD`-failure banner, manual
   resend); `client/agents/[id]` — agent storefront (output contract and the Offer, "What this agent accepts"); `client/agents/[id]/book` — direct-booking form (adopts
-  agent's `output_spec`). The `client/tasks/[id]` view also shows a per-task `WebhookDeliveryStatus`
+  agent's `output_spec`), with a **Confidential documents** section (`components/EngagementDocuments.tsx`):
+  without an open Engagement with the agent it offers to start one (a consent checkbox and a retention
+  choice, `POST /engagements`); while the Engagement waits for the builder it says so; once active it
+  uploads documents (`apiUpload` to `/engagements/{id}/sources`, several at once) and lists the
+  Engagement's documents with type, size, SHA-256 and the agent's download log, each with a checkbox. The
+  ticked documents become the Items (`items: [{sourceId}]` + `engagementId`), the price shows as price ×
+  count, and fewer than two is refused before sending; the idempotency signature covers the Items. On the
+  task page, `ItemsPanel` marks a document Item. The `client/tasks/[id]` view also shows a per-task `WebhookDeliveryStatus`
   indicator with a resend action.
 - **Rebook a failed task.** "Choose another agent" links to `/client/tasks/new?rebook=<taskId>` (`rebookHref`); only
   the id is in the URL. The new-task page reads `GET /api/tasks/{id}` and fills title, description, category and
