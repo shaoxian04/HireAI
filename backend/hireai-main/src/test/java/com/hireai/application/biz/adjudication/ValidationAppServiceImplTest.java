@@ -57,7 +57,8 @@ class ValidationAppServiceImplTest {
     private final ValidationAppServiceImpl svc = new ValidationAppServiceImpl(domain, snapshots, reports, tasks, settlement,
             agentRepository, apiKeyTaskRepository, webhookOutbox, reputationWrite,
             new com.hireai.domain.biz.task.model.ReviewWindow(java.time.Duration.ofHours(24)),
-            new ReworkPolicy(2), routing, decoder, java.time.Clock.systemUTC());
+            new ReworkPolicy(2), routing, decoder, java.time.Clock.systemUTC(),
+            new com.hireai.infrastructure.adjudication.JacksonInvoiceReader());
 
     /** Build a RESULT_RECEIVED TaskModel via the canonical transition chain. */
     private TaskModel resultReceivedTask() {

@@ -122,6 +122,9 @@ function Reviewer() {
   const sampleItems = (draw?.itemNos ?? []).map((n) => items.get(n)).filter((i): i is TaskItemDTO => !!i);
   const listed = showAll ? sampleItems : sampleItems.filter((i) => i.status === "PENDING_REVIEW" || i.status === "REJECTED");
   const earlier = inspection.draws.filter((d) => d !== draw);
+  // Items a check sent to review (#106, D7): never drawn, judged here one by one, never counted.
+  const flagged = (task.items ?? []).filter((i) => i.needsReview && !sampled.has(i.itemNo)
+    && (i.status === "PENDING_REVIEW" || i.status === "REJECTED"));
 
   function addExtra() {
     const n = Number(extraNo);
@@ -209,6 +212,30 @@ function Reviewer() {
         </section>
       )}
 
+      {flagged.length > 0 && (
+        <section aria-labelledby="flagged-h" className="space-y-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 id="flagged-h" className="display text-[1.6rem]">Flagged for your own check</h2>
+            <p className="tabular text-sm text-muted">{`${flagged.length} ${flagged.length === 1 ? "Item" : "Items"}`}</p>
+          </div>
+          <p className="text-sm text-muted">
+            {"A check couldn't decide these, such as an invoice whose figures don't add up. They are not in the sample "
+              + "and don't count towards it: each is paid only if you confirm it against its document. Anything you "
+              + "haven't judged when the review window closes is accepted."}
+          </p>
+          {!open && actionError && (
+            <p role="alert" className="rounded-lg border border-red/30 bg-red/10 px-4 py-3 text-sm text-red">{actionError}</p>
+          )}
+          <ol className="panel divide-y divide-line overflow-hidden p-0">
+            {flagged.map((item) => (
+              <SampleItemCard key={item.itemNo} taskId={id} item={item} sampled={false}
+                rejection={latestRejection(inspection, item.itemNo)} canJudge={canJudge} busy={busy} now={now}
+                onJudge={judge} onAccept={accept} />
+            ))}
+          </ol>
+        </section>
+      )}
+
       {task.status === "PENDING_REVIEW" && (
         <section aria-labelledby="extra-h" className="space-y-4">
           <h2 id="extra-h" className="display text-[1.6rem]">Check another Item</h2>
@@ -224,7 +251,7 @@ function Reviewer() {
             </label>
             <Button type="submit" size="md" variant="secondary">Check it</Button>
           </form>
-          {!open && actionError && (
+          {!open && flagged.length === 0 && actionError && (
             <p role="alert" className="rounded-lg border border-red/30 bg-red/10 px-4 py-3 text-sm text-red">{actionError}</p>
           )}
           {extra.length > 0 && (

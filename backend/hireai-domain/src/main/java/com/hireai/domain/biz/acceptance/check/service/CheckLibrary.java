@@ -1,6 +1,9 @@
 package com.hireai.domain.biz.acceptance.check.service;
 
 import com.hireai.domain.biz.acceptance.check.model.DecodedImage;
+import com.hireai.domain.biz.acceptance.check.model.ExtractedInvoice;
+import com.hireai.domain.biz.acceptance.check.model.SelfReportedAnomaly;
+import com.hireai.domain.biz.acceptance.template.model.InvoiceExtractionTemplate;
 import com.hireai.domain.biz.acceptance.check.model.Finding;
 import com.hireai.domain.biz.acceptance.check.model.FindingFacts;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
@@ -46,12 +49,30 @@ import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTem
  *       reports a {@link Finding}: it never decides a verdict, so it never moves money (D7).</li>
  * </ul>
  * The generic Templates' checks still run in {@code ValidationDomainServiceImpl}; new Templates add
- * their entries here.
+ * their entries here (image_generation below, ap_invoice_extraction in {@link InvoiceChecks}).
  */
 public final class CheckLibrary {
 
-    /** What a pixel check judges: the Contract and the frozen copy, with its pixels when decodable. */
-    public record Subject(Contract contract, DeliverySnapshot snapshot, DecodedImage image) {
+    /**
+     * What a check judges: the Contract and, by Template, the frozen copy with its pixels when decodable
+     * (image_generation), or the delivered invoice as read, null when it is not a JSON object, with the
+     * Agent's self-reported anomalies (ap_invoice_extraction). {@code taskId} names the Task in Findings.
+     */
+    public record Subject(Contract contract, DeliverySnapshot snapshot, DecodedImage image, ExtractedInvoice invoice,
+                          List<SelfReportedAnomaly> anomalies, UUID taskId) {
+        public Subject {
+            anomalies = anomalies == null ? List.of() : List.copyOf(anomalies);
+        }
+
+        public Subject(Contract contract, DeliverySnapshot snapshot, DecodedImage image) {
+            this(contract, snapshot, image, null, List.of(), null);
+        }
+
+        /** An invoice result's subject. */
+        public static Subject ofInvoice(Contract contract, ExtractedInvoice invoice, List<SelfReportedAnomaly> anomalies,
+                                        UUID taskId) {
+            return new Subject(contract, null, null, invoice, anomalies, taskId);
+        }
     }
 
     /** Types the platform decodes: one that will not decode is broken, and rejected. */
@@ -71,6 +92,21 @@ public final class CheckLibrary {
         CHECKS.put(IMAGE_DIMENSIONS, CheckLibrary::imageDimensions);
         CHECKS.put(IMAGE_BACKGROUND_COLOUR, CheckLibrary::backgroundColour);
         FINDINGS.put(DUPLICATE_BRIEF, CheckLibrary::duplicateBrief);
+        // ap_invoice_extraction: the shape, then the arithmetic once the shape is sound.
+        CHECKS.put(InvoiceExtractionTemplate.INVOICE_FIELDS, s -> InvoiceChecks.fields(s.invoice()));
+        CHECKS.put(InvoiceExtractionTemplate.INVOICE_LINE_ARITHMETIC, s -> InvoiceChecks.arithmeticReady(s.invoice())
+                ? InvoiceChecks.lineArithmetic(s.contract(), s.invoice(), s.anomalies()) : Optional.empty());
+        CHECKS.put(InvoiceExtractionTemplate.INVOICE_LINES_SUM, s -> InvoiceChecks.arithmeticReady(s.invoice())
+                ? InvoiceChecks.linesSum(s.contract(), s.invoice(), s.anomalies()) : Optional.empty());
+        CHECKS.put(InvoiceExtractionTemplate.INVOICE_TAX_ARITHMETIC, s -> InvoiceChecks.arithmeticReady(s.invoice())
+                ? InvoiceChecks.taxArithmetic(s.contract(), s.invoice(), s.anomalies()) : Optional.empty());
+        CHECKS.put(InvoiceExtractionTemplate.INVOICE_TOTAL, s -> InvoiceChecks.arithmeticReady(s.invoice())
+                ? InvoiceChecks.total(s.contract(), s.invoice(), s.anomalies()) : Optional.empty());
+        FINDINGS.put(InvoiceExtractionTemplate.DUPLICATE_DOCUMENT, (s, f) -> InvoiceChecks.duplicateDocument(f, s.taskId()));
+        FINDINGS.put(InvoiceExtractionTemplate.DUPLICATE_INVOICE,
+                (s, f) -> InvoiceChecks.duplicateInvoice(s.invoice(), f, s.taskId()));
+        FINDINGS.put(InvoiceExtractionTemplate.INVOICE_ARITHMETIC, (s, f) -> InvoiceChecks.arithmeticReady(s.invoice())
+                ? InvoiceChecks.arithmeticFinding(s.contract(), s.invoice()) : Optional.empty());
     }
 
     private CheckLibrary() {

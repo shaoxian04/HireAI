@@ -1,7 +1,9 @@
 package com.hireai.domain.biz.adjudication.service.impl;
 
 import com.hireai.domain.biz.acceptance.check.model.AcceptanceEvidence;
+import com.hireai.domain.biz.acceptance.check.model.ExtractedInvoice;
 import com.hireai.domain.biz.acceptance.check.model.Finding;
+import com.hireai.domain.biz.acceptance.check.model.InvoiceReading;
 import com.hireai.domain.biz.acceptance.check.model.SelfReportedAnomaly;
 import com.hireai.domain.biz.acceptance.check.service.CheckLibrary;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
@@ -13,6 +15,7 @@ import com.hireai.domain.biz.acceptance.offer.model.OfferTerm;
 import com.hireai.domain.biz.acceptance.offer.model.ParameterRange;
 import com.hireai.domain.biz.acceptance.template.model.GenericTemplates;
 import com.hireai.domain.biz.acceptance.template.model.ImageGenerationTemplate;
+import com.hireai.domain.biz.acceptance.template.model.InvoiceExtractionTemplate;
 import com.hireai.domain.biz.acceptance.template.model.TemplateRef;
 import com.hireai.domain.biz.adjudication.model.CheckResult;
 import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
@@ -42,7 +45,10 @@ import java.util.Set;
  *       {@code FILE_MEDIA_TYPE} / {@code FILE_MAX_BYTES} when the Contract sets {@code media_types} /
  *       {@code max_bytes}. The media type is the one judged from the bytes ({@code DeliveredMediaType}).</li>
  *   <li>{@code image_generation}: the same link and fetch checks, then its Check Library entries
- *       ({@link CheckLibrary}) on the frozen copy's pixels, and its Findings.</li>
+ *       ({@link CheckLibrary}) on the frozen copy's pixels, and its Findings;</li>
+ *   <li>{@code ap_invoice_extraction}: the result is one JSON object ({@code INVOICE_JSON}), its fields
+ *       are there and well formed, then the invoice's own arithmetic, judged by the Contract's
+ *       expectation mode; and its Findings (duplicates, figures that don't add up).</li>
  * </ul>
  * A self-reported anomaly turns a rejection into review on every Template (D7).
  */
@@ -100,13 +106,40 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
                     CheckLibrary.find(entry, subject, evidence.facts()).ifPresent(findings::add);
                 }
             }
+        } else if (template.equals(InvoiceExtractionTemplate.AP_INVOICE_EXTRACTION_V1)) {
+            InvoiceReading reading = evidence.invoice();
+            if (reading == null) {
+                throw new IllegalStateException("An invoice result is judged on its reading; read it first (needsInvoice)");
+            }
+            ExtractedInvoice invoice = reading instanceof InvoiceReading.Read read ? read.invoice() : null;
+            checks.add(invoice != null
+                    ? new CheckResult(InvoiceExtractionTemplate.INVOICE_JSON, true, "a JSON object")
+                    : new CheckResult(InvoiceExtractionTemplate.INVOICE_JSON, false,
+                    "the result must be one JSON object with the invoice's fields: "
+                            + ((InvoiceReading.Unreadable) reading).reason()));
+            CheckLibrary.Subject subject = CheckLibrary.Subject.ofInvoice(contract, invoice, evidence.anomalies(),
+                    result.taskId());
+            boolean shapeOk = invoice != null;
+            for (String entry : InvoiceExtractionTemplate.CHECKS) {
+                if (CheckLibrary.isCheck(entry) && shapeOk) {
+                    Optional<CheckResult> c = CheckLibrary.check(entry, subject);
+                    c.ifPresent(checks::add);
+                    if (entry.equals(InvoiceExtractionTemplate.INVOICE_FIELDS) && c.isPresent() && c.get().rejects()) {
+                        shapeOk = false; // arithmetic on a malformed invoice would only repeat the problem
+                    }
+                } else if (CheckLibrary.isFinding(entry)) {
+                    CheckLibrary.find(entry, subject, evidence.facts()).ifPresent(findings::add);
+                }
+            }
         } else {
             // A Contract naming another Template fails its Template check at submit, so reaching
             // here means a Template shipped without its checks.
             throw new IllegalStateException("No checks implemented for Template " + template);
         }
         Set<String> eligible = template.equals(ImageGenerationTemplate.IMAGE_GENERATION_V1)
-                ? ImageGenerationTemplate.ANOMALY_ELIGIBLE : Set.of();
+                ? ImageGenerationTemplate.ANOMALY_ELIGIBLE
+                : template.equals(InvoiceExtractionTemplate.AP_INVOICE_EXTRACTION_V1)
+                ? InvoiceExtractionTemplate.ANOMALY_ELIGIBLE : Set.of();
         return ValidationReportModel.of(result.taskId(), attemptNo,
                 applyAnomalies(checks, evidence.anomalies(), eligible), findings, evidence.anomalies());
     }
@@ -161,7 +194,13 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
 
     @Override
     public boolean needsFindingFacts(Contract contract) {
-        return contract.template().equals(ImageGenerationTemplate.IMAGE_GENERATION_V1);
+        return contract.template().equals(ImageGenerationTemplate.IMAGE_GENERATION_V1)
+                || contract.template().equals(InvoiceExtractionTemplate.AP_INVOICE_EXTRACTION_V1);
+    }
+
+    @Override
+    public boolean needsInvoice(Contract contract) {
+        return contract.template().equals(InvoiceExtractionTemplate.AP_INVOICE_EXTRACTION_V1);
     }
 
     @Override

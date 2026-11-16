@@ -97,6 +97,20 @@ public record TaskItems(List<TaskItemModel> all) {
         return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW).toList();
     }
 
+    /**
+     * The sampled lot (spec S8): the Items awaiting review that every check passed. An Item a check sent to
+     * review ({@link TaskItemModel#needsReview()}, D7) is the reviewer's to judge on its own, so it is never
+     * drawn, accepted with the lot, reworked with it or settled pro rata.
+     */
+    public List<TaskItemModel> lot() {
+        return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW && !i.needsReview()).toList();
+    }
+
+    /** The Items awaiting the reviewer's own judgement because a check sent them to review (D7). */
+    public List<TaskItemModel> flaggedForReview() {
+        return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW && i.needsReview()).toList();
+    }
+
     public boolean anyPassed() {
         return all.stream().anyMatch(i -> i.status() == ItemStatus.PENDING_REVIEW || i.status() == ItemStatus.ACCEPTED);
     }

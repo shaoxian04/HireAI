@@ -2,6 +2,9 @@ package com.hireai.infrastructure.repository.task.item;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hireai.domain.biz.acceptance.check.model.Finding;
+import com.hireai.domain.biz.acceptance.check.model.FindingFacts;
+import com.hireai.domain.biz.acceptance.check.model.SelfReportedAnomaly;
 import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
 import com.hireai.domain.biz.task.item.model.ItemCheck;
@@ -27,8 +30,11 @@ import java.util.stream.Collectors;
 public class TaskItemRepositoryImpl implements TaskItemRepository {
 
     private static final String COLUMNS = "id, task_id, item_no, input, price, status, agent_status, "
-            + "result_payload, result_url, checks::text AS checks, auto_accepted, source_snapshot_id, paid_amount";
+            + "result_payload, result_url, checks::text AS checks, auto_accepted, source_snapshot_id, paid_amount, "
+            + "findings::text AS findings, anomalies::text AS anomalies";
     private static final TypeReference<List<ItemCheck>> CHECKS = new TypeReference<>() { };
+    private static final TypeReference<List<Finding>> FINDINGS = new TypeReference<>() { };
+    private static final TypeReference<List<SelfReportedAnomaly>> ANOMALIES = new TypeReference<>() { };
 
     private final NamedParameterJdbcTemplate jdbc;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -54,7 +60,8 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
                 UPDATE task_items SET status = :status, agent_status = :agentStatus,
                        result_payload = :resultPayload, result_url = :resultUrl,
                        checks = CAST(:checks AS jsonb), auto_accepted = :autoAccepted,
-                       paid_amount = :paidAmount, updated_at = now()
+                       paid_amount = :paidAmount, findings = CAST(:findings AS jsonb),
+                       anomalies = CAST(:anomalies AS jsonb), updated_at = now()
                 WHERE id = :id
                 """, params(item));
     }
@@ -68,7 +75,8 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
                 UPDATE task_items SET status = :status, agent_status = :agentStatus,
                        result_payload = :resultPayload, result_url = :resultUrl,
                        checks = CAST(:checks AS jsonb), auto_accepted = :autoAccepted,
-                       paid_amount = :paidAmount, updated_at = now()
+                       paid_amount = :paidAmount, findings = CAST(:findings AS jsonb),
+                       anomalies = CAST(:anomalies AS jsonb), updated_at = now()
                 WHERE id = :id
                 """, items.stream().map(this::params).toArray(MapSqlParameterSource[]::new));
     }
@@ -121,7 +129,9 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
                 .addValue("agentStatus", item.agentStatus())
                 .addValue("resultPayload", item.resultPayload())
                 .addValue("resultUrl", item.resultUrl())
-                .addValue("checks", writeChecks(item.checks()))
+                .addValue("checks", write(item.checks()))
+                .addValue("findings", write(item.findings()))
+                .addValue("anomalies", write(item.anomalies()))
                 .addValue("autoAccepted", item.autoAccepted())
                 .addValue("sourceSnapshotId", item.sourceSnapshotId())
                 .addValue("paidAmount", item.paidAmount() == null ? null : item.paidAmount().value());
@@ -133,24 +143,72 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
                 rs.getString("input"), Money.of(rs.getBigDecimal("price")),
                 ItemStatus.valueOf(rs.getString("status")), rs.getString("agent_status"),
                 rs.getString("result_payload"), rs.getString("result_url"),
-                readChecks(rs.getString("checks")), rs.getBoolean("auto_accepted"),
+                read(rs.getString("checks"), CHECKS), rs.getBoolean("auto_accepted"),
                 rs.getObject("source_snapshot_id", UUID.class),
-                rs.getBigDecimal("paid_amount") == null ? null : Money.of(rs.getBigDecimal("paid_amount")));
+                rs.getBigDecimal("paid_amount") == null ? null : Money.of(rs.getBigDecimal("paid_amount")),
+                read(rs.getString("findings"), FINDINGS), read(rs.getString("anomalies"), ANOMALIES));
     }
 
-    private String writeChecks(List<ItemCheck> checks) {
+    private String write(List<?> values) {
         try {
-            return mapper.writeValueAsString(checks);
+            return mapper.writeValueAsString(values);
         } catch (Exception e) {
-            throw new IllegalStateException("serialize item checks", e);
+            throw new IllegalStateException("serialize item checks/findings/anomalies", e);
         }
     }
 
-    private List<ItemCheck> readChecks(String json) {
+    private <T> List<T> read(String json, TypeReference<List<T>> type) {
         try {
-            return json == null ? List.of() : mapper.readValue(json, CHECKS);
+            return json == null ? List.of() : mapper.readValue(json, type);
         } catch (Exception e) {
-            throw new IllegalStateException("deserialize item checks", e);
+            throw new IllegalStateException("deserialize item checks/findings/anomalies", e);
         }
+    }
+
+    @Override
+    public List<FindingFacts.ItemRef> findEarlierItemsWithSameDocument(TaskItemModel item, UUID clientId) {
+        if (item.sourceSnapshotId() == null) {
+            return List.of();
+        }
+        return jdbc.query("""
+                SELECT o.task_id, o.item_no
+                FROM task_items me
+                JOIN source_snapshots ms ON ms.id = me.source_snapshot_id
+                JOIN tasks mt ON mt.id = me.task_id
+                JOIN source_snapshots os ON os.sha256 = ms.sha256
+                JOIN task_items o ON o.source_snapshot_id = os.id
+                JOIN tasks ot ON ot.id = o.task_id
+                WHERE me.id = :itemId AND ot.client_id = :clientId AND o.id <> me.id
+                  AND ((o.task_id = me.task_id AND o.item_no < me.item_no)
+                       OR (o.task_id <> me.task_id AND ot.gmt_create < mt.gmt_create))
+                ORDER BY ot.gmt_create, o.item_no
+                LIMIT 20
+                """, Map.of("itemId", item.id(), "clientId", clientId),
+                (rs, i) -> new FindingFacts.ItemRef(rs.getObject("task_id", UUID.class), rs.getInt("item_no")));
+    }
+
+    @Override
+    public List<FindingFacts.ItemRef> findOtherItemsWithInvoiceKey(UUID clientId, String invoiceKey, UUID exceptItemId) {
+        return jdbc.query("""
+                SELECT task_id, item_no FROM item_invoice_keys
+                WHERE client_id = :clientId AND invoice_key = :key AND item_id <> :itemId
+                ORDER BY recorded_at, item_no
+                LIMIT 20
+                """, Map.of("clientId", clientId, "key", invoiceKey, "itemId", exceptItemId),
+                (rs, i) -> new FindingFacts.ItemRef(rs.getObject("task_id", UUID.class), rs.getInt("item_no")));
+    }
+
+    @Override
+    public void recordInvoiceKey(TaskItemModel item, UUID clientId, String invoiceKey) {
+        if (invoiceKey == null) {
+            jdbc.update("DELETE FROM item_invoice_keys WHERE item_id = :itemId", Map.of("itemId", item.id()));
+            return;
+        }
+        jdbc.update("""
+                INSERT INTO item_invoice_keys (item_id, task_id, item_no, client_id, invoice_key)
+                VALUES (:itemId, :taskId, :itemNo, :clientId, :key)
+                ON CONFLICT (item_id) DO UPDATE SET invoice_key = EXCLUDED.invoice_key, recorded_at = now()
+                """, new MapSqlParameterSource().addValue("itemId", item.id()).addValue("taskId", item.taskId())
+                .addValue("itemNo", item.itemNo()).addValue("clientId", clientId).addValue("key", invoiceKey));
     }
 }

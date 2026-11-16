@@ -140,12 +140,17 @@ public final class TaskModel2DTOConverter {
         return new TaskItemDTO(item.itemNo(), item.input(), item.status().name(), item.price().value(),
                 item.resultPayload(), item.resultUrl(),
                 item.checks().isEmpty() ? null : item.checks().stream()
-                        .map(c -> new TaskItemDTO.CheckDTO(c.rule(), c.passed(), c.detail()))
+                        .map(c -> new TaskItemDTO.CheckDTO(c.rule(), c.passed(), c.detail(), c.outcome().name()))
                         .toList(),
                 item.autoAccepted() ? Boolean.TRUE : null,
                 paid == null ? null : SettlementPolicy.netOf(paid).value(),
                 paid == null ? null : SettlementPolicy.commissionOn(paid).value(),
                 refund == null || !refund.isPositive() ? null : refund.value(),
-                item.sourceSnapshotId());
+                item.sourceSnapshotId(),
+                item.needsReview() ? Boolean.TRUE : null,
+                item.findings().isEmpty() ? null : item.findings().stream()
+                        .map(f -> new com.hireai.controller.biz.adjudication.dto.ValidationReportDTO.FindingDTO(f.code(), f.detail())).toList(),
+                item.anomalies().isEmpty() ? null : item.anomalies().stream()
+                        .map(a -> new com.hireai.controller.biz.adjudication.dto.ValidationReportDTO.AnomalyDTO(a.check(), a.description())).toList());
     }
 }

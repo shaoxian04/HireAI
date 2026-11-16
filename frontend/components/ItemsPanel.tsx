@@ -7,6 +7,7 @@ import type { ItemStatus, TaskDTO, TaskItemDTO, TaskStatus } from "@/lib/types";
 import { Badge, Button, ConfirmDialog } from "@/components/ui";
 import { ResultView } from "@/components/ResultView";
 import { ruleText } from "@/components/InspectionReport";
+import { ItemNotes } from "@/components/ItemNotes";
 import { ReviewWindowNotice, reviewWindowClosed, useNow } from "@/components/ReviewWindowNotice";
 
 interface Props {
@@ -42,7 +43,7 @@ function cr(amount: number | null | undefined): string {
 function ItemBadge({ item, taskStatus }: { item: TaskItemDTO; taskStatus: TaskStatus }) {
   const label: Record<ItemStatus, string> = {
     AWAITING_RESULT: ENDED.has(taskStatus) ? "Not delivered" : "Waiting for the agent",
-    PENDING_REVIEW: "Needs your review",
+    PENDING_REVIEW: item.needsReview ? "Needs your own check" : "Needs your review",
     ACCEPTED: item.autoAccepted ? "Accepted automatically" : "Accepted",
     SPEC_VIOLATION: "Failed its checks",
     FAILED: "Agent couldn't do it",
@@ -92,7 +93,7 @@ function ItemRow({ item, task, canDecide, busy, onAccept }: {
   busy: boolean;
   onAccept: (itemNo: number) => void;
 }) {
-  const failed = (item.checks ?? []).filter((c) => !c.passed);
+  const failed = (item.checks ?? []).filter((c) => !c.passed && c.outcome !== "REVIEW");
   const hasResult = item.resultPayload != null && item.resultPayload !== "";
   return (
     <li className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 px-5 py-4 sm:grid-cols-[auto_1fr_auto]">
@@ -120,6 +121,7 @@ function ItemRow({ item, task, canDecide, busy, onAccept }: {
             ))}
           </div>
         )}
+        <ItemNotes item={item} />
         {hasResult && (
           <details className="group rounded-lg border border-line bg-surface-2 px-3 py-2">
             <summary className="cursor-pointer text-xs font-semibold text-muted group-open:mb-2">Agent&apos;s result</summary>

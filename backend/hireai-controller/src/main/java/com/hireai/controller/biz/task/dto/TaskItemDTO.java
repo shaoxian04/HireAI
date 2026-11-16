@@ -1,6 +1,7 @@
 package com.hireai.controller.biz.task.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.hireai.controller.biz.adjudication.dto.ValidationReportDTO;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -29,11 +30,20 @@ public record TaskItemDTO(
         BigDecimal commissionAmount,
         BigDecimal refundAmount,
         /** The SourceSnapshot this Item's input is (an Engagement's document); absent for a text Item. */
-        UUID sourceId
+        UUID sourceId,
+        /**
+         * True when a check sent this Item to the buyer's review (D7): the reviewer judges it on its own, outside
+         * the sample, and it is paid only when confirmed (or when the review window closes). Absent otherwise.
+         */
+        Boolean needsReview,
+        /** Facts about the Item's input (duplicates, figures that don't add up, D45); never change the pay. */
+        List<ValidationReportDTO.FindingDTO> findings,
+        /** What the Agent self-reported about this Item's source with its result (D7). */
+        List<ValidationReportDTO.AnomalyDTO> anomalies
 ) {
 
-    /** One Acceptance Check as run on this Item's result. */
+    /** One Acceptance Check as run on this Item's result: outcome PASS, REJECT or REVIEW. */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record CheckDTO(String rule, boolean passed, String detail) {
+    public record CheckDTO(String rule, boolean passed, String detail, String outcome) {
     }
 }

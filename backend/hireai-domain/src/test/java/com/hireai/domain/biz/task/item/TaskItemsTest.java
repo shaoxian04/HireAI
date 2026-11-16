@@ -1,7 +1,10 @@
 package com.hireai.domain.biz.task.item;
 
+import com.hireai.domain.biz.acceptance.check.model.Finding;
+import com.hireai.domain.biz.adjudication.enums.CheckOutcome;
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
 import com.hireai.domain.biz.task.item.info.ItemInput;
+import com.hireai.domain.biz.task.item.model.ItemAcceptance;
 import com.hireai.domain.biz.task.item.model.ItemCheck;
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
 import com.hireai.domain.biz.task.item.model.TaskItems;
@@ -33,6 +36,30 @@ class TaskItemsTest {
         assertThat(items.all()).extracting(TaskItemModel::input).containsExactly("invoice A", "invoice B", "invoice C");
         assertThat(items.all()).allMatch(i -> i.status() == ItemStatus.AWAITING_RESULT);
         assertThat(TaskItems.escrowFor(Money.of("2.50"), 3)).isEqualTo(Money.of("7.50"));
+    }
+
+    @Test
+    void anItemACheckSentToReviewAwaitsTheReviewerOutsideTheSampledLot() {
+        TaskItems submitted = TaskItems.submit(taskId, List.of("a", "b", "c"), Money.of("1.00"));
+        List<ItemCheck> review = List.of(new ItemCheck("INVOICE_JSON", true, null),
+                new ItemCheck("INVOICE_TOTAL", false, "150.00, not 144.00", CheckOutcome.REVIEW));
+        Finding duplicate = new Finding("DUPLICATE_INVOICE", "seen before");
+        TaskItemModel flagged = submitted.item(1).recordResult("COMPLETED", "{}", null,
+                new ItemAcceptance(review, List.of(duplicate), List.of()));
+        TaskItemModel clean = submitted.item(2).recordResult("COMPLETED", "{}", null, PASSED);
+        TaskItemModel broken = submitted.item(3).recordResult("COMPLETED", "", null, FAILED);
+
+        assertThat(flagged.status()).isEqualTo(ItemStatus.PENDING_REVIEW);
+        assertThat(flagged.needsReview()).isTrue();
+        assertThat(flagged.findings()).containsExactly(duplicate);
+        assertThat(broken.status()).isEqualTo(ItemStatus.SPEC_VIOLATION);
+        TaskItems items = new TaskItems(List.of(flagged, clean, broken));
+        assertThat(items.lot()).extracting(TaskItemModel::itemNo).containsExactly(2);
+        assertThat(items.flaggedForReview()).extracting(TaskItemModel::itemNo).containsExactly(1);
+        assertThat(items.awaitingReview()).hasSize(2);
+        // Accepting keeps what was reported; a whole-Task rework takes the result, and its Findings, back.
+        assertThat(flagged.accept().findings()).containsExactly(duplicate);
+        assertThat(flagged.returnForRework().findings()).isEmpty();
     }
 
     @Test
