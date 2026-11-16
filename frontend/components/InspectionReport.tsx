@@ -144,7 +144,9 @@ export function InspectionReport({
   const stamp = STAMP[report.verdict] ?? STAMP.FAIL;
   const anomalies = report.anomalies ?? [];
   const findings = report.findings ?? [];
-  const previous = report.previousAttempts ?? [];
+  // Only results a check rejected were sent back for rework; a passed earlier result was replaced by the
+  // agent revising it after the client's rejection, which the rejection panel already explains.
+  const previous = (report.previousAttempts ?? []).filter((a) => a.verdict === "FAIL");
   return (
     <section aria-labelledby="inspection-h" className="docket overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-3 px-5 pb-3 pt-5">

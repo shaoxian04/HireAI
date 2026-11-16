@@ -24,7 +24,7 @@ export function ContractTerms({ spec }: { spec: OutputSpecDTO }) {
         {spec.schema ? (
           <dd className="min-w-0 whitespace-pre-wrap break-words font-mono text-xs text-fg">{spec.schema}</dd>
         ) : (
-          <Blank>No schema. Any {spec.format.toLowerCase()} result passes the shape check.</Blank>
+          <Blank>No schema. Any {spec.format === "JSON" ? "JSON" : spec.format.toLowerCase()} result passes the shape check.</Blank>
         )}
       </div>
       <div className="grid gap-1 px-4 py-3 sm:grid-cols-[8rem_1fr] sm:gap-4">

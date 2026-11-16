@@ -113,4 +113,20 @@ describe("InspectionReport", () => {
     expect(screen.getByText(/reworked once/i)).toBeInTheDocument();
     expect(screen.getByText(/Result 1 failed the background colour check/i)).toBeInTheDocument();
   });
+
+  it("doesn't call a revision after the client's rejection a rework (the earlier result passed its checks)", () => {
+    render(
+      <InspectionReport
+        report={{
+          verdict: "PASS",
+          checks: [{ rule: "FORMAT_TEXT_NON_EMPTY", passed: true, detail: null, outcome: "PASS" }],
+          previousAttempts: [{ attemptNo: 1, verdict: "PASS", failedChecks: [] }],
+        }}
+        spec={spec}
+        awaitingYou
+      />,
+    );
+    expect(screen.queryByText(/reworked/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/failed the automatic check/i)).not.toBeInTheDocument();
+  });
 });

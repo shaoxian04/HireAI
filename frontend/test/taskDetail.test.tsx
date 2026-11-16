@@ -9,6 +9,7 @@ import {
   vi,
 } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
 import { server, resetTaskDetailPolls } from "./msw/handlers";
 import { AuthProvider } from "@/lib/auth";
 import TaskDetailPage from "@/app/client/tasks/[id]/page";
@@ -63,4 +64,26 @@ describe("task detail polling", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^reject$/i })).toBeInTheDocument();
   }, 12000);
+
+  it("shows settled amounts to two decimals, like the receipt", async () => {
+    server.use(
+      http.get("*/api/tasks/:id", ({ params }) =>
+        HttpResponse.json({
+          success: true,
+          data: {
+            id: params.id, clientId: "u-1", title: "Summarise Q2 report", description: "Summarise it", budget: 8,
+            status: "RESOLVED", outputSpec: { format: "TEXT" }, createdAt: "2026-06-06T10:00:00Z",
+            resolution: "ACCEPTED", resolvedAt: "2026-06-06T10:10:00Z", payoutAmount: 6.8, commissionAmount: 1.2,
+          },
+        }),
+      ),
+      http.get("*/api/tasks/:id/receipts", () => HttpResponse.json({ success: true, data: [] })),
+    );
+    render(
+      <AuthProvider>
+        <TaskDetailPage />
+      </AuthProvider>,
+    );
+    expect(await screen.findByText("6.80 cr")).toBeInTheDocument();
+  });
 });

@@ -214,7 +214,7 @@ export function ItemsPanel({ task, now, onChange }: Props) {
           <ReviewWindowNotice deadline={task.reviewDeadline} now={current} subject="items" />
           {awaiting.some((i) => i.needsReview) && (
             <p className="text-xs text-muted">
-              {"Items marked “Needs your own check” are never paid with the batch: check each one. If nobody does by then, they are accepted too."}
+              {"Items marked “Needs your own check” are not decided by the sample: check each one. Accepting all accepts them too, and if nobody decides by then, they are accepted."}
             </p>
           )}
           {canDecide && awaiting.length > 0 && (
