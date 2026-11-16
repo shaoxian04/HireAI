@@ -75,6 +75,31 @@ public class ReceiptController extends BaseController {
                 .body(receipt.envelope().getBytes(StandardCharsets.UTF_8));
     }
 
+    /**
+     * The receipt as a W3C Verifiable Credential 2.0 (media type {@code application/vc}), secured
+     * with an {@code eddsa-jcs-2022} Data Integrity proof; docs/details/receipts.md#exports.
+     */
+    @GetMapping("/api/receipts/{receiptId}/credential")
+    public ResponseEntity<byte[]> credential(@PathVariable("receiptId") UUID receiptId) {
+        return export(receiptAppService.credential(receiptId, reader()), MediaType.parseMediaType("application/vc"),
+                "hireai-receipt-" + receiptId + ".vc.json");
+    }
+
+    /** The receipt as OTel {@code gen_ai.evaluation.result} events, an OTLP/JSON logs export request. */
+    @GetMapping("/api/receipts/{receiptId}/otel")
+    public ResponseEntity<byte[]> otel(@PathVariable("receiptId") UUID receiptId) {
+        return export(receiptAppService.otelEvents(receiptId, reader()), MediaType.APPLICATION_JSON,
+                "hireai-receipt-" + receiptId + ".otlp.json");
+    }
+
+    private static ResponseEntity<byte[]> export(String document, MediaType type, String filename) {
+        return ResponseEntity.ok()
+                .contentType(type)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
+                .header("X-Content-Type-Options", "nosniff")
+                .body(document.getBytes(StandardCharsets.UTF_8));
+    }
+
     /** The receipt verification keys as a JWK Set (RFC 8037 OKP keys), active key first. */
     @GetMapping("/api/receipt-keys")
     public ResponseEntity<Map<String, Object>> publicKeys() {

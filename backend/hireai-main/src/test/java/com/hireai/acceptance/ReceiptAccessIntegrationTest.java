@@ -34,6 +34,7 @@ import static org.awaitility.Awaitility.await;
 @ActiveProfiles(inheritProfiles = false)
 class ReceiptAccessIntegrationTest extends WholeAppIntegrationTest {
 
+    private static final java.util.List<String> EXPORTS = java.util.List.of("/credential", "/otel");
     private static final String SEED_PASSWORD = "DemoPass123!";
     private static final UUID SEED_CLIENT = UUID.fromString("00000000-0000-0000-0000-000000000010");
 
@@ -80,6 +81,11 @@ class ReceiptAccessIntegrationTest extends WholeAppIntegrationTest {
         assertThat(download.statusCode()).as(download.body()).isEqualTo(200);
         assertThat(mapper.readTree(download.body()).has("signature")).isTrue();
         assertThat(get("/api/receipts/" + receiptId, "Bearer " + clientJwt).statusCode()).isEqualTo(200);
+        // The exports (#109) go to the same readers through the same channels.
+        for (String export : EXPORTS) {
+            assertThat(get("/api/receipts/" + receiptId + export, "ApiKey " + clientKey).statusCode()).isEqualTo(200);
+            assertThat(get("/api/receipts/" + receiptId + export, "Bearer " + clientJwt).statusCode()).isEqualTo(200);
+        }
     }
 
     @Test
@@ -98,6 +104,10 @@ class ReceiptAccessIntegrationTest extends WholeAppIntegrationTest {
         assertThat(get("/api/receipts/" + receiptId, "Bearer " + builderJwt).statusCode()).isEqualTo(200);
         // The API key is still a Client-channel credential after the owner became a Builder.
         assertThat(get("/api/receipts/" + receiptId, "ApiKey " + builderKey).statusCode()).isEqualTo(404);
+        for (String export : EXPORTS) {
+            assertThat(get("/api/receipts/" + receiptId + export, "Bearer " + builderJwt).statusCode()).isEqualTo(200);
+            assertThat(get("/api/receipts/" + receiptId + export, "ApiKey " + builderKey).statusCode()).isEqualTo(404);
+        }
     }
 
     @Test
@@ -111,6 +121,10 @@ class ReceiptAccessIntegrationTest extends WholeAppIntegrationTest {
         assertThat(get("/api/receipts/" + receiptId, "ApiKey " + createKey(stranger)).statusCode()).isEqualTo(404);
         assertThat(get(receiptsPath(), null).statusCode()).isEqualTo(401);
         assertThat(get("/api/receipts/" + receiptId, null).statusCode()).isEqualTo(401);
+        for (String export : EXPORTS) {
+            assertThat(get("/api/receipts/" + receiptId + export, "Bearer " + stranger).statusCode()).isEqualTo(404);
+            assertThat(get("/api/receipts/" + receiptId + export, null).statusCode()).isEqualTo(401);
+        }
     }
 
     @Test

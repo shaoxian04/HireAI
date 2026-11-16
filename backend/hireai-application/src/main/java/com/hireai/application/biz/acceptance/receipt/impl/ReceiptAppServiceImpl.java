@@ -41,6 +41,7 @@ public class ReceiptAppServiceImpl implements ReceiptAppService {
     private final ReceiptEvidenceQueryPort evidence;
     private final ReceiptSigner signer;
     private final ReceiptBodyAssembler assembler;
+    private final ReceiptExporter exporter;
     private final TaskRepository taskRepository;
     private final TaskItemRepository taskItemRepository;
     private final SettlementRepository settlementRepository;
@@ -70,6 +71,18 @@ public class ReceiptAppServiceImpl implements ReceiptAppService {
         TaskModel task = taskRepository.findById(receipt.taskId()).orElseThrow(() -> notFound("receipt", receiptId));
         requireParty(task, builderOf(task), reader, "receipt", receiptId);
         return receipt;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public String credential(UUID receiptId, Reader reader) {
+        return exporter.credential(receipt(receiptId, reader), clock.instant());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public String otelEvents(UUID receiptId, Reader reader) {
+        return exporter.otelEvents(receipt(receiptId, reader), clock.instant());
     }
 
     @Override

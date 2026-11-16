@@ -18,7 +18,12 @@ import com.hireai.utility.canonical.JsonCanonicalizer;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.hash.Sha256;
 import com.hireai.utility.result.ResultCode;
+import com.hireai.utility.signature.DidKey;
 import com.hireai.utility.signature.Ed25519;
+import com.networknt.schema.JsonSchema;
+import com.networknt.schema.JsonSchemaFactory;
+import com.networknt.schema.SpecVersion;
+import com.networknt.schema.ValidationMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,12 +34,18 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.InputStream;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
@@ -233,6 +244,19 @@ class ReceiptIntegrationTest extends WholeAppIntegrationTest {
         JsonNode envelope = JSON.readTree(http.getForObject(
                 platformUrl("/api/receipts/" + list.get(0).get("id").asText()), String.class));
         assertThat(verify(envelope)).isTrue();
+
+        // Its exports carry the ruling: the split is half the price kept by the Builder's side.
+        JsonNode credential = JSON.readTree(http.getForObject(
+                platformUrl("/api/receipts/" + list.get(0).get("id").asText() + "/credential"), String.class));
+        assertThat(verifyCredential(credential)).isTrue();
+        assertThat(schemaErrors("receipt-credential.v1.schema.json", credential)).isEmpty();
+        JsonNode otel = otel(list.get(0).get("id").asText());
+        assertThat(schemaErrors("receipt-otel.v1.schema.json", otel)).isEmpty();
+        JsonNode acceptance = events(otel).get(events(otel).size() - 1);
+        assertThat(attr(acceptance, "gen_ai.evaluation.score.label").asText()).isEqualTo("split");
+        assertThat(attr(acceptance, "gen_ai.evaluation.score.value").asDouble()).isEqualTo(0.5);
+        assertThat(attr(acceptance, "hireai.ruling.category").asText()).isEqualTo("PARTIALLY_FULFILLED");
+        assertThat(attr(acceptance, "gen_ai.evaluation.explanation").asText()).contains("ruling PARTIALLY_FULFILLED");
     }
 
     @Test
@@ -291,6 +315,221 @@ class ReceiptIntegrationTest extends WholeAppIntegrationTest {
         assertThat(keys.get(1).get("status").asText()).isEqualTo("retired");
         assertThat(Base64.getUrlDecoder().decode(keys.get(1).get("x").asText()))
                 .isEqualTo(Ed25519.raw(RETIRED_KEY.getPublic()));
+    }
+
+    // --- exports (#109): W3C VC 2.0 and OTel gen_ai.evaluation.result, against the published schemas ---
+
+    @Test
+    void aReceiptExportsAsAVerifiableCredentialWhoseProofVerifiesWithPublicMaterialOnly() throws Exception {
+        FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted()
+                .withCallback(AgentCallback.completed().afterReply(Duration.ofMillis(200))));
+        Seeded seeded = seedTextAgent(agent, "10.00");
+        UUID taskId = book(seeded.agentId(), "10.00", null);
+        awaitStatus(taskId, "PENDING_REVIEW");
+        post("/api/tasks/" + taskId + "/accept");
+        UUID receiptId = UUID.fromString(getData("/api/tasks/" + taskId + "/receipts").get(0).get("id").asText());
+        String stored = http.getForObject(platformUrl("/api/receipts/" + receiptId), String.class);
+
+        ResponseEntity<String> response = http.getForEntity(
+                platformUrl("/api/receipts/" + receiptId + "/credential"), String.class);
+        assertThat(response.getHeaders().getContentType()).hasToString("application/vc");
+        JsonNode credential = JSON.readTree(response.getBody());
+
+        // Valid against the published schemas: the credential, and the receipt it carries.
+        assertThat(schemaErrors("receipt-credential.v1.schema.json", credential)).isEmpty();
+        ObjectNode carried = JSON.createObjectNode();
+        carried.set("receipt", credential.get("credentialSubject").get("receipt"));
+        carried.set("signature", credential.get("credentialSubject").get("receiptSignature"));
+        assertThat(schemaErrors("receipt.v1.schema.json", carried)).isEmpty();
+        assertThat(schemaErrors("receipt.v1.schema.json", JSON.readTree(stored))).isEmpty();
+        // The schemas do bite: a wrong cryptosuite, a foreign key or a mangled amount is refused.
+        ObjectNode otherSuite = credential.deepCopy();
+        ((ObjectNode) otherSuite.get("proof")).put("cryptosuite", "ecdsa-jcs-2019");
+        assertThat(schemaErrors("receipt-credential.v1.schema.json", otherSuite)).isNotEmpty();
+        ObjectNode otherKey = credential.deepCopy();
+        ((ObjectNode) otherKey.get("proof")).put("verificationMethod", "did:key:z6MkA#z6MkB");
+        assertThat(schemaErrors("receipt-credential.v1.schema.json", otherKey)).isNotEmpty();
+        ObjectNode badAmount = carried.deepCopy();
+        ((ObjectNode) badAmount.get("receipt").get("settlement")).put("paid", "8.5");
+        assertThat(schemaErrors("receipt.v1.schema.json", badAmount)).isNotEmpty();
+        assertThat(schemaErrors("contract.v1.schema.json", JSON.readTree(jdbc.queryForObject(
+                "SELECT contract::text FROM tasks WHERE id = ?", String.class, taskId)))).isEmpty();
+
+        // It derives from the stored receipt: the same signed bytes, still verifiable on their own.
+        assertThat(JsonCanonicalizer.canonicalize(JSON.convertValue(carried, Object.class))).isEqualTo(stored);
+        assertThat(verify(carried)).isTrue();
+        assertThat(credential.get("id").asText()).isEqualTo("urn:uuid:" + receiptId);
+        assertThat(credential.get("validFrom").asText())
+                .isEqualTo(credential.get("credentialSubject").get("receipt").get("issuedAt").asText());
+
+        // The Data Integrity proof verifies with nothing but the document; its key is a published one.
+        assertThat(verifyCredential(credential)).isTrue();
+        byte[] proofKey = DidKey.publicKey(credential.get("proof").get("verificationMethod").asText());
+        assertThat(publishedKeys()).anySatisfy(k -> assertThat(k).isEqualTo(proofKey));
+        assertThat(DidKey.of(proofKey)).isEqualTo(credential.get("issuer").asText());
+
+        ObjectNode forged = credential.deepCopy();
+        ((ObjectNode) forged.get("credentialSubject").get("receipt").get("settlement")).put("paid", "10.00");
+        assertThat(verifyCredential(forged)).isFalse();
+        ObjectNode reissued = credential.deepCopy();
+        reissued.put("validFrom", "2020-01-01T00:00:00Z");
+        assertThat(verifyCredential(reissued)).isFalse();
+        ObjectNode backdated = credential.deepCopy();
+        ((ObjectNode) backdated.get("proof")).put("created", "2020-01-01T00:00:00Z");
+        assertThat(verifyCredential(backdated)).isFalse();
+
+        // Like the receipt, it names no user or Agent version.
+        String versionId = jdbc.queryForObject("SELECT agent_version_id::text FROM tasks WHERE id = ?", String.class, taskId);
+        assertThat(response.getBody()).doesNotContain(DEV_USER.toString())
+                .doesNotContain(seeded.ownerId().toString()).doesNotContain(versionId);
+    }
+
+    @Test
+    void aReceiptExportsAsOtelEvaluationEventsMatchingWhatItRecords() throws Exception {
+        FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted()
+                .withCallback(itemCallback().afterReply(Duration.ofMillis(200))));
+        Seeded seeded = seedTextAgent(agent, "3.00");
+        UUID taskId = book(seeded.agentId(), "3.00", List.of("invoice A", "invoice B #empty", "invoice C #fail"));
+        awaitStatus(taskId, "PENDING_REVIEW");
+        post("/api/tasks/" + taskId + "/items/1/accept");
+        JsonNode list = getData("/api/tasks/" + taskId + "/receipts");
+
+        // Item 1: checks passed and the Client accepted.
+        JsonNode accepted = otel(list.get(0).get("id").asText());
+        assertThat(schemaErrors("receipt-otel.v1.schema.json", accepted)).isEmpty();
+        ObjectNode renamed = accepted.deepCopy();
+        ((ObjectNode) events(renamed).get(0)).put("eventName", "gen_ai.evaluation");
+        assertThat(schemaErrors("receipt-otel.v1.schema.json", renamed)).isNotEmpty();
+        List<JsonNode> events = events(accepted);
+        assertThat(events).extracting(e -> attr(e, "hireai.evaluation.kind").asText())
+                .startsWith("checks").endsWith("acceptance").contains("check");
+        JsonNode checks = events.get(0);
+        assertThat(attr(checks, "gen_ai.evaluation.name").asText()).isEqualTo("hireai.contract_checks");
+        assertThat(attr(checks, "gen_ai.evaluation.score.label").asText()).isEqualTo("pass");
+        assertThat(attr(checks, "gen_ai.evaluation.score.value").asDouble()).isEqualTo(1.0);
+        JsonNode acceptance = events.get(events.size() - 1);
+        assertThat(attr(acceptance, "gen_ai.evaluation.name").asText()).isEqualTo("hireai.acceptance");
+        assertThat(attr(acceptance, "gen_ai.evaluation.score.label").asText()).isEqualTo("accept");
+        assertThat(attr(acceptance, "gen_ai.evaluation.score.value").asDouble()).isEqualTo(1.0);
+        assertThat(attr(acceptance, "hireai.item.no").asText()).isEqualTo("1");
+        assertThat(attr(acceptance, "gen_ai.response.id").asText()).isEqualTo(taskId + "/items/1");
+        // Each event points at the signed receipt it came from.
+        String stored = http.getForObject(platformUrl("/api/receipts/" + list.get(0).get("id").asText()), String.class);
+        assertThat(events).allSatisfy(e -> {
+            assertThat(attr(e, "hireai.receipt.id").asText()).isEqualTo(list.get(0).get("id").asText());
+            assertThat(attr(e, "hireai.receipt.sha256").asText()).isEqualTo(Sha256.hex(stored));
+        });
+        String settledAt = list.get(0).get("receipt").get("settlement").get("settledAt").asText();
+        assertThat(acceptance.get("timeUnixNano").asText()).isEqualTo(nanos(settledAt));
+
+        // Item 2: the empty text failed a check and was refunded.
+        List<JsonNode> refused = events(otel(list.get(1).get("id").asText()));
+        assertThat(attr(refused.get(0), "gen_ai.evaluation.score.label").asText()).isEqualTo("fail");
+        assertThat(attr(refused.get(0), "gen_ai.evaluation.score.value").asDouble()).isLessThan(1.0);
+        assertThat(attr(refused.get(refused.size() - 1), "gen_ai.evaluation.score.label").asText()).isEqualTo("reject");
+        assertThat(attr(refused.get(refused.size() - 1), "gen_ai.evaluation.score.value").asDouble()).isEqualTo(0.0);
+
+        // Item 3: nothing was delivered, so nothing was checked: only the acceptance outcome.
+        JsonNode failed = otel(list.get(2).get("id").asText());
+        assertThat(schemaErrors("receipt-otel.v1.schema.json", failed)).isEmpty();
+        assertThat(events(failed)).extracting(e -> attr(e, "hireai.evaluation.kind").asText())
+                .containsExactly("acceptance");
+        assertThat(failed.toString()).doesNotContain(DEV_USER.toString()).doesNotContain(seeded.ownerId().toString());
+    }
+
+    @Test
+    void exportsGoOnlyToTheReceiptsParties() throws Exception {
+        FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted()
+                .withCallback(AgentCallback.failed("cannot do it").afterReply(Duration.ofMillis(200))));
+        Seeded seeded = seedTextAgent(agent, "5.00");
+        UUID taskId = book(seeded.agentId(), "5.00", null);
+        awaitStatus(taskId, "FAILED");
+        UUID receiptId = UUID.fromString(getData("/api/tasks/" + taskId + "/receipts").get(0).get("id").asText());
+
+        ReceiptAppService.Reader builder = ReceiptAppService.Reader.signedIn(seeded.ownerId(), true);
+        assertThat(verifyCredential(JSON.readTree(receiptAppService.credential(receiptId, builder)))).isTrue();
+        assertThat(schemaErrors("receipt-otel.v1.schema.json",
+                JSON.readTree(receiptAppService.otelEvents(receiptId, builder)))).isEmpty();
+        ReceiptAppService.Reader stranger = ReceiptAppService.Reader.signedIn(UUID.randomUUID(), true);
+        assertThatThrownBy(() -> receiptAppService.credential(receiptId, stranger))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.resultCode()).isEqualTo(ResultCode.NOT_FOUND));
+        assertThatThrownBy(() -> receiptAppService.otelEvents(receiptId, ReceiptAppService.Reader.apiKey(seeded.ownerId())))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.resultCode()).isEqualTo(ResultCode.NOT_FOUND));
+    }
+
+    /**
+     * eddsa-jcs-2022 verification (W3C vc-di-eddsa §3.3.2) with the JDK alone: the key comes from the
+     * proof's did:key, the hashes from RFC 8785, proof configuration hash first.
+     */
+    private static boolean verifyCredential(JsonNode credential) throws Exception {
+        ObjectNode unsecured = credential.deepCopy();
+        ObjectNode proofOptions = (ObjectNode) unsecured.remove("proof");
+        String proofValue = proofOptions.remove("proofValue").asText();
+        if (!"DataIntegrityProof".equals(proofOptions.path("type").asText())
+                || !"eddsa-jcs-2022".equals(proofOptions.path("cryptosuite").asText())
+                || !proofValue.startsWith("z")
+                || !proofOptions.path("@context").equals(unsecured.path("@context"))) {
+            return false;
+        }
+        MessageDigest sha = MessageDigest.getInstance("SHA-256");
+        byte[] configHash = sha.digest(JsonCanonicalizer.canonicalize(JSON.convertValue(proofOptions, Object.class))
+                .getBytes(StandardCharsets.UTF_8));
+        byte[] documentHash = sha.digest(JsonCanonicalizer.canonicalize(JSON.convertValue(unsecured, Object.class))
+                .getBytes(StandardCharsets.UTF_8));
+        byte[] hashData = new byte[64];
+        System.arraycopy(configHash, 0, hashData, 0, 32);
+        System.arraycopy(documentHash, 0, hashData, 32, 32);
+        byte[] signature = DidKey.decodeBase58btc(proofValue.substring(1));
+        byte[] key = DidKey.publicKey(proofOptions.get("verificationMethod").asText());
+        return Ed25519.verify(key, hashData, Base64.getUrlEncoder().withoutPadding().encodeToString(signature));
+    }
+
+    private List<byte[]> publishedKeys() throws Exception {
+        List<byte[]> raw = new ArrayList<>();
+        JSON.readTree(http.getForObject(platformUrl("/api/receipt-keys"), String.class)).get("keys")
+                .forEach(k -> raw.add(Base64.getUrlDecoder().decode(k.get("x").asText())));
+        return raw;
+    }
+
+    private JsonNode otel(String receiptId) throws Exception {
+        return JSON.readTree(http.getForObject(platformUrl("/api/receipts/" + receiptId + "/otel"), String.class));
+    }
+
+    private static List<JsonNode> events(JsonNode export) {
+        List<JsonNode> events = new ArrayList<>();
+        export.get("resourceLogs").get(0).get("scopeLogs").get(0).get("logRecords").forEach(events::add);
+        return events;
+    }
+
+    /** The attribute's value, whichever OTLP value kind it has. */
+    private static JsonNode attr(JsonNode event, String key) {
+        for (JsonNode a : event.get("attributes")) {
+            if (a.get("key").asText().equals(key)) {
+                return a.get("value").elements().next();
+            }
+        }
+        throw new AssertionError("No attribute " + key + " in " + event);
+    }
+
+    private static String nanos(String isoTime) {
+        Instant t = Instant.parse(isoTime);
+        return BigInteger.valueOf(t.getEpochSecond()).multiply(BigInteger.valueOf(1_000_000_000L))
+                .add(BigInteger.valueOf(t.getNano())).toString();
+    }
+
+    /** Validation errors of {@code document} against a schema published in docs/formats. */
+    private static Set<ValidationMessage> schemaErrors(String schemaFile, JsonNode document) throws Exception {
+        Path dir = Path.of("").toAbsolutePath();
+        while (dir != null && !Files.isDirectory(dir.resolve("docs/formats"))) {
+            dir = dir.getParent();
+        }
+        assertThat(dir).as("docs/formats above the working directory").isNotNull();
+        try (InputStream in = Files.newInputStream(dir.resolve("docs/formats").resolve(schemaFile))) {
+            JsonSchema schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012).getSchema(in);
+            return schema.validate(document);
+        }
     }
 
     // --- verification, as an outsider does it (docs/details/receipts.md) ---
