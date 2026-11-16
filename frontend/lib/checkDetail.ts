@@ -10,7 +10,7 @@ export function checkDetail(detail: string | null | undefined): string | null {
     const at = /line: (\d+), column: (\d+)/.exec(detail);
     return at ? `the result isn't valid JSON (line ${at[1]}, column ${at[2]})` : "the result isn't valid JSON";
   }
-  const schema = /^\[(\$.*)\]$/s.exec(detail.trim());
+  const schema = /^\[(\$[\s\S]*)\]$/.exec(detail.trim());
   if (schema) return `doesn't match the schema: ${schema[1].split(/, (?=\$)/).join("; ")}`;
   return detail;
 }

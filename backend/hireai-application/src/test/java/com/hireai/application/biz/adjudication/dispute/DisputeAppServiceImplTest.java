@@ -326,9 +326,9 @@ class DisputeAppServiceImplTest {
         service.acceptRuling(ruled.id(), builderId);
 
         verify(settlement).settleRejected(disputedTask.id(), clientId, Money.of("100.00"));
-        verify(settlement).chargeDisputeFee(eq(ruled.id()), eq(disputedTask.id()), eq(clientId), eq(builderId),
-                eq(DisputeFeeType.ARBITRATION_COST), eq(Money.of("3.00")), eq(Money.of("100.00")),
-                eq(Set.of(DisputeParty.BUILDER)));
+        // An AI ruling was recorded, so the loser bears the arbitration cost.
+        verify(settlement).chargeArbitrationCost(eq(ruled.id()), eq(disputedTask.id()), eq(clientId), eq(builderId),
+                eq(true), eq(Money.of("3.00")), eq(Money.of("100.00")), eq(Set.of(DisputeParty.BUILDER)));
         verify(settlement, never()).chargeDisputeFee(any(), any(), any(), any(),
                 eq(DisputeFeeType.APPEAL_FEE), any(), any(), any());
     }
