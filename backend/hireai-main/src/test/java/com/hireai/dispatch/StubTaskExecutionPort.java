@@ -39,6 +39,11 @@ public class StubTaskExecutionPort implements TaskExecutionPort {
     }
 
     @Override
+    public void markExecuting(UUID taskId, java.time.Instant executionDeadline) {
+        executing.add(taskId);
+    }
+
+    @Override
     public void markTimedOut(UUID taskId) {
         timedOut.add(taskId);
     }

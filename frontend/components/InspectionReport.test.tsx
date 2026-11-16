@@ -52,4 +52,65 @@ describe("InspectionReport", () => {
     expect(screen.queryByText(/judged by you/i)).toBeNull();
     expect(screen.getByText(/not judged: the review window closed/i)).toBeInTheDocument();
   });
+
+  it("marks a check no machine could decide as yours, and shows what the agent flagged", () => {
+    render(
+      <InspectionReport
+        report={{
+          verdict: "REVIEW",
+          checks: [
+            { rule: "IMAGE_FORMAT", passed: true, detail: "the file is image/png", outcome: "PASS" },
+            {
+              rule: "IMAGE_BACKGROUND_COLOUR",
+              passed: false,
+              detail: "the background is #ff0000; #ffffff asked. The Agent reported: white on white is invisible",
+              outcome: "REVIEW",
+            },
+          ],
+          anomalies: [{ check: "IMAGE_BACKGROUND_COLOUR", description: "white on white is invisible" }],
+        }}
+        spec={spec}
+        awaitingYou
+      />,
+    );
+    expect(screen.getByText(/verdict: sent to your review/i)).toBeInTheDocument();
+    expect(screen.getByText(/for you to judge:/i)).toBeInTheDocument();
+    expect(screen.getByText("The agent flagged")).toBeInTheDocument();
+    expect(screen.getByText(/the agent is paid only then/i)).toBeInTheDocument();
+  });
+
+  it("lists Findings apart from the checks, as never changing the agent's pay", () => {
+    render(
+      <InspectionReport
+        report={{
+          verdict: "PASS",
+          checks: [{ rule: "IMAGE_FORMAT", passed: true, detail: null, outcome: "PASS" }],
+          findings: [{ code: "DUPLICATE_BRIEF", detail: "on task t-1" }],
+        }}
+        spec={spec}
+        awaitingYou
+      />,
+    );
+    expect(screen.getByText("You have sent this exact brief before")).toBeInTheDocument();
+    expect(screen.getByText(/never changes what the agent is paid/i)).toBeInTheDocument();
+    expect(screen.getByText(/verdict: passed/i)).toBeInTheDocument();
+  });
+
+  it("says when the result was reworked before the client saw it", () => {
+    render(
+      <InspectionReport
+        report={{
+          verdict: "PASS",
+          checks: [{ rule: "IMAGE_BACKGROUND_COLOUR", passed: true, detail: null, outcome: "PASS" }],
+          previousAttempts: [
+            { attemptNo: 1, verdict: "FAIL", failedChecks: [{ rule: "IMAGE_BACKGROUND_COLOUR", passed: false, detail: "red", outcome: "REJECT" }] },
+          ],
+        }}
+        spec={spec}
+        awaitingYou
+      />,
+    );
+    expect(screen.getByText(/reworked once/i)).toBeInTheDocument();
+    expect(screen.getByText(/Result 1 failed the background colour check/i)).toBeInTheDocument();
+  });
 });

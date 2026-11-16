@@ -119,6 +119,13 @@ export function TaskFailurePanel({ taskId, status, failureReason, budget, detail
         <div className="max-w-lg space-y-1.5">
           <h2 className={`text-lg font-bold ${HEAD_CLS[copy.tone]}`}>{copy.headline}</h2>
           <p className="text-sm leading-relaxed text-muted">{copy.why}</p>
+          {status === "SPEC_VIOLATION" && (detail?.rejectedAttempts ?? 0) > 1 && (
+            <p className="text-sm text-muted">
+              {`The agent was sent the failing checks and reworked it ${
+                detail!.rejectedAttempts! - 1 === 1 ? "once" : `${detail!.rejectedAttempts! - 1} times`
+              }; it still failed, so the task ended here. A failed automatic check can't be disputed.`}
+            </p>
+          )}
           {failureReason === "NO_ELIGIBLE_AGENT" && failureDetail && (
             <p className="rounded-md border border-line bg-surface-2 px-3 py-2 text-sm text-fg">
               <span className="eyebrow mr-2">What ruled agents out</span>

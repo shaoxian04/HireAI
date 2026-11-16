@@ -1,4 +1,4 @@
--- V48: Signed receipts (spec S11, D40). One receipt per settled Item: a single-deliverable Task's
+-- V49: Signed receipts (spec S11, D40). One receipt per settled Item: a single-deliverable Task's
 -- settlement (item_no NULL) or one Item of a multi-Item Task (item_no 1..n). The body is the exact
 -- RFC 8785 text that was signed, kept as TEXT (jsonb would re-format it and break the signature).
 -- Receipts are evidence, never inputs: nothing in HireAI reads them to decide anything.

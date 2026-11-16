@@ -20,7 +20,7 @@ It ignores the task apart from `taskId` and `callbackUrl`, and always sends a **
 
 It therefore passes `TEXT`, or `JSON` with no conflicting schema, and fails any schema requiring other fields, ending in `SPEC_VIOLATION`.
 
-For a `FILE` WorkOrder it sends a `resultUrl`: the URL in a `#deliver:<https-url>` tag in the task description, else `HIREAI_AGENT_FILE_URL`. The platform fetches that link once and freezes it as the DeliverySnapshot, so a demo can deliver a passing file and a wrong-type one (for example an HTML page) from the same running stub. `HIREAI_AGENT_WORK_SECONDS` (default 2) sets how long it "works" before calling back.
+For a `FILE` WorkOrder it sends a `resultUrl`: the URL in a `#deliver:<https-url>` tag in the task description, else `HIREAI_AGENT_FILE_URL`. The platform fetches that link once and freezes it as the DeliverySnapshot, so a demo can deliver a passing file and a wrong-type one (for example an HTML page) from the same running stub. `HIREAI_AGENT_WORK_SECONDS` (default 2) sets how long it "works" before calling back. A rework WorkOrder (it carries `rework`) delivers the `#rework:<https-url>` link instead when the description has one, so a demo can fail a check once and pass on the rework; a `#anomaly:<CHECK>` tag self-reports an anomaly about that check with every result.
 
 Because it ignores the task, a demo with this stub cannot show whether real task content reaches an agent. See [Known gaps](../docs/details/build-status.md#known-gaps).
 

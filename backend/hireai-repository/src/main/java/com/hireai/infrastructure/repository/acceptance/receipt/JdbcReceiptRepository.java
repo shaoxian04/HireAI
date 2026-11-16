@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/** {@code receipts} (V48): append-only (DB triggers), one row per settled subject. */
+/** {@code receipts} (V49): append-only (DB triggers), one row per settled subject. */
 @Repository
 public class JdbcReceiptRepository implements ReceiptRepository {
 

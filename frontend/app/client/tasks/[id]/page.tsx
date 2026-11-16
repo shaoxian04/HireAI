@@ -9,6 +9,7 @@ import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { StatusTrack } from "@/components/StatusTrack";
 import { InspectionReport } from "@/components/InspectionReport";
+import { ReworkNotice } from "@/components/ReworkNotice";
 import { TaskFailurePanel } from "@/components/TaskFailurePanel";
 import { DeliverablePanel, LegacyDeliverableLink } from "@/components/DeliverablePanel";
 import WebhookDeliveryStatus from "@/components/WebhookDeliveryStatus";
@@ -109,15 +110,23 @@ function TaskDetail() {
   // The validation report: on a spec-violation it explains what failed (the failure drawer); once
   // a result is shown it is the inspection report above it. Best-effort: a 404 (no report) or any
   // error just leaves both off.
+  // While the task is back with its agent (QUEUED/EXECUTING) it may be a rework (#98): the report
+  // then says what failed. A first dispatch has no report yet, so that fetch is a quiet 404.
   const hasResult = !!result;
+  const reworkable = task?.status === "QUEUED" || task?.status === "EXECUTING";
   useEffect(() => {
-    if (task?.status !== "SPEC_VIOLATION" && !hasResult) return;
+    if (task?.status !== "SPEC_VIOLATION" && !hasResult && !reworkable) return;
     let cancelled = false;
-    api<ValidationReportDTO>(`/tasks/${id}/validation`)
-      .then((v) => { if (!cancelled) setValidation(v); })
-      .catch(() => { /* no report — panel still renders without the drawer */ });
-    return () => { cancelled = true; };
-  }, [task?.status, id, hasResult]);
+    const fetchReport = () =>
+      api<ValidationReportDTO>(`/tasks/${id}/validation`)
+        .then((v) => { if (!cancelled) setValidation(v); })
+        .catch(() => { /* no report — panel still renders without the drawer */ });
+    fetchReport();
+    // A rework can happen without the status the poller sees ever changing (EXECUTING → a result
+    // the checks reject → EXECUTING again), so the report is re-read while the task is with its agent.
+    const t = reworkable ? setInterval(fetchReport, POLL_MS) : undefined;
+    return () => { cancelled = true; if (t) clearInterval(t); };
+  }, [task?.status, id, hasResult, reworkable]);
 
   // The hand-off history (#75, #93): re-read whenever the status moves, so a failover or a declined
   // contract shows up. Best-effort: on any error the section just stays off.
@@ -352,6 +361,8 @@ function TaskDetail() {
           </div>
         )}
       </article>
+
+      {reworkable && <ReworkNotice report={validation} />}
 
       {/* Renders nothing for a WEB task or an API task with no webhook subscription. */}
       <WebhookDeliveryStatus taskId={task.id} />

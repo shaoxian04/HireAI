@@ -1,6 +1,7 @@
 package com.hireai.application.biz.task.routing;
 
 import org.jspecify.annotations.NonNull;
+import com.hireai.domain.biz.task.routing.info.ReworkRequest;
 import org.springframework.validation.annotation.Validated;
 
 import java.util.UUID;
@@ -36,4 +37,15 @@ public interface RoutingAppService {
      * <p>MUST run inside the caller's transaction, which holds the task row lock.
      */
     void failOver(@NonNull UUID taskId);
+
+    /**
+     * Rework (spec D17): sends a task whose result a deterministic check rejected back to the same
+     * Agent version, with a new execution deadline and the failing checks on the WorkOrder. The
+     * WorkOrder is published once the caller's transaction commits. Returns false, changing
+     * nothing, when that version can no longer take work (the Agent is not ACTIVE or the version
+     * was superseded): the caller then ends the task instead.
+     *
+     * <p>MUST run inside the caller's transaction, which holds the task row lock.
+     */
+    boolean redispatchForRework(@NonNull UUID taskId, @NonNull UUID agentVersionId, @NonNull ReworkRequest rework);
 }

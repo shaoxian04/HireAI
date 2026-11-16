@@ -70,6 +70,14 @@ public interface TaskWriteAppService {
      */
     void reassign(@NonNull UUID taskId, @NonNull UUID newAgentVersionId, @NonNull Instant executionDeadline);
 
+    /**
+     * Rework (D17): RESULT_RECEIVED -> QUEUED for the same Agent, with a new execution deadline, and
+     * returns the deadline stamped. It is always later than the task's previous one (by a microsecond
+     * if need be), so each WorkOrder's deadline names its dispatch and a late mark-EXECUTING of an
+     * earlier send is recognised as stale. Joins the caller's row-locked transaction (MANDATORY).
+     */
+    Instant returnForRework(@NonNull UUID taskId, @NonNull Instant executionDeadline);
+
 
     /**
      * A dispatch failure before the Agent started ended the task (#58): QUEUED/EXECUTING -> FAILED

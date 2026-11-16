@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.UUID;
 
-/** The settlement and ledger reads behind receipts (V48). */
+/** The settlement and ledger reads behind receipts (V49). */
 @Repository
 public class JdbcReceiptEvidenceQueryDao implements ReceiptEvidenceQueryPort {
 

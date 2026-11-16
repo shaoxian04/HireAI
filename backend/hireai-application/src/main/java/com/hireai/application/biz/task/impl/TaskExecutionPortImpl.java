@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -80,9 +81,21 @@ public class TaskExecutionPortImpl implements TaskExecutionPort {
 
     @Override
     public void markExecuting(UUID taskId) {
+        markExecuting(taskId, null);
+    }
+
+    @Override
+    @Transactional
+    public void markExecuting(UUID taskId, Instant executionDeadline) {
         // Row-locked: an early callback (QUEUED → RESULT_RECEIVED) or a timeout that committed
         // first is seen here, and markExecuting() is then a no-op instead of overwriting it.
         TaskModel task = loadForUpdate(taskId);
+        if (executionDeadline != null && taskRepository.findExecutionDeadline(taskId)
+                .filter(stamped -> !stamped.equals(executionDeadline)).isPresent()) {
+            // Re-queued for a newer WorkOrder (a rework) after this one was sent: that one marks it.
+            log.info("Task {} was re-queued for a newer dispatch; this WorkOrder's mark EXECUTING is a no-op", taskId);
+            return;
+        }
         TaskModel executing = task.markExecuting();
         if (executing == task) {
             log.info("Task {} already {}; mark EXECUTING is a no-op", taskId, task.status());

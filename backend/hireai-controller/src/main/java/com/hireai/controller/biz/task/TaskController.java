@@ -194,10 +194,11 @@ public class TaskController extends BaseController {
     public WebResult<ValidationReportDTO> getValidation(@PathVariable("id") UUID id) {
         UUID clientId = currentUser.currentUserId();
         readAppService.getForClient(id, clientId); // ownership guard (Hard Invariant #5)
-        ValidationReportModel report = validationReadAppService.latestForTask(id)
-                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
-                        "No validation report for task: " + id));
-        return ok(ValidationReport2DTOConverter.toDTO(report));
+        List<ValidationReportModel> history = validationReadAppService.historyForTask(id);
+        if (history.isEmpty()) {
+            throw new DomainException(ResultCode.NOT_FOUND, "No validation report for task: " + id);
+        }
+        return ok(ValidationReport2DTOConverter.toDTO(history, validationReadAppService.maxReworks()));
     }
 
     /** The task's dispatch history (#75), owner-only: another client gets 404, not the rows. */
