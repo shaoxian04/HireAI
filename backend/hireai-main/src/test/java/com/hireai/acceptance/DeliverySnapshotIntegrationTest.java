@@ -6,6 +6,8 @@ import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.adjudication.port.ArbitrationDeliverable;
 import com.hireai.application.biz.adjudication.port.ArbitrationGateway;
 import com.hireai.application.biz.adjudication.port.RulingInfo;
+import com.hireai.domain.biz.acceptance.delivery.model.DeliverySnapshot;
+import com.hireai.domain.biz.acceptance.delivery.repository.DeliverySnapshotRepository;
 import com.hireai.domain.biz.adjudication.model.DisputeModel;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.model.TaskModel;
@@ -37,6 +39,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -93,6 +96,8 @@ class DeliverySnapshotIntegrationTest extends WholeAppIntegrationTest {
     private TaskRepository taskRepository;
     @Autowired
     private TestHostResolver dns;
+    @Autowired
+    private DeliverySnapshotRepository snapshots;
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
@@ -231,6 +236,71 @@ class DeliverySnapshotIntegrationTest extends WholeAppIntegrationTest {
 
         awaitStatus(taskId, "SPEC_VIOLATION");
         assertThat(detail(taskId, "FILE_FETCHED")).contains("public address").doesNotContain("10.1.2.3");
+    }
+
+    @Test
+    void afterACheckFailedReworkEveryReaderSeesTheReworkedFileAndTheFirstIsKept() throws Exception {
+        String taskId = bookReworkedDelivery();
+        String reworked = sha256Hex(PNG);
+
+        assertThat(get("/api/tasks/" + taskId + "/result").path("deliverable").path("sha256").asText()).isEqualTo(reworked);
+        assertDownloadIs(taskId, PNG);
+        TaskModel task = taskRepository.findById(UUID.fromString(taskId)).orElseThrow();
+        disputeAppService.openDispute(task, DEV_USER, RejectReason.A_MISMATCH);
+        assertThat(RecordingArbitration.SEEN).singleElement().satisfies(d -> assertThat(d.sha256()).isEqualTo(reworked));
+        // The rejected first delivery stays on record (append-only history).
+        assertThat(jdbc.queryForList("SELECT sha256 FROM delivery_snapshots WHERE task_id = ?::uuid", String.class, taskId))
+                .containsExactlyInAnyOrder(sha256Hex(HTML), reworked);
+    }
+
+    @Test
+    void afterACheckFailedReworkTheReceiptCarriesTheReworkedFilesHash() throws Exception {
+        String taskId = bookReworkedDelivery();
+        post("/api/tasks/" + taskId + "/accept", "{}");
+
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> assertThat(
+                get("/api/tasks/" + taskId + "/receipts").get(0).path("receipt").path("delivery").path("file")
+                        .path("sha256").asText()).isEqualTo(sha256Hex(PNG)));
+    }
+
+    @Test
+    void anItemsLatestAttemptIsTheSnapshotFoundForItAndEarlierOnesAreKept() throws Exception {
+        files.serve("/result.png", PNG, "image/png");
+        UUID taskId = UUID.fromString(bookFileAgentDelivering(files.url("/result.png"), Duration.ofMillis(200)));
+        UUID itemId = UUID.randomUUID();
+        Instant first = Instant.parse("2026-11-16T10:00:00Z");
+        snapshots.save(new DeliverySnapshot(UUID.randomUUID(), taskId, itemId, "https://a.example/1.png", "text/html",
+                null, 1, sha256Hex(HTML), first, itemId));
+        snapshots.save(new DeliverySnapshot(UUID.randomUUID(), taskId, UUID.randomUUID(), "https://a.example/2.png",
+                "image/png", null, 1, sha256Hex(PNG), first.plusSeconds(60), itemId));
+        // Another Item of the same Task, delivered later, is not this Item's.
+        snapshots.save(new DeliverySnapshot(UUID.randomUUID(), taskId, UUID.randomUUID(), "https://a.example/3.png",
+                "image/png", null, 1, sha256Hex(OTHER_PNG), first.plusSeconds(120), UUID.randomUUID()));
+
+        assertThat(snapshots.findLatestForItem(itemId)).get().extracting(DeliverySnapshot::sha256).isEqualTo(sha256Hex(PNG));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM delivery_snapshots WHERE item_id = ?", Integer.class, itemId))
+                .isEqualTo(2);
+    }
+
+    /** A FILE task whose first delivery fails file_basic (HTML, not PNG) and whose rework passes. */
+    private String bookReworkedDelivery() throws Exception {
+        files.serve("/first.png", HTML, "image/png").serve("/second.png", PNG, "image/png");
+        java.util.concurrent.atomic.AtomicInteger attempt = new java.util.concurrent.atomic.AtomicInteger();
+        FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted().withCallback(AgentCallback.custom(order ->
+                        CallbackRequest.post(order.callbackUrl())
+                                .header("Authorization", "Bearer " + order.bearerToken())
+                                .body("{\"taskId\":\"" + order.taskId() + "\",\"agentStatus\":\"COMPLETED\","
+                                        + "\"resultPayloadJson\":\"{}\",\"resultUrl\":\""
+                                        + files.url(attempt.incrementAndGet() == 1 ? "/first.png" : "/second.png") + "\"}"))
+                .afterReply(Duration.ofSeconds(2))));
+        UUID agentId = seedListedAgent(uniqueCategory(), agent.webhookUrl());
+        shareSigningSecret(agent);
+        String taskId = post("/api/tasks/direct", "{\"title\":\"Logo\",\"description\":\"Draw the logo\",\"budget\":10.00,"
+                + "\"agentId\":\"" + agentId + "\"}").path("id").asText();
+        requireInContract(taskId, "{\"media_types\":[\"image/png\"]}");
+        awaitStatus(taskId, "PENDING_REVIEW");
+        assertThat(files.requests()).containsExactly("/first.png", "/second.png");
+        return taskId;
     }
 
     @Test

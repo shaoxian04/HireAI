@@ -14,13 +14,16 @@ import java.util.UUID;
  *
  * <p>The record holds the metadata; the bytes live in content-addressed storage under
  * {@link #sha256()} (the application's {@code DeliveryContentStore} port). One snapshot per
- * {@code taskResultId}: a revised result is a new result and gets its own.
+ * {@code taskResultId}: a revised result is a new result and gets its own. An Item's snapshots also
+ * carry {@link #itemId()}, so the Item's latest attempt is found among its earlier ones (all kept).
  *
  * @param mediaType         what the platform judged the bytes to be ({@link DeliveredMediaType})
  * @param declaredMediaType the Agent's Content-Type essence, or null; kept only as a record of the claim
+ * @param itemId            the Item this snapshot was taken for, or null for a whole-Task result
  */
 public record DeliverySnapshot(UUID id, UUID taskId, UUID taskResultId, String sourceUrl, String mediaType,
-                               String declaredMediaType, long sizeBytes, String sha256, Instant fetchedAt) {
+                               String declaredMediaType, long sizeBytes, String sha256, Instant fetchedAt,
+                               UUID itemId) {
 
     public DeliverySnapshot {
         if (id == null || taskId == null || taskResultId == null || sourceUrl == null || mediaType == null
@@ -29,13 +32,25 @@ public record DeliverySnapshot(UUID id, UUID taskId, UUID taskResultId, String s
         }
     }
 
+    /** A whole-Task result's snapshot. */
+    public DeliverySnapshot(UUID id, UUID taskId, UUID taskResultId, String sourceUrl, String mediaType,
+                            String declaredMediaType, long sizeBytes, String sha256, Instant fetchedAt) {
+        this(id, taskId, taskResultId, sourceUrl, mediaType, declaredMediaType, sizeBytes, sha256, fetchedAt, null);
+    }
+
     public static DeliverySnapshot capture(UUID taskId, UUID taskResultId, String sourceUrl,
+                                           DeliveryFetch.Fetched fetched, Instant fetchedAt) {
+        return capture(taskId, taskResultId, null, sourceUrl, fetched, fetchedAt);
+    }
+
+    /** {@link #capture(UUID, UUID, String, DeliveryFetch.Fetched, Instant)} for one Item's attempt. */
+    public static DeliverySnapshot capture(UUID taskId, UUID taskResultId, UUID itemId, String sourceUrl,
                                            DeliveryFetch.Fetched fetched, Instant fetchedAt) {
         byte[] content = fetched.content();
         return new DeliverySnapshot(UUID.randomUUID(), taskId, taskResultId, sourceUrl,
                 DeliveredMediaType.determine(fetched.contentType(), content),
                 DeliveredMediaType.essence(fetched.contentType()),
-                content.length, sha256Hex(content), fetchedAt);
+                content.length, sha256Hex(content), fetchedAt, itemId);
     }
 
     public static String sha256Hex(byte[] content) {

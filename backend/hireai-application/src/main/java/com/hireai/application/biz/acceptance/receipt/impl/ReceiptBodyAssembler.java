@@ -196,8 +196,8 @@ class ReceiptBodyAssembler {
         }
         Map<String, Object> delivery = map("agentStatus", item.agentStatus(),
                 "payloadSha256", item.resultPayload() == null ? null : Sha256.hex(item.resultPayload()));
-        // An Item's file is frozen under the Item's own id (#97).
-        deliverySnapshotRepository.findByTaskResultId(item.id())
+        // The Item's latest attempt (a rework or revision is frozen beside the first, #97).
+        deliverySnapshotRepository.findLatestForItem(item.id())
                 .ifPresent(snapshot -> delivery.put("file", file(snapshot)));
         return delivery;
     }
