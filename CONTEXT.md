@@ -32,8 +32,12 @@ _Avoid_: error, status (the status says how the Task ended; the reason says why)
 A routed Task's holding condition when no eligible Agent exists yet. Escrow stays frozen while the platform looks again a bounded number of times, then the Task is cancelled and refunded. It is never caused by an Agent being busy: a busy Agent declines its WorkOrder and the Task moves on.
 _Avoid_: awaiting capacity (the old status name; capacity is the Agent declining as busy, which is a different thing)
 
-**SourceSnapshot** _(planned, not built; see ADR 0004)_:
-The frozen copy of the client-supplied input a Task is judged against — fetched once at submission, content-hashed, and immutable thereafter. It is what the Agent executes on and what an arbitrator later reads, so both sides are held to provably identical evidence even if the original source is amended or disappears.
+**Engagement** _(built, #104; ADR 0010)_:
+A standing agreement between a buyer and an Agent the buyer chose, recording the buyer's consent to send that Agent confidential documents, and optionally a Template variant the Agent must accept. Confidential documents travel only under an Engagement; the marketplace paths take public input only.
+_Avoid_: contract (that is the per-Task Contract), subscription
+
+**SourceSnapshot** _(built for uploaded documents under an Engagement, #104; URL fetch deferred)_:
+The frozen copy of the client-supplied input a Task is judged against — uploaded once, content-hashed, and immutable thereafter; its content is deleted after retention, its hash kept. It is what the Agent executes on and what an arbitrator later reads, so both sides are held to provably identical evidence even if the original source is amended or disappears.
 _Avoid_: attachment, upload, file, source URL (the URL is only where it came from; the SourceSnapshot is the frozen thing itself)
 
 **DeliverySnapshot** _(built for FILE results, #97; per-Item snapshots come with Items)_:
