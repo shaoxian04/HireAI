@@ -14,7 +14,7 @@ API key ──(Authorization: ApiKey <raw>)──► submit (open | direct)
   → atomic escrow freeze                 (Inv #1)
   → routing → RabbitMQ dispatch → signed HTTPS webhook to the Agent
   → Agent callback (dispatch token + agent signature)
-  → validation gate on the frozen output_spec
+  → acceptance gate on the frozen Contract
         PASS → settleAccepted (85/15) → RESOLVED
         FAIL → refund → SPEC_VIOLATION
   → outbox row written in the settling transaction
@@ -49,7 +49,7 @@ Both go through `SubmitOrchestrationAppService` (idempotency, caps, attribution)
 | Mode | Endpoint | Body | Agent | Spec |
 |---|---|---|---|---|
 | **Open** | `POST /api/tasks` | `{title, description, category, budget, outputSpec?, contract?, deadlineSeconds?}` | Matcher picks | Description only: extracted and adopted; with `contract`: that Contract ([requirement extraction](#4a-requirement-extraction-and-the-two-open-submit-modes)) |
-| **Direct** | `POST /api/tasks/direct` | `{title, description, budget, agentId, category?, deadlineSeconds?, contract?}` | Pinned | Inherits the agent's spec; an optional `contract` must be [covered](matching.md#offer-coverage) by the agent's Offer (else 400) and is frozen as the task's Contract |
+| **Direct** | `POST /api/tasks/direct` | `{title, description, budget, agentId, category?, deadlineSeconds?, contract?}` | Pinned | Freezes the agent's own terms as the Contract; an optional `contract` must be [covered](matching.md#offer-coverage) by the agent's Offer (else 400) and is frozen as the task's Contract |
 
 - **Categories come from one platform-owned list** ([`categories`](data-model.md#categories), served by `GET /api/catalogue/categories`). An unknown slug on open submit, on a direct booking's optional `category`, or on match-preview is `400 VALIDATION_ERROR` whose message lists the valid slugs (`Unknown category 'x'. Valid categories: …`); input is trimmed and lowercased first. Nothing is frozen. A direct booking's `category` must also be one the agent serves (else 400); without it the task takes the agent's first category.
 - **An optional deadline** (`deadlineSeconds`, 1 to 2592000 = 30 days, else 400) says how soon the result is needed, counted from the request and fixed on the task at submit. Only Agents that can finish in time are picked, at routing and at every failover hop ([eligibility](matching.md#client-deadline)); a routed task no Agent fits waits `AWAITING_AGENT` and ends `CANCELLED` with `NO_ELIGIBLE_AGENT` and a refund. A direct booking of an Agent that can't fit is `400 VALIDATION_ERROR` and nothing is frozen. A given `deadlineSeconds` is part of the idempotency fingerprint, as is a direct booking's `contract`.
@@ -83,9 +83,9 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 
 **What the gate actually checks** (`ValidationDomainServiceImpl`) is the task's frozen [Contract](data-model.md#acceptance): format, optional text length, and JSON Schema only:
 - `text_basic` (TEXT) passes on any non-blank payload, within `min_length`/`max_length` when the Contract sets them (characters of the payload).
-- `custom_json` (JSON) must parse and, when the Contract has a `schema`, match it. A non-blank `schema` that is not a valid JSON Schema 2020-12 object is a **400 at submit** (nothing frozen), so a schema is never silently skipped. A schema is one self-contained document: only local `#...` references, no `$id`, and `$schema` (if given) must be 2020-12. The validator never fetches a URL or file a schema names (`NetworkntSchemaValidator`). Only a task from before Contracts (no `contract`) still skips a prose schema, under its `output_spec`.
+- `custom_json` (JSON) must parse and, when the Contract has a `schema`, match it. A non-blank `schema` that is not a valid JSON Schema 2020-12 object is a **400 at submit** (nothing frozen), so a schema is never silently skipped. A schema is one self-contained document: only local `#...` references, no `$id`, and `$schema` (if given) must be 2020-12. The validator never fetches a URL or file a schema names (`NetworkntSchemaValidator`). A task from before Contracts carries the Contract its output spec mapped onto ([the retired output spec](data-model.md#the-retired-output-spec)), so it is judged exactly as before; a prose schema it kept from before D8 is still skipped.
 - `file_basic` (FILE) needs a valid HTTPS URL.
-- `acceptanceCriteria` is **never evaluated** here. It is only arbitration evidence, and API tasks don't reach arbitration.
+- `acceptanceCriteria` is **never evaluated** here: it maps onto no Template parameter and is kept beside the Contract as intent evidence. On a description-only submit extraction reads it like the description, so a requirement written there can still become a checked parameter. API tasks don't reach arbitration.
 
 **Accepted limitation:** a fully autonomous client has no recourse for output that is spec-valid but poor; it pays. Its levers are a real JSON Schema (or a stricter format), agent choice, and booking an [AI Review](data-model.md#ai-review) of the criteria code cannot check. A programmatic dispute API is out of scope.
 

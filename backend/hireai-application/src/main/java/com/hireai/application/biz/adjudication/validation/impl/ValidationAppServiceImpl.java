@@ -70,10 +70,9 @@ public class ValidationAppServiceImpl implements ValidationAppService {
         // The first result is attempt 1; an Agent's revision after a rejection (#95) is the next one.
         int attempt = reportRepository.findLatestByTaskId(task.id())
                 .map(previous -> previous.attemptNo() + 1).orElse(1);
-        // The frozen Contract is the binding contract (Invariant #4). A Task submitted before
-        // Contracts existed has none and finishes under its frozen output_spec, through the same
-        // D39 mapping (ValidationDomainService#validate(OutputSpec, ...)).
-        Contract contract = task.contract() != null ? task.contract() : task.outputSpec().toContract();
+        // The frozen Contract is the binding contract (Invariant #4). Every Task has one: V55 gave the
+        // Tasks submitted before Contracts existed the one their output spec mapped onto (D39, #110).
+        Contract contract = task.contract();
         // A file is fetched and frozen once, here, before any check (D24): every later step judges
         // the DeliverySnapshot, never the Agent's link.
         DeliveryOutcome delivery = validationDomainService.needsDelivery(contract, task.result())
@@ -108,7 +107,7 @@ public class ValidationAppServiceImpl implements ValidationAppService {
                                 "No agent owner for version " + task.agentVersionId()));
                 TaskModel resolved = gated.accept(); // PENDING_REVIEW -> RESOLVED
                 settlementWriteAppService.settleAccepted(task.id(), task.clientId(), builderId, task.budget());
-                // Machine-verified conformance against the binding output_spec is real evidence and
+                // Machine-verified conformance against the binding Contract is real evidence and
                 // is NOT discounted (#39). No Satisfaction event is possible — no human judged it —
                 // which caps an API-only agent below one with human approval without any rule
                 // saying so; the two-component model produces that ceiling on its own.

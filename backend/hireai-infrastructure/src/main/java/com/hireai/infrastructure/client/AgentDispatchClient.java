@@ -213,7 +213,8 @@ public class AgentDispatchClient implements AgentNoticePort {
                                         item.source().sha256(), item.source().mediaType(), item.source().sizeBytes(),
                                         item.source().filename(), item.source().expiresAt().toString())))
                         .toList(),
-                payload.rework());
+                payload.rework(),
+                readJson(payload.contractJson()));
     }
 
     private JsonNode readJson(String json) {

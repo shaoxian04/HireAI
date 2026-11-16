@@ -60,7 +60,7 @@ public final class TaskModel2DTOConverter {
     public static TaskDTO toDTO(TaskModel task, UUID agentId, ReviewWindowState reviewWindow,
                                 RejectionModel rejection, String failureDetail, TaskItems items,
                                 boolean listItems) {
-        OutputSpec spec = task.outputSpec();
+        OutputSpec spec = task.outputDescription();
         BigDecimal payout = null;
         BigDecimal commission = null;
         BigDecimal refund = null;

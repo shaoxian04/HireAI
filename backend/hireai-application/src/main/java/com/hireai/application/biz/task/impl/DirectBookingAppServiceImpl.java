@@ -29,6 +29,7 @@ import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.adjudication.service.ValidationDomainService;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
+import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.ClientDeadline;
 import com.hireai.domain.biz.task.model.ExecutionGrace;
 import com.hireai.utility.exception.DomainException;
@@ -45,8 +46,8 @@ import java.util.UUID;
 /**
  * Direct booking orchestration. Validates that the target agent is ACTIVE and listed
  * (both failures surface as NOT_FOUND — existence is not leaked for unlisted agents,
- * per spec §6). Checks budget >= agent price. Adopts the agent's declared output_spec
- * as the task's binding contract (Hard Invariant #4) and its first capability category
+ * per spec §6). Checks budget >= agent price. Freezes the client's terms, else the agent's
+ * own terms, as the task's binding Contract (Hard Invariant #4) and its first capability category
  * for stats/labels. Delegates atomic submit + escrow freeze + pinned dispatch to the
  * write service (Hard Invariants #1 and #6).
  */
@@ -148,12 +149,15 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
                     info.aiReviewCriteria(), info.budget(), agent.currentVersion().offer().acceptsAiReview()));
         }
 
-        // Adopt the agent's declared output_spec as the task's binding contract (Invariant #4).
+        // The frozen Contract is the task's binding contract (Invariant #4). The output spec only describes
+        // it on the wire: the frozen Template's shape, plus the Agent's prose acceptance criteria (#110).
         // The task category (stats/labels, rebook) is the client's choice when given, which the
         // agent must serve; otherwise the agent's first capability category.
+        OutputSpec described = OutputSpec.describing(terms.template().outputShape(), frozen,
+                agent.currentVersion().outputSpec().acceptanceCriteria());
         TaskSubmitInfo submitInfo = new TaskSubmitInfo(
                 info.clientId(), info.title(), info.description(), info.budget(),
-                agent.currentVersion().outputSpec(), agent.currentVersion().taskCategoryFor(info.category()),
+                described, agent.currentVersion().taskCategoryFor(info.category()),
                 info.deadlineSeconds(), frozen, info.items());
 
         // A multi-Item Task is inspected by sampling (spec S8, D21): the buyer may choose a stricter level

@@ -21,6 +21,7 @@ JAVA_FIELDS = {
     "resultUrl",
     "reasonCategory",
     "deliverable",
+    "contract",
 }
 
 

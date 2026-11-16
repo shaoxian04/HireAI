@@ -70,9 +70,9 @@ class PinnedFailFastIntegrationTest extends WholeAppIntegrationTest {
         UUID taskId = UUID.randomUUID();
         // The task must be attributed to a subscribed API key before routing runs, so seed it SUBMITTED
         // and dispatch it the way the SUBMITTED sweeper does.
-        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, output_spec, category, status, "
+        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, contract, category, status, "
                         + "gmt_create, pinned_agent_version_id) VALUES (?, ?, 'Pinned', 'Pinned task', 30.00, "
-                        + "'{\"format\":\"JSON\"}'::jsonb, 'general', 'SUBMITTED', now() - interval '1 hour', ?)",
+                        + "contract_from_output_spec('{\"format\":\"JSON\"}'::jsonb), 'general', 'SUBMITTED', now() - interval '1 hour', ?)",
                 taskId, DEV_USER, seeded.versionId());
         jdbc.update("UPDATE wallets SET available_balance = available_balance - 30.00, "
                 + "escrow_balance = escrow_balance + 30.00 WHERE user_id = ?", DEV_USER);
@@ -93,9 +93,9 @@ class PinnedFailFastIntegrationTest extends WholeAppIntegrationTest {
         SeededAgent seeded = seedAgent("https://agent.example/run", "SUSPENDED");
         UUID taskId = UUID.randomUUID();
         // A pinned task parked AWAITING_AGENT with escrow frozen, as dispatch left them before #77.
-        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, output_spec, category, status, "
+        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, contract, category, status, "
                         + "gmt_create, pinned_agent_version_id) VALUES (?, ?, 'Pinned', 'Pinned task', 30.00, "
-                        + "'{\"format\":\"JSON\"}'::jsonb, 'general', 'AWAITING_AGENT', now(), ?)",
+                        + "contract_from_output_spec('{\"format\":\"JSON\"}'::jsonb), 'general', 'AWAITING_AGENT', now(), ?)",
                 taskId, DEV_USER, seeded.versionId());
         jdbc.update("UPDATE wallets SET available_balance = available_balance - 30.00, "
                 + "escrow_balance = escrow_balance + 30.00 WHERE user_id = ?", DEV_USER);

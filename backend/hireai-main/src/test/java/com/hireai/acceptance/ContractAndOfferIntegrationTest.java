@@ -156,16 +156,30 @@ class ContractAndOfferIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
-    void aTaskSubmittedBeforeContractsKeepsItsOutputSpecAndShowsNoContract() throws Exception {
-        // A Task from before V39 has no Contract; it finishes under its frozen output_spec.
+    void aTaskFromBeforeContractsIsReadByTheContractV55GaveItAndOutputSpecIsNeverRead() throws Exception {
+        // V55 (#110) gave every Task from before V39 the Contract its output spec maps onto and moved its
+        // criteria out; output_spec stays as history. Here the history says JSON, the Contract says TEXT:
+        // the API describes the task from its Contract, so the retired column is provably unread.
         UUID taskId = UUID.randomUUID();
-        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, output_spec, status, category) "
-                + "VALUES (?, ?, 'Old', 'Submitted before contracts', 10.00, ?::jsonb, 'SUBMITTED', 'other')",
-                taskId, DEV_USER, "{\"format\":\"TEXT\",\"acceptanceCriteria\":\"old rules\"}");
+        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, output_spec, contract, "
+                + "acceptance_criteria, status, category) VALUES (?, ?, 'Old', 'Submitted before contracts', 10.00, "
+                + "?::jsonb, contract_from_output_spec(?::jsonb), 'old rules', 'SUBMITTED', 'other')",
+                taskId, DEV_USER, "{\"format\":\"JSON\",\"schema\":\"{}\",\"acceptanceCriteria\":\"history\"}",
+                "{\"format\":\"TEXT\"}");
 
         JsonNode task = get("/api/tasks/" + taskId);
-        assertThat(task.has("contract")).isFalse();
+        assertThat(task.path("contract").path("template").asText()).isEqualTo("text_basic");
+        assertThat(task.path("outputSpec").path("format").asText()).isEqualTo("TEXT");
+        assertThat(task.path("outputSpec").hasNonNull("schema")).isFalse();
         assertThat(task.path("outputSpec").path("acceptanceCriteria").asText()).isEqualTo("old rules");
+    }
+
+    @Test
+    void aTaskCannotBeStoredWithoutAContract() {
+        assertThatThrownBy(() -> jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, "
+                + "output_spec, status, category) VALUES (?, ?, 'No contract', 'd', 10.00, "
+                + "'{\"format\":\"TEXT\"}'::jsonb, 'SUBMITTED', 'other')", UUID.randomUUID(), DEV_USER))
+                .hasMessageContaining("contract");
     }
 
     @Test

@@ -75,8 +75,8 @@ class WebhookDeliveryRepositoryIntegrationTest {
 
     private UUID seedTask(UUID clientId) {
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, output_spec, status) " +
-                        "VALUES (?, ?, 'Task', 'desc', 10.00, ?::jsonb, 'SUBMITTED')",
+        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, contract, status) " +
+                        "VALUES (?, ?, 'Task', 'desc', 10.00, contract_from_output_spec(?::jsonb), 'SUBMITTED')",
                 id, clientId, "{\"format\":\"JSON\"}");
         return id;
     }

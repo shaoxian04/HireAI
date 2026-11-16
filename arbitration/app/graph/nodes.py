@@ -15,7 +15,9 @@ CATEGORIES = {"FULFILLED", "PARTIALLY_FULFILLED", "NOT_FULFILLED"}
 
 _SYSTEM = (
     "You are a neutral dispute arbitrator for a task marketplace. "
-    "You are given the TASK the client submitted, the declared acceptance criteria, and the "
+    "You are given the TASK the client submitted, its CONTRACT (the binding terms the output was "
+    "checked against: a Template and its parameters; on a conflict with the task text the "
+    "contract wins), the declared acceptance criteria, and the "
     "agent's output. Judge whether the output actually addresses THIS task AND satisfies the "
     "acceptance criteria. Being well-formed or schema-valid is NOT enough: an output that does "
     "not correspond to the submitted task — for example a summary of a different article than the "
@@ -64,6 +66,8 @@ async def gather_evidence(
     ]
     if req.task_description:
         parts.append(f"TASK (what the client asked the agent to do):\n{req.task_description}")
+    if req.contract:
+        parts.append(f"CONTRACT (binding terms, frozen at submit):\n{req.contract}")
     if req.acceptance_criteria:
         parts.append(f"ACCEPTANCE CRITERIA:\n{req.acceptance_criteria}")
     if req.result_payload_json:

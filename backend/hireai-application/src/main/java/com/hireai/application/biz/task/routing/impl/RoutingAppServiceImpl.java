@@ -275,8 +275,8 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                 view.title(),
                 view.description(),
                 view.category(),
-                // Hard Invariant #4: use the task's adopted copy (frozen at submit time) as the binding
-                // contract. The candidate supplies only webhookUrl/version identity — not the spec.
+                // Hard Invariant #4: the task's Contract frozen at submit is the binding contract; the
+                // outputSpec describes it. The candidate supplies only webhookUrl/version identity.
                 view.outputSpecJson(),
                 executionDeadline,
                 callbackUrl,
@@ -285,7 +285,8 @@ public class RoutingAppServiceImpl implements RoutingAppService {
                 // dispatch's execution deadline (S4, D31), so a rework dispatch gets fresh links.
                 sourceSnapshotAppService.withSignedLinks(taskReadAppService.workOrderItems(view.taskId()),
                         executionDeadline),
-                rework);
+                rework,
+                view.contractJson());
         return new DispatchMessage(view.taskId(), agentVersionId, target.webhookUrl(), correlationId, payload);
     }
 }

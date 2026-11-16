@@ -69,9 +69,9 @@ class JdbcAdminQueryDaoIntegrationTest {
 
         UUID taskId = UUID.randomUUID();
         jdbc.update("""
-                INSERT INTO tasks (id, client_id, title, description, budget, output_spec, status,
+                INSERT INTO tasks (id, client_id, title, description, budget, contract, status,
                                    reject_reason_category, rejection_reason, category)
-                VALUES (?, ?, 'Admin evidence task', 'Summarise the attached report.', ?, '{"format":"TEXT"}'::jsonb,
+                VALUES (?, ?, 'Admin evidence task', 'Summarise the attached report.', ?, contract_from_output_spec('{"format":"TEXT"}'::jsonb),
                         'DISPUTED', 'A_MISMATCH', 'The summary is about a different report entirely.', 'summarisation')
                 """, taskId, clientId, budget);
         jdbc.update("""

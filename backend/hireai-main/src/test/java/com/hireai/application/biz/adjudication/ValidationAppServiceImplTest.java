@@ -125,7 +125,7 @@ class ValidationAppServiceImplTest {
         when(task.clientId()).thenReturn(clientId);
         when(task.agentVersionId()).thenReturn(versionId);
         when(task.budget()).thenReturn(Money.of("100"));
-        when(task.outputSpec()).thenReturn(new OutputSpec(OutputFormat.TEXT, null, null));
+        when(task.contract()).thenReturn(new OutputSpec(OutputFormat.TEXT, null, null).toContract());
         TaskModel pending = mock(TaskModel.class);
         TaskModel resolved = mock(TaskModel.class);
         when(task.passValidation()).thenReturn(pending);
@@ -151,7 +151,7 @@ class ValidationAppServiceImplTest {
         TaskModel task = mock(TaskModel.class);
         when(task.id()).thenReturn(taskId);
         when(task.agentVersionId()).thenReturn(versionId);
-        when(task.outputSpec()).thenReturn(new OutputSpec(OutputFormat.TEXT, null, null));
+        when(task.contract()).thenReturn(new OutputSpec(OutputFormat.TEXT, null, null).toContract());
         TaskModel pending = mock(TaskModel.class);
         when(task.passValidation()).thenReturn(pending);
         when(domain.judge(ArgumentMatchers.<Contract>any(), any(), any(), anyInt())).thenReturn(passingReport(taskId));
@@ -193,12 +193,11 @@ class ValidationAppServiceImplTest {
     }
 
     @Test
-    void aTaskFromBeforeContractsIsJudgedAgainstItsOutputSpec() {
-        TaskModel legacy = mock(TaskModel.class);
+    void aTaskIsJudgedAgainstItsFrozenContract() {
+        TaskModel legacy = mock(TaskModel.class); // V55 gave every Task a Contract
         OutputSpec spec = new OutputSpec(OutputFormat.TEXT, null, null);
         TaskResultModel result = TaskResultModel.record(UUID.randomUUID(), "COMPLETED", "\"hi\"", null);
-        when(legacy.contract()).thenReturn(null);
-        when(legacy.outputSpec()).thenReturn(spec);
+        when(legacy.contract()).thenReturn(spec.toContract());
         when(legacy.result()).thenReturn(result);
         when(legacy.passValidation()).thenReturn(mock(TaskModel.class));
         when(domain.judge(eq(spec.toContract()), eq(result), ArgumentMatchers.<AcceptanceEvidence>argThat(e -> e.delivery() == null), eq(1))).thenReturn(passingReport(UUID.randomUUID()));
@@ -214,7 +213,7 @@ class ValidationAppServiceImplTest {
         TaskModel task = mock(TaskModel.class);
         OutputSpec spec = new OutputSpec(OutputFormat.FILE, null, null);
         TaskResultModel result = TaskResultModel.record(UUID.randomUUID(), "COMPLETED", "{}", "https://cdn.example.com/a.png");
-        when(task.outputSpec()).thenReturn(spec);
+        when(task.contract()).thenReturn(spec.toContract());
         when(task.result()).thenReturn(result);
         when(task.passValidation()).thenReturn(mock(TaskModel.class));
         when(domain.needsDelivery(spec.toContract(), result)).thenReturn(true);
