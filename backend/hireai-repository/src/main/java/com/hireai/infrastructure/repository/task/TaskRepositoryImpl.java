@@ -105,6 +105,26 @@ public class TaskRepositoryImpl implements TaskRepository {
     }
 
     @Override
+    public Optional<Instant> findExecutionDeadline(UUID taskId) {
+        return taskJpa.findExecutionDeadline(taskId);
+    }
+
+    @Override
+    public void stampReviewReason(UUID taskId, String reason) {
+        taskJpa.stampReviewReason(taskId, reason);
+    }
+
+    @Override
+    public Optional<String> findReviewReason(UUID taskId) {
+        return taskJpa.findReviewReason(taskId);
+    }
+
+    @Override
+    public List<UUID> findEarlierTaskIdsWithSameBrief(UUID taskId, UUID clientId, String title, String description) {
+        return taskJpa.findEarlierIdsWithSameBrief(taskId, clientId, title, description);
+    }
+
+    @Override
     public Optional<ReviewWindowState> findReviewWindow(UUID taskId) {
         return taskJpa.findReviewDeadline(taskId)
                 .map(deadline -> new ReviewWindowState(deadline, taskJpa.isReviewAutoAccepted(taskId)));

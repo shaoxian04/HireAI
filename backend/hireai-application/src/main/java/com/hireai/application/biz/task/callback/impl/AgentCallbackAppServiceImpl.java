@@ -113,7 +113,7 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
         TaskModel recorded = task.recordResult(resultModel);
         taskRepository.save(recorded);
         log.info("Task {} result recorded; invoking validation gate (agentStatus={})", taskId, result.agentStatus());
-        validationAppService.validateAndGate(recorded);
+        validationAppService.validateAndGate(recorded, result.anomalies());
     }
 
     private DispatchTokenClaims verifyTokenFor(UUID taskId, String bearerToken) {

@@ -219,7 +219,10 @@ override block). Follow these rules on every surface:
   searchable category picker), `components/CategoryPicker.tsx` (a builder's categories as checkboxes from the
   platform-owned list, plus the optional "suggest a category" field), `components/ContractTerms.tsx` (an output contract as a labelled list),
   `components/InspectionReport.tsx` (the validation report above a delivered result: each automated check
-  ticked or crossed, then the acceptance criteria left for the client to judge),
+  ticked, crossed or marked for the client to judge when it could not decide, a "Reworked" line for earlier
+  failed attempts, what the agent flagged, Findings about the brief, then the acceptance criteria left for the
+  client to judge), `components/ReworkNotice.tsx` (while a task is QUEUED/EXECUTING after a check rejected its
+  result: "Rework n of max", the failed checks, and that a failed check is not disputable),
   `components/StartLink.tsx` (landing CTAs that route by sign-in state and role),
   `components/FlashBanner.tsx` + `lib/flash.ts` (a one-shot success message carried across a navigation,
   shown by `AppShell`), `components/BottomBar.tsx` (a phone-only bar pinned to the screen, portalled to

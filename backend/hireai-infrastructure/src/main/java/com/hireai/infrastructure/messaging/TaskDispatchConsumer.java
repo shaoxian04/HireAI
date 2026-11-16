@@ -145,7 +145,7 @@ public class TaskDispatchConsumer {
         //    WorkOrder twice). The task may stay QUEUED, which is safe: the callback accepts a
         //    result from QUEUED, and the timeout sweeper covers an Agent that never answers.
         try {
-            taskExecutionPort.markExecuting(message.taskId());
+            taskExecutionPort.markExecuting(message.taskId(), message.payload().executionDeadline());
             log.info("Task {} dispatched and marked EXECUTING", message.taskId());
         } catch (RuntimeException e) {
             log.error("Task {} WorkOrder was delivered but marking EXECUTING failed; acknowledging "

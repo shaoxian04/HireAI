@@ -1,5 +1,6 @@
 package com.hireai.application.config;
 
+import com.hireai.domain.biz.adjudication.model.ReworkPolicy;
 import com.hireai.domain.biz.task.model.ReviewWindow;
 import com.hireai.domain.biz.task.rejection.model.RejectionWindows;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +19,12 @@ public class ReviewConfig {
     @Bean
     public ReviewWindow reviewWindow(@Value("${hireai.review.window}") Duration length) {
         return new ReviewWindow(length);
+    }
+
+    /** {@code hireai.acceptance.max-reworks}: how often a rejected result goes back to its Agent (D17, D41). */
+    @Bean
+    public ReworkPolicy reworkPolicy(@Value("${hireai.acceptance.max-reworks:2}") int maxReworks) {
+        return new ReworkPolicy(maxReworks);
     }
 
     @Bean

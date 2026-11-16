@@ -2,7 +2,15 @@ package com.hireai.application.biz.adjudication.validation.impl;
 
 import com.hireai.application.biz.acceptance.delivery.DeliverySnapshotAppService;
 import com.hireai.application.biz.adjudication.validation.ValidationAppService;
+import com.hireai.application.biz.task.routing.RoutingAppService;
+import com.hireai.domain.biz.acceptance.check.model.AcceptanceEvidence;
+import com.hireai.domain.biz.acceptance.check.model.DecodedImage;
+import com.hireai.domain.biz.acceptance.check.model.FindingFacts;
+import com.hireai.domain.biz.acceptance.check.model.SelfReportedAnomaly;
+import com.hireai.domain.biz.acceptance.check.service.ImageDecoder;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.adjudication.model.ReworkPolicy;
+import com.hireai.domain.biz.task.routing.info.ReworkRequest;
 import com.hireai.domain.biz.acceptance.delivery.model.DeliveryOutcome;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
@@ -25,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -43,11 +52,19 @@ public class ValidationAppServiceImpl implements ValidationAppService {
     private final WebhookOutboxAppService webhookOutboxAppService;
     private final ReputationWriteAppService reputationWriteAppService;
     private final ReviewWindow reviewWindow;
+    private final ReworkPolicy reworkPolicy;
+    private final RoutingAppService routingAppService;
+    private final ImageDecoder imageDecoder;
     /** The app's Clock bean (ClockConfig): the review window opens at this instant. */
     private final Clock clock;
 
     @Override
     public TaskModel validateAndGate(TaskModel task) {
+        return validateAndGate(task, List.of());
+    }
+
+    @Override
+    public TaskModel validateAndGate(TaskModel task, List<SelfReportedAnomaly> anomalies) {
         // The first result is attempt 1; an Agent's revision after a rejection (#95) is the next one.
         int attempt = reportRepository.findLatestByTaskId(task.id())
                 .map(previous -> previous.attemptNo() + 1).orElse(1);
@@ -60,12 +77,17 @@ public class ValidationAppServiceImpl implements ValidationAppService {
         DeliveryOutcome delivery = validationDomainService.needsDelivery(contract, task.result())
                 ? deliverySnapshotAppService.capture(contract, task.result())
                 : null;
-        ValidationReportModel report = validationDomainService.validate(contract, task.result(), delivery, attempt);
+        AcceptanceEvidence evidence = new AcceptanceEvidence(delivery, pixelsOf(contract, delivery), anomalies,
+                validationDomainService.needsFindingFacts(contract) ? findingFactsFor(task) : FindingFacts.NONE);
+        ValidationReportModel report = validationDomainService.judge(contract, task.result(), evidence, attempt);
         reportRepository.save(report);
 
-        if (report.isPass()) {
+        if (!report.isRejected()) {
             TaskModel gated = task.passValidation(); // -> PENDING_REVIEW
-            boolean apiSubmitted = apiKeyTaskRepository.findApiKeyIdByTask(task.id()).isPresent();
+            // A result sent to review (an undecidable check, a self-reported anomaly) always waits
+            // for the Client, on either channel: it is paid only when the Client confirms it (D7).
+            boolean apiSubmitted = report.isPass()
+                    && apiKeyTaskRepository.findApiKeyIdByTask(task.id()).isPresent();
             if (apiSubmitted) {
                 // Programmatic channel: deterministic immediate auto-settle. Reuse the accept settlement
                 // (Invariant #3 — same money path, no LLM/human). Disputes stay human-channel only.
@@ -91,9 +113,27 @@ public class ValidationAppServiceImpl implements ValidationAppService {
             // Web channel: the Client reviews within the window, or silence counts as acceptance (#94).
             Instant reviewDeadline = reviewWindow.closesAt(clock.instant());
             taskRepository.stampReviewDeadline(task.id(), reviewDeadline);
-            log.info("Task {} passed validation -> PENDING_REVIEW (review window closes {})",
-                    task.id(), reviewDeadline);
+            if (report.needsReview()) {
+                // Recorded so the review sweeper can one day treat an anomaly differently; for now the
+                // window still accepts on silence like any other result (owner decision pending).
+                taskRepository.stampReviewReason(task.id(), report.anomalies().isEmpty() ? "UNDECIDED" : "ANOMALY");
+            }
+            log.info("Task {} {} validation -> PENDING_REVIEW (review window closes {})",
+                    task.id(), report.isPass() ? "passed" : "was sent to review by", reviewDeadline);
             return gated;
+        }
+        // A deterministic check rejected it (not appealable, D17): back to the same Agent with the
+        // failing checks while reworks remain, else SPEC_VIOLATION with a refund.
+        int rejections = reportRepository.countRejectedByTaskId(task.id());
+        if (reworkPolicy.allowsRework(rejections)) {
+            ReworkRequest rework = new ReworkRequest(rejections, reworkPolicy.maxReworks(),
+                    report.rejectingChecks().stream()
+                            .map(c -> new ReworkRequest.FailedCheck(c.rule(), c.detail())).toList());
+            if (routingAppService.redispatchForRework(task.id(), task.agentVersionId(), rework)) {
+                log.info("Task {} failed validation -> rework {}/{} by the same Agent", task.id(),
+                        rework.reworkNo(), rework.maxReworks());
+                return taskRepository.findById(task.id()).orElseThrow();
+            }
         }
         TaskModel gated = task.failValidation();
         taskRepository.save(gated);
@@ -103,7 +143,22 @@ public class ValidationAppServiceImpl implements ValidationAppService {
         reputationWriteAppService.recordOutcome(task.id(), task.agentVersionId(),
                 task.clientId(), ReputationEventType.SPEC_VIOLATION);
         webhookOutboxAppService.enqueueFailed(gated, gated.status().name());
-        log.info("Task {} failed validation -> SPEC_VIOLATION (refunded)", task.id());
+        log.info("Task {} failed validation after {} rework(s) -> SPEC_VIOLATION (refunded)", task.id(),
+                rejections - 1);
         return gated;
+    }
+
+    /** The frozen copy's pixels when the checks read them; null when there is no decodable image. */
+    private DecodedImage pixelsOf(Contract contract, DeliveryOutcome delivery) {
+        if (!validationDomainService.needsPixels(contract) || !(delivery instanceof DeliveryOutcome.Captured c)) {
+            return null;
+        }
+        return deliverySnapshotAppService.content(c.snapshot()).flatMap(imageDecoder::decode).orElse(null);
+    }
+
+    /** Outside data for the Findings (D7): the same Client's earlier Tasks with this very brief. */
+    private FindingFacts findingFactsFor(TaskModel task) {
+        return new FindingFacts(taskRepository.findEarlierTaskIdsWithSameBrief(task.id(), task.clientId(),
+                task.title(), task.description()));
     }
 }

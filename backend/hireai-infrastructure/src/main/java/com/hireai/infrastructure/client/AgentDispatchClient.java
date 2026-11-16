@@ -208,7 +208,9 @@ public class AgentDispatchClient implements AgentNoticePort {
                 payload.callbackUrl(),
                 payload.items().stream()
                         .map(item -> new WebhookDispatchBody.Item(item.itemNo(), item.input()))
-                        .toList());
+                        .toList(),
+                payload.rework());
+
     }
 
     private JsonNode readJson(String json) {

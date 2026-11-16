@@ -196,6 +196,12 @@ class ReputationEmissionIntegrationTest {
         TaskModel withResult = task.recordResult(TaskResultModel.rehydrate(
                 UUID.randomUUID(), task.id(), "COMPLETED", "", null, Instant.now()));
         taskRepository.save(withResult);
+        // The result already failed and was reworked twice (#98, max-reworks 2): this is the last failure.
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            jdbc.update("INSERT INTO validation_reports (id, task_id, attempt_no, verdict, checks) VALUES (?, ?, ?, 'FAIL', "
+                    + "'[{\"rule\":\"FORMAT_TEXT_NON_EMPTY\",\"passed\":false,\"detail\":\"empty\"}]'::jsonb)",
+                    UUID.randomUUID(), task.id(), attempt);
+        }
         validationAppService.validateAndGate(withResult);
 
         assertThat(eventsFor(agent[0])).singleElement().satisfies(e -> {

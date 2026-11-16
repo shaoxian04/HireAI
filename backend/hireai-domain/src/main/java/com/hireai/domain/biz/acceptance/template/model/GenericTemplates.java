@@ -24,6 +24,9 @@ public final class GenericTemplates {
     /** {@code file_basic}'s optional accepted media types (comparison {@code subset}). */
     public static final String MEDIA_TYPES = "media_types";
 
+    /** Parameters holding a whole number (characters, bytes); anything else is refused at submit. */
+    public static final java.util.Set<String> WHOLE_NUMBER_PARAMETERS = java.util.Set.of(MIN_LENGTH, MAX_LENGTH, MAX_BYTES);
+
     private GenericTemplates() {
     }
 }

@@ -17,3 +17,17 @@ def test_without_a_tag_the_env_names_the_file(monkeypatch):
     assert agent.file_url_for({"outputSpec": {"format": "FILE"}, "description": "Draw it"}) == (
         "https://env.example/a.png"
     )
+
+
+def test_a_rework_work_order_delivers_the_rework_link():
+    order = {"outputSpec": {"format": "FILE"},
+             "description": "Logo #deliver:https://a.example/red.png #rework:https://a.example/white.png"}
+    assert agent.file_url_for(order) == "https://a.example/red.png"
+    assert agent.file_url_for({**order, "rework": {"reworkNo": 1}}) == "https://a.example/white.png"
+
+
+def test_an_anomaly_tag_self_reports_against_that_check():
+    assert agent.anomalies_for({"description": "Logo #anomaly:IMAGE_BACKGROUND_COLOUR"}) == [
+        {"check": "IMAGE_BACKGROUND_COLOUR",
+         "description": "The demo agent flags this: the brief makes it hard to meet as written."}]
+    assert agent.anomalies_for({"description": "Logo"}) == []

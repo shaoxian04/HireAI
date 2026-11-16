@@ -735,15 +735,45 @@ export interface NoMatchDTO {
 
 // ── Validation report (spec-violation reason) ───────────────────────────────
 
+/** PASS, a deterministic REJECT (reworked, then refunded), or REVIEW: the check could not decide (#98). */
+export type CheckOutcome = "PASS" | "REJECT" | "REVIEW";
+
 export interface ValidationCheckDTO {
   rule: string;
   passed: boolean;
   detail: string | null;
+  outcome?: CheckOutcome;
+}
+
+/** A fact about the brief noticed while accepting (spec D7): shown to the client, never moves money. */
+export interface FindingDTO {
+  code: string;
+  detail: string | null;
+}
+
+/** Something the agent itself reported with its result; it sends the result to the client's review. */
+export interface AnomalyDTO {
+  check: string | null;
+  description: string;
+}
+
+export interface ValidationAttemptDTO {
+  attemptNo: number;
+  verdict: "PASS" | "FAIL" | "REVIEW";
+  failedChecks: ValidationCheckDTO[];
 }
 
 export interface ValidationReportDTO {
-  verdict: "PASS" | "FAIL";
+  /** FAIL: a check rejected it; REVIEW: none did, but one could not decide or the agent flagged an anomaly. */
+  verdict: "PASS" | "FAIL" | "REVIEW";
   checks: ValidationCheckDTO[];
+  attemptNo?: number;
+  findings?: FindingDTO[];
+  anomalies?: AnomalyDTO[];
+  /** How many of the task's results a check rejected (each but the last was sent back for rework). */
+  rejectedAttempts?: number;
+  maxReworks?: number;
+  previousAttempts?: ValidationAttemptDTO[];
 }
 
 // ── API keys (programmatic submission) ──────────────────────────────────────

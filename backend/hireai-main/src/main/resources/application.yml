@@ -103,6 +103,10 @@ hireai:
     # one keeps taking new Contracts for this long, and a Contract falls back to it when no Offer covers
     # the new one. After it, the previous version takes no new Contracts (or Offer terms).
     template-transition: ${TEMPLATE_TRANSITION:P30D}
+    # Rework (spec D17, #98): a result a deterministic check rejects goes back to the same Agent with
+    # the failing checks this many times; failing after the last one ends the Task SPEC_VIOLATION
+    # with a refund. The rejection itself is not appealable.
+    max-reworks: ${ACCEPTANCE_MAX_REWORKS:2}
   review:
     # Client review window (#94): a web-channel result that passed validation waits this long in
     # PENDING_REVIEW, then the review-window sweeper accepts and settles it on the Client's behalf.

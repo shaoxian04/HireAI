@@ -19,6 +19,11 @@ import java.util.UUID;
  * <p>For a multi-Item Task (the WorkOrder carried {@code items}), {@code items} holds one result per
  * Item, keyed by the WorkOrder's {@code itemNo}, and {@code resultPayloadJson} may be left out. An
  * Item left out of the callback counts as FAILED.
+ *
+ * <p>{@code anomalies} (optional, spec D7) are what the Agent reports about the brief or source:
+ * one naming a content check the Template allows sends a failure of that check to the Client's
+ * review instead of a rework, and is paid if the Client confirms it by accepting. {@code check}
+ * optionally names the Check Library entry the anomaly explains.
  */
 public record AgentResultCallbackRequest(
         @NotNull UUID taskId,
@@ -26,12 +31,18 @@ public record AgentResultCallbackRequest(
         String resultPayloadJson,
         @Size(max = 2000) String resultUrl,
         @Size(max = 2000) String message,
-        @Size(max = 1000) List<@Valid @NotNull ItemResult> items
+        @Size(max = 1000) List<@Valid @NotNull ItemResult> items,
+        @Size(max = 20) List<@Valid @NotNull Anomaly> anomalies
 ) {
 
     public AgentResultCallbackRequest(UUID taskId, String agentStatus, String resultPayloadJson,
                                       String resultUrl, String message) {
-        this(taskId, agentStatus, resultPayloadJson, resultUrl, message, null);
+        this(taskId, agentStatus, resultPayloadJson, resultUrl, message, null, null);
+    }
+
+    public AgentResultCallbackRequest(UUID taskId, String agentStatus, String resultPayloadJson,
+                                      String resultUrl, String message, List<ItemResult> items) {
+        this(taskId, agentStatus, resultPayloadJson, resultUrl, message, items, null);
     }
 
     public boolean hasItems() {
@@ -45,5 +56,9 @@ public record AgentResultCallbackRequest(
             String resultPayloadJson,
             @Size(max = 2000) String resultUrl
     ) {
+    }
+
+    /** One self-reported anomaly. */
+    public record Anomaly(@Size(max = 64) String check, @NotBlank @Size(max = 1000) String description) {
     }
 }

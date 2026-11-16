@@ -77,7 +77,7 @@ class AgentCallbackAppServiceImplTest {
         assertThat(captor.getValue().result()).isNotNull();
         assertThat(captor.getValue().result().agentStatus()).isEqualTo("COMPLETED");
         assertThat(captor.getValue().result().resultPayloadJson()).isEqualTo("{\"k\":\"v\"}");
-        verify(validationAppService).validateAndGate(captor.getValue());
+        verify(validationAppService).validateAndGate(captor.getValue(), java.util.List.of());
     }
 
     @Test
