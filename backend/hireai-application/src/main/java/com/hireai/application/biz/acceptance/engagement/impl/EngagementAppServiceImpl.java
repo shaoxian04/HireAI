@@ -12,7 +12,6 @@ import com.hireai.domain.biz.offering.storefront.model.StorefrontModel;
 import com.hireai.domain.biz.offering.storefront.repository.StorefrontRepository;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,7 +22,6 @@ import java.util.UUID;
 
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class EngagementAppServiceImpl implements EngagementAppService {
 
     private final EngagementRepository engagementRepository;
@@ -31,6 +29,21 @@ public class EngagementAppServiceImpl implements EngagementAppService {
     private final StorefrontRepository storefrontRepository;
     private final TemplateReadAppService templateReadAppService;
     private final Clock clock;
+    /** The longest (and default) document retention after the last window closes (D32, D41). */
+    private final int retentionDays;
+
+    public EngagementAppServiceImpl(EngagementRepository engagementRepository, AgentRepository agentRepository,
+                                    StorefrontRepository storefrontRepository,
+                                    TemplateReadAppService templateReadAppService, Clock clock,
+                                    @org.springframework.beans.factory.annotation.Value(
+                                            "${hireai.source.retention-days:30}") int retentionDays) {
+        this.engagementRepository = engagementRepository;
+        this.agentRepository = agentRepository;
+        this.storefrontRepository = storefrontRepository;
+        this.templateReadAppService = templateReadAppService;
+        this.clock = clock;
+        this.retentionDays = retentionDays;
+    }
 
     @Override
     @Transactional
@@ -46,7 +59,7 @@ public class EngagementAppServiceImpl implements EngagementAppService {
             templateReadAppService.requireValid(templateVariant);
         }
         EngagementModel engagement = EngagementModel.open(clientId, agentId, confidentialConsent, templateVariant,
-                retentionDays, clock.instant());
+                retentionDays, this.retentionDays, clock.instant());
         engagementRepository.insert(engagement);
         log.info("Engagement {} opened by client {} with agent {} ({})", engagement.id(), clientId, agentId,
                 engagement.status());

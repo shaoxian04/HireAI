@@ -27,6 +27,19 @@ class DisputeFeeTest {
     }
 
     @Test
+    void theCapShareIsConfigurable() {
+        // D41: a deployment may cap the loser's share at 10% instead of 20%.
+        DisputeFeeDomainServiceImpl tenPercent = new DisputeFeeDomainServiceImpl(new java.math.BigDecimal("0.10"));
+        DisputeFeeCharge charge = tenPercent.charge(DisputeFeeType.ARBITRATION_COST, Money.of("3.00"),
+                Money.of("20.00"), EnumSet.of(DisputeParty.CLIENT), walletWith("50.00"), walletWith("0.00"), taskId, "c");
+        assertThat(charge.clientCharged()).isEqualTo(Money.of("2.00"));
+        assertThat(charge.platformCovered()).isEqualTo(Money.of("1.00"));
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> new DisputeFeeDomainServiceImpl(new java.math.BigDecimal("1.5")))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void theLosingClientPaysTheWholeCostFromItsBalance() {
         WalletModel client = walletWith("50.00");
         WalletModel builder = walletWith("0.00");

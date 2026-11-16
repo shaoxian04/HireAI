@@ -74,6 +74,9 @@ hireai:
   source:
     # Engagement documents (spec S4): the largest upload, and how often the D32 retention pass runs.
     max-bytes: ${SOURCE_MAX_BYTES:26214400}
+    # D32: a document's bytes are deleted this many days after the last window of every Task using it
+    # closes; an Engagement may ask for fewer (retentionDays), never more.
+    retention-days: ${SOURCE_RETENTION_DAYS:30}
     retention-sweep-interval: ${SOURCE_RETENTION_SWEEP_INTERVAL:PT1H}
   matching:
     # Multi-factor matcher weights (must sum to 1.0; checked at startup) + epsilon-greedy exploration
@@ -232,9 +235,11 @@ hireai:
     appeal-window: ${APPEAL_WINDOW:${hireai.rejection.client-decision-window}}
     accept-sweep-interval: ${RULING_ACCEPT_SWEEP_INTERVAL:PT1M}
     # Loser pays (#96, spec D43): the arbitration cost and the Appeal Fee of a web appeal to an
-    # admin, in credits. The side the effective ruling goes against bears each, capped at 20% of
-    # the Item price (domain policy); the platform covers the excess. 0 turns a fee off.
+    # admin, in credits. The side the effective ruling goes against bears each, capped at
+    # fee-cap-share of the Item price; the platform covers the excess. 0 turns a fee off.
     cost: ${ARBITRATION_COST:3.00}
+    # The most a loser bears of each fee, as a share of the Item price; the platform covers the rest.
+    fee-cap-share: ${ARBITRATION_FEE_CAP_SHARE:0.20}
     appeal-fee: ${APPEAL_FEE:5.00}
   receipts:
     # Signed receipts (D40, docs/details/receipts.md). The Ed25519 private key, base64 PKCS#8 DER, from the

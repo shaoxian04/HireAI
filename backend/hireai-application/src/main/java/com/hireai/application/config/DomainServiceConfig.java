@@ -153,8 +153,10 @@ public class DomainServiceConfig {
     }
 
     @Bean
-    public DisputeFeeDomainService disputeFeeDomainService() {
-        return new DisputeFeeDomainServiceImpl();
+    public DisputeFeeDomainService disputeFeeDomainService(
+            @org.springframework.beans.factory.annotation.Value("${hireai.arbitration.fee-cap-share:0.20}")
+            java.math.BigDecimal capShare) {
+        return new DisputeFeeDomainServiceImpl(capShare);
     }
 
     @Bean
