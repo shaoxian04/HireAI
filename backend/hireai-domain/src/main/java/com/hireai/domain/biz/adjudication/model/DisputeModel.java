@@ -239,6 +239,19 @@ public final class DisputeModel {
         return rulings.stream().max(Comparator.comparingInt(Ruling::tier));
     }
 
+    /** True when the AI arbitrator produced a ruling for this dispute (it did not fail before ruling). */
+    public boolean hasAiRuling() {
+        return rulings.stream().anyMatch(r -> r.decidedBy() == RulingDecidedBy.ARBITRATOR);
+    }
+
+    /**
+     * True once the dispute is past the AI arbitrator without an AI ruling (it failed: the admin backstop
+     * or the refund fallback rules instead), so nobody bears the arbitration cost (owner decision on #87).
+     */
+    public boolean arbitrationCostWaived() {
+        return !hasAiRuling() && status != DisputeStatus.OPEN && status != DisputeStatus.ARBITRATING;
+    }
+
     private List<Ruling> append(Ruling ruling) {
         List<Ruling> next = new ArrayList<>(rulings);
         next.add(ruling);

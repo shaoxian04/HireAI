@@ -57,4 +57,13 @@ public interface SettlementWriteAppService {
 
     DisputeFeeCharge chargeDisputeFee(UUID disputeId, UUID taskId, UUID clientId, UUID builderId,
                                       DisputeFeeType type, Money fullCost, Money itemPrice, Set<DisputeParty> payers);
+
+    /**
+     * The arbitration cost, borne by the loser only when the AI arbitrator produced a ruling
+     * ({@code aiRulingRecorded}); otherwise recorded as waived (nobody charged). Same record as
+     * {@link #chargeDisputeFee}.
+     */
+    DisputeFeeCharge chargeArbitrationCost(UUID disputeId, UUID taskId, UUID clientId, UUID builderId,
+                                           boolean aiRulingRecorded, Money fullCost, Money itemPrice,
+                                           Set<DisputeParty> payers);
 }

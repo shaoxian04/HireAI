@@ -55,13 +55,14 @@ public final class AdminViews {
      * (so the money math is never duplicated in the UI), and the dispute fees the side(s) it goes against
      * would bear (loser pays, D43: the arbitration cost, plus the Appeal Fee once appealed, each capped).
      * Amounts are indicative — the actual movement still happens deterministically in the domain at
-     * apply-time (Inv #3), and a fee a wallet cannot cover is borne by the platform.
+     * apply-time (Inv #3), and a fee a wallet cannot cover is borne by the platform. When the AI arbitrator
+     * produced no ruling the arbitration cost is waived ({@code arbitrationCostWaived}) and left out.
      */
     public record SettlementPreview(BigDecimal budget, BigDecimal fulfilledPayout, BigDecimal fulfilledCommission,
                                     BigDecimal notFulfilledRefund, BigDecimal partialBuilderNet,
                                     BigDecimal partialClientRefund, BigDecimal fulfilledClientFees,
                                     BigDecimal notFulfilledBuilderFees, BigDecimal partialClientFees,
-                                    BigDecimal partialBuilderFees) {}
+                                    BigDecimal partialBuilderFees, boolean arbitrationCostWaived) {}
 
     public record DisputeDetail(UUID disputeId, UUID taskId, String taskTitle, String taskDescription,
                                 String status, String reasonCategory, String clientReason,

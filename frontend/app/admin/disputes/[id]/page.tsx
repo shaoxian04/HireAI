@@ -139,6 +139,10 @@ function AdminDisputeDetail() {
         : "";
     return `builder +${p.partialBuilderNet} cr · client refunded ${p.partialClientRefund} cr${split}`;
   }
+  // The arbitrator failed before ruling: nobody pays its cost (owner decision on #87).
+  const costWaivedNote = p?.arbitrationCostWaived
+    ? "No AI ruling was made, so the arbitration cost is waived: neither side pays it, whatever you rule."
+    : null;
 
   const escalatedNoRuling = detail.actionable && detail.rulings.length === 0;
 
@@ -318,6 +322,7 @@ function AdminDisputeDetail() {
               No money has settled yet. Your ruling settles escrow once,
               deterministically, from the category:
             </p>
+            {costWaivedNote && <p className="text-sm text-muted">{costWaivedNote}</p>}
             {error && (
               <p role="alert" className="text-xs text-red">
                 {error}

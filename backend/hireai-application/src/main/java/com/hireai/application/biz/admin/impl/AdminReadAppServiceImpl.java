@@ -90,7 +90,8 @@ public class AdminReadAppServiceImpl implements AdminReadAppService {
             case OPEN, ARBITRATING, ESCALATED -> true;
             case RULED, RESOLVED -> false;
         };
-        AdminViews.SettlementPreview preview = settlementPreview(ev.budget(), dispute.appealedBy() != null);
+        AdminViews.SettlementPreview preview = settlementPreview(ev.budget(), dispute.appealedBy() != null,
+                !dispute.hasAiRuling());
         return new AdminViews.DisputeDetail(disputeId, dispute.taskId(), ev.taskTitle(), ev.taskDescription(),
                 dispute.status().name(), dispute.reasonCategory().name(), ev.clientReason(),
                 dispute.createdAt(), ev.clientName(),
@@ -103,11 +104,13 @@ public class AdminReadAppServiceImpl implements AdminReadAppService {
     }
 
     /** What each ruling category would move for this budget (authoritative math via SettlementPolicy). */
-    private AdminViews.SettlementPreview settlementPreview(BigDecimal budgetValue, boolean appealed) {
+    private AdminViews.SettlementPreview settlementPreview(BigDecimal budgetValue, boolean appealed,
+                                                           boolean noAiRuling) {
         Money budget = Money.of(budgetValue);
         Money splitBuilderGross = SettlementPolicy.builderShareOnSplit(budget);
         // Loser pays (D43), as DisputeAppServiceImpl charges it: each fee capped, split per fee on a split ruling.
-        Money cost = feeSchedule.arbitrationCostFor(budget);
+        // An admin ruling without an AI ruling (the arbitrator failed) charges nobody the arbitration cost.
+        Money cost = noAiRuling ? Money.ZERO : feeSchedule.arbitrationCostFor(budget);
         Money appeal = appealed ? feeSchedule.appealFeeFor(budget) : Money.ZERO;
         Money splitClient = SettlementPolicy.clientShareOfSplitFee(cost).add(SettlementPolicy.clientShareOfSplitFee(appeal));
         Money all = cost.add(appeal);
@@ -118,7 +121,7 @@ public class AdminReadAppServiceImpl implements AdminReadAppService {
                 budget.value(),
                 SettlementPolicy.netOf(splitBuilderGross).value(),
                 budget.subtract(splitBuilderGross).value(),
-                all.value(), all.value(), splitClient.value(), all.subtract(splitClient).value());
+                all.value(), all.value(), splitClient.value(), all.subtract(splitClient).value(), noAiRuling);
     }
 
     @Override

@@ -681,6 +681,8 @@ export interface DisputeFeeDTO {
   clientCharged: number;
   builderCharged: number;
   platformCovered: number;
+  /** Set when nobody was charged by rule: NO_AI_RULING = the AI arbitrator gave no ruling. */
+  waivedReason?: string | null;
 }
 
 export interface DisputeOutcomeDTO {
@@ -709,6 +711,8 @@ export interface DisputeOutcomeDTO {
   agentResponse?: "REVISE" | "CONCEDE" | "STAND_BY" | null;
   agentReason?: string | null;
   agentSilent?: boolean;
+  /** The AI arbitrator gave no ruling (it failed), so nobody pays the arbitration cost (it is 0). */
+  arbitrationCostWaived?: boolean;
 }
 
 /** Row shape for a user's own dispute list (/client/disputes, /builder/disputes). */
@@ -763,6 +767,8 @@ export interface AdminSettlementPreviewDTO {
   notFulfilledBuilderFees: number;
   partialClientFees: number;
   partialBuilderFees: number;
+  /** No AI ruling (the arbitrator failed): the arbitration cost is waived and left out of the fees. */
+  arbitrationCostWaived?: boolean;
 }
 
 export interface AdminDisputeDetailDTO {
