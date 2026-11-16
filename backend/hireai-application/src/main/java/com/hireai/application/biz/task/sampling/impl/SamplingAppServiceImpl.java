@@ -151,7 +151,8 @@ public class SamplingAppServiceImpl implements SamplingAppService {
                 .map(TaskItemModel::itemNo).toList();
         if (lot.isEmpty()) {
             // Nothing passed the checks this round: every Item already settled, is on its own path, or
-            // awaits the reviewer's own judgement.
+            // awaits the reviewer's own judgement. No sample will be drawn, so the inspection ends.
+            inspectionRepository.save(inspection.close());
             taskItemAppService.resolveIfAllSettled(pendingReview);
             return;
         }

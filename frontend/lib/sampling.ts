@@ -105,7 +105,8 @@ export function path(inspection: InspectionDTO): Step[] {
   const second1 = r1.find((d) => d.stage === 2);
   const reworked = inspection.round === 2 || r1.some((d) => d.decision === "REWORK");
   const proRata = inspection.status === "PRO_RATA";
-  const finished = inspection.status === "ACCEPTED" || proRata || inspection.status === "WAIVED";
+  const finished = inspection.status === "ACCEPTED" || proRata || inspection.status === "WAIVED"
+    || inspection.status === "CLOSED";
   // Once the inspection ended, a step that never happened was skipped, never still to come.
   const state = (done: boolean, current: boolean, skipped = false): Step["state"] =>
     done ? "done" : skipped || finished ? "skipped" : current ? "current" : "upcoming";
@@ -131,4 +132,12 @@ export function path(inspection: InspectionDTO): Step[] {
     },
     { key: "pro-rata", label: "Pro-rata settlement", state: state(proRata, false, finished && !proRata) },
   ];
+}
+
+/**
+ * True when the reviewer has nothing to do or look at: the inspection closed before any sample was drawn
+ * (no Item passed its checks), and no Item awaits the reviewer's own check.
+ */
+export function nothingToReview(inspection: InspectionDTO, flaggedAwaiting: number): boolean {
+  return inspection.status === "CLOSED" && inspection.draws.length === 0 && flaggedAwaiting === 0;
 }

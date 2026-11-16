@@ -80,7 +80,7 @@ Items judged correct were already paid in full, and Items found wrong refunded, 
 the unverified Items only. If the Agent can no longer take work, a failed round 1 settles pro rata at
 once. Nothing is clawed back: a judgement after the review window closed is a 409, and the window's
 close accepts whatever is still awaiting review (the inspection reads `WAIVED`, as it does when the buyer
-accepts everything awaiting review).
+accepts everything awaiting review). When nothing is left to sample (every reworked Item failed its checks again, or the Task ended without a result) the inspection is `CLOSED`: no entry on the task page, and the reviewer page says there is nothing left to sample.
 
 ## Money
 

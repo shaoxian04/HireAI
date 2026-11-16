@@ -10,7 +10,7 @@ import { Button, Input, Skeleton } from "@/components/ui";
 import { ReviewWindowNotice, reviewWindowClosed, useNow } from "@/components/ReviewWindowNotice";
 import { SampleItemCard, type Judgement } from "@/components/sampling/SampleItemCard";
 import { SamplingPath, PlanFacts, InspectionOutcome } from "@/components/sampling/InspectionSummary";
-import { currentDraw, latestRejection, sampledInRound, tally } from "@/lib/sampling";
+import { currentDraw, latestRejection, nothingToReview, sampledInRound, tally } from "@/lib/sampling";
 import type { InspectionDTO, TaskDTO, TaskItemDTO } from "@/lib/types";
 
 const POLL_MS = 4000;
@@ -125,6 +125,21 @@ function Reviewer() {
   // Items a check sent to review (#106, D7): never drawn, judged here one by one, never counted.
   const flagged = (task.items ?? []).filter((i) => i.needsReview && !sampled.has(i.itemNo)
     && (i.status === "PENDING_REVIEW" || i.status === "REJECTED"));
+
+  if (nothingToReview(inspection, flagged.length)) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6">
+        <BackLink id={id} />
+        <div role="status" className="panel space-y-2 px-6 py-8 text-center">
+          <p className="display text-2xl text-fg">Nothing left to sample</p>
+          <p className="text-sm text-muted">
+            No Item passed its checks, so there is no sample to review and the inspection is closed. Items that
+            failed their checks were refunded; see the task page for each Item.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   function addExtra() {
     const n = Number(extraNo);

@@ -1058,7 +1058,7 @@ export type AgentReputationDTO = {
 // ── Sampling inspection (#105, spec S8) ──
 
 export type InspectionLevel = "I" | "II" | "III";
-export type InspectionStatus = "SAMPLING" | "REWORKING" | "ACCEPTED" | "PRO_RATA" | "WAIVED";
+export type InspectionStatus = "SAMPLING" | "REWORKING" | "ACCEPTED" | "PRO_RATA" | "WAIVED" | "CLOSED";
 export type SampleDecision = "ACCEPT_LOT" | "DRAW_SECOND" | "REWORK" | "PRO_RATA";
 
 /** One sample drawn after delivery from a recorded seed, under the plan the lot-size table set. */

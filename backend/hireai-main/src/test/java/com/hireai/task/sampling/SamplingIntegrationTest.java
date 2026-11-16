@@ -260,6 +260,41 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
                 .add(task.get("refundAmount").decimalValue())).isEqualByComparingTo("400.00");
     }
 
+    /**
+     * Chrome E2E: when every reworked Item fails its checks again, nothing is left to sample. The inspection
+     * must end (CLOSED), not stay SAMPLING with an empty reviewer page, and the Task settles what it has.
+     */
+    @Test
+    void whenEveryReworkedItemFailsItsChecksTheInspectionClosesWithNothingToSample() throws Exception {
+        FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted().withCallback(itemCallback(true)));
+        UUID agentId = seedTextAgent(agent, "4.00");
+        UUID taskId = book(agentId, "4.00", inputs(20), null);
+        awaitStatus(taskId, "PENDING_REVIEW");
+        // Every draw of round 1 has one wrong Item (conceded): 2 wrong over both samples fails the lot.
+        int sampled = 0;
+        for (int stage = 0; stage < 2; stage++) {
+            List<Integer> sample = itemNos(inspection(taskId).get("draws").get(stage));
+            sampled += sample.size();
+            reject(taskId, sample.get(0), "A_MISMATCH", "the vendor is missing");
+            concede(agent, taskId, sample.get(0));
+            for (int n : sample.subList(1, sample.size())) {
+                pass(taskId, n);
+            }
+        }
+        assertThat(sampled).isLessThan(20);
+
+        // The sample failed: the unsampled Items went back, came back empty, were reworked per Item and refunded.
+        awaitStatus(taskId, "RESOLVED");
+        JsonNode task = getTask(taskId);
+        assertThat(statusCounts(task)).isEqualTo(Map.of("ACCEPTED", (long) sampled - 2, "CONCEDED", 2L,
+                "SPEC_VIOLATION", 20L - sampled));
+        JsonNode inspection = inspection(taskId);
+        assertThat(inspection.get("status").asText()).isEqualTo("CLOSED");
+        assertThat(inspection.get("round").asInt()).isEqualTo(2);
+        assertThat(inspection.get("draws")).hasSize(2); // no resample was drawn: nothing passed to draw from
+        assertThat(escrowLeftFor(taskId)).isEqualByComparingTo("0.00");
+    }
+
     @Test
     void aSampledRejectionTakesTheResponsePathWithTheBuyerDeciding() throws Exception {
         FakeAgent agent = itemAgent();
@@ -438,17 +473,22 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
 
     /** Answers every WorkOrder (the first and the rework) with each Item done; ignores notices. */
     private AgentCallback itemCallback() {
+        return itemCallback(false);
+    }
+
+    /** {@code failReworks}: every Item of a rework WorkOrder comes back empty (fails text_basic). */
+    private AgentCallback itemCallback(boolean failReworks) {
         return AgentCallback.custom(order -> {
             if (order.field("event") != null) {
                 throw new IllegalStateException("a notice: the test answers it itself");
             }
             return CallbackRequest.post(order.callbackUrl())
                     .header("Authorization", "Bearer " + order.bearerToken())
-                    .body(itemResults(order));
+                    .body(itemResults(order, failReworks && order.json().has("rework")));
         }).afterReply(Duration.ofMillis(200)).signedAt(() -> clock.instant());
     }
 
-    private static String itemResults(RecordedWorkOrder order) {
+    private static String itemResults(RecordedWorkOrder order, boolean empty) {
         ObjectNode body = JSON.createObjectNode();
         body.put("taskId", order.taskId());
         body.put("agentStatus", "COMPLETED");
@@ -457,7 +497,7 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
             ObjectNode result = results.addObject();
             result.put("itemNo", item.get("itemNo").asInt());
             result.put("agentStatus", "COMPLETED");
-            result.put("resultPayloadJson", "done: " + item.get("input").asText());
+            result.put("resultPayloadJson", empty ? "" : "done: " + item.get("input").asText());
         }
         return body.toString();
     }

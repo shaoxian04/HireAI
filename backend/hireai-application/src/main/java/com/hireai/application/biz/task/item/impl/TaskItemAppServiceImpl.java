@@ -33,6 +33,7 @@ import com.hireai.domain.biz.task.model.ReviewWindow;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
+import com.hireai.domain.biz.task.sampling.repository.InspectionRepository;
 import com.hireai.domain.shared.model.Money;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
@@ -82,6 +83,8 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
     private final InvoiceReader invoiceReader;
     /** How many times a rejected Item may come back (spec S5, {@code hireai.acceptance.max-reworks}). */
     private final ReworkPolicy reworkPolicy;
+    /** Closes an inspection left open when the Task ends with nothing to sample. */
+    private final InspectionRepository inspectionRepository;
     /** Looked up lazily: routing depends on the task write service, which depends on this one. */
     private final ObjectProvider<RoutingAppService> routingAppService;
 
@@ -162,6 +165,7 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
         if (!outcome.anyPassed() && !outcome.anyOpenOrPaid()) {
             TaskModel failed = recorded.failValidation(); // every Item already refunded on its own
             taskRepository.save(failed);
+            closeInspection(failed.id()); // e.g. every reworked Item failed again: nothing is left to sample
             recordReputation(failed, outcome);
             webhookOutboxAppService.enqueueFailed(failed, failed.status().name());
             log.info("Task {}: none of its {} Items passed -> SPEC_VIOLATION (each Item refunded)",
@@ -296,6 +300,12 @@ public class TaskItemAppServiceImpl implements TaskItemAppService {
         }
         TaskItems items = taskItemRepository.findByTaskId(task.id());
         return items.allSettled() ? resolve(task, items) : task;
+    }
+
+    @Override
+    public void closeInspection(UUID taskId) {
+        inspectionRepository.findByTaskId(taskId).filter(i -> !i.status().isFinished())
+                .ifPresent(i -> inspectionRepository.save(i.close()));
     }
 
     /** Every Item has settled: the Task resolves and writes its one reputation event (D22, D27). */
