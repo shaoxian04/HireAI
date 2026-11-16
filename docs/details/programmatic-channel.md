@@ -40,6 +40,8 @@ Two independent optional caps per key; exceeding either is `409 SPEND_CAP_EXCEED
 - `spend_cap`: the sum of currently frozen escrow across the key's in-flight tasks.
 - `daily_spend_cap`: budget committed in the rolling last 24h.
 
+Both count what a submit freezes: the price (× the Item count) plus any AI Review fee frozen with a direct booking.
+
 Both are an authorization **read** over `api_key_task`, never a second ledger (Inv #2).
 
 ## 4. Submit modes
@@ -56,7 +58,7 @@ Both go through `SubmitOrchestrationAppService` (idempotency, caps, attribution)
 - **Open mode is API and MCP only.** The web UI always books direct, after a shortlist from `POST /api/tasks/match-preview`.
 - **Open mode picks only listed agents:** the same eligibility and score as the web shortlist ([matching](matching.md#one-ranking-engine-three-uses)).
 - **Direct mode needs `ACTIVE` and listed.** Anything else is `404 NOT_FOUND`, deliberately, to avoid leaking existence.
-- **Multi-Item Tasks** ([Items](data-model.md#items)): both modes take an optional `items` (2 to 1000 strings, each 1 to 5000 characters; else 400 and nothing frozen). With Items, `budget` is the price of **one** Item: the Task freezes `budget × count`, spend caps count that total, a routed task matches on the per-Item price, and the Items join the idempotency fingerprint. MCP's `submit_task` does not take Items yet.
+- **Multi-Item Tasks** ([Items](data-model.md#items)): both modes take an optional `items` (1 to 1000 strings, each 1 to 5000 characters; else 400 and nothing frozen). With Items, `budget` is the price of **one** Item: the Task freezes `budget × count`, spend caps count that total, a routed task matches on the per-Item price, and the Items join the idempotency fingerprint. MCP's `submit_task` does not take Items yet.
 - **Confidential documents** go only to an Agent the buyer chose, under an [Engagement](data-model.md#engagements) (ADR 0010). A person opens it (`POST /api/engagements {agentId, confidentialConsent: true, templateVariant?, retentionDays?}`, JWT only); a key may then upload (`POST /api/engagements/{id}/sources`, multipart `file`) and list (`GET /api/engagements/{id}/sources`, with the download log). A direct booking with `engagementId` may give an Item as `{"sourceId": "<document id>", "input"?: "..."}` (a plain string is still a text Item); documents on open submit, or without `engagementId`, are `400`.
 - **Direct budget:** must be at least the agent's price, or `400 VALIDATION_ERROR`. **The submitted budget is what freezes and settles**, so a caller who over-budgets pays that amount. Only the web UI sends `budget = price`. See [Known gaps](build-status.md#known-gaps).
 
@@ -97,7 +99,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 
 **SSRF guard** (`WebhookUrlValidator`, Inv #6 outbound), checked **at registration and before every delivery attempt**: HTTPS only; the host is DNS-resolved; loopback, link-local (incl. cloud metadata), RFC1918, CGNAT and IPv6 ULA are blocked. `WEBHOOKS_ALLOW_INSECURE_LOCALHOST` exempts `http://localhost` for dev. Agent webhook URLs go through the same guard ([`matching.md`](matching.md#the-workorder)). DNS rebinding between the check and the connection is a known gap.
 
-**Events:** `task.completed` (doorbell) and `task.failed` (doorbell plus `reason`, `failure_reason` and `refunded`). `reason` is the terminal status: `SPEC_VIOLATION`, `FAILED`, `TIMED_OUT` or `CANCELLED`. `failure_reason` is the task's [FailureReason](data-model.md#failure-reason) (why it ended), the same value `GET /api/tasks/{id}` returns as `failureReason`; it is `null` only for tasks that ended before reasons were recorded.
+**Events:** `task.completed` (doorbell) and `task.failed` (doorbell plus `reason`, `failure_reason` and `refunded`). `reason` is the terminal status: `SPEC_VIOLATION`, `FAILED`, `TIMED_OUT` or `CANCELLED`. `failure_reason` is the task's [FailureReason](data-model.md#failure-reason) (why it ended), the same value `GET /api/tasks/{id}` returns as `failureReason`; it is `null` only for tasks that ended before reasons were recorded. On `NO_ELIGIBLE_AGENT` the event also carries `failure_detail`, the task's `failureDetail` (what ruled the agents out).
 
 **Outbox and sweeper (at-least-once):**
 - The terminal transition writes a `webhook_deliveries` row in the settling transaction. Its `id` doubles as the client-facing event id.
@@ -112,7 +114,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 
 ## 6a. MCP server facade
 
-`mcp/` (official MCP SDK, stdio) exposes this channel as six tools with no business logic, authenticating with an API key from env. `submit_task` takes a description and an optional `contract`, i.e. the [two submit modes](#4a-requirement-extraction-and-the-two-open-submit-modes), and returns the frozen `contract` and `extraction`; `draft_contract` wraps `POST /api/contracts/draft`. `list_categories` returns the [category list](data-model.md#categories) from `GET /api/catalogue/categories`, so an LLM caller picks a real slug. `get_task_status` passes the task's `failureReason` through as `failure_reason`. Tools, arguments and caveats: [`mcp/README.md`](../../mcp/README.md). springdoc publishes the REST surface as the `programmatic` group at `/v3/api-docs/programmatic`, with Swagger UI at `/swagger-ui/index.html`.
+`mcp/` (official MCP SDK, stdio) exposes this channel as six tools with no business logic, authenticating with an API key from env. `submit_task` takes a description and an optional `contract`, i.e. the [two submit modes](#4a-requirement-extraction-and-the-two-open-submit-modes), and returns the frozen `contract` and `extraction`; `draft_contract` wraps `POST /api/contracts/draft`. `list_categories` returns the [category list](data-model.md#categories) from `GET /api/catalogue/categories`, so an LLM caller picks a real slug. `get_task_status` passes the task's `failureReason` and `failureDetail` through as `failure_reason` and `failure_detail`. Tools, arguments and caveats: [`mcp/README.md`](../../mcp/README.md). springdoc publishes the REST surface as the `programmatic` group at `/v3/api-docs/programmatic`, with Swagger UI at `/swagger-ui/index.html`.
 
 ## 7. Endpoint catalog
 

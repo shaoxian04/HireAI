@@ -28,7 +28,8 @@ class WebhookOutboxAppServiceImplTest {
     private final WebhookDeliveryRepository deliveries = mock(WebhookDeliveryRepository.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-07-19T09:12:00Z"), ZoneOffset.UTC);
     private final WebhookOutboxAppServiceImpl svc =
-            new WebhookOutboxAppServiceImpl(apiKeyTasks, subs, deliveries, clock);
+            new WebhookOutboxAppServiceImpl(apiKeyTasks, subs, deliveries, clock,
+                    mock(com.hireai.domain.biz.task.repository.TaskRepository.class));
 
     private final UUID taskId = UUID.randomUUID(), clientId = UUID.randomUUID(),
             keyId = UUID.randomUUID(), subId = UUID.randomUUID();

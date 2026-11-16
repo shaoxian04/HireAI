@@ -398,6 +398,7 @@ export const handlers = [
       agentsTotal: 2,
       escrowHeld: 20,
       commissionEarned: 1.5,
+      aiReviewFeesEarned: 0.4,
     }),
   ),
   http.get("*/api/admin/tasks", () => ok([])),

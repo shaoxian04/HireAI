@@ -26,10 +26,21 @@ public final class WebhookPayloads {
      */
     public static String failed(UUID eventId, UUID taskId, String reason, FailureReason failureReason,
                                 BigDecimal refundedAmount, Instant at) {
+        return failed(eventId, taskId, reason, failureReason, null, refundedAmount, at);
+    }
+
+    /**
+     * {@link #failed(UUID, UUID, String, FailureReason, BigDecimal, Instant)} plus {@code failure_detail}, the
+     * same detail {@code GET /api/tasks/{id}} returns as {@code failureDetail} (what ruled agents out on a
+     * NO_ELIGIBLE_AGENT, #91); left out when there is none.
+     */
+    public static String failed(UUID eventId, UUID taskId, String reason, FailureReason failureReason,
+                                String failureDetail, BigDecimal refundedAmount, Instant at) {
         String failureReasonJson = failureReason == null ? "null" : "\"" + failureReason.name() + "\"";
+        String detail = failureDetail == null ? "" : ",\"failure_detail\":\"" + jsonEscape(failureDetail) + "\"";
         return "{\"event_id\":\"" + eventId + "\",\"type\":\"" + WebhookEventType.TASK_FAILED.wire()
              + "\",\"task_id\":\"" + taskId + "\",\"reason\":\"" + jsonEscape(reason)
-             + "\",\"failure_reason\":" + failureReasonJson
+             + "\",\"failure_reason\":" + failureReasonJson + detail
              + ",\"refunded\":" + refundedAmount.toPlainString() + ",\"occurred_at\":\"" + at + "\"}";
     }
 

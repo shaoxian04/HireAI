@@ -46,18 +46,15 @@ What exists and what doesn't, per area. **Known gaps below is the single home fo
 
 ### AI Review (#107)
 - **A convincing deliverable can still sway a final API verdict (accepted residual risk).** The reviewer's evidence is fenced with a per-run nonce, forged markers are redacted and the prompt treats instructions inside it as manipulation, but the model still reads text inside images and PDFs. On API/MCP the verdict settles and is final (D38): that is the opt-in trade-off both sides accepted. Unusable answers fail closed (never a payout) and money only moves from the ruling category (Inv #3).
-- **`AI_REVIEW_UNAVAILABLE` auto-accepts on silence, like `ANOMALY` and `UNDECIDED` (owner decision pending).** An API result whose decisive AI Review gave no usable verdict waits in `PENDING_REVIEW` with a review window, and the review-window sweeper accepts it on silence like any other. Same open decision as the anomaly entry below.
 - **Booked only on the agent booking page and `POST /api/tasks/direct`.** The routed submit, the submit form's shortlist "Confirm & book" and MCP `submit_task` can't add one yet; nor can a multi-Item Task (D5: never per Item by default).
-- **The API spend caps count the price, not the AI Review fee** (at most 10% more is frozen than the caps see).
-- **The admin overview's platform revenue leaves out AI Review fees** (it sums commission only); the ledger has them as `AI_REVIEW_FEE`.
 - **One review per Task:** a result revised after a rejection (#95) is not reviewed again.
 
 ### Items (multi-Item Tasks, #103)
 
-- **A single Item cannot be arbitrated yet.** After the Agent stands by an Item the reviewer rejected, the buyer can only accept it (or let the decision window close, which accepts it); `ARBITRATE` is refused with 409. Tracked in #113 (with the arbitrator seeing the Item's SourceSnapshot, S9).
+- **A single Item cannot be arbitrated yet.** After the Agent stands by an Item the reviewer rejected, the buyer can only accept it (or let the decision window close, which accepts it); `ARBITRATE` is refused with 409. Until per-Item disputes exist, standing by always ends in payment, so a sample can be talked out of its defects. Whole-Task reject of a multi-Item Task stays 409 (judge Items instead). Tracked in #113 (with the arbitrator seeing the Item's SourceSnapshot, S9).
 - **Sampling ground truth is the buyer's reviewer only (#115).** The optional second, independent Agent's extraction (S8) is not built.
 - **Windows, reworks and caps are platform-wide (#114).** A Contract cannot override them within its Template's bounds (D41).
-- **The AI Review fee does not price size (#116).** It prices type and criterion count only (S10). Until per-Item disputes exist, standing by always ends in payment, so a sample can be talked out of its defects. Whole-Task reject of a multi-Item Task stays 409 (judge Items instead).
+- **The AI Review fee does not price size (#116).** It prices type and criterion count only (S10).
 - **Only web tasks are sampled.** API-key tasks settle their passing Items at once, as before; routed submits cannot choose a stricter inspection level (direct booking only), and the Builder console's Offer editor has no control for `strictestInspectionLevel` (API only: `offer.strictestInspectionLevel` on publish).
 - **Sampled rejections and the rework run on the Task row lock.** Accepting a 500-Item lot, or settling it pro rata, settles every Item in one transaction (one wallet write per Item).
 - **Items on the web only as Engagement documents, and no MCP for Items.** The booking page books uploaded documents as Items; text Items are API-only (`items` on `POST /api/tasks` and `/api/tasks/direct`), and MCP `submit_task` takes neither.

@@ -93,8 +93,15 @@ class JdbcAdminQueryDaoIntegrationTest {
         jdbc.update("INSERT INTO settlements (id, task_id, type, net, commission) VALUES (?, ?, 'SPLIT', 8.50, 1.50)",
                 UUID.randomUUID(), UUID.randomUUID());
 
+        BigDecimal feesBefore = dao.overview().aiReviewFeesEarned();
+        UUID walletId = jdbc.queryForObject("SELECT id FROM wallets LIMIT 1", UUID.class);
+        jdbc.update("INSERT INTO ledger_entries (id, wallet_id, entry_type, amount, balance_after, related_task_id, "
+                + "correlation_id, created_at) VALUES (?, ?, 'AI_REVIEW_FEE', -0.40, 0.00, ?, 'ai-review-x', now())",
+                UUID.randomUUID(), walletId, UUID.randomUUID());
+
         AdminViews.Overview o = dao.overview();
 
+        assertThat(o.aiReviewFeesEarned()).isEqualByComparingTo(feesBefore.add(new BigDecimal("0.40")));
         assertThat(o.disputesEscalated()).isGreaterThanOrEqualTo(1);
         assertThat(o.escrowHeld()).isGreaterThanOrEqualTo(new BigDecimal("20.00"));
         assertThat(o.commissionEarned()).isGreaterThanOrEqualTo(new BigDecimal("1.50"));

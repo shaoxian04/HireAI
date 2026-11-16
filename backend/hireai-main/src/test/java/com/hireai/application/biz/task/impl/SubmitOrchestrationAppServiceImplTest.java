@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -237,6 +238,29 @@ class SubmitOrchestrationAppServiceImplTest {
         assertThat(svc.submitDirect(ctx, info)).isEqualTo(taskId);
         verify(direct).book(info);
         verify(attribution).attribute(eq(taskId), eq(keyId), any(), eq(fixed));
+    }
+
+    @Test
+    void theSpendCapsCountTheAiReviewFeeFrozenWithTheBooking() {
+        UUID owner = UUID.randomUUID();
+        UUID keyId = UUID.randomUUID();
+        UUID agentId = UUID.randomUUID();
+        DirectBookingInfo info = new DirectBookingInfo(owner, "T", "d", Money.of("20.00"), agentId, null, null,
+                null, null, null, List.of("is polite"), null);
+        when(direct.quoteAiReview(agentId, null, Money.of("20.00"), 1)).thenReturn(
+                new com.hireai.domain.biz.acceptance.aireview.model.AiReviewQuote(Money.of("1.50"), Money.of("2.00"),
+                        true, null));
+        // 20.00 price + 1.50 fee = 21.50 frozen: over a 21.00 cap, under neither alone.
+        SubmitContext capped = new SubmitContext(owner, null, keyId, new BigDecimal("21.00"), null);
+        when(spendRead.committedFor(keyId)).thenReturn(BigDecimal.ZERO);
+        assertThatThrownBy(() -> svc.submitDirect(capped, info)).isInstanceOfSatisfying(DomainException.class,
+                e -> assertThat(e.resultCode()).isEqualTo(ResultCode.SPEND_CAP_EXCEEDED));
+        verify(direct, never()).book(any());
+
+        UUID taskId = UUID.randomUUID();
+        when(direct.book(any())).thenReturn(taskId);
+        svc.submitDirect(new SubmitContext(owner, null, keyId, null, null), info);
+        verify(attribution).attribute(eq(taskId), eq(keyId), eq(new BigDecimal("21.50")), eq(fixed));
     }
 
     // Mirrors SubmitOrchestrationAppServiceImpl.fingerprint(TaskSubmitInfo) + specJson(OutputSpec)

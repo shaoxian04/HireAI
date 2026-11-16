@@ -733,6 +733,8 @@ export interface AdminOverviewDTO {
   agentsTotal: number;
   escrowHeld: number;
   commissionEarned: number;
+  /** AI Review fees charged (refunded ones excluded). */
+  aiReviewFeesEarned: number;
 }
 
 export interface AdminDisputeRowDTO {
