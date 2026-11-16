@@ -33,6 +33,8 @@ Stored in the `user_roles` join table; a user may hold several of `CLIENT`, `BUI
 | `/api/admin/**` | `ADMIN` |
 | `POST /api/agents/*/rotate-secret` | `BUILDER` (JWT-only; the app service then requires ownership, a foreign agent is `NOT_FOUND`) |
 | `GET /api/catalogue/**` | `CLIENT`, `BUILDER`, `ADMIN`, `API_CLIENT` |
+| `GET /api/tasks/*/receipts`, `/api/receipts/*` | `CLIENT`, `BUILDER`, `ADMIN`, `API_CLIENT`; the app service then admits the task's Client, or its Agent's Builder only on a JWT holding `BUILDER` (an API key never reads as a Builder) ([`receipts.md`](receipts.md)) |
+| `GET /api/receipt-keys` | public |
 | Anything else | `CLIENT`, `BUILDER`, `ADMIN` |
 
 Consequences worth knowing:

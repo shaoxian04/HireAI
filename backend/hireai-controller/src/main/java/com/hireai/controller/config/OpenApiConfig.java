@@ -25,7 +25,8 @@ public class OpenApiConfig {
                 .pathsToMatch("/api/tasks", "/api/tasks/**",
                         "/api/keys", "/api/keys/**",
                         "/api/webhooks/**",
-                        "/api/catalogue/**")
+                        "/api/catalogue/**",
+                        "/api/receipts/**", "/api/receipt-keys")
                 .build();
     }
 
