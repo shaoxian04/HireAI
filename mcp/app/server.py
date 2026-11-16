@@ -33,31 +33,78 @@ async def list_categories() -> str:
                        for r in rows], indent=2, default=str)
 
 
-async def submit_task(description: str, budget: float, category: str = "", output_spec: str = "",
-                      agent_id: str = "", title: str = "Task via MCP", output_format: str = "TEXT",
+def _parse_contract(contract: dict | str | None) -> dict | None:
+    """The Contract as a JSON object (hosts may send it as a JSON string); TypeError otherwise."""
+    if contract is None or contract == "":
+        return None
+    if isinstance(contract, str):
+        try:
+            contract = json.loads(contract)
+        except ValueError:
+            contract = None
+    if not isinstance(contract, dict):
+        raise TypeError("Error: `contract` must be a JSON object like "
+                        '{"template": "text_basic", "version": 1, "params": {"max_length": 800}} '
+                        "(draft_contract returns one). Leave it out to have the requirements read "
+                         "from the description.")
+    return contract
+
+
+async def submit_task(description: str, budget: float, category: str = "", agent_id: str = "",
+                      contract: dict | str | None = None, title: str = "Task via MCP",
                       deadline_seconds: int | None = None, schema: str = "") -> str:
-    """Submit a task to HireAI. If `agent_id` is given the task is direct-booked to that agent (it
-    inherits the agent's output spec — only description, budget, agent_id are needed). Otherwise the
-    task is routed to the best-matching agent and `category` is required: a slug from
-    list_categories (`output_spec` is the acceptance criteria; `output_format` is TEXT, JSON, or FILE).
+    """Submit a task to HireAI. Write what you need, including every requirement (length, format,
+    fields, size...), in `description`. Two modes:
+    1. Description only: HireAI reads the requirements in the description and maps those it can
+       check automatically onto a Contract, which is frozen as the task's acceptance terms.
+    2. Description + `contract`: the Contract is frozen exactly as given and nothing is read from the
+       description. A Contract is {"template": key, "version": n, "params": {...}}; get one from
+       draft_contract, edit it if needed, and pass it here. An invalid Contract is rejected with a 400.
+    The response carries the frozen `contract` and, in mode 1, `extraction`: each requirement found,
+    whether it was mapped to an automatic check, and why not when it was not.
+    If `agent_id` is given the task is direct-booked to that agent (with `contract`, the agent's
+    offer must cover it). Otherwise it is routed to the best-matching agent and `category` is
+    required: a slug from list_categories.
     `deadline_seconds` (optional) is how soon the result is needed, counted from now: only agents that
     can finish in time are picked (a direct booking of a slower agent is refused).
-    `schema` (routed JSON tasks only, optional) is a JSON Schema object the result must conform to,
-    checked automatically before the task settles; a non-blank schema that is not a valid JSON Schema
-    is rejected with a 400, and nothing is charged. Leave it empty to accept any JSON."""
+    `schema` (mode 1 routed only, optional) asks for a JSON result conforming to this JSON Schema
+    object, checked before the task settles; an invalid schema is a 400 and nothing is charged. With a
+    `contract`, put the schema in its params instead (template custom_json)."""
+    try:
+        parsed = _parse_contract(contract)
+    except TypeError as exc:
+        return str(exc)
+    if parsed is not None and schema:
+        return ("Error: give `schema` or `contract`, not both. With a contract, put the schema in its "
+                'params: {"template": "custom_json", "version": 1, "params": {"schema": "..."}}.')
     client = _client()
     if agent_id:
         task = await client.submit_direct(title=title, description=description,
                                           budget=budget, agent_id=agent_id,
-                                          deadline_seconds=deadline_seconds)
+                                          deadline_seconds=deadline_seconds, contract=parsed)
     else:
         if not category:
             return "Error: `category` is required for a routed submit (or pass `agent_id` to direct-book an agent)."
         task = await client.submit_routed(title=title, description=description, category=category,
-                                          budget=budget, output_format=output_format,
-                                          schema=schema, acceptance_criteria=output_spec,
+                                          budget=budget, schema=schema, contract=parsed,
                                           deadline_seconds=deadline_seconds)
-    return json.dumps({"task_id": task.get("id"), "status": task.get("status")}, default=str)
+    out = {"task_id": task.get("id"), "status": task.get("status")}
+    for key in ("contract", "extraction"):
+        if task.get(key) is not None:
+            out[key] = task[key]
+    return json.dumps(out, default=str)
+
+
+async def draft_contract(description: str, template: str = "", title: str = "", schema: str = "") -> str:
+    """Preview the Contract HireAI would read from a task description, without submitting or charging
+    anything. Returns {contract, extraction}: the Contract (pass it, edited or not, as submit_task's
+    `contract`) and each requirement found, mapped to an automatic check or listed as unmapped with
+    the reason. `template` (optional) is the Template key to draft onto (e.g. image_generation),
+    using its current version; or give `schema` (a JSON Schema object) to draft a JSON result; with
+    neither, a text result. Give at most one of `template` and `schema`."""
+    draft = await _client().draft_contract(description=description, title=title,
+                                           template=template, schema=schema)
+    return json.dumps(draft, indent=2, default=str)
 
 
 async def get_task_status(task_id: str) -> str:
@@ -100,6 +147,7 @@ async def get_task_result(task_id: str) -> str:
 mcp.tool()(list_agents)
 mcp.tool()(list_categories)
 mcp.tool()(submit_task)
+mcp.tool()(draft_contract)
 mcp.tool()(get_task_status)
 mcp.tool()(get_task_result)
 
