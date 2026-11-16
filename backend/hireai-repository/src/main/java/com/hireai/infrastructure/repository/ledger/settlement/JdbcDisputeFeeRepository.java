@@ -24,23 +24,24 @@ public class JdbcDisputeFeeRepository implements DisputeFeeRepository {
     public void append(UUID disputeId, UUID taskId, DisputeFeeCharge c) {
         jdbc.update("""
                 INSERT INTO dispute_fees (id, dispute_id, task_id, fee_type, full_cost, capped_amount,
-                                          client_charged, builder_charged, platform_covered)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                          client_charged, builder_charged, platform_covered, waived_reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 UUID.randomUUID(), disputeId, taskId, c.type().name(), c.fullCost().value(),
                 c.cappedAmount().value(), c.clientCharged().value(), c.builderCharged().value(),
-                c.platformCovered().value());
+                c.platformCovered().value(), c.waivedReason());
     }
 
     @Override
     public List<DisputeFeeCharge> findByDisputeId(UUID disputeId) {
         return jdbc.query("""
-                SELECT fee_type, full_cost, capped_amount, client_charged, builder_charged, platform_covered
+                SELECT fee_type, full_cost, capped_amount, client_charged, builder_charged, platform_covered,
+                       waived_reason
                 FROM dispute_fees WHERE dispute_id = ?
                 ORDER BY CASE fee_type WHEN 'ARBITRATION_COST' THEN 0 ELSE 1 END""",
                 (rs, i) -> new DisputeFeeCharge(DisputeFeeType.valueOf(rs.getString("fee_type")),
                         Money.of(rs.getBigDecimal("full_cost")), Money.of(rs.getBigDecimal("capped_amount")),
                         Money.of(rs.getBigDecimal("client_charged")), Money.of(rs.getBigDecimal("builder_charged")),
-                        Money.of(rs.getBigDecimal("platform_covered"))),
+                        Money.of(rs.getBigDecimal("platform_covered")), rs.getString("waived_reason")),
                 disputeId);
     }
 }

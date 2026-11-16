@@ -68,6 +68,12 @@ public interface TaskItemAppService {
     TaskModel resolveIfAllSettled(TaskModel task);
 
     /**
+     * Ends the Task's sampling inspection as CLOSED when it is still open and nothing is left to sample
+     * (the Task ended, or no Item passed its checks); a finished inspection, or none, is left as it is.
+     */
+    void closeInspection(UUID taskId);
+
+    /**
      * The Agent revised an Item a reviewer rejected (D17′): runs the Contract's checks on the revision and
      * saves it, back to review when it passes, else refunded. {@code round}: the rejection round it answers.
      */

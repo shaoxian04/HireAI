@@ -40,6 +40,29 @@ class DisputeFeeTest {
     }
 
     @Test
+    void withoutAnAiRulingNobodyPaysTheArbitrationCostAndTheRecordSaysWhy() {
+        WalletModel client = walletWith("50.00");
+        WalletModel builder = walletWith("50.00");
+
+        DisputeFeeCharge charge = service.chargeArbitrationCost(false, Money.of("3.00"), Money.of("100.00"),
+                EnumSet.of(DisputeParty.CLIENT, DisputeParty.BUILDER), client, builder, taskId, "c");
+
+        assertThat(charge.type()).isEqualTo(DisputeFeeType.ARBITRATION_COST);
+        assertThat(charge.clientCharged()).isEqualTo(Money.ZERO);
+        assertThat(charge.builderCharged()).isEqualTo(Money.ZERO);
+        assertThat(charge.platformCovered()).isEqualTo(Money.of("3.00"));
+        assertThat(charge.waivedReason()).isEqualTo(DisputeFeeCharge.NO_AI_RULING);
+        assertThat(client.pendingEntries()).isEmpty();
+        assertThat(builder.pendingEntries()).isEmpty();
+
+        // With an AI ruling the loser pays as always.
+        DisputeFeeCharge ruled = service.chargeArbitrationCost(true, Money.of("3.00"), Money.of("100.00"),
+                EnumSet.of(DisputeParty.CLIENT), client, builder, taskId, "c");
+        assertThat(ruled.clientCharged()).isEqualTo(Money.of("3.00"));
+        assertThat(ruled.waivedReason()).isNull();
+    }
+
+    @Test
     void theLosingClientPaysTheWholeCostFromItsBalance() {
         WalletModel client = walletWith("50.00");
         WalletModel builder = walletWith("0.00");

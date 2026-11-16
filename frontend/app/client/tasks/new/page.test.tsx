@@ -580,15 +580,53 @@ const EXTRACTED = {
 };
 
 describe("submit task — extracted checks (#101)", () => {
-  async function searchAndPick() {
+  async function searchAndPick(before?: () => Promise<void>) {
     renderPage();
     fillBasics("30");
     await pickCategory();
+    if (before) await before();
     fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
     await screen.findByRole("dialog", { name: /pick your agent/i });
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     return screen.findByRole("region", { name: /what booking agrees to/i });
   }
+
+  async function chooseTextTerms() {
+    const terms = await screen.findByLabelText(/output terms/i);
+    await screen.findByRole("option", { name: "Text" });
+    fireEvent.change(terms, { target: { value: "text_basic@1" } });
+  }
+
+  it("keeps each agent's own terms when no Output terms are chosen, listing what it read as advice", async () => {
+    let previewSent: Record<string, unknown> | null = null;
+    let booked: Record<string, unknown> | null = null;
+    server.use(
+      http.get("*/api/catalogue/templates", () => ok(TEXT_TEMPLATES)),
+      // The description says JSON, but nothing chose a Template: the draft is read against text_basic.
+      http.post("*/api/contracts/draft", () => ok(EXTRACTED)),
+      http.post("*/api/tasks/match-preview", async ({ request }) => {
+        previewSent = (await request.json()) as Record<string, unknown>;
+        return ok(previewBody);
+      }),
+      http.post("*/api/tasks/direct", async ({ request }) => {
+        booked = (await request.json()) as Record<string, unknown>;
+        return ok({ id: "t-1", status: "SUBMITTED" });
+      }),
+    );
+    const checks = await searchAndPick();
+
+    // No Template the Client didn't choose may rule an Agent out (a JSON Agent stays on the shortlist).
+    expect(previewSent).not.toHaveProperty("contract");
+    expect(within(checks).getByRole("list", { name: /^checked automatically/i }))
+      .toHaveTextContent(/agent.s own output terms/i);
+    expect(within(checks).getByRole("list", { name: /not checked automatically/i }))
+      .toHaveTextContent(/no more than 800 characters.*choose output terms/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /confirm & book/i }));
+    await waitFor(() => expect(booked).not.toBeNull());
+    expect(booked).not.toHaveProperty("contract");
+    expect(booked).not.toHaveProperty("extraction");
+  });
 
   it("extracts the description before the search and books the extracted terms", async () => {
     const order: string[] = [];
@@ -612,12 +650,12 @@ describe("submit task — extracted checks (#101)", () => {
         return ok({ id: "t-1", status: "SUBMITTED" });
       }),
     );
-    const checks = await searchAndPick();
+    const checks = await searchAndPick(chooseTextTerms);
 
     expect(order).toEqual(["draft", "preview"]);
-    expect(draftSent).toEqual({ title: "Summarise", description: "the report" });
+    expect(draftSent).toEqual({ title: "Summarise", description: "the report", template: "text_basic" });
     expect(previewSent!.contract).toEqual(EXTRACTED.contract);
-    expect(screen.getByText(/held to the terms read from your description: text/i)).toBeInTheDocument();
+    expect(screen.getByText(/held to your output terms: text/i)).toBeInTheDocument();
     // The mapped requirement is checked automatically, in plain words.
     const automatic = within(checks).getByRole("list", { name: /^checked automatically/i });
     expect(automatic).toHaveTextContent(/longest text accepted/i);
@@ -760,10 +798,11 @@ describe("submit task — extracted checks (#101)", () => {
     renderPage();
     fillBasics("30");
     await pickCategory();
+    await chooseTextTerms();
     fireEvent.click(screen.getByRole("button", { name: /find agents/i }));
     fireEvent.click(await screen.findByRole("button", { name: /drop longest text accepted → 1 agent/i }));
     await waitFor(() => expect(sent).toHaveLength(2));
-    expect(sent[1]).not.toHaveProperty("contract");
+    expect(sent[1].contract).toEqual({ template: "text_basic", version: 1, params: {} });
     expect(drafts).toBe(1);
 
     fireEvent.click(await screen.findByRole("button", { name: "Select" }));

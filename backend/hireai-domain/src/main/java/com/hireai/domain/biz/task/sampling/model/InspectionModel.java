@@ -54,6 +54,14 @@ public record InspectionModel(UUID taskId, InspectionLevel level, int round, Ins
         return status.isFinished() ? this : new InspectionModel(taskId, level, round, InspectionStatus.WAIVED, null);
     }
 
+    /**
+     * The inspection ends with nothing left to sample (every Item failed its checks, was refunded or settled
+     * on its own path, or the Task ended): no reviewer page is waiting. No-op once finished.
+     */
+    public InspectionModel close() {
+        return status.isFinished() ? this : new InspectionModel(taskId, level, round, InspectionStatus.CLOSED, null);
+    }
+
     public boolean isSampling() {
         return status == InspectionStatus.SAMPLING;
     }

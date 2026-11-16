@@ -119,4 +119,29 @@ describe("DisputeProgressPanel", () => {
     expect(screen.getByText("You paid 2.00 cr · platform covered 1.00 cr")).toBeTruthy();
     expect(screen.getByText("You paid 0.50 cr · platform covered 4.50 cr")).toBeTruthy();
   });
+
+  it("says nobody pays the arbitration cost when the arbitrator gave no ruling", () => {
+    const noAiRuling: DisputeOutcomeDTO = {
+      ...ruledAgainstBuilder, status: "ESCALATED", effectiveCategory: null, rulings: [], awaiting: [],
+      appealDeadline: null, arbitrationCost: 0, arbitrationCostWaived: true,
+    };
+    const { unmount } = render(<DisputeProgressPanel outcome={noAiRuling} onChange={() => {}} now={NOW} />);
+    expect(screen.getByText(/couldn.t give a ruling.*nobody pays the arbitration cost/i)).toBeTruthy();
+    unmount();
+
+    render(
+      <DisputeProgressPanel
+        outcome={{
+          ...noAiRuling, status: "RESOLVED", effectiveCategory: "PARTIALLY_FULFILLED",
+          rulings: [{ tier: 2, decidedBy: "ADMINISTRATOR", category: "PARTIALLY_FULFILLED", rationale: "half",
+            decidedAt: "2026-11-16T09:30:00Z" }],
+          fees: [{ type: "ARBITRATION_COST", fullCost: 3, cappedAmount: 0, clientCharged: 0, builderCharged: 0,
+            platformCovered: 3, waivedReason: "NO_AI_RULING" }],
+        }}
+        onChange={() => {}}
+        now={NOW}
+      />,
+    );
+    expect(screen.getByText("Nobody paid: the AI arbitrator gave no ruling, so the platform covered 3.00 cr")).toBeTruthy();
+  });
 });

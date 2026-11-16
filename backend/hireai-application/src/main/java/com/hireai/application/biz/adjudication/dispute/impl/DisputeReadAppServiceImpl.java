@@ -8,6 +8,7 @@ import com.hireai.application.biz.adjudication.port.DisputeQueryPort;
 import com.hireai.domain.biz.adjudication.enums.DisputeParty;
 import com.hireai.domain.biz.adjudication.enums.DisputeStatus;
 import com.hireai.domain.biz.adjudication.model.DisputeModel;
+import com.hireai.domain.shared.model.Money;
 import com.hireai.domain.biz.adjudication.model.Ruling;
 import com.hireai.domain.biz.adjudication.repository.DisputeRepository;
 import com.hireai.domain.biz.ledger.settlement.repository.DisputeFeeRepository;
@@ -103,7 +104,8 @@ public class DisputeReadAppServiceImpl implements DisputeReadAppService {
         // The round that led to arbitration: the Agent stood by its result (D20).
         Optional<RejectionModel> round = rejectionRepository.findLatestByTaskId(task.id());
         return new DisputeOutcomeView(dispute, task.title(), task.budget(), sides, dispute.partiesWhoMayAppeal(), appealDeadline,
-                feeSchedule.arbitrationCostFor(task.budget()), feeSchedule.appealFeeFor(task.budget()),
+                dispute.arbitrationCostWaived() ? Money.ZERO : feeSchedule.arbitrationCostFor(task.budget()),
+                feeSchedule.appealFeeFor(task.budget()),
                 disputeFeeRepository.findByDisputeId(dispute.id()),
                 round.map(RejectionModel::reason).orElse(task.rejectionReason()),
                 round.map(RejectionModel::response).orElse(null),

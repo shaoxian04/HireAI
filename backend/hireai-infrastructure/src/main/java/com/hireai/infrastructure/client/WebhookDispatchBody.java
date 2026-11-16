@@ -49,12 +49,18 @@ public record WebhookDispatchBody(
 
     /**
      * One Item: answer it in the callback's {@code items} under the same {@code itemNo}. {@code source} is
-     * the Item's input document (Engagements only), left out for a text Item.
+     * the Item's input document (Engagements only), left out for a text Item. {@code rework} is set when this
+     * Item comes back because a deterministic check rejected its last result: fix the failing checks.
      */
-    public record Item(int itemNo, String input, @JsonInclude(JsonInclude.Include.NON_NULL) Source source) {
+    public record Item(int itemNo, String input, @JsonInclude(JsonInclude.Include.NON_NULL) Source source,
+                       @JsonInclude(JsonInclude.Include.NON_NULL) ReworkRequest rework) {
 
         public Item(int itemNo, String input) {
-            this(itemNo, input, null);
+            this(itemNo, input, null, null);
+        }
+
+        public Item(int itemNo, String input, Source source) {
+            this(itemNo, input, source, null);
         }
     }
 

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hireai.application.biz.task.reliability.TaskReliabilityAppService;
 import com.hireai.support.agent.FakeAgent;
 import com.hireai.support.agent.FakeAgentReply;
+import com.hireai.support.extraction.FakeExtractionProvider;
 import com.hireai.support.harness.WholeAppIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,7 @@ class OfferCoverageIntegrationTest extends WholeAppIntegrationTest {
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
+    private final FakeExtractionProvider llm = FakeExtractionProvider.shared();
 
     @BeforeEach
     void fundDevUser() {
@@ -64,6 +66,40 @@ class OfferCoverageIntegrationTest extends WholeAppIntegrationTest {
         // Without a Contract the preview filters no Offer, as before.
         JsonNode open = post("/api/tasks/match-preview", previewBody(category, 10, null));
         assertThat(open.path("shortlist")).hasSize(3);
+    }
+
+    /**
+     * The web with no Output terms chosen (Chrome E2E): the draft is read against the text default, so its
+     * extracted terms are text_basic's. The platform never rules an Agent out by a Template the Client didn't
+     * choose: the web searches and books on each Agent's own terms, and the JSON Agent the description asks
+     * for is found and booked under its own JSON terms.
+     */
+    @Test
+    void withNoTemplateChosenAJsonDescriptionFindsTheJsonAgentOnItsOwnTerms() throws Exception {
+        String category = uniqueCategory();
+        UUID json = seedAgent(category, "https://agent.example.com/json",
+                jsonSpec("{\"type\":\"object\"}"), null, "80.00");
+        llm.answering("""
+                {"requirements":[
+                  {"text":"under 300 characters","check":"TEXT_MAX_LENGTH","params":{"min_length":null,"max_length":300}}
+                ]}""");
+        try {
+            JsonNode draft = post("/api/contracts/draft", """
+                    {"title":"Totals","description":"Return the totals as JSON, under 300 characters."}""");
+            assertThat(draft.path("contract").path("template").asText()).isEqualTo("text_basic");
+            assertThat(draft.path("contract").path("params").path("max_length").asInt()).isEqualTo(300);
+        } finally {
+            llm.reset();
+        }
+
+        // What the web sends then: no contract, so each Agent is matched on its own terms.
+        JsonNode preview = post("/api/tasks/match-preview", previewBody(category, 10, null));
+        assertThat(agentIds(preview.path("shortlist"))).containsExactly(json.toString());
+
+        JsonNode task = post("/api/tasks/direct", """
+                {"title":"Totals","description":"Return the totals as JSON, under 300 characters.",
+                 "budget":10.00,"agentId":"%s"}""".formatted(json));
+        assertThat(task.path("contract").path("template").asText()).isEqualTo("custom_json");
     }
 
     @Test

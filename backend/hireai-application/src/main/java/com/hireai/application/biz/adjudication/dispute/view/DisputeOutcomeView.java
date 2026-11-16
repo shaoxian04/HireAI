@@ -18,7 +18,8 @@ import java.util.Set;
  * @param yourSides       the viewer's side(s): CLIENT, BUILDER, or both on a self-booked task
  * @param awaiting        the sides that may still accept or appeal the proposed ruling
  * @param appealDeadline  while the ruling is proposed: when it is accepted on everyone's behalf
- * @param arbitrationCost the capped arbitration cost the loser bears
+ * @param arbitrationCost the capped arbitration cost the loser bears; zero when it is waived because the AI
+ *                        arbitrator produced no ruling ({@code dispute().arbitrationCostWaived()})
  * @param appealFee       the capped Appeal Fee the loser bears if the ruling is appealed
  * @param fees            how each fee was borne, once the dispute settled
  * @param clientReason    the Client's rejection text

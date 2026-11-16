@@ -98,6 +98,10 @@ export function InspectionOutcome({ inspection, task }: { inspection: Inspection
     headline = "Settled pro rata";
     body = `The resample failed too. The measured error rate is ${(rate * 100).toFixed(2)}% (${wrong} of ${sampled} `
       + `sampled), so each unchecked Item was paid ${(100 - rate * 100).toFixed(2)}% of its price and the rest refunded.`;
+  } else if (inspection.status === "CLOSED") {
+    headline = "Nothing left to sample";
+    body = "No Item that passed its checks was left to sample, so no further sample is drawn. Items that failed "
+      + "their checks were refunded on their own.";
   } else if (inspection.status === "WAIVED") {
     headline = "Accepted without finishing the sample";
     body = "You accepted the Items awaiting review, or the review window closed, before the sample was judged.";
@@ -134,7 +138,8 @@ export function InspectionCard({ task }: { task: TaskDTO }) {
   if (failed) {
     return <p role="alert" className="text-sm text-red">Couldn&apos;t load the sampling inspection; it is retried on the next update.</p>;
   }
-  if (!inspection) return null;
+  // Closed before any sample was drawn: there is no inspection to open, so the task page shows no entry.
+  if (!inspection || (inspection.status === "CLOSED" && inspection.draws.length === 0)) return null;
   const draw = currentDraw(inspection);
   const items = new Map((task.items ?? []).map((i) => [i.itemNo, i]));
   const t = draw ? tally(draw, items, inspection) : null;
@@ -153,7 +158,9 @@ export function InspectionCard({ task }: { task: TaskDTO }) {
                 : inspection.status === "ACCEPTED" ? "The sample passed; the lot was accepted."
                   : inspection.status === "PRO_RATA"
                     ? `Settled pro rata at a ${(Number(inspection.errorRate ?? 0) * 100).toFixed(2)}% error rate.`
-                    : inspection.status === "WAIVED" ? "Accepted before the sample was judged." : "Judging the sample…"}
+                    : inspection.status === "WAIVED" ? "Accepted before the sample was judged."
+                      : inspection.status === "CLOSED" ? "Closed: no Item was left to sample."
+                        : "Judging the sample…"}
           </p>
           <p className="text-xs text-dim">
             {`Level ${inspection.level} · round ${inspection.round} of 2`}

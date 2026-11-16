@@ -81,6 +81,17 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
     }
 
     @Override
+    public DisputeFeeCharge chargeArbitrationCost(UUID disputeId, UUID taskId, UUID clientId, UUID builderId,
+                                                  boolean aiRulingRecorded, Money fullCost, Money itemPrice,
+                                                  Set<DisputeParty> payers) {
+        DisputeFeeCharge charge = withBothWallets(clientId, builderId, (client, builder) ->
+                disputeFeeDomainService.chargeArbitrationCost(aiRulingRecorded, fullCost, itemPrice, payers,
+                        client, builder, taskId, "dispute-fee-" + disputeId));
+        disputeFeeRepository.append(disputeId, taskId, charge);
+        return charge;
+    }
+
+    @Override
     public SettlementBreakdown settleItemAccepted(UUID taskId, UUID itemId, int itemNo, UUID clientId,
                                                   UUID builderId, Money price) {
         SettlementBreakdown breakdown = withBothWallets(clientId, builderId, (client, builder) ->

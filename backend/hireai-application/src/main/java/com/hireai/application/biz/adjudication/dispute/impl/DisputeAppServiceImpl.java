@@ -260,7 +260,7 @@ public class DisputeAppServiceImpl implements DisputeAppService {
 
     /**
      * Loser pays (D43): after the settlement, the side(s) the effective ruling goes against bear the
-     * arbitration cost and, if the ruling was appealed, the Appeal Fee (D42). Each is capped at 20% of
+     * arbitration cost (only when the AI arbitrator produced a ruling) and, if the ruling was appealed, the Appeal Fee (D42). Each is capped at 20% of
      * the Item price; the platform covers the excess. Deterministic, from the category alone (Inv #3).
      */
     private void chargeFees(DisputeModel dispute, TaskModel task, Optional<UUID> builder, RulingCategory category) {
@@ -270,8 +270,10 @@ public class DisputeAppServiceImpl implements DisputeAppService {
         }
         UUID builderId = builder.orElse(task.clientId());
         if (feeSchedule.arbitrationCost().isPositive()) {
-            settlementWriteAppService.chargeDisputeFee(dispute.id(), task.id(), task.clientId(), builderId,
-                    DisputeFeeType.ARBITRATION_COST, feeSchedule.arbitrationCost(), task.budget(), payers);
+            // Only an AI ruling costs anything to the parties: when the arbitrator failed and the admin ruled
+            // without one, nobody pays it (owner decision on #87).
+            settlementWriteAppService.chargeArbitrationCost(dispute.id(), task.id(), task.clientId(), builderId,
+                    dispute.hasAiRuling(), feeSchedule.arbitrationCost(), task.budget(), payers);
         }
         if (dispute.appealedBy() != null && feeSchedule.appealFee().isPositive()) {
             settlementWriteAppService.chargeDisputeFee(dispute.id(), task.id(), task.clientId(), builderId,

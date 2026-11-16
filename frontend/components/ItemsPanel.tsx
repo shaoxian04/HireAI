@@ -9,6 +9,7 @@ import { ResultView } from "@/components/ResultView";
 import { ruleText } from "@/components/InspectionReport";
 import { ItemNotes } from "@/components/ItemNotes";
 import { ReviewWindowNotice, reviewWindowClosed, useNow } from "@/components/ReviewWindowNotice";
+import { checkDetail } from "@/lib/checkDetail";
 
 interface Props {
   /** A multi-Item task (`task.items` set). */
@@ -116,7 +117,7 @@ function ItemRow({ item, task, canDecide, busy, onAccept }: {
               <p key={c.rule} className="text-sm text-red">
                 <span aria-hidden>✕ </span>
                 {ruleText(c.rule)}
-                {c.detail ? <span className="text-muted"> — {c.detail}</span> : null}
+                {c.detail ? <span className="text-muted"> — {checkDetail(c.detail)}</span> : null}
               </p>
             ))}
           </div>

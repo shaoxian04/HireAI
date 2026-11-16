@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { currentDraw, path, ruleText, standing, tally } from "@/lib/sampling";
+import { currentDraw, nothingToReview, path, ruleText, standing, tally } from "@/lib/sampling";
 import type { InspectionDTO, SampleDrawDTO, TaskItemDTO } from "@/lib/types";
 
 const draw = (over: Partial<SampleDrawDTO> = {}): SampleDrawDTO => ({
@@ -50,6 +50,13 @@ describe("currentDraw and path", () => {
   it("skips what an accepted first sample never needed", () => {
     const insp = inspection({ status: "ACCEPTED", draws: [draw({ decision: "ACCEPT_LOT", defects: 0 })] });
     expect(path(insp).map((s) => s.state)).toEqual(["done", "skipped", "skipped", "skipped", "skipped"]);
+  });
+  it("marks every step skipped when the inspection closed with nothing to sample", () => {
+    const insp = inspection({ status: "CLOSED", draws: [] });
+    expect(path(insp).map((s) => s.state)).toEqual(["skipped", "skipped", "skipped", "skipped", "skipped"]);
+    expect(nothingToReview(insp, 0)).toBe(true);
+    expect(nothingToReview(insp, 1)).toBe(false); // an Item flagged for the reviewer's own check is still there
+    expect(nothingToReview(inspection(), 0)).toBe(false);
   });
   it("marks every step that never happened as skipped once the buyer waived the sample", () => {
     const insp = inspection({ status: "WAIVED" });

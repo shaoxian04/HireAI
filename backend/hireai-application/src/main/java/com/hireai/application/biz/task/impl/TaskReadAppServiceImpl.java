@@ -33,6 +33,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import com.hireai.domain.biz.task.item.info.DispatchItem;
+import com.hireai.domain.biz.task.routing.info.ReworkRequest;
 import com.hireai.domain.biz.task.item.model.TaskItems;
 import com.hireai.domain.biz.task.item.repository.TaskItemRepository;
 import java.util.Optional;
@@ -54,6 +55,8 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     private final AcceptanceJsonMapper acceptanceJsonMapper;
     private final com.hireai.domain.biz.ledger.settlement.repository.SettlementRepository settlementRepository;
     private final com.hireai.domain.biz.ledger.settlement.repository.ItemSettlementRepository itemSettlementRepository;
+    /** How many times a rejected Item may come back (spec S5), stated on its rework WorkOrder. */
+    private final com.hireai.domain.biz.adjudication.model.ReworkPolicy reworkPolicy;
 
     @Override
     public Optional<String> findFailureDetail(TaskModel task) {
@@ -146,9 +149,13 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     @Override
     public List<DispatchItem> workOrderItems(UUID taskId) {
         // Only the Items still awaiting a result: all of them on first dispatch; on a sampled Task's
-        // whole-Task rework (spec S8, D19), the ones not yet settled or on their own rejection path.
+        // whole-Task rework (spec S8, D19), the ones not yet settled or on their own rejection path; on a
+        // per-Item rework (spec S5), the rejected ones, each with the checks its last result failed.
         return taskItemRepository.findByTaskId(taskId).awaitingResult().stream()
-                .map(item -> new DispatchItem(item.itemNo(), item.input(), item.id(), item.sourceSnapshotId(), null))
+                .map(item -> new DispatchItem(item.itemNo(), item.input(), item.id(), item.sourceSnapshotId(), null,
+                        item.failingChecks().isEmpty() ? null : new ReworkRequest(item.reworks(),
+                                reworkPolicy.maxReworks(), item.failingChecks().stream()
+                                .map(c -> new ReworkRequest.FailedCheck(c.rule(), c.detail())).toList())))
                 .toList();
     }
 

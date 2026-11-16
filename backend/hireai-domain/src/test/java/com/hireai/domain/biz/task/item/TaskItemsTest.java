@@ -43,6 +43,29 @@ class TaskItemsTest {
     }
 
     @Test
+    void aDeterministicallyRejectedItemGoesBackWithItsFailingChecksUntilItsReworksRunOut() {
+        TaskItemModel item = TaskItems.submit(taskId, List.of("a"), Money.of("1.00")).item(1);
+
+        TaskItemModel rejected = item.recordResult("COMPLETED", "", null, FAILED);
+        assertThat(rejected.reworkAllowed(2)).isTrue();
+        TaskItemModel back = rejected.returnForItemRework(2);
+        assertThat(back.status()).isEqualTo(ItemStatus.AWAITING_RESULT);
+        assertThat(back.reworks()).isEqualTo(1);
+        assertThat(back.failingChecks()).containsExactlyElementsOf(FAILED);
+
+        TaskItemModel second = back.recordResult("COMPLETED", "", null, FAILED).returnForItemRework(2);
+        assertThat(second.reworks()).isEqualTo(2);
+        TaskItemModel last = second.recordResult("COMPLETED", "", null, FAILED);
+        assertThat(last.reworkAllowed(2)).isFalse();
+        assertThatThrownBy(() -> last.returnForItemRework(2)).isInstanceOf(DomainException.class);
+        assertThat(last.status()).isEqualTo(ItemStatus.SPEC_VIOLATION);
+
+        // A reworked result that passes is judged like any other; an Agent-reported failure is never reworked.
+        assertThat(back.recordResult("COMPLETED", "fixed", null, PASSED).status()).isEqualTo(ItemStatus.PENDING_REVIEW);
+        assertThat(item.recordFailure("FAILED").reworkAllowed(2)).isFalse();
+    }
+
+    @Test
     void anItemACheckSentToReviewAwaitsTheReviewerOutsideTheSampledLot() {
         TaskItems submitted = TaskItems.submit(taskId, List.of("a", "b", "c"), Money.of("1.00"));
         List<ItemCheck> review = List.of(new ItemCheck("INVOICE_JSON", true, null),

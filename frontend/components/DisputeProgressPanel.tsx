@@ -75,6 +75,9 @@ function Stage({
 
 /** What one settled fee cost the viewer, and what the platform covered. */
 function feeLine(fee: DisputeFeeDTO, sides: DisputeSide[]): string {
+  if (fee.waivedReason === "NO_AI_RULING") {
+    return `Nobody paid: the AI arbitrator gave no ruling, so the platform covered ${cr(fee.platformCovered)}`;
+  }
   const yours =
     (sides.includes("CLIENT") ? fee.clientCharged : 0) + (sides.includes("BUILDER") ? fee.builderCharged : 0);
   const theirs =
@@ -283,6 +286,13 @@ export function DisputeProgressPanel({
             </p>
           )}
         </div>
+      )}
+
+      {outcome.arbitrationCostWaived && s !== "RESOLVED" && (
+        <p role="status" className="text-sm text-muted">
+          The AI arbitrator couldn&apos;t give a ruling, so an administrator decides this dispute, and nobody pays the
+          arbitration cost.
+        </p>
       )}
 
       {s === "RESOLVED" && fees.length > 0 && (

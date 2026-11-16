@@ -9,6 +9,8 @@ package com.hireai.domain.biz.task.sampling.enums;
  *   <li>{@code PRO_RATA}: the resample failed too; the unverified Items settled at the error rate.</li>
  *   <li>{@code WAIVED}: the buyer accepted everything awaiting review, or let the review window close,
  *       before the sample decided.</li>
+ *   <li>{@code CLOSED}: nothing was left to sample (every Item had failed its checks or the Agent could not
+ *       do it, was refunded or settled on its own path, or the Task ended), so no sample awaits a reviewer.</li>
  * </ul>
  */
 public enum InspectionStatus {
@@ -16,9 +18,10 @@ public enum InspectionStatus {
     REWORKING,
     ACCEPTED,
     PRO_RATA,
-    WAIVED;
+    WAIVED,
+    CLOSED;
 
     public boolean isFinished() {
-        return this == ACCEPTED || this == PRO_RATA || this == WAIVED;
+        return this == ACCEPTED || this == PRO_RATA || this == WAIVED || this == CLOSED;
     }
 }

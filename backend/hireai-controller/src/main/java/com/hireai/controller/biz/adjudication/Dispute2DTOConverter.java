@@ -26,7 +26,8 @@ public final class Dispute2DTOConverter {
                 .toList();
         var fees = view.fees().stream()
                 .map(f -> new DisputeFeeDTO(f.type().name(), f.fullCost().value(), f.cappedAmount().value(),
-                        f.clientCharged().value(), f.builderCharged().value(), f.platformCovered().value()))
+                        f.clientCharged().value(), f.builderCharged().value(), f.platformCovered().value(),
+                        f.waivedReason()))
                 .toList();
         return new DisputeOutcomeDTO(dispute.id(), dispute.taskId(), view.taskTitle(), view.price().value(),
                 dispute.status().name(),
@@ -35,7 +36,7 @@ public final class Dispute2DTOConverter {
                 dispute.appealedBy() == null ? null : dispute.appealedBy().name(),
                 view.appealDeadline(), view.arbitrationCost().value(), view.appealFee().value(), fees,
                 view.clientReason(), view.agentResponse() == null ? null : view.agentResponse().name(),
-                view.agentReason(), view.agentSilent());
+                view.agentReason(), view.agentSilent(), dispute.arbitrationCostWaived());
     }
 
     /** CLIENT before BUILDER, so the order is stable for the UI. */

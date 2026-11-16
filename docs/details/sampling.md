@@ -8,7 +8,8 @@ D19, D21 in the [decision log](../superpowers/specs/2026-11-15-acceptance-contra
 ## The lot and the plan
 
 - **The lot** is the Items that passed the Contract's checks when the Agent delivered (`PENDING_REVIEW`).
-  Items that failed their checks or that the Agent could not do were refunded at once and are not in it.
+  Items that failed their checks after their [per-Item reworks](data-model.md#item-status), or that the Agent could not do,
+  were refunded and are not in it. Sampling starts only once no Item is out for rework.
 - **Items flagged for review are not in the lot** (#106, D7), up to a cap: an Item a check sent to review (for an
   invoice, figures that don't add up) is never drawn, accepted with the lot, reworked with it or settled pro rata.
   The reviewer judges it on its own, like an extra check (never counted), on the reviewer page's "Flagged for your
@@ -79,7 +80,7 @@ Items judged correct were already paid in full, and Items found wrong refunded, 
 the unverified Items only. If the Agent can no longer take work, a failed round 1 settles pro rata at
 once. Nothing is clawed back: a judgement after the review window closed is a 409, and the window's
 close accepts whatever is still awaiting review (the inspection reads `WAIVED`, as it does when the buyer
-accepts everything awaiting review).
+accepts everything awaiting review). When nothing is left to sample (every reworked Item failed its checks again, or the Task ended without a result) the inspection is `CLOSED`: no entry on the task page, and the reviewer page says there is nothing left to sample.
 
 ## Money
 

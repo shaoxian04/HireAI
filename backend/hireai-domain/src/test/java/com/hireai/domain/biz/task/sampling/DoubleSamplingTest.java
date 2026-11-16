@@ -5,6 +5,8 @@ import com.hireai.domain.biz.ledger.settlement.service.impl.SettlementDomainServ
 import com.hireai.domain.biz.ledger.wallet.model.WalletModel;
 import com.hireai.domain.biz.task.sampling.enums.InspectionLevel;
 import com.hireai.domain.biz.task.sampling.enums.SampleItemOutcome;
+import com.hireai.domain.biz.task.sampling.enums.InspectionStatus;
+import com.hireai.domain.biz.task.sampling.model.InspectionModel;
 import com.hireai.domain.biz.task.sampling.model.ProRata;
 import com.hireai.domain.biz.task.sampling.model.SampleSizeTable;
 import com.hireai.domain.biz.task.sampling.model.SampleTally;
@@ -26,6 +28,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  * resampled; failing again, it settles pro rata from the random sample's measured error rate.
  */
 class DoubleSamplingTest {
+
+    @Test
+    void anInspectionWithNothingLeftToSampleClosesAndAFinishedOneStaysAsItEnded() {
+        InspectionModel open = InspectionModel.open(UUID.randomUUID(), InspectionLevel.DEFAULT);
+
+        assertThat(open.close().status()).isEqualTo(InspectionStatus.CLOSED);
+        assertThat(open.close().status().isFinished()).isTrue();
+        assertThat(open.startRework().close().status()).isEqualTo(InspectionStatus.CLOSED);
+        assertThat(open.acceptLot().close().status()).isEqualTo(InspectionStatus.ACCEPTED);
+    }
+
 
     private static final SamplingPlan PLAN_500 = SampleSizeTable.plan(500, InspectionLevel.II); // 32+32, 1/3, 4/5
 

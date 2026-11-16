@@ -1,5 +1,6 @@
 import type { TaskItemDTO } from "@/lib/types";
 import { findingText, ruleText } from "@/components/InspectionReport";
+import { checkDetail } from "@/lib/checkDetail";
 
 /** The checks that sent an Item to the buyer's review (outcome REVIEW, #106 / D7). */
 export function reviewChecks(item: TaskItemDTO) {
@@ -26,7 +27,7 @@ export function ItemNotes({ item }: { item: TaskItemDTO }) {
           {review.map((c) => (
             <p key={c.rule} className="text-sm text-fg">
               <span className="font-medium">{ruleText(c.rule)}</span>
-              {c.detail ? <span className="text-muted">{` — ${c.detail}`}</span> : null}
+              {c.detail ? <span className="text-muted">{` — ${checkDetail(c.detail)}`}</span> : null}
             </p>
           ))}
           <p className="text-xs text-dim">

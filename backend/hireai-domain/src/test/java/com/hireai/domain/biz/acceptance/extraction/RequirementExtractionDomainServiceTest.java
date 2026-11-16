@@ -12,6 +12,7 @@ import com.hireai.domain.biz.acceptance.template.enums.ExpectationMode;
 import com.hireai.domain.biz.acceptance.template.enums.OutputShape;
 import com.hireai.domain.biz.acceptance.template.enums.ParameterComparison;
 import com.hireai.domain.biz.acceptance.template.enums.TemplateStatus;
+import com.hireai.domain.biz.acceptance.template.model.GenericTemplates;
 import com.hireai.domain.biz.acceptance.template.model.ImageGenerationTemplate;
 import com.hireai.domain.biz.acceptance.template.model.ParameterBounds;
 import com.hireai.domain.biz.acceptance.template.model.TemplateModel;
@@ -215,6 +216,55 @@ class RequirementExtractionDomainServiceTest {
         assertThat(extraction.status()).isEqualTo(ExtractionStatus.UNAVAILABLE);
         assertThat(extraction.contract()).isEqualTo(DEFAULTS);
         assertThat(extraction.requirements()).isEmpty();
+    }
+
+    // ---- units (D11/D12: only unambiguous requirements map) ----
+
+    /** text_basic@1: min_length / max_length count characters. */
+    private static final TemplateModel TEXT = new TemplateModel(GenericTemplates.TEXT_BASIC_V1,
+            "Plain text", "Text", OutputShape.TEXT,
+            List.of("FORMAT_TEXT_NON_EMPTY", "TEXT_MIN_LENGTH", "TEXT_MAX_LENGTH"), List.of(
+                    new TemplateParameter("min_length", "Fewest characters", "", ParameterComparison.MAX,
+                            ParameterBounds.numeric(BigDecimal.ONE, BigDecimal.valueOf(100_000))),
+                    new TemplateParameter("max_length", "Most characters", "", ParameterComparison.MIN,
+                            ParameterBounds.numeric(BigDecimal.ONE, BigDecimal.valueOf(100_000)))),
+            ExpectationMode.FAITHFUL_TO_SOURCE,
+            Map.of("FULFILLED", BigDecimal.ONE, "PARTIALLY_FULFILLED", new BigDecimal("0.5"),
+                    "NOT_FULFILLED", BigDecimal.ZERO),
+            TemplateStatus.ACTIVE, Instant.parse("2026-11-01T00:00:00Z"));
+
+    @Test
+    void aWordCountMappedOntoACharacterCountIsDowngraded() {
+        ContractExtraction extraction = service.adopt(TEXT, new Contract(TEXT.ref(), Map.of()), List.of(
+                mapped("Between 20 to 200 words", "TEXT_MAX_LENGTH", Map.of("max_length", 200)),
+                mapped("At least 3 paragraphs", "TEXT_MIN_LENGTH", Map.of("min_length", 3))), TEXT::requireValid);
+
+        assertThat(extraction.contract().params()).isEmpty();
+        assertThat(extraction.requirements()).noneMatch(ExtractedRequirement::mapped);
+        assertThat(extraction.requirements().get(0).unmappedReason()).contains("words").contains("characters");
+        assertThat(extraction.requirements().get(1).unmappedReason()).contains("paragraphs");
+    }
+
+    @Test
+    void aCharacterCountMappedOntoACharacterCountStands() {
+        ContractExtraction extraction = service.adopt(TEXT, new Contract(TEXT.ref(), Map.of()), List.of(
+                mapped("Keep it under 800 characters", "TEXT_MAX_LENGTH", Map.of("max_length", 800))),
+                TEXT::requireValid);
+
+        assertThat(extraction.contract().params()).containsOnly(
+                Map.entry("max_length", new ParameterValue.Number(BigDecimal.valueOf(800))));
+        assertThat(extraction.requirements().get(0).mapped()).isTrue();
+    }
+
+    @Test
+    void aPixelSizeIsNotReadAsCharactersAndAPageCountIsNotReadAsPixels() {
+        ContractExtraction extraction = service.adopt(IMAGE, DEFAULTS, List.of(
+                mapped("A 512 by 512 pixel image", "IMAGE_DIMENSIONS", Map.of("width", 512, "height", 512)),
+                mapped("Two pages wide", "IMAGE_DIMENSIONS", Map.of("width", 2048))), valid);
+
+        assertThat(extraction.requirements().get(0).mapped()).isTrue();
+        assertThat(extraction.requirements().get(1).mapped()).isFalse();
+        assertThat(extraction.requirements().get(1).unmappedReason()).contains("pages").contains("pixels");
     }
 
     // ---- a client naming the checks it relies on (mode 2) ----

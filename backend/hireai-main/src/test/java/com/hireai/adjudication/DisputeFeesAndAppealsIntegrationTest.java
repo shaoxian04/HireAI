@@ -60,6 +60,9 @@ class DisputeFeesAndAppealsIntegrationTest extends WholeAppIntegrationTest {
     @Autowired com.hireai.application.biz.admin.AdminReadAppService adminReadAppService;
     @Autowired ApplicationContext context;
     @Autowired ObjectMapper objectMapper;
+    @Autowired com.hireai.domain.biz.task.repository.TaskRepository taskRepository;
+    @Autowired com.hireai.domain.biz.adjudication.repository.DisputeRepository disputeRepository;
+    @Autowired com.hireai.application.biz.ledger.wallet.WalletWriteAppService walletWrite;
 
     @Test
     void theBuilderAppealsARulingAgainstItFromTheWebAndBearsBothCapppedFeesWhenTheAdminUpholdsIt() throws Exception {
@@ -174,7 +177,75 @@ class DisputeFeesAndAppealsIntegrationTest extends WholeAppIntegrationTest {
         assertThat(wallet(builder).get(0)).isEqualByComparingTo("7.00");
     }
 
+    /**
+     * Owner decision on #87: the arbitrator's model failed, the request dead-lettered and the dispute went to
+     * the admin backstop with no AI ruling. Nobody pays the arbitration cost; the fee record says why.
+     */
+    @Test
+    void whenTheArbitratorFailsAndTheAdminRulesASplitNobodyPaysTheArbitrationCost() throws Exception {
+        UUID builder = newUser("BUILDER", "5.00");
+        Fixture f = arbitratingTask(DEV_USER, builder);
+        BigDecimal clientBefore = wallet(DEV_USER).get(0);
+
+        disputeAppService.escalate(f.disputeId()); // what the DLQ listener does after the model call failed
+        JsonNode escalated = outcome(f.taskId());
+        assertThat(escalated.get("status").asText()).isEqualTo("ESCALATED");
+        assertThat(escalated.get("arbitrationCost").decimalValue()).isEqualByComparingTo("0.00");
+        assertThat(escalated.get("arbitrationCostWaived").asBoolean()).isTrue();
+        var preview = adminReadAppService.disputeDetail(f.disputeId()).settlementPreview();
+        assertThat(preview.arbitrationCostWaived()).isTrue();
+        assertThat(preview.partialClientFees()).isEqualByComparingTo("0.00");
+        assertThat(preview.partialBuilderFees()).isEqualByComparingTo("0.00");
+
+        disputeAppService.adminRule(f.disputeId(), RulingCategory.PARTIALLY_FULFILLED, "half done", ADMIN);
+
+        // Split: 10.00 refunded, 8.50 paid, and no ARBITRATION_FEE entry on either side.
+        assertThat(wallet(DEV_USER).get(0)).isEqualByComparingTo(clientBefore.add(new BigDecimal("10.00")));
+        assertThat(wallet(builder).get(0)).isEqualByComparingTo("13.50");
+        assertThat(feeEntries(f.taskId(), DEV_USER)).isEmpty();
+        assertThat(feeEntries(f.taskId(), builder)).isEmpty();
+        JsonNode fees = outcome(f.taskId()).get("fees");
+        assertThat(fees).hasSize(1);
+        assertThat(fees.get(0).get("type").asText()).isEqualTo("ARBITRATION_COST");
+        assertThat(fees.get(0).get("clientCharged").decimalValue()).isEqualByComparingTo("0.00");
+        assertThat(fees.get(0).get("builderCharged").decimalValue()).isEqualByComparingTo("0.00");
+        assertThat(fees.get(0).get("platformCovered").decimalValue()).isEqualByComparingTo("3.00");
+        assertThat(fees.get(0).get("waivedReason").asText()).isEqualTo("NO_AI_RULING");
+        assertThat(jdbc.queryForObject("SELECT waived_reason FROM dispute_fees WHERE dispute_id = ?", String.class,
+                f.disputeId())).isEqualTo("NO_AI_RULING");
+    }
+
     // --- helpers ---
+
+    /**
+     * A 20.00 task of {@code client} delivered by {@code builder}'s Agent and disputed, its arbitration still
+     * pending (no stub ruling): the escrow is held and the dispute is ARBITRATING.
+     */
+    private Fixture arbitratingTask(UUID client, UUID builder) {
+        fund(client, "20.00");
+        UUID agentId = UUID.randomUUID();
+        UUID versionId = UUID.randomUUID();
+        jdbc.update("INSERT INTO agents (id, owner_id, name, status, current_version_id, reputation_score) "
+                + "VALUES (?, ?, 'Fake Agent', 'ACTIVE', ?, 80.00)", agentId, builder, versionId);
+        jdbc.update("INSERT INTO agent_versions (id, agent_id, version_number, output_spec, capability_categories, "
+                        + "webhook_url, max_execution_seconds, price) VALUES (?, ?, 1, ?::jsonb, ?, ?, 60, ?)",
+                versionId, agentId, "{\"format\":\"TEXT\"}", new String[]{uniqueCategory()},
+                "https://agent.test/run", new BigDecimal("20.00"));
+        var task = com.hireai.domain.biz.task.model.TaskModel.submit(client, "Summarise report", "desc",
+                        Money.of("20.00"), new OutputSpec(OutputFormat.TEXT, null, null), "summarisation")
+                .assignAndQueue(versionId)
+                .markExecuting();
+        task = task.recordResult(com.hireai.domain.biz.task.model.TaskResultModel.record(task.id(), "COMPLETED",
+                        "a summary", null))
+                .passValidation()
+                .dispute(RejectReason.B_FACTUAL, "not what I asked for");
+        taskRepository.save(task);
+        walletWrite.freeze(client, Money.of("20.00"), task.id(), "seed-freeze-" + task.id());
+        var dispute = com.hireai.domain.biz.adjudication.model.DisputeModel.open(task.id(), client,
+                RejectReason.B_FACTUAL, "dispute-" + task.id()).startArbitrating();
+        disputeRepository.save(dispute);
+        return new Fixture(task.id(), dispute.id(), builder, wallet(builder).get(0));
+    }
 
     private record Fixture(UUID taskId, UUID disputeId, UUID builderId, BigDecimal builderStart) {}
 

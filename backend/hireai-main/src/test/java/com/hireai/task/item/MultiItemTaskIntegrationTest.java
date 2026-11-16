@@ -89,6 +89,18 @@ class MultiItemTaskIntegrationTest extends WholeAppIntegrationTest {
         UUID taskId = book(agentId, "3.00", List.of("invoice A", "invoice B #empty", "invoice C #fail"));
         awaitStatus(taskId, "PENDING_REVIEW");
 
+        // The empty Item went back twice with its failing check (spec S5) before it was refunded; the Item
+        // the Agent itself reported failed is never reworked.
+        List<RecordedWorkOrder> orders = agent.awaitWorkOrders(3, Duration.ofSeconds(20));
+        assertThat(orders).hasSize(3);
+        for (int n = 1; n <= 2; n++) {
+            JsonNode rework = orders.get(n).json();
+            assertThat(rework.get("items")).hasSize(1);
+            assertThat(rework.get("items").get(0).get("itemNo").asInt()).isEqualTo(2);
+            assertThat(rework.get("items").get(0).path("rework").path("reworkNo").asInt()).isEqualTo(n);
+            assertThat(rework.get("items").get(0).path("rework").path("failedChecks").get(0).path("rule").asText())
+                    .isEqualTo("FORMAT_TEXT_NON_EMPTY");
+        }
         JsonNode items = getTask(taskId).get("items");
         assertThat(items).extracting(i -> i.get("status").asText())
                 .containsExactly("PENDING_REVIEW", "SPEC_VIOLATION", "FAILED");
@@ -123,6 +135,43 @@ class MultiItemTaskIntegrationTest extends WholeAppIntegrationTest {
         assertThat((BigDecimal) event.get("quality")).isEqualByComparingTo("0.333");
         assertThat((BigDecimal) event.get("weight")).isEqualByComparingTo("1");
         // Nothing of the Task is left in escrow.
+        assertThat(escrowLeftFor(taskId)).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void aRejectedItemGoesBackAloneWithItsFailingChecksAndIsPaidWhenItsReworkPasses() throws Exception {
+        FakeAgent agent = itemAgent();
+        UUID agentId = seedTextAgent(agent, "2.00");
+        UUID taskId = book(agentId, "2.00", List.of("invoice A", "invoice B #emptyonce"));
+
+        List<RecordedWorkOrder> orders = agent.awaitWorkOrders(2, Duration.ofSeconds(20));
+        JsonNode rework = orders.get(1).json();
+        assertThat(rework.path("rework").path("failedChecks").get(0).path("rule").asText())
+                .isEqualTo("ITEM_CHECKS_FAILED");
+        assertThat(rework.get("items")).hasSize(1);
+        JsonNode item = rework.get("items").get(0);
+        assertThat(item.get("itemNo").asInt()).isEqualTo(2);
+        assertThat(item.path("rework").path("reworkNo").asInt()).isEqualTo(1);
+        assertThat(item.path("rework").path("maxReworks").asInt()).isEqualTo(2);
+        assertThat(item.path("rework").path("failedChecks").get(0).path("rule").asText())
+                .isEqualTo("FORMAT_TEXT_NON_EMPTY");
+        assertThat(orders.get(0).json().get("items").get(0).has("rework")).isFalse();
+
+        awaitStatus(taskId, "PENDING_REVIEW");
+        JsonNode task = getTask(taskId);
+        assertThat(task.get("items")).extracting(i -> i.get("status").asText())
+                .containsExactly("PENDING_REVIEW", "PENDING_REVIEW");
+        assertThat(task.get("items").get(1).get("resultPayload").asText()).isEqualTo("done: invoice B #emptyonce");
+        assertThat(refunds(taskId)).isEmpty();
+        assertThat(escrowLeftFor(taskId)).isEqualByComparingTo("4.00");
+        // Sampling waited for the rework: one inspection, drawn over both Items once the reworked one was back.
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM task_inspections WHERE task_id = ?", Integer.class,
+                taskId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT lot_size FROM sample_draws WHERE task_id = ?", Integer.class,
+                taskId)).isEqualTo(2);
+
+        JsonNode resolved = post("/api/tasks/" + taskId + "/accept");
+        assertThat(resolved.get("resolution").asText()).isEqualTo("ACCEPTED");
         assertThat(escrowLeftFor(taskId)).isEqualByComparingTo("0.00");
     }
 
@@ -357,7 +406,8 @@ class MultiItemTaskIntegrationTest extends WholeAppIntegrationTest {
                 result.put("agentStatus", "FAILED");
             } else {
                 result.put("agentStatus", "COMPLETED");
-                result.put("resultPayloadJson", input.contains("#empty") ? "" : "done: " + input);
+                boolean fixed = input.contains("#emptyonce") && item.has("rework");
+                result.put("resultPayloadJson", input.contains("#empty") && !fixed ? "" : "done: " + input);
                 if (input.contains("#jslink")) {
                     result.put("resultUrl", "javascript:alert(document.cookie)");
                 } else if (input.contains("#link")) {

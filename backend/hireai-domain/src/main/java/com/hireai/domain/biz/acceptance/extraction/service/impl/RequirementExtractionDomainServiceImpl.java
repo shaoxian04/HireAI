@@ -9,6 +9,7 @@ import com.hireai.domain.biz.acceptance.extraction.model.ContractExtraction;
 import com.hireai.domain.biz.acceptance.extraction.model.ExtractedRequirement;
 import com.hireai.domain.biz.acceptance.extraction.model.ProposedRequirement;
 import com.hireai.domain.biz.acceptance.extraction.service.RequirementExtractionDomainService;
+import com.hireai.domain.biz.acceptance.template.enums.ParameterUnit;
 import com.hireai.domain.biz.acceptance.template.model.TemplateModel;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
@@ -93,6 +94,14 @@ public class RequirementExtractionDomainServiceImpl implements RequirementExtrac
                 return Vetted.unmapped("The value for " + name + " is not a number, text, list of texts or yes/no.");
             }
             params.put(name, value.get());
+        }
+        for (String name : params.keySet()) {
+            Optional<ParameterUnit> unit = ParameterUnit.of(name);
+            Optional<String> other = unit.flatMap(u -> u.otherUnitNamedIn(proposal.text()));
+            if (other.isPresent()) {
+                return Vetted.unmapped("It counts " + other.get() + ", but " + name + " is measured in "
+                        + unit.get().words() + ", so it is not checked automatically.");
+            }
         }
         if (!entry.get().alwaysRuns() && params.keySet().stream().noneMatch(entry.get().activatedBy()::contains)) {
             return Vetted.unmapped(check + " runs only when " + String.join(" or ", new TreeSet<>(entry.get().activatedBy()))

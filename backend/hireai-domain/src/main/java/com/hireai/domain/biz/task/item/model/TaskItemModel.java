@@ -29,19 +29,30 @@ import java.util.UUID;
 public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Money price, ItemStatus status,
                             String agentStatus, String resultPayload, String resultUrl,
                             List<ItemCheck> checks, boolean autoAccepted, UUID sourceSnapshotId, Money paidAmount,
-                            List<Finding> findings, List<SelfReportedAnomaly> anomalies) {
+                            List<Finding> findings, List<SelfReportedAnomaly> anomalies, int reworks) {
 
     public TaskItemModel {
         checks = checks == null ? List.of() : List.copyOf(checks);
         findings = findings == null ? List.of() : List.copyOf(findings);
         anomalies = anomalies == null ? List.of() : List.copyOf(anomalies);
+        if (reworks < 0) {
+            throw new IllegalArgumentException("reworks must not be negative: " + reworks);
+        }
+    }
+
+    public TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Money price, ItemStatus status,
+                         String agentStatus, String resultPayload, String resultUrl, List<ItemCheck> checks,
+                         boolean autoAccepted, UUID sourceSnapshotId, Money paidAmount, List<Finding> findings,
+                         List<SelfReportedAnomaly> anomalies) {
+        this(id, taskId, itemNo, input, price, status, agentStatus, resultPayload, resultUrl, checks, autoAccepted,
+                sourceSnapshotId, paidAmount, findings, anomalies, 0);
     }
 
     public TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Money price, ItemStatus status,
                          String agentStatus, String resultPayload, String resultUrl, List<ItemCheck> checks,
                          boolean autoAccepted, UUID sourceSnapshotId, Money paidAmount) {
         this(id, taskId, itemNo, input, price, status, agentStatus, resultPayload, resultUrl, checks, autoAccepted,
-                sourceSnapshotId, paidAmount, List.of(), List.of());
+                sourceSnapshotId, paidAmount, List.of(), List.of(), 0);
     }
 
     static TaskItemModel create(UUID taskId, int itemNo, String input, Money price, UUID sourceSnapshotId) {
@@ -69,7 +80,33 @@ public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Mone
         boolean passed = !newChecks.isEmpty() && newChecks.stream().noneMatch(ItemCheck::rejects);
         return new TaskItemModel(id, taskId, itemNo, input, price,
                 passed ? ItemStatus.PENDING_REVIEW : ItemStatus.SPEC_VIOLATION, nextAgentStatus, payload, url,
-                newChecks, false, sourceSnapshotId, null, acceptance.findings(), acceptance.anomalies());
+                newChecks, false, sourceSnapshotId, null, acceptance.findings(), acceptance.anomalies(), reworks);
+    }
+
+    /**
+     * True when a deterministic check rejected this result (SPEC_VIOLATION, never an Agent-reported failure)
+     * and it has been reworked fewer than {@code maxReworks} times (spec S5: up to two reworks, then refunded).
+     */
+    public boolean reworkAllowed(int maxReworks) {
+        return status == ItemStatus.SPEC_VIOLATION && !checks.isEmpty() && reworks < maxReworks;
+    }
+
+    /**
+     * SPEC_VIOLATION -> AWAITING_RESULT: the rejected result goes back to the same Agent with its failing
+     * checks (kept on the Item until the reworked result replaces them), counting one more rework.
+     */
+    public TaskItemModel returnForItemRework(int maxReworks) {
+        if (!reworkAllowed(maxReworks)) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION, "Item " + itemNo + " (" + status
+                    + ", reworked " + reworks + " of " + maxReworks + " times) cannot go back for rework");
+        }
+        return new TaskItemModel(id, taskId, itemNo, input, price, ItemStatus.AWAITING_RESULT, agentStatus,
+                resultPayload, resultUrl, checks, false, sourceSnapshotId, null, findings, anomalies, reworks + 1);
+    }
+
+    /** The checks that rejected this Item's latest result (what a rework WorkOrder tells the Agent). */
+    public List<ItemCheck> failingChecks() {
+        return checks.stream().filter(ItemCheck::rejects).toList();
     }
 
     /**
@@ -182,7 +219,7 @@ public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Mone
         boolean sameResult = nextChecks == checks;
         return new TaskItemModel(id, taskId, itemNo, input, price, next, nextAgentStatus, payload, url,
                 nextChecks, auto, sourceSnapshotId, paid, sameResult ? findings : List.of(),
-                sameResult ? anomalies : List.of());
+                sameResult ? anomalies : List.of(), reworks);
     }
 
     public boolean isSettled() {

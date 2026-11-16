@@ -344,6 +344,7 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
     private void endWithRefund(TaskModel ended) {
         taskRepository.save(ended);
         settlementWriteAppService.settleRejected(ended.id(), ended.clientId(), ended.budget());
+        taskItemAppService.closeInspection(ended.id()); // a sampled Task that ended has nothing left to sample
         webhookOutboxAppService.enqueueFailed(ended, ended.status().name());
     }
 

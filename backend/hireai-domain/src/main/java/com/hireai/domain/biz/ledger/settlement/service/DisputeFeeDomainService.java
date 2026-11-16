@@ -18,4 +18,18 @@ public interface DisputeFeeDomainService {
 
     DisputeFeeCharge charge(DisputeFeeType type, Money fullCost, Money itemPrice, Set<DisputeParty> payers,
                             WalletModel clientWallet, WalletModel builderWallet, UUID taskId, String correlationId);
+
+    /**
+     * The arbitration cost is borne only for a ruling the AI arbitrator actually produced: when it failed
+     * and the dispute was ruled without one (the admin backstop, or the refund fallback), nobody pays it and
+     * the record says so ({@link DisputeFeeCharge#NO_AI_RULING}); the platform covers it.
+     */
+    default DisputeFeeCharge chargeArbitrationCost(boolean aiRulingRecorded, Money fullCost, Money itemPrice,
+                                                   Set<DisputeParty> payers, WalletModel clientWallet,
+                                                   WalletModel builderWallet, UUID taskId, String correlationId) {
+        return aiRulingRecorded
+                ? charge(DisputeFeeType.ARBITRATION_COST, fullCost, itemPrice, payers, clientWallet, builderWallet,
+                        taskId, correlationId)
+                : DisputeFeeCharge.waived(DisputeFeeType.ARBITRATION_COST, fullCost, DisputeFeeCharge.NO_AI_RULING);
+    }
 }
