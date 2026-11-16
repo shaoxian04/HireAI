@@ -62,7 +62,11 @@ public class HmacSourceLinkSigner implements SourceLinkSigner {
         } catch (IllegalArgumentException e) {
             return Optional.empty();
         }
-        if (payload.length != PAYLOAD_BYTES || !MessageDigest.isEqual(mac(key, payload), given)) {
+        // Only the canonical encoding: base64 lets a final character carry ignored bits, so several
+        // spellings decode alike. One token per Item and expiry keeps the logged links unambiguous.
+        String canonical = ENCODER.encodeToString(payload) + "." + ENCODER.encodeToString(given);
+        if (payload.length != PAYLOAD_BYTES || !canonical.equals(token)
+                || !MessageDigest.isEqual(mac(key, payload), given)) {
             return Optional.empty();
         }
         ByteBuffer buffer = ByteBuffer.wrap(payload);

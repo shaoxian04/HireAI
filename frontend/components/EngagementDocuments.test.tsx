@@ -59,7 +59,7 @@ describe("EngagementDocuments", () => {
     render(<EngagementDocuments agentId="ag-1" agentName="Invoice Bot" onChange={onChange} />);
 
     expect(await screen.findByText("old.pdf")).toBeInTheDocument();
-    expect(screen.getByText(/Fetched by the agent 1×/)).toBeInTheDocument();
+    expect(screen.getByText(/Downloaded through its link 1×/)).toBeInTheDocument();
     await userEvent.upload(screen.getByLabelText("Documents to upload"), [
       new File(["%PDF a"], "a.pdf", { type: "application/pdf" }),
       new File(["%PDF b"], "b.pdf", { type: "application/pdf" }),
@@ -100,9 +100,9 @@ describe("EngagementDocuments", () => {
 
 describe("downloadSummary", () => {
   it("counts served downloads and refused (expired) attempts", () => {
-    expect(downloadSummary(doc("x"))).toBe("Not fetched yet");
+    expect(downloadSummary(doc("x"))).toBe("Not downloaded yet");
     expect(downloadSummary(doc("x", {
       downloads: [{ at: "2026-11-16T10:00:00Z", taskId: "t", itemNo: 1, outcome: "EXPIRED" }],
-    }))).toBe("Not fetched yet · 1 refused (link expired)");
+    }))).toBe("Not downloaded yet · 1 refused (link expired)");
   });
 });

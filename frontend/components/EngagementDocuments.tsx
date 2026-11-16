@@ -14,17 +14,17 @@ export interface DocumentSelection {
 
 const RETENTION_CHOICES = [30, 14, 7, 1];
 
-/** "Fetched by the agent 2× · last 10:04" / "Not fetched yet" / refused attempts, from the download log. */
+/** "Downloaded through its link 2× · last 10:04" / "Not downloaded yet" / refused attempts, from the download log. */
 export function downloadSummary(doc: SourceDTO): string {
   const downloads = doc.downloads ?? [];
   const served = downloads.filter((d) => d.outcome === "SERVED");
   const refused = downloads.length - served.length;
   const parts: string[] = [];
   if (served.length === 0) {
-    parts.push("Not fetched yet");
+    parts.push("Not downloaded yet");
   } else {
     const last = new Date(served[served.length - 1].at);
-    parts.push(`Fetched by the agent ${served.length}× · last ${last.toLocaleString()}`);
+    parts.push(`Downloaded through its link ${served.length}× · last ${last.toLocaleString()}`);
   }
   if (refused > 0) parts.push(`${refused} refused (link expired)`);
   return parts.join(" · ");
@@ -53,7 +53,8 @@ export function EngagementDocuments({ agentId, agentName, onChange }: {
       const open = mine.find((e) => e.agentId === agentId && e.status !== "ENDED") ?? null;
       setEngagement(open);
       if (open && open.status === "ACTIVE") {
-        setDocs(await api<SourceDTO[]>(`/engagements/${open.id}/sources`));
+        // Oldest first, so the list reads in the order the documents become Items.
+        setDocs((await api<SourceDTO[]>(`/engagements/${open.id}/sources`)).slice().reverse());
       }
     } catch (e) {
       setLoadError(e instanceof ApiError ? e.message : "Could not load your Engagement with this agent");
@@ -101,7 +102,7 @@ export function EngagementDocuments({ agentId, agentName, onChange }: {
           docs={docs}
           selected={selected}
           onUploaded={(doc) => {
-            setDocs((d) => [doc, ...d]);
+            setDocs((d) => [...d, doc]);
             setSelected((s) => [...s, doc.id]);
           }}
           onToggle={(id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))}

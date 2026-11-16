@@ -42,6 +42,14 @@ class HmacSourceLinkSignerTest {
         String extended = Base64.getUrlEncoder().withoutPadding().encodeToString(payload) + "." + a.split("\\.")[1];
         assertThat(signer.verify(extended)).isEmpty();
 
+        // The MAC's last base64 character carries 2 ignored bits: another spelling of the same bytes is refused.
+        String alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        String respelled = a.substring(0, a.length() - 1)
+                + alphabet.charAt(alphabet.indexOf(a.charAt(a.length() - 1)) + 1);
+        assertThat(Base64.getUrlDecoder().decode(respelled.split("\\.")[1]))
+                .isEqualTo(Base64.getUrlDecoder().decode(a.split("\\.")[1])); // the same bytes...
+        assertThat(signer.verify(respelled)).isEmpty(); // ...but not the token that was issued
+
         assertThat(signer.verify(null)).isEmpty();
         assertThat(signer.verify("nodot")).isEmpty();
         assertThat(signer.verify("a.b.c")).isEmpty();
