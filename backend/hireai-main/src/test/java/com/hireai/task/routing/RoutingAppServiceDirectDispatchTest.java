@@ -47,7 +47,8 @@ class RoutingAppServiceDirectDispatchTest {
             mock(com.hireai.domain.biz.task.routing.service.RoutedFailoverDomainService.class),
             mock(com.hireai.application.biz.acceptance.TemplateReadAppService.class),
             mock(com.hireai.application.biz.offering.embedding.TaskTextEmbeddingAppService.class),
-            Clock.systemUTC(), new com.hireai.domain.biz.task.model.ExecutionGrace(60));
+            Clock.systemUTC(), new com.hireai.domain.biz.task.model.ExecutionGrace(60), org.mockito.Mockito.mock(com.hireai.application.biz.acceptance.source.SourceSnapshotAppService.class,
+                    invocation -> invocation.getArgument(0)));
 
     private static final String TASK_OUTPUT_SPEC = "{\"format\":\"JSON\",\"schema\":\"task-snap\"}";
     private static final String CANDIDATE_OUTPUT_SPEC = "{\"format\":\"TEXT\",\"schema\":\"agent-live\"}";

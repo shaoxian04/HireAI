@@ -63,6 +63,14 @@ function Money({ item }: { item: TaskItemDTO }) {
   return <p className="tabular text-xs text-dim">{cr(item.price)} in escrow</p>;
 }
 
+function DocIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="size-3" aria-hidden>
+      <path d="M4 1.5h5L12.5 5v9.5h-8.5zM9 1.5V5h3.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function ItemRow({ item, task, canDecide, busy, onAccept }: {
   item: TaskItemDTO;
   task: TaskDTO;
@@ -79,7 +87,14 @@ function ItemRow({ item, task, canDecide, busy, onAccept }: {
         <div className="flex flex-wrap items-center gap-2">
           <ItemBadge item={item} taskStatus={task.status} />
         </div>
-        <p className="break-words text-[0.9375rem] text-fg">{item.input}</p>
+        <p className="break-words text-[0.9375rem] text-fg">
+          {item.sourceId && (
+            <span className="mr-2 inline-flex items-center gap-1 rounded border border-line-bright bg-surface-2 px-1.5 py-0.5 align-middle text-[0.6875rem] font-semibold uppercase tracking-wide text-muted">
+              <DocIcon /> Document
+            </span>
+          )}
+          {item.input}
+        </p>
         {failed.length > 0 && (
           <div aria-label={`Checks Item ${item.itemNo} failed`} className="space-y-1">
             {failed.map((c) => (

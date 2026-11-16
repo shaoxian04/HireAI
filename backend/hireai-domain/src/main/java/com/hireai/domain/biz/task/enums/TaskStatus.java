@@ -46,4 +46,15 @@ public enum TaskStatus {
     public boolean isPendingEscrow() {
         return PENDING_ESCROW.contains(this);
     }
+
+    /**
+     * Final statuses: settled or refunded, with every review, dispute and appeal window behind it. A
+     * dispute keeps the Task DISPUTED until its ruling (and the appeal window) settles it, so a final
+     * status means no window is left open. Starts the D32 retention clock of its SourceSnapshots.
+     */
+    private static final Set<TaskStatus> CLOSED = EnumSet.of(RESOLVED, TIMED_OUT, SPEC_VIOLATION, FAILED, CANCELLED);
+
+    public boolean isClosed() {
+        return CLOSED.contains(this);
+    }
 }

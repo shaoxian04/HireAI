@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
@@ -11,6 +11,10 @@ import { errorFor, toFormError, useFocusOnFieldError, validateForm, type FormErr
 import type { AgentProfileDTO, DirectBookRequest, TaskDTO } from "@/lib/types";
 import { directBookSignature, useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { PageHeader } from "@/components/PageHeader";
+import { EngagementDocuments, type DocumentSelection } from "@/components/EngagementDocuments";
+
+/** A multi-Item Task holds two Items or more; a single piece of work is described in the brief. */
+const MIN_ITEMS = 2;
 
 function BookingForm() {
   const { id } = useParams<{ id: string }>();
@@ -26,12 +30,21 @@ function BookingForm() {
   // A field error clears the moment that field (or any other) is edited, so it never goes stale.
   const clearFieldError = () => setError((er) => (er?.field ? null : er));
   const [submitting, setSubmitting] = useState(false);
+  const [documents, setDocuments] = useState<DocumentSelection>({ engagementId: null, sourceIds: [] });
+  const onDocumentsChange = useCallback((s: DocumentSelection) => setDocuments(s), []);
   useFocusOnFieldError(error);
   // Built here rather than in onSubmit so the idempotency signature is derived from the very
   // object that gets sent: retrying the same booking reuses one key (deduped server-side),
   // while an edited title or description starts a fresh one.
+  const itemCount = documents.engagementId ? documents.sourceIds.length : 0;
   const bookingBody: DirectBookRequest | null = profile
-    ? { title, description, budget: profile.card.price, agentId: id }
+    ? {
+        title, description, budget: profile.card.price, agentId: id,
+        // Documents become the Items, priced each at the agent's price, under the Engagement.
+        ...(itemCount > 0 && documents.engagementId
+          ? { engagementId: documents.engagementId, items: documents.sourceIds.map((sourceId) => ({ sourceId })) }
+          : {}),
+      }
     : null;
   const getIdempotencyKey = useIdempotencyKey(directBookSignature(bookingBody));
 
@@ -61,6 +74,7 @@ function BookingForm() {
     return <SkeletonRows label="Loading agent profile…" rows={3} />;
 
   const { card } = profile;
+  const total = itemCount > 0 ? Math.round(card.price * itemCount * 100) / 100 : card.price;
 
   const bookErrors = { title: "Title", description: "Description" };
 
@@ -70,6 +84,11 @@ function BookingForm() {
     const invalid = validateForm(e.currentTarget as HTMLFormElement);
     if (invalid) {
       setError(invalid);
+      return;
+    }
+    if (itemCount > 0 && itemCount < MIN_ITEMS) {
+      setError({ field: null, message: "Choose at least two documents: each document is one Item, and a batch holds two or more. "
+        + "For a single piece of work, untick the document and describe it in the brief." });
       return;
     }
     setSubmitting(true);
@@ -136,10 +155,17 @@ function BookingForm() {
             />
           </Field>
 
+          <EngagementDocuments agentId={id} agentName={card.name} onChange={onDocumentsChange} />
+
           <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line text-sm">
             <div className="bg-surface px-4 py-3">
               <dt className="text-xs text-dim">You&apos;ll pay</dt>
-              <dd className="display tabular mt-0.5 text-2xl text-accent">{card.price} cr</dd>
+              <dd className="display tabular mt-0.5 text-2xl text-accent">{total} cr</dd>
+              {itemCount > 0 && (
+                <dd className="tabular text-xs text-dim">
+                  {card.price} cr × {itemCount} {itemCount === 1 ? "document" : "documents"}
+                </dd>
+              )}
             </div>
             <div className="bg-surface px-4 py-3">
               <dt className="text-xs text-dim">Agent must deliver within</dt>
@@ -148,6 +174,7 @@ function BookingForm() {
           </dl>
           <p className="text-xs text-dim">
             The price is fixed by the agent and frozen in escrow, not charged, until you accept the result.
+            {itemCount > 0 && " With documents, each one is an Item you accept, or get refunded, on its own."}
           </p>
 
           {error && !error.field && (
@@ -159,7 +186,7 @@ function BookingForm() {
             </p>
           )}
           <Button type="submit" disabled={submitting} className="w-full">
-            {submitting ? "Booking…" : `Book and freeze ${card.price} cr`}
+            {submitting ? "Booking…" : `Book and freeze ${total} cr`}
           </Button>
         </form>
       </div>

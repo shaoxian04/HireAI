@@ -15,6 +15,7 @@ import { TabStats } from "@/components/manage/TabStats";
 import { TabReviews } from "@/components/manage/TabReviews";
 import { TabReputation } from "@/components/manage/TabReputation";
 import { SigningSecretPanel } from "@/components/manage/SigningSecretPanel";
+import { EngagementsPanel } from "@/components/manage/EngagementsPanel";
 import { SkeletonRows, ConfirmDialog } from "@/components/ui";
 
 type Tab = "storefront" | "pricing" | "stats" | "reputation" | "reviews";
@@ -135,6 +136,8 @@ function ManageAgentPage() {
         hasSigningSecret={agent.hasSigningSecret}
         onIssued={() => setAgent((a) => (a ? { ...a, hasSigningSecret: true } : a))}
       />
+
+      <EngagementsPanel agentId={id} />
 
       {/* Tab bar */}
       {/* Five tabs do not fit a phone; scroll the strip rather than the whole page sideways. */}

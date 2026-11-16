@@ -182,19 +182,48 @@ async def run(request: Request, authorization: str = Header(default="")):
     return {"accepted": True, "taskId": task_id}
 
 
-def item_results(items: list[dict]) -> list[dict]:
+async def read_sources(items: list[dict], client: httpx.AsyncClient) -> dict[int, bytes | None]:
+    """Downloads each Item's input document (an Engagement's SourceSnapshot) through its signed link,
+    which expires at the execution deadline. Bytes whose SHA-256 is not the one the WorkOrder names, or a
+    refused link, count as unreadable (None)."""
+    documents: dict[int, bytes | None] = {}
+    for item in items:
+        source = item.get("source")
+        if not source:
+            continue
+        try:
+            response = await client.get(source["url"])
+        except httpx.HTTPError as exc:
+            log.warning("Item %s: document link failed: %s", item["itemNo"], exc)
+            documents[item["itemNo"]] = None
+            continue
+        content = response.content if response.status_code == 200 else None
+        if content is not None and hashlib.sha256(content).hexdigest() != source.get("sha256"):
+            log.warning("Item %s: document hash does not match the WorkOrder", item["itemNo"])
+            content = None
+        log.info("Item %s: document %s -> HTTP %s", item["itemNo"], source.get("filename"), response.status_code)
+        documents[item["itemNo"]] = content
+    return documents
+
+
+def item_results(items: list[dict], documents: dict[int, bytes | None] | None = None) -> list[dict]:
     """One result per Item of a multi-Item WorkOrder. Tags in an Item's input stage the outcome:
     #fail -> the Item is reported FAILED, #empty -> an empty result (fails a text Contract),
-    #skip -> left out of the callback (the platform counts it as failed); otherwise a staged text."""
+    #skip -> left out of the callback (the platform counts it as failed); otherwise a staged text.
+    An Item whose document could not be read (``documents[itemNo] is None``) is reported FAILED."""
+    documents = documents or {}
     results = []
     for item in items:
         text = item.get("input", "")
         if "#skip" in text:
             continue
-        if "#fail" in text:
+        if "#fail" in text or (item["itemNo"] in documents and documents[item["itemNo"]] is None):
             results.append({"itemNo": item["itemNo"], "agentStatus": "FAILED"})
             continue
         payload = "" if "#empty" in text else f"Extracted from item {item['itemNo']}: {text}"
+        document = documents.get(item["itemNo"])
+        if document is not None and payload:
+            payload += f" (read {len(document)} bytes, sha256 verified)"
         results.append({"itemNo": item["itemNo"], "agentStatus": "COMPLETED", "resultPayloadJson": payload})
     return results
 
@@ -212,8 +241,10 @@ async def _complete(task_id: str, callback_url: str, token: str, secret: str | N
         "message": "stub agent completed",
     }
     if items:
-        # A multi-Item Task: answer every Item under its itemNo.
-        callback_body["items"] = item_results(items)
+        # A multi-Item Task: answer every Item under its itemNo, reading its document first if it has one.
+        async with httpx.AsyncClient(timeout=30) as client:
+            documents = await read_sources(items, client)
+        callback_body["items"] = item_results(items, documents)
     else:
         callback_body["resultPayloadJson"] = json.dumps({"summary": DEMO_SUMMARY})
     if anomalies:

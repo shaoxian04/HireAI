@@ -59,7 +59,8 @@ class RoutingAppServiceImplTest {
     private final RoutingAppServiceImpl service = new RoutingAppServiceImpl(
             taskReadAppService, taskWriteAppService, agentRepository,
             routingMatchDomainService, taskDispatchPublisher, dispatchAttemptRepository,
-            routedFailoverDomainService, templateReadAppService, taskText, clock, new com.hireai.domain.biz.task.model.ExecutionGrace(60));
+            routedFailoverDomainService, templateReadAppService, taskText, clock, new com.hireai.domain.biz.task.model.ExecutionGrace(60), org.mockito.Mockito.mock(com.hireai.application.biz.acceptance.source.SourceSnapshotAppService.class,
+                    invocation -> invocation.getArgument(0)));
 
     // The task's adopted output spec snapshot (Invariant #4). In unit tests the view carries
     // this directly; candidates supply only webhookUrl/version identity.

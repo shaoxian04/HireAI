@@ -133,6 +133,7 @@ public final class TaskModel2DTOConverter {
                 item.autoAccepted() ? Boolean.TRUE : null,
                 accepted ? SettlementPolicy.netOf(item.price()).value() : null,
                 accepted ? SettlementPolicy.commissionOn(item.price()).value() : null,
-                refunded ? item.price().value() : null);
+                refunded ? item.price().value() : null,
+                item.sourceSnapshotId());
     }
 }

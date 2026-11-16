@@ -1,6 +1,7 @@
 package com.hireai.domain.biz.task.info;
 
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.task.item.info.ItemInput;
 import com.hireai.domain.biz.task.item.model.TaskItems;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.shared.model.Money;
@@ -20,7 +21,7 @@ import java.util.UUID;
  */
 public record TaskSubmitInfo(UUID clientId, String title, String description,
                              Money budget, OutputSpec outputSpec, String category, Long deadlineSeconds,
-                             Contract contract, List<String> items) {
+                             Contract contract, List<ItemInput> items) {
 
     public TaskSubmitInfo {
         items = items == null ? List.of() : List.copyOf(items);
@@ -40,6 +41,11 @@ public record TaskSubmitInfo(UUID clientId, String title, String description,
     public TaskSubmitInfo(UUID clientId, String title, String description,
                           Money budget, OutputSpec outputSpec, String category) {
         this(clientId, title, description, budget, outputSpec, category, null);
+    }
+
+    /** Whether any Item's input is a SourceSnapshot (allowed only under an Engagement, ADR 0010). */
+    public boolean hasSources() {
+        return items.stream().anyMatch(ItemInput::hasSource);
     }
 
     public boolean hasItems() {

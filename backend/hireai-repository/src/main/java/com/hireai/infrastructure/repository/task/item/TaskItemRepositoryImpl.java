@@ -2,6 +2,7 @@ package com.hireai.infrastructure.repository.task.item;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
 import com.hireai.domain.biz.task.item.model.ItemCheck;
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
@@ -17,6 +18,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -25,7 +27,7 @@ import java.util.stream.Collectors;
 public class TaskItemRepositoryImpl implements TaskItemRepository {
 
     private static final String COLUMNS = "id, task_id, item_no, input, price, status, agent_status, "
-            + "result_payload, result_url, checks::text AS checks, auto_accepted";
+            + "result_payload, result_url, checks::text AS checks, auto_accepted, source_snapshot_id";
     private static final TypeReference<List<ItemCheck>> CHECKS = new TypeReference<>() { };
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -40,9 +42,9 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
         MapSqlParameterSource[] rows = items.all().stream().map(this::params).toArray(MapSqlParameterSource[]::new);
         jdbc.batchUpdate("""
                 INSERT INTO task_items (id, task_id, item_no, input, price, status, agent_status,
-                                        result_payload, result_url, checks, auto_accepted)
+                                        result_payload, result_url, checks, auto_accepted, source_snapshot_id)
                 VALUES (:id, :taskId, :itemNo, :input, :price, :status, :agentStatus,
-                        :resultPayload, :resultUrl, CAST(:checks AS jsonb), :autoAccepted)
+                        :resultPayload, :resultUrl, CAST(:checks AS jsonb), :autoAccepted, :sourceSnapshotId)
                 """, rows);
     }
 
@@ -80,6 +82,19 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
                 Collectors.collectingAndThen(Collectors.toList(), TaskItems::new)));
     }
 
+    @Override
+    public Optional<TaskItemModel> findById(UUID itemId) {
+        return jdbc.query("SELECT " + COLUMNS + " FROM task_items WHERE id = :id", Map.of("id", itemId), rowMapper())
+                .stream().findFirst();
+    }
+
+    @Override
+    public List<TaskStatus> taskStatusesUsingSource(UUID sourceSnapshotId) {
+        return jdbc.queryForList("SELECT DISTINCT t.status FROM task_items i JOIN tasks t ON t.id = i.task_id "
+                        + "WHERE i.source_snapshot_id = :id", Map.of("id", sourceSnapshotId), String.class)
+                .stream().map(TaskStatus::valueOf).toList();
+    }
+
     private MapSqlParameterSource params(TaskItemModel item) {
         return new MapSqlParameterSource()
                 .addValue("id", item.id())
@@ -92,7 +107,8 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
                 .addValue("resultPayload", item.resultPayload())
                 .addValue("resultUrl", item.resultUrl())
                 .addValue("checks", writeChecks(item.checks()))
-                .addValue("autoAccepted", item.autoAccepted());
+                .addValue("autoAccepted", item.autoAccepted())
+                .addValue("sourceSnapshotId", item.sourceSnapshotId());
     }
 
     private RowMapper<TaskItemModel> rowMapper() {
@@ -101,7 +117,8 @@ public class TaskItemRepositoryImpl implements TaskItemRepository {
                 rs.getString("input"), Money.of(rs.getBigDecimal("price")),
                 ItemStatus.valueOf(rs.getString("status")), rs.getString("agent_status"),
                 rs.getString("result_payload"), rs.getString("result_url"),
-                readChecks(rs.getString("checks")), rs.getBoolean("auto_accepted"));
+                readChecks(rs.getString("checks")), rs.getBoolean("auto_accepted"),
+                rs.getObject("source_snapshot_id", UUID.class));
     }
 
     private String writeChecks(List<ItemCheck> checks) {
