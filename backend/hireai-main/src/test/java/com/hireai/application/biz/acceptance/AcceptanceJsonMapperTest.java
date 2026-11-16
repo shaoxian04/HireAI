@@ -37,7 +37,7 @@ class AcceptanceJsonMapperTest {
     }
 
     @Test
-    void anExtractionRecordRoundTripsInTheV49Shape() {
+    void anExtractionRecordRoundTripsInItsMigrationShape() {
         var record = new com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord(ref,
                 com.hireai.domain.biz.acceptance.extraction.enums.ExtractionStatus.EXTRACTED, java.util.List.of(
                         com.hireai.domain.biz.acceptance.extraction.model.ExtractedRequirement.mapped("At most 12 pages",

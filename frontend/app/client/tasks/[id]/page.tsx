@@ -23,6 +23,7 @@ import { RatingPrompt } from "@/components/RatingPrompt";
 import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
 import { ContractPanel } from "@/components/AcceptanceTerms";
 import { ItemsPanel } from "@/components/ItemsPanel";
+import { ReceiptsPanel } from "@/components/ReceiptsPanel";
 import { VersionFallbackNotice } from "@/components/VersionFallbackNotice";
 import { DispatchHistory } from "@/components/ContractDeclines";
 import { AgentResponsePending, ClientDecisionPanel, RevisedResultNotice } from "@/components/RejectionPanel";
@@ -60,6 +61,9 @@ const RESULT_READY: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
   "DISPUTED",
   "RESOLVED",
 ]);
+
+/** Item statuses that have settled (paid or refunded), so each has a receipt. */
+const SETTLED_ITEM: ReadonlySet<string> = new Set(["ACCEPTED", "SPEC_VIOLATION", "FAILED"]);
 
 /** Terminal auto-refund failures that get a plain-English panel. */
 const TERMINAL_FAILURE: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
@@ -273,6 +277,7 @@ function TaskDetail() {
   // Once a task is in a dispute (or resolved via one), the execution pipeline is history — the
   // dispute timeline below tells the story instead.
   const inDispute = task.status === "DISPUTED" || !!outcome;
+  const settledItems = (task.items ?? []).filter((i) => SETTLED_ITEM.has(i.status)).length;
 
   // Where the budget is now. A terminal failure is auto-refunded, so it is no longer "in escrow".
   const money = task.resolution
@@ -554,6 +559,11 @@ function TaskDetail() {
           rejectionReason={task.rejectionReason ?? null}
           onChange={setOutcome}
         />
+      )}
+
+      {/* Receipts exist once something has settled: the whole task, or (multi-Item) any one Item. */}
+      {(TERMINAL.has(task.status) || settledItems > 0) && (
+        <ReceiptsPanel taskId={task.id} refreshKey={`${task.status}:${settledItems}`} />
       )}
     </div>
   );

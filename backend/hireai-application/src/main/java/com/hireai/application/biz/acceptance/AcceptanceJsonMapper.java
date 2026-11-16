@@ -93,7 +93,7 @@ public class AcceptanceJsonMapper {
         throw corrupt("Contract parameter " + name + " has an unreadable value");
     }
 
-    // ---- Extraction record (V49__contract_extraction.sql documents the shape) ----
+    // ---- Extraction record (V51__contract_extraction.sql documents the shape) ----
 
     public String toJson(ExtractionRecord record) {
         ObjectNode root = refNode(record.template());
