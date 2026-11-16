@@ -54,8 +54,8 @@ class SettlementWriteAppServiceImplTest {
     void settleAcceptedSavesBothWalletsAndRecordsSettlement() {
         WalletModel clientWallet = WalletModel.openFor(clientId);
         WalletModel builderWallet = WalletModel.openFor(builderId);
-        when(walletRepository.findByUserId(clientId)).thenReturn(Optional.of(clientWallet));
-        when(walletRepository.findByUserId(builderId)).thenReturn(Optional.of(builderWallet));
+        when(walletRepository.findByUserIdForUpdate(clientId)).thenReturn(Optional.of(clientWallet));
+        when(walletRepository.findByUserIdForUpdate(builderId)).thenReturn(Optional.of(builderWallet));
         when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(settlementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         SettlementBreakdown expected = new SettlementBreakdown(Money.of("17.00"), Money.of("3.00"));
@@ -74,8 +74,8 @@ class SettlementWriteAppServiceImplTest {
     void settleAcceptedOpensBuilderWalletWhenAbsent() {
         WalletModel clientWallet = WalletModel.openFor(clientId);
         WalletModel newBuilderWallet = WalletModel.openFor(builderId);
-        when(walletRepository.findByUserId(clientId)).thenReturn(Optional.of(clientWallet));
-        when(walletRepository.findByUserId(builderId)).thenReturn(Optional.empty());
+        when(walletRepository.findByUserIdForUpdate(clientId)).thenReturn(Optional.of(clientWallet));
+        when(walletRepository.findByUserIdForUpdate(builderId)).thenReturn(Optional.empty());
         when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(settlementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(settlementDomainService.settleAcceptance(any(), any(), any(), any(), any()))
@@ -90,7 +90,7 @@ class SettlementWriteAppServiceImplTest {
     @Test
     void selfSettleSavesOneWallet() {
         WalletModel shared = WalletModel.openFor(clientId);
-        when(walletRepository.findByUserId(clientId)).thenReturn(Optional.of(shared));
+        when(walletRepository.findByUserIdForUpdate(clientId)).thenReturn(Optional.of(shared));
         when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(settlementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(settlementDomainService.settleAcceptance(eq(shared), eq(shared), any(), any(), any()))
@@ -104,7 +104,7 @@ class SettlementWriteAppServiceImplTest {
     @Test
     void settleRejectedRefundsAndRecordsRejectSettlement() {
         WalletModel clientWallet = WalletModel.openFor(clientId);
-        when(walletRepository.findByUserId(clientId)).thenReturn(Optional.of(clientWallet));
+        when(walletRepository.findByUserIdForUpdate(clientId)).thenReturn(Optional.of(clientWallet));
         when(walletRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(settlementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -117,7 +117,7 @@ class SettlementWriteAppServiceImplTest {
 
     @Test
     void requireWalletMissingThrowsNotFound() {
-        when(walletRepository.findByUserId(clientId)).thenReturn(Optional.empty());
+        when(walletRepository.findByUserIdForUpdate(clientId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.settleAccepted(taskId, clientId, builderId, Money.of("20.00")))
                 .isInstanceOf(DomainException.class)

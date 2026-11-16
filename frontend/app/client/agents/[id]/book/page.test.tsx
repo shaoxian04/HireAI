@@ -95,10 +95,9 @@ describe("book agent — idempotency", () => {
     fireEvent.change(screen.getByLabelText(/description/i), { target: { value: "the invoices" } });
     fireEvent.click(await screen.findByLabelText("Send inv-1.pdf as an Item"));
 
-    // One document is not a batch: refused before anything is sent.
-    fireEvent.click(screen.getByRole("button", { name: /book/i }));
-    expect(await screen.findByText(/Choose at least two documents/)).toBeInTheDocument();
-    expect(body).toBeNull();
+    // One document is a one-Item Task (spec S3: 1..n Items): it is checked like a batch.
+    expect(screen.getByRole("button", { name: /book and freeze/i })).toHaveTextContent(/10 cr/);
+    expect(screen.getByText(/how the batch is checked/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText("Send inv-2.pdf as an Item"));
     const book = screen.getByRole("button", { name: /book and freeze/i });

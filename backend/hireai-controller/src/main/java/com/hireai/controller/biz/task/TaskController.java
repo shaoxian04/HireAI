@@ -198,7 +198,8 @@ public class TaskController extends BaseController {
         return ok(TaskModel2DTOConverter.toDTO(task, agentId,
                 readAppService.findReviewWindow(task).orElse(null),
                 rejectionAppService.findLatest(task.id()).orElse(null),
-                readAppService.findFailureDetail(task).orElse(null), readAppService.findItems(task), true)
+                readAppService.findFailureDetail(task).orElse(null), readAppService.findItems(task), true,
+                readAppService.findSettlementRecord(task))
                 .withTemplateFallback(Acceptance2DTOConverter.toDTO(
                         readAppService.findTemplateFallback(task).orElse(null)))
                 .withReviewReason(readAppService.findReviewReason(task).orElse(null))
@@ -253,10 +254,11 @@ public class TaskController extends BaseController {
             @RequestParam(defaultValue = "50") int size) {
         UUID clientId = currentUser.currentUserId();
         List<TaskModel> owned = readAppService.listForClient(clientId, new TaskQuery(page, size));
-        // One read for the page's Items: a multi-Item Task's amounts come from its Items (spec S3).
+        // One read for the page's Items; the amounts come from each Task's recorded settlements.
         Map<UUID, TaskItems> items = readAppService.findItems(owned.stream().map(TaskModel::id).toList());
         List<TaskDTO> tasks = owned.stream()
-                .map(task -> TaskModel2DTOConverter.toDTO(task, null, null, null, null, items.get(task.id()), false))
+                .map(task -> TaskModel2DTOConverter.toDTO(task, null, null, null, null, items.get(task.id()), false,
+                        readAppService.findSettlementRecord(task)))
                 .toList();
         return ok(tasks);
     }
@@ -280,7 +282,13 @@ public class TaskController extends BaseController {
         // Same view as GET /{id}: the page replaces its task with this, so keep the review window.
         return TaskModel2DTOConverter.toDTO(task, readAppService.findBookedAgentId(task).orElse(null),
                 readAppService.findReviewWindow(task).orElse(null),
-                rejectionAppService.findLatest(task.id()).orElse(null), null, readAppService.findItems(task), true);
+                rejectionAppService.findLatest(task.id()).orElse(null), null, readAppService.findItems(task), true,
+                readAppService.findSettlementRecord(task));
+    }
+
+    /** A task with the amounts its recorded settlements say. */
+    private TaskDTO settled(TaskModel task) {
+        return TaskModel2DTOConverter.toDTO(task, readAppService.findSettlementRecord(task));
     }
 
     @PostMapping("/{id}/reject")
@@ -288,7 +296,7 @@ public class TaskController extends BaseController {
                                      @Valid @RequestBody RejectTaskRequest request) {
         UUID clientId = currentUser.currentUserId();
         reviewAppService.reject(id, clientId, request.reasonCategory(), request.reason());
-        return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
+        return ok(settled(readAppService.getForClient(id, clientId)));
     }
 
     /**
@@ -299,7 +307,7 @@ public class TaskController extends BaseController {
     public WebResult<TaskDTO> requestArbitration(@PathVariable("id") UUID id) {
         UUID clientId = currentUser.currentUserId();
         rejectionAppService.requestArbitration(id, clientId);
-        return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
+        return ok(settled(readAppService.getForClient(id, clientId)));
     }
 
     /**

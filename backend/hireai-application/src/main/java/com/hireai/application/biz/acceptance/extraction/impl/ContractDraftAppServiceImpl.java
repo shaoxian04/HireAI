@@ -29,10 +29,13 @@ public class ContractDraftAppServiceImpl implements ContractDraftAppService {
     private final TemplateReadAppService templateReadAppService;
     private final RequirementExtractorPort requirementExtractorPort;
     private final RequirementExtractionDomainService requirementExtractionDomainService;
+    private final com.hireai.application.biz.acceptance.extraction.ExtractionRateLimiter rateLimiter;
 
     @Override
-    public ContractExtraction draft(String title, String description, String acceptanceCriteria, Contract base) {
+    public ContractExtraction draft(java.util.UUID requestedBy, String title, String description,
+                                    String acceptanceCriteria, Contract base) {
         templateReadAppService.requireValid(base);
+        rateLimiter.acquire(requestedBy); // before the LLM call, and before a submit freezes anything
         TemplateModel template = templateReadAppService.get(base.template());
         List<ProposedRequirement> proposals;
         try {

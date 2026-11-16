@@ -15,7 +15,7 @@ import java.util.UUID;
 /**
  * Auto-accept sweeper: a RULED dispute is a PROPOSED ruling awaiting the client. If the client never
  * accepts or appeals, escrow would hang forever. This job auto-accepts any RULED dispute older than
- * {@code hireai.arbitration.ruling-accept-after}, settling from the arbitrator's proposal. Each
+ * the appeal window ({@code hireai.arbitration.appeal-window}), settling from the arbitrator's proposal. Each
  * autoAcceptOne() is a cross-bean call (own transaction), so one poisoned id can't roll back
  * settlements already committed for healthy ids in the same pass.
  */
@@ -28,7 +28,7 @@ public class RulingAcceptSweeper {
     private final Duration acceptAfter;
 
     public RulingAcceptSweeper(DisputeAppService disputeAppService,
-                               @Value("${hireai.arbitration.ruling-accept-after:PT2M}") Duration acceptAfter) {
+                               @Value("${hireai.arbitration.appeal-window:PT24H}") Duration acceptAfter) {
         this.disputeAppService = disputeAppService;
         this.acceptAfter = acceptAfter;
     }

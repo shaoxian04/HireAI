@@ -110,13 +110,15 @@ async def draft_contract(description: str, template: str = "", title: str = "", 
 async def get_task_status(task_id: str) -> str:
     """Get the current status of a HireAI task (e.g. SUBMITTED, EXECUTING, RESOLVED, FAILED).
     For a task that ended without a result, failure_reason says why (e.g. AGENT_UNREACHABLE,
-    AGENT_BUSY, NO_ELIGIBLE_AGENT, EXECUTION_TIMEOUT, SPEC_VIOLATION); otherwise it is null.
+    AGENT_BUSY, NO_ELIGIBLE_AGENT, EXECUTION_TIMEOUT, SPEC_VIOLATION); otherwise it is null. On
+    NO_ELIGIBLE_AGENT (or while AWAITING_AGENT), failure_detail says what ruled the agents out.
     For a task waiting in PENDING_REVIEW for a human, review_reason says why (ANOMALY, UNDECIDED, or
     AI_REVIEW_UNAVAILABLE when a booked AI Review gave no usable verdict); otherwise it is null."""
     task = await _client().get_task(task_id)
     return json.dumps({"task_id": task.get("id"), "status": task.get("status"),
                        "resolution": task.get("resolution"),
                        "failure_reason": task.get("failureReason"),
+                       "failure_detail": task.get("failureDetail"),
                        "review_reason": task.get("reviewReason")}, default=str)
 
 

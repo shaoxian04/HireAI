@@ -80,11 +80,7 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
         // callback's committed outcome instead of overwriting it.
         TaskModel task = taskRepository.findByIdForUpdate(taskId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
-        if (!claims.agentVersionId().equals(task.agentVersionId())) {
-            throw new DispatchTokenInvalidException(
-                    "Dispatch token agent version " + claims.agentVersionId()
-                            + " does not match task " + taskId + " assignment " + task.agentVersionId());
-        }
+        claims.requireAssignedVersion(task.agentVersionId());
         // A result is accepted while the task is QUEUED or EXECUTING: a fast Agent may call back
         // before the dispatch consumer marks the task EXECUTING. Any later status means the first
         // callback was already processed (or the task ended): first result wins, no-op. There is
@@ -124,11 +120,6 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
     }
 
     private DispatchTokenClaims verifyTokenFor(UUID taskId, String bearerToken) {
-        DispatchTokenClaims claims = dispatchTokenService.verify(bearerToken);
-        if (!claims.taskId().equals(taskId)) {
-            throw new DispatchTokenInvalidException(
-                    "Dispatch token task " + claims.taskId() + " does not match callback task " + taskId);
-        }
-        return claims;
+        return dispatchTokenService.verify(bearerToken).requireTask(taskId);
     }
 }

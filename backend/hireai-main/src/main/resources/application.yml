@@ -29,8 +29,8 @@ spring:
     locations: classpath:db/migration
   servlet:
     multipart:
-      # The largest upload is an Engagement document (hireai.source.max-bytes); storefront images
-      # keep their own 2 MB check in the service.
+      # Sized for the largest upload, an Engagement document (hireai.source.max-bytes). Every other
+      # multipart endpoint is held to hireai.upload.default-max-bytes by UploadSizeFilter (413).
       max-file-size: 25MB
       max-request-size: 26MB
   rabbitmq:
@@ -74,6 +74,9 @@ hireai:
   source:
     # Engagement documents (spec S4): the largest upload, and how often the D32 retention pass runs.
     max-bytes: ${SOURCE_MAX_BYTES:26214400}
+    # D32: a document's bytes are deleted this many days after the last window of every Task using it
+    # closes; an Engagement may ask for fewer (retentionDays), never more.
+    retention-days: ${SOURCE_RETENTION_DAYS:30}
     retention-sweep-interval: ${SOURCE_RETENTION_SWEEP_INTERVAL:PT1H}
   matching:
     # Multi-factor matcher weights (must sum to 1.0; checked at startup) + epsilon-greedy exploration
@@ -113,6 +116,11 @@ hireai:
     # the failing checks this many times; failing after the last one ends the Task SPEC_VIOLATION
     # with a refund. The rejection itself is not appealable.
     max-reworks: ${ACCEPTANCE_MAX_REWORKS:2}
+    # Flagged-share cap (owner decision on #87): of a multi-Item Task's Items, at most this share (rounded
+    # down, but at least flagged-minimum) that a check sent to review are held out of the sampled lot for
+    # the reviewer's own judgement; flagged Items beyond it stay in the random lot.
+    flagged-share: ${ACCEPTANCE_FLAGGED_SHARE:0.10}
+    flagged-minimum: ${ACCEPTANCE_FLAGGED_MINIMUM:1}
   ai-review:
     # AI Review (spec S10, D37): an optional, Client-paid judgement of criteria code cannot check, on a
     # direct booking whose Agent's Offer accepts it. Fee = (base-fee + fee-per-criterion x criteria),
@@ -194,6 +202,11 @@ hireai:
     model: ${EXTRACTION_MODEL:gpt-4o-mini}
     # Connect and read timeout per extraction request; a slower answer falls back to the defaults.
     timeout: ${EXTRACTION_TIMEOUT:PT10S}
+    # Per-user cap on extractions (drafts and description-only submits together), over a sliding
+    # window; beyond it the request is a 429 before anything is extracted or frozen.
+    rate-limit:
+      max-calls: ${EXTRACTION_RATE_LIMIT_MAX_CALLS:20}
+      window: ${EXTRACTION_RATE_LIMIT_WINDOW:PT1M}
   auth:
     # HS256 signing secret for authentication JWTs. MUST be overridden in real deploys.
     # Dev default is >= 32 bytes (HS256 minimum). Never a real secret in git.
@@ -216,15 +229,17 @@ hireai:
     # Human-backstop sweeper: an ARBITRATING dispute older than this is escalated to the admin.
     stale-after: ${ARBITRATION_STALE_AFTER:PT2M}
     sweep-interval: ${ARBITRATION_SWEEP_INTERVAL:PT1M}
-    # Auto-accept sweeper: a RULED (proposed) dispute the client never acted on is auto-accepted
-    # after this long, so escrow doesn't hang forever.
-    ruling-accept-after: ${RULING_ACCEPT_AFTER:PT2M}
+    # Appeal window (D42): how long either side may accept or appeal a proposed (RULED) ruling; after
+    # it the auto-accept sweeper accepts it on everyone's behalf, so escrow doesn't hang forever.
+    # Defaults to the Client's decision window.
+    appeal-window: ${APPEAL_WINDOW:${hireai.rejection.client-decision-window}}
     accept-sweep-interval: ${RULING_ACCEPT_SWEEP_INTERVAL:PT1M}
     # Loser pays (#96, spec D43): the arbitration cost and the Appeal Fee of a web appeal to an
-    # admin, in credits. The side the effective ruling goes against bears each, capped at 20% of
-    # the Item price (domain policy); the platform covers the excess. 0 turns a fee off.
-    # ruling-accept-after above is also the window in which either side may accept or appeal.
+    # admin, in credits. The side the effective ruling goes against bears each, capped at
+    # fee-cap-share of the Item price; the platform covers the excess. 0 turns a fee off.
     cost: ${ARBITRATION_COST:3.00}
+    # The most a loser bears of each fee, as a share of the Item price; the platform covers the rest.
+    fee-cap-share: ${ARBITRATION_FEE_CAP_SHARE:0.20}
     appeal-fee: ${APPEAL_FEE:5.00}
   receipts:
     # Signed receipts (D40, docs/details/receipts.md). The Ed25519 private key, base64 PKCS#8 DER, from the

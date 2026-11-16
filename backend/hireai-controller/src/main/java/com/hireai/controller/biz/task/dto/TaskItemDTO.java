@@ -33,8 +33,8 @@ public record TaskItemDTO(
         UUID sourceId,
         /**
          * True when a check sent this Item to the buyer's review (D7): the reviewer judges it on its own, outside
-         * the sample; it is paid only when confirmed, and refunded (UNREVIEWED) if nobody judges it before the review
-         * window closes. Absent otherwise.
+         * the sample (within the Task's flagged-share cap); like any Item it is accepted if nobody judges it
+         * before the review window closes. Absent otherwise.
          */
         Boolean needsReview,
         /** Facts about the Item's input (duplicates, figures that don't add up, D45); never change the pay. */

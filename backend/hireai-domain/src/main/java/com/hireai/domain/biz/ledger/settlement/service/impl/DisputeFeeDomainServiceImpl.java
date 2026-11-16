@@ -13,11 +13,23 @@ import java.util.UUID;
 
 public class DisputeFeeDomainServiceImpl implements DisputeFeeDomainService {
 
+    /** The share of the Item price a loser bears at most (D43; configurable, D41). */
+    private final java.math.BigDecimal capRate;
+
+    public DisputeFeeDomainServiceImpl() {
+        this(SettlementPolicy.DISPUTE_FEE_CAP_RATE);
+    }
+
+    public DisputeFeeDomainServiceImpl(java.math.BigDecimal capRate) {
+        SettlementPolicy.disputeFeeCap(Money.ZERO, Money.ZERO, capRate); // validates the share
+        this.capRate = capRate;
+    }
+
     @Override
     public DisputeFeeCharge charge(DisputeFeeType type, Money fullCost, Money itemPrice, Set<DisputeParty> payers,
                                    WalletModel clientWallet, WalletModel builderWallet,
                                    UUID taskId, String correlationId) {
-        Money capped = SettlementPolicy.disputeFeeCap(fullCost, itemPrice);
+        Money capped = SettlementPolicy.disputeFeeCap(fullCost, itemPrice, capRate);
         Money clientShare = Money.ZERO;
         Money builderShare = Money.ZERO;
         if (payers.contains(DisputeParty.CLIENT) && payers.contains(DisputeParty.BUILDER)) {

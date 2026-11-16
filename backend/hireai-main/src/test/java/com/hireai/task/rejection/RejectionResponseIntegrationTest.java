@@ -91,6 +91,8 @@ class RejectionResponseIntegrationTest extends WholeAppIntegrationTest {
         assertThat(notice.field("reasonCategory")).isEqualTo("A_MISMATCH");
         assertThat(notice.field("reason")).isEqualTo("the totals are wrong");
         assertThat(notice.json().get("revisionAllowed").asBoolean()).isTrue();
+        // The notice carries the frozen Contract exactly as the WorkOrder does (#110).
+        assertThat(notice.json().get("contract")).isNotNull().isEqualTo(f.agent().workOrders().get(0).json().get("contract"));
         assertThat(Instant.parse(notice.field("responseDeadline"))).isEqualTo(start.plus(Duration.ofHours(2)));
         assertThat(notice.field("responseUrl"))
                 .isEqualTo(platformUrl("/api/agent-callbacks/" + f.taskId() + "/rejection-response"));

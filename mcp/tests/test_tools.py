@@ -146,7 +146,7 @@ async def test_submit_task_routed_requires_category(fake):
 async def test_get_task_status_shapes_output(fake):
     out = await server.get_task_status("t9")
     assert json.loads(out) == {"task_id": "t9", "status": "WORKING", "resolution": None,
-                               "failure_reason": None, "review_reason": None}
+                               "failure_reason": None, "failure_detail": None, "review_reason": None}
 
 
 async def test_get_task_status_shows_why_a_task_failed(monkeypatch, fake):
@@ -157,7 +157,18 @@ async def test_get_task_status_shows_why_a_task_failed(monkeypatch, fake):
     monkeypatch.setattr(fake, "get_task", failed_task)
     out = await server.get_task_status("t9")
     assert json.loads(out) == {"task_id": "t9", "status": "FAILED", "resolution": None,
-                               "failure_reason": "AGENT_UNREACHABLE", "review_reason": None}
+                               "failure_reason": "AGENT_UNREACHABLE", "failure_detail": None,
+                               "review_reason": None}
+
+
+async def test_get_task_status_says_what_ruled_the_agents_out(monkeypatch, fake):
+    async def no_match(task_id):
+        return {"id": task_id, "status": "FAILED", "failureReason": "NO_ELIGIBLE_AGENT",
+                "failureDetail": "3 agents: their offers don't accept the largest file size"}
+
+    monkeypatch.setattr(fake, "get_task", no_match)
+    out = json.loads(await server.get_task_status("t9"))
+    assert out["failure_detail"] == "3 agents: their offers don't accept the largest file size"
 
 
 async def test_get_task_status_says_why_a_result_waits_for_a_human(monkeypatch, fake):

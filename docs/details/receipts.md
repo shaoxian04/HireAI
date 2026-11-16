@@ -63,8 +63,11 @@ numbers.
 | `parties` | `clientRef`, `builderRef`, `agentVersionRef`: pseudonymous references, see below |
 | `contract` | `template` (`key@version`), `templateKey`, `templateVersion`, `sha256` of the RFC 8785 form of the Task's frozen [Contract](#the-contract-a-receipt-names) (for a Task from before Contracts, the one its output spec mapped onto) |
 | `input` | `sha256` of the UTF-8 task description, or of the Item's input |
+| `source` | on an Item whose input is an Engagement document: the [SourceSnapshot](data-model.md#engagements)'s `sha256`, `mediaType`, `sizeBytes` (the hash outlives the deleted bytes) |
 | `delivery` | `agentStatus`, `receivedAt`, `payloadSha256` of the result payload, and `file` (`sha256`, `mediaType`, `sizeBytes`, `fetchedAt`) when a [DeliverySnapshot](data-model.md#delivery-snapshots) was frozen; absent when nothing was delivered |
 | `checks` | `attempt`, `verdict` (`PASS`/`FAIL`), `results[]` of `rule`, `passed`, `detail` |
+| `findings` | facts about the input that never changed the pay (D45): each Finding's `code` only (its detail can name other tasks, a tax id or an invoice number, so it stays in the Client's task views); absent when there are none |
+| `aiReview` | on a Task with an [AI Review](data-model.md#ai-review): `status`, `decisive`, `fee`, and once it ran `verdicts[]` (`criterion`, `passed`) and `rulingCategory` |
 | `sample` | on an Item of a sampled Task (spec S8): `table` (`ISO2859-1`), `aql`, `inspectionLevel`, `outcome` (`SAMPLING`/`REWORKING`/`ACCEPTED`/`PRO_RATA`/`WAIVED`), `errorRate` (pro rata only), `sampled` (whether this Item was in any sample), and `draws[]` (`round`, `stage`, `seed` as a decimal string, `lotSize`, `codeLetter`, `size`, `member`, `defects`, `decision`). The draw is reproducible from the seed: see [sampling.md](sampling.md#the-draw) |
 | `judgements` | on an Item, first the buyer's reviewer (`by: REVIEWER`, `decision` `PASSED`/`REJECTED`, `round`, `sampled`, `reasonCategory`), the Agent's responses and the buyer's decisions on it; otherwise, in order: Client rejections (`decision: REJECTED`, `round`, `reasonCategory`), Agent responses (`response`: `REVISE`/`CONCEDE`/`STAND_BY`, `silent`), Client decisions (`ACCEPT`/`ARBITRATE`, `silent`), and a final Client `ACCEPTED` (`automatic: true` when the review window closed) |
 | `ruling` | `disputeId`, effective `category`, `appealedBy`, and `rulings[]` (`tier`, `category`, `decidedBy`, `decidedAt`, `rationale`) |
@@ -81,8 +84,8 @@ one else can, without the key.
 
 ### Extending the format
 
-New facts arrive as new optional members under `v1` (the `sample` member was added this way); the
-SourceSnapshot hashes of the input documents (#104) will be too. Receipts
+New facts arrive as new optional members under `v1` (`sample`, `source`, `findings` and `aiReview` were
+added this way). Receipts
 already issued keep their stored bytes and signature, so they keep verifying. A verifier must ignore
 members it does not know. Only a change to an existing member's meaning bumps `format`.
 

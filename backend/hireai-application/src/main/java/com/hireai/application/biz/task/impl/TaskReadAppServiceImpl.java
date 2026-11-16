@@ -52,6 +52,8 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     private final DeliverySnapshotAppService deliverySnapshotAppService;
     private final TemplateReadAppService templateReadAppService;
     private final AcceptanceJsonMapper acceptanceJsonMapper;
+    private final com.hireai.domain.biz.ledger.settlement.repository.SettlementRepository settlementRepository;
+    private final com.hireai.domain.biz.ledger.settlement.repository.ItemSettlementRepository itemSettlementRepository;
 
     @Override
     public Optional<String> findFailureDetail(TaskModel task) {
@@ -153,6 +155,12 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     @Override
     public TaskItems findItems(TaskModel task) {
         return taskItemRepository.findByTaskId(task.id());
+    }
+
+    @Override
+    public com.hireai.domain.biz.ledger.settlement.model.TaskSettlementRecord findSettlementRecord(TaskModel task) {
+        return new com.hireai.domain.biz.ledger.settlement.model.TaskSettlementRecord(task.budget(),
+                settlementRepository.findByTaskId(task.id()), itemSettlementRepository.findByTaskId(task.id()));
     }
 
     @Override

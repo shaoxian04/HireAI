@@ -33,12 +33,23 @@ public final class SettlementPolicy {
         return budget.percentage(PARTIAL_BUILDER_FRACTION);
     }
 
-    /** A dispute fee (arbitration cost or Appeal Fee) is capped at 20% of the Item price (D43). */
+    /**
+     * The default cap on a dispute fee (arbitration cost or Appeal Fee): 20% of the Item price (D43). The
+     * deployed share is {@code hireai.arbitration.fee-cap-share} (D41: all configurable).
+     */
     public static final BigDecimal DISPUTE_FEE_CAP_RATE = new BigDecimal("0.20");
 
-    /** What a loser can be asked to bear of a dispute fee: the fee, or 20% of the Item price if less. */
+    /** What a loser can be asked to bear of a dispute fee at the default cap. */
     public static Money disputeFeeCap(Money fee, Money itemPrice) {
-        Money cap = itemPrice.percentage(DISPUTE_FEE_CAP_RATE);
+        return disputeFeeCap(fee, itemPrice, DISPUTE_FEE_CAP_RATE);
+    }
+
+    /** What a loser can be asked to bear of a dispute fee: the fee, or {@code capRate} of the Item price if less. */
+    public static Money disputeFeeCap(Money fee, Money itemPrice, BigDecimal capRate) {
+        if (capRate == null || capRate.signum() < 0 || capRate.compareTo(BigDecimal.ONE) > 0) {
+            throw new IllegalArgumentException("dispute fee cap share must be between 0 and 1, got " + capRate);
+        }
+        Money cap = itemPrice.percentage(capRate);
         return fee.isGreaterThan(cap) ? cap : fee;
     }
 }

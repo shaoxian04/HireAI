@@ -109,17 +109,13 @@ function AdminOverview() {
 
       <section className="space-y-3">
         <h2 className="eyebrow">Platform</h2>
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
           <Tile label="Tasks" value={overview.tasksTotal} />
           <Tile label="Users" value={overview.usersTotal} />
           <Tile label="Agents" value={overview.agentsTotal} />
           <Tile label="Escrow held" value={`${overview.escrowHeld} cr`} tone="text-accent" />
-          {/* spans the leftover cells on 2- and 3-column grids, so no row ends in an empty box */}
-          <Tile
-            label="Commission earned"
-            value={`${overview.commissionEarned} cr`}
-            className="col-span-2 lg:col-span-1"
-          />
+          <Tile label="Commission earned" value={`${overview.commissionEarned} cr`} />
+          <Tile label="AI Review fees" value={`${overview.aiReviewFeesEarned ?? 0} cr`} />
         </div>
       </section>
 

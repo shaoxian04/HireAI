@@ -121,6 +121,7 @@ public class TaskInspectionController extends BaseController {
     private TaskDTO withItems(TaskModel task) {
         return TaskModel2DTOConverter.toDTO(task, readAppService.findBookedAgentId(task).orElse(null),
                 readAppService.findReviewWindow(task).orElse(null),
-                rejectionAppService.findLatest(task.id()).orElse(null), null, readAppService.findItems(task), true);
+                rejectionAppService.findLatest(task.id()).orElse(null), null, readAppService.findItems(task), true,
+                readAppService.findSettlementRecord(task));
     }
 }

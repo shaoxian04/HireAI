@@ -398,6 +398,7 @@ function SubmitTask() {
           onRelax={onRelax}
           fallback={preview.fallback ?? null}
           templateTitle={contractTemplate?.title}
+          termsExtracted={terms !== null && terms !== contract}
           budget={budgetValue}
           onSelect={(o) => {
             setSelected(o);

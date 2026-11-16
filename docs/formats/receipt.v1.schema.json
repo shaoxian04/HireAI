@@ -61,6 +61,45 @@
           "required": ["sha256"],
           "properties": { "sha256": { "$ref": "#/$defs/hex64" } }
         },
+        "source": {
+          "type": "object",
+          "required": ["sha256", "mediaType", "sizeBytes"],
+          "properties": {
+            "sha256": { "$ref": "#/$defs/hex64" },
+            "mediaType": { "type": "string", "minLength": 1 },
+            "sizeBytes": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["code"],
+            "additionalProperties": false,
+            "properties": { "code": { "type": "string", "minLength": 1 } }
+          }
+        },
+        "aiReview": {
+          "type": "object",
+          "required": ["status", "decisive", "fee"],
+          "properties": {
+            "status": { "enum": ["FROZEN", "REQUESTED", "COMPLETED", "FAILED", "RELEASED"] },
+            "decisive": { "type": "boolean" },
+            "fee": { "$ref": "#/$defs/money" },
+            "rulingCategory": { "enum": ["FULFILLED", "PARTIALLY_FULFILLED", "NOT_FULFILLED"] },
+            "verdicts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["criterion", "passed"],
+                "properties": {
+                  "criterion": { "type": "string" },
+                  "passed": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
         "delivery": {
           "type": "object",
           "required": ["agentStatus"],

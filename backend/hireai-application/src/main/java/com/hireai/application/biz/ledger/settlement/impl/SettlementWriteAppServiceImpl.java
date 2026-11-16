@@ -9,6 +9,7 @@ import com.hireai.domain.biz.ledger.settlement.model.ItemSettlementModel;
 import com.hireai.domain.biz.ledger.settlement.repository.DisputeFeeRepository;
 import com.hireai.domain.biz.ledger.settlement.service.DisputeFeeDomainService;
 import com.hireai.domain.biz.ledger.settlement.model.SettlementModel;
+import com.hireai.domain.biz.ledger.settlement.model.TaskSettlementRecord;
 import com.hireai.domain.biz.ledger.settlement.repository.ItemSettlementRepository;
 import com.hireai.domain.biz.ledger.settlement.repository.SettlementRepository;
 import com.hireai.domain.biz.ledger.settlement.service.SettlementDomainService;
@@ -39,18 +40,9 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
 
     @Override
     public SettlementBreakdown settleAccepted(UUID taskId, UUID clientId, UUID builderId, Money budget) {
-        WalletModel clientWallet = requireWallet(clientId);
-        boolean selfSettle = clientId.equals(builderId);
-        WalletModel builderWallet = selfSettle ? clientWallet : loadOrOpen(builderId);
-
-        String correlationId = "settle-" + taskId;
-        SettlementBreakdown breakdown = settlementDomainService.settleAcceptance(
-                clientWallet, builderWallet, budget, taskId, correlationId);
-
-        walletRepository.save(clientWallet);
-        if (!selfSettle) {
-            walletRepository.save(builderWallet);
-        }
+        SettlementBreakdown breakdown = withBothWallets(clientId, builderId, (client, builder) ->
+                settlementDomainService.settleAcceptance(
+                client, builder, budget, taskId, "settle-" + taskId));
         settlementRepository.save(SettlementModel.accepted(taskId, breakdown.net(), breakdown.commission()));
         return breakdown;
     }
@@ -60,9 +52,7 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
         WalletModel clientWallet = requireWallet(clientId);
         // A multi-Item Task's Items may already have settled one by one (a sampled Task reworked after
         // a failed sample): only what is still in escrow goes back, never their share twice.
-        Money settledItems = itemSettlementRepository.findByTaskId(taskId).stream()
-                .map(ItemSettlementModel::gross).reduce(Money.ZERO, Money::add);
-        Money held = budget.subtract(settledItems);
+        Money held = recordOf(taskId, budget).stillHeld();
         if (held.isPositive()) {
             settlementDomainService.settleRejection(clientWallet, held, taskId, "settle-" + taskId);
         }
@@ -72,18 +62,9 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
 
     @Override
     public SettlementBreakdown settleSplit(UUID taskId, UUID clientId, UUID builderId, Money budget) {
-        WalletModel clientWallet = requireWallet(clientId);
-        boolean selfSettle = clientId.equals(builderId);
-        WalletModel builderWallet = selfSettle ? clientWallet : loadOrOpen(builderId);
-
-        String correlationId = "settle-" + taskId;
-        SettlementBreakdown breakdown = settlementDomainService.settleSplit(
-                clientWallet, builderWallet, budget, taskId, correlationId);
-
-        walletRepository.save(clientWallet);
-        if (!selfSettle) {
-            walletRepository.save(builderWallet);
-        }
+        SettlementBreakdown breakdown = withBothWallets(clientId, builderId, (client, builder) ->
+                settlementDomainService.settleSplit(
+                client, builder, budget, taskId, "settle-" + taskId));
         settlementRepository.save(SettlementModel.split(taskId, breakdown.net(), breakdown.commission()));
         return breakdown;
     }
@@ -92,17 +73,9 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
     public DisputeFeeCharge chargeDisputeFee(UUID disputeId, UUID taskId, UUID clientId, UUID builderId,
                                              DisputeFeeType type, Money fullCost, Money itemPrice,
                                              Set<DisputeParty> payers) {
-        WalletModel clientWallet = requireWallet(clientId);
-        boolean selfSettle = clientId.equals(builderId);
-        WalletModel builderWallet = selfSettle ? clientWallet : loadOrOpen(builderId);
-
-        DisputeFeeCharge charge = disputeFeeDomainService.charge(type, fullCost, itemPrice, payers,
-                clientWallet, builderWallet, taskId, "dispute-fee-" + disputeId);
-
-        walletRepository.save(clientWallet);
-        if (!selfSettle) {
-            walletRepository.save(builderWallet);
-        }
+        DisputeFeeCharge charge = withBothWallets(clientId, builderId, (client, builder) ->
+                disputeFeeDomainService.charge(type, fullCost, itemPrice, payers,
+                client, builder, taskId, "dispute-fee-" + disputeId));
         disputeFeeRepository.append(disputeId, taskId, charge);
         return charge;
     }
@@ -110,17 +83,9 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
     @Override
     public SettlementBreakdown settleItemAccepted(UUID taskId, UUID itemId, int itemNo, UUID clientId,
                                                   UUID builderId, Money price) {
-        WalletModel clientWallet = requireWallet(clientId);
-        boolean selfSettle = clientId.equals(builderId);
-        WalletModel builderWallet = selfSettle ? clientWallet : loadOrOpen(builderId);
-
-        SettlementBreakdown breakdown = settlementDomainService.settleAcceptance(
-                clientWallet, builderWallet, price, taskId, itemCorrelation(taskId, itemNo));
-
-        walletRepository.save(clientWallet);
-        if (!selfSettle) {
-            walletRepository.save(builderWallet);
-        }
+        SettlementBreakdown breakdown = withBothWallets(clientId, builderId, (client, builder) ->
+                settlementDomainService.settleAcceptance(client, builder, price,
+                recordOf(taskId, price).commissionOnNextItem(price), taskId, itemCorrelation(taskId, itemNo)));
         itemSettlementRepository.append(ItemSettlementModel.accepted(taskId, itemId, itemNo,
                 breakdown.net(), breakdown.commission()));
         return breakdown;
@@ -129,17 +94,9 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
     @Override
     public SettlementBreakdown settleItemProRata(UUID taskId, UUID itemId, int itemNo, UUID clientId,
                                                  UUID builderId, Money price, Money paid) {
-        WalletModel clientWallet = requireWallet(clientId);
-        boolean selfSettle = clientId.equals(builderId);
-        WalletModel builderWallet = selfSettle ? clientWallet : loadOrOpen(builderId);
-
-        SettlementBreakdown breakdown = settlementDomainService.settlePartial(
-                clientWallet, builderWallet, price, paid, taskId, itemCorrelation(taskId, itemNo));
-
-        walletRepository.save(clientWallet);
-        if (!selfSettle) {
-            walletRepository.save(builderWallet);
-        }
+        SettlementBreakdown breakdown = withBothWallets(clientId, builderId, (client, builder) ->
+                settlementDomainService.settlePartial(client, builder, price, paid,
+                recordOf(taskId, price).commissionOnNextItem(paid), taskId, itemCorrelation(taskId, itemNo)));
         itemSettlementRepository.append(ItemSettlementModel.proRata(taskId, itemId, itemNo,
                 breakdown.net(), breakdown.commission(), price.subtract(paid)));
         return breakdown;
@@ -151,6 +108,28 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
         settlementDomainService.settleRejection(clientWallet, price, taskId, itemCorrelation(taskId, itemNo));
         walletRepository.save(clientWallet);
         itemSettlementRepository.append(ItemSettlementModel.refunded(taskId, itemId, itemNo, price));
+    }
+
+    /**
+     * Loads the client's wallet and the builder's (the same wallet on a self-booked task), runs one
+     * settlement on them and saves each once. Both are read row-locked (see {@code findByUserIdForUpdate}).
+     */
+    private <T> T withBothWallets(UUID clientId, UUID builderId,
+                                  java.util.function.BiFunction<WalletModel, WalletModel, T> settle) {
+        WalletModel clientWallet = requireWallet(clientId);
+        boolean selfSettle = clientId.equals(builderId);
+        WalletModel builderWallet = selfSettle ? clientWallet : loadOrOpen(builderId);
+        T outcome = settle.apply(clientWallet, builderWallet);
+        walletRepository.save(clientWallet);
+        if (!selfSettle) {
+            walletRepository.save(builderWallet);
+        }
+        return outcome;
+    }
+
+    /** The Task's recorded settlements so far; {@code budget} only feeds {@code stillHeld}. */
+    private TaskSettlementRecord recordOf(UUID taskId, Money budget) {
+        return new TaskSettlementRecord(budget, java.util.Optional.empty(), itemSettlementRepository.findByTaskId(taskId));
     }
 
     @Override
@@ -178,12 +157,12 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
     }
 
     private WalletModel requireWallet(UUID userId) {
-        return walletRepository.findByUserId(userId)
+        return walletRepository.findByUserIdForUpdate(userId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "No wallet for user " + userId));
     }
 
     private WalletModel loadOrOpen(UUID userId) {
-        return walletRepository.findByUserId(userId)
+        return walletRepository.findByUserIdForUpdate(userId)
                 .orElseGet(() -> walletRepository.save(WalletModel.openFor(userId)));
     }
 }

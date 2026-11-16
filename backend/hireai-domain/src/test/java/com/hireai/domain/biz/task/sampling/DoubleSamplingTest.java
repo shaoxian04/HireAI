@@ -31,39 +31,41 @@ class DoubleSamplingTest {
 
     @Test
     void aCleanFirstSampleAcceptsTheLot() {
-        assertThat(SamplingDecision.after(PLAN_500, 1, 1, 32, 1)).isEqualTo(SamplingDecision.acceptLot());
+        assertThat(SamplingDecision.after(PLAN_500, 1, 1, 32, 1, 1)).isEqualTo(SamplingDecision.acceptLot());
     }
 
     @Test
     void anInconclusiveFirstSampleDrawsTheSecond() {
-        assertThat(SamplingDecision.after(PLAN_500, 1, 2, 32, 1)).isEqualTo(SamplingDecision.drawSecond());
+        assertThat(SamplingDecision.after(PLAN_500, 1, 2, 32, 2, 1)).isEqualTo(SamplingDecision.drawSecond());
     }
 
     @Test
     void aFailedSecondSampleInTheFirstRoundReworksTheWholeTask() {
-        assertThat(SamplingDecision.after(PLAN_500, 2, 5, 64, 1)).isEqualTo(SamplingDecision.rework());
+        assertThat(SamplingDecision.after(PLAN_500, 2, 5, 64, 3, 1)).isEqualTo(SamplingDecision.rework());
     }
 
     @Test
-    void aFirstSampleAtOrAboveTheRejectionNumberSkipsTheSecondSample() {
-        assertThat(SamplingDecision.after(PLAN_500, 1, 3, 32, 1)).isEqualTo(SamplingDecision.rework());
+    void aFirstSampleAtOrAboveTheRejectionNumberStillDrawsTheSecondSample() {
+        // D19: a failed first sample always draws a second before any rework (the spec, not ISO's early reject).
+        assertThat(SamplingDecision.after(PLAN_500, 1, 3, 32, 3, 1)).isEqualTo(SamplingDecision.drawSecond());
+        assertThat(SamplingDecision.after(PLAN_500, 1, 9, 32, 9, 2)).isEqualTo(SamplingDecision.drawSecond());
     }
 
     @Test
     void aSecondSampleWithinTheCumulativeAcceptanceNumberAcceptsTheLot() {
-        assertThat(SamplingDecision.after(PLAN_500, 2, 4, 64, 1)).isEqualTo(SamplingDecision.acceptLot());
+        assertThat(SamplingDecision.after(PLAN_500, 2, 4, 64, 2, 1)).isEqualTo(SamplingDecision.acceptLot());
     }
 
     @Test
     void failingAgainAfterTheReworkSettlesProRataFromTheMeasuredErrorRate() {
-        SamplingDecision decision = SamplingDecision.after(PLAN_500, 2, 6, 64, 2);
+        SamplingDecision decision = SamplingDecision.after(PLAN_500, 2, 6, 64, 3, 2);
         assertThat(decision.next()).isEqualTo(SamplingDecision.Next.PRO_RATA);
         assertThat(decision.errorRate()).isEqualByComparingTo("0.0938"); // 6 / 64 = 0.09375, half-up to 4dp
     }
 
     @Test
     void theReworkedTaskIsResampledAndCanStillPass() {
-        assertThat(SamplingDecision.after(PLAN_500, 1, 0, 32, 2)).isEqualTo(SamplingDecision.acceptLot());
+        assertThat(SamplingDecision.after(PLAN_500, 1, 0, 32, 0, 2)).isEqualTo(SamplingDecision.acceptLot());
     }
 
     @Test
@@ -89,10 +91,24 @@ class DoubleSamplingTest {
     }
 
     @Test
-    void aSingleZeroAcceptancePlanFailsStraightToTheRework() {
-        SamplingPlan single = SampleSizeTable.plan(40, InspectionLevel.II);
-        assertThat(SamplingDecision.after(single, 1, 1, 8, 1)).isEqualTo(SamplingDecision.rework());
-        assertThat(SamplingDecision.after(single, 1, 1, 8, 2).next()).isEqualTo(SamplingDecision.Next.PRO_RATA);
+    void aFailedSingleZeroAcceptanceSampleDrawsASecondSampleOfTheSameSizeJudgedOnItsOwn() {
+        SamplingPlan single = SampleSizeTable.plan(40, InspectionLevel.II); // n=8, Ac 0 / Re 1
+        assertThat(SamplingDecision.after(single, 1, 1, 8, 1, 1)).isEqualTo(SamplingDecision.drawSecond());
+        assertThat(single.sampleSize(2)).isEqualTo(8);
+        // A clean second sample accepts the lot; a second failure reworks it (round 1) or settles pro rata.
+        assertThat(SamplingDecision.after(single, 2, 1, 16, 0, 1)).isEqualTo(SamplingDecision.acceptLot());
+        assertThat(SamplingDecision.after(single, 2, 2, 16, 1, 1)).isEqualTo(SamplingDecision.rework());
+        SamplingDecision last = SamplingDecision.after(single, 2, 2, 16, 1, 2);
+        assertThat(last.next()).isEqualTo(SamplingDecision.Next.PRO_RATA);
+        assertThat(last.errorRate()).isEqualByComparingTo("0.125");
+    }
+
+    @Test
+    void whenTheFirstSampleWasTheWholeLotAFailureHasNoSecondSampleToDraw() {
+        SamplingPlan whole = SampleSizeTable.plan(5, InspectionLevel.II); // every Item, Ac 0
+        assertThat(SamplingDecision.afterWholeLot(whole, 1, 5, 1)).isEqualTo(SamplingDecision.rework());
+        assertThat(SamplingDecision.afterWholeLot(whole, 0, 5, 1)).isEqualTo(SamplingDecision.acceptLot());
+        assertThat(SamplingDecision.afterWholeLot(whole, 1, 5, 2).next()).isEqualTo(SamplingDecision.Next.PRO_RATA);
     }
 
     @Test
@@ -136,5 +152,19 @@ class DoubleSamplingTest {
                 assertThat(client.available().add(builder.available()).add(b.commission())).isEqualTo(price);
             }
         }
+    }
+
+    @Test
+    void anItemCountsAsPassOnceAcceptedAsADefectOnceRefundedAndOpenOtherwise() {
+        assertThat(SampleItemOutcome.of(com.hireai.domain.biz.task.item.enums.ItemStatus.ACCEPTED))
+                .isEqualTo(SampleItemOutcome.PASS);
+        assertThat(SampleItemOutcome.of(com.hireai.domain.biz.task.item.enums.ItemStatus.CONCEDED))
+                .isEqualTo(SampleItemOutcome.DEFECT);
+        assertThat(SampleItemOutcome.of(com.hireai.domain.biz.task.item.enums.ItemStatus.SPEC_VIOLATION))
+                .isEqualTo(SampleItemOutcome.DEFECT);
+        assertThat(SampleItemOutcome.of(com.hireai.domain.biz.task.item.enums.ItemStatus.REJECTED))
+                .isEqualTo(SampleItemOutcome.OPEN);
+        assertThat(SampleItemOutcome.of(com.hireai.domain.biz.task.item.enums.ItemStatus.PENDING_REVIEW))
+                .isEqualTo(SampleItemOutcome.OPEN);
     }
 }

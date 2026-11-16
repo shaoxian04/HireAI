@@ -15,21 +15,22 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * The Items of one multi-Item Task, in Item order (spec S3). A Task without Items is today's
- * single-deliverable Task: its one Item is the Task's own result, so the Items list starts at 2.
+ * The Items of one Task, in Item order (spec S3: 1..n). A Task without Items is the single-deliverable Task,
+ * whose one result is the Task's own.
  * Escrow is frozen once for the Task as the per-Item price × the Item count.
  */
 public record TaskItems(List<TaskItemModel> all) {
 
-    /** A Task with fewer Items is an ordinary single-deliverable Task. */
-    public static final int MIN_ITEMS = 2;
+    /** Spec S3: a Task holds 1..n Items (a single document is a one-Item Task); without Items it is single-deliverable. */
+    public static final int MIN_ITEMS = 1;
     public static final int MAX_ITEMS = 1000;
     /** Same limit as a Task description, which is what an Item's input stands in for. */
     public static final int MAX_INPUT_LENGTH = 5000;
     private static final int QUALITY_SCALE = 3;
     /**
-     * The lowest per-Item price that still earns a commission: each Item settles on its own and the
-     * 15% is rounded per Item, so below 0.04 it rounds to 0.00 and a many-Item Task would pay none.
+     * The lowest per-Item price that still earns a commission: 15% of a lower price rounds to 0.00, so a
+     * Task whose only paid Item cost less would pay none. Commission is allocated on the Task's running
+     * total ({@code TaskSettlementRecord.commissionOnNextItem}), not rounded up on every Item.
      * Single-deliverable Tasks keep their own minimum (see build-status Known gaps).
      */
     public static final Money MIN_ITEM_PRICE = Money.of("0.04");
@@ -50,8 +51,8 @@ public record TaskItems(List<TaskItemModel> all) {
     public static TaskItems submitInputs(UUID taskId, List<ItemInput> inputs, Money price) {
         if (inputs == null || inputs.size() < MIN_ITEMS) {
             throw new DomainException(ResultCode.VALIDATION_ERROR,
-                    "items: a multi-Item Task needs at least " + MIN_ITEMS + " Items; for one, leave items out "
-                            + "and describe the work in the description");
+                    "items: give at least " + MIN_ITEMS + " Item, or leave items out and describe the work "
+                            + "in the description");
         }
         if (inputs.size() > MAX_ITEMS) {
             throw new DomainException(ResultCode.VALIDATION_ERROR,
@@ -98,15 +99,30 @@ public record TaskItems(List<TaskItemModel> all) {
     }
 
     /**
-     * The sampled lot (spec S8): the Items awaiting review that every check passed. An Item a check sent to
-     * review ({@link TaskItemModel#needsReview()}, D7) is the reviewer's to judge on its own, so it is never
-     * drawn, accepted with the lot, reworked with it or settled pro rata.
+     * The Items a passed lot (or the API channel) accepts and pays at once (spec S8): those awaiting review that
+     * every check passed. An Item a check sent to review ({@link TaskItemModel#needsReview()}, D7) is never
+     * paid without its own judgement: the reviewer judges it, or it is accepted when the review window closes.
      */
     public List<TaskItemModel> lot() {
         return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW && !i.needsReview()).toList();
     }
 
-    /** The Items awaiting the reviewer's own judgement because a check sent them to review (D7). */
+    /**
+     * The Items the random sample is drawn from, and that a failed lot reworks or settles pro rata (spec S8):
+     * the {@link #lot()}, plus every flagged Item beyond the {@code cap}. They share every penalty of the lot,
+     * but a passed lot still leaves the flagged ones to their own review. A flagged Item within the cap (the first ones, in Item order) is the reviewer's own
+     * extra check and never drawn; one beyond it can be drawn and then counts in the error rate like any
+     * sampled Item. So flagging more Items cannot shrink the population, the sample or the measured error
+     * rate. The rank counts every flagged Item whatever its status, so judging one never moves another.
+     */
+    public List<TaskItemModel> sampleable(FlaggedShareCap cap) {
+        List<UUID> heldOut = all.stream().filter(TaskItemModel::needsReview).limit(cap.allowed(count()))
+                .map(TaskItemModel::id).toList();
+        return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW && !heldOut.contains(i.id()))
+                .toList();
+    }
+
+    /** The Items awaiting their own judgement because a check sent them to review (D7). */
     public List<TaskItemModel> flaggedForReview() {
         return all.stream().filter(i -> i.status() == ItemStatus.PENDING_REVIEW && i.needsReview()).toList();
     }
@@ -146,14 +162,6 @@ public record TaskItems(List<TaskItemModel> all) {
                 .map(i -> i.paidAmount().value().divide(i.price().value(), QUALITY_SCALE, RoundingMode.DOWN))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return acceptedCount() + proRata.setScale(0, RoundingMode.DOWN).intValue();
-    }
-
-    /**
-     * How many Items the Task's reputation event weighs (D22): all of them except those refunded because
-     * nobody judged them ({@code UNREVIEWED}), whose work was never shown wrong (owner decision on #87).
-     */
-    public int reputationCount() {
-        return (int) all.stream().filter(i -> i.status() != ItemStatus.UNREVIEWED).count();
     }
 
     public int acceptedCount() {

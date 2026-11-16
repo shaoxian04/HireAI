@@ -43,7 +43,7 @@ public final class SampleSizeTable {
             Map.entry('G', new int[]{2, 20, 0, 3, 3, 4}),
             Map.entry('H', new int[]{3, 32, 1, 3, 4, 5}),
             Map.entry('J', new int[]{5, 50, 2, 5, 6, 7}),
-            Map.entry('K', new int[]{7, 80, 3, 6, 8, 9}),
+            Map.entry('K', new int[]{7, 80, 3, 6, 9, 10}),
             Map.entry('L', new int[]{10, 125, 5, 9, 12, 13}),
             Map.entry('M', new int[]{14, 200, 7, 11, 18, 19}),
             Map.entry('N', new int[]{21, 315, 11, 16, 26, 27}));

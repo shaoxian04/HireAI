@@ -198,22 +198,31 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
             pass(taskId, n);
         }
 
-        // 2 wrong >= the rejection number 2: no second sample, the whole Task goes back once.
+        // 2 wrong >= the rejection number 2: D19 still draws the second sample before any rework.
+        JsonNode afterFirst = inspection(taskId);
+        assertThat(afterFirst.get("draws").get(0).get("decision").asText()).isEqualTo("DRAW_SECOND");
+        List<Integer> second = itemNos(afterFirst.get("draws").get(1));
+        assertThat(second).hasSize(13).doesNotContainAnyElementsOf(first);
+        for (int n : second) {
+            pass(taskId, n);
+        }
+
+        // 2 wrong over both samples > Ac2 1: the whole Task goes back once.
         RecordedWorkOrder rework = await().atMost(Duration.ofSeconds(20))
                 .until(() -> workOrders(agent), orders -> orders.size() == 2).get(1);
         assertThat(rework.json().get("rework").get("failedChecks").get(0).get("rule").asText())
                 .isEqualTo("SAMPLE_REJECTED");
-        // Only the Items not yet settled go back: 100 - 11 accepted - 2 conceded.
-        assertThat(rework.json().get("items")).hasSize(87);
+        // Only the Items not yet settled go back: 100 - 24 accepted - 2 conceded.
+        assertThat(rework.json().get("items")).hasSize(74);
         awaitInspectionRound(taskId, 2);
 
         JsonNode inspection = inspection(taskId);
-        assertThat(inspection.get("draws").get(0).get("decision").asText()).isEqualTo("REWORK");
-        JsonNode resample = inspection.get("draws").get(1);
+        assertThat(inspection.get("draws").get(1).get("decision").asText()).isEqualTo("REWORK");
+        JsonNode resample = inspection.get("draws").get(2);
         assertThat(resample.get("round").asInt()).isEqualTo(2);
-        assertThat(resample.get("lotSize").asInt()).isEqualTo(87); // letter E: 8 + 8, 0/2, 1/2
+        assertThat(resample.get("lotSize").asInt()).isEqualTo(74); // letter E: 8 + 8, 0/2, 1/2
         List<Integer> again = itemNos(resample);
-        assertThat(again).hasSize(8).doesNotContainAnyElementsOf(first);
+        assertThat(again).hasSize(8).doesNotContainAnyElementsOf(first).doesNotContainAnyElementsOf(second);
 
         reject(taskId, again.get(0), "C_INCOMPLETE", "line items are missing");
         reject(taskId, again.get(1), "C_INCOMPLETE", "the tax is missing");
@@ -222,11 +231,20 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
         for (int n : again.subList(2, again.size())) {
             pass(taskId, n);
         }
+        List<Integer> againSecond = itemNos(inspection(taskId).get("draws").get(3));
+        assertThat(againSecond).hasSize(8);
+        reject(taskId, againSecond.get(0), "C_INCOMPLETE", "the supplier is missing");
+        reject(taskId, againSecond.get(1), "C_INCOMPLETE", "the currency is missing");
+        concede(agent, taskId, againSecond.get(0));
+        concede(agent, taskId, againSecond.get(1));
+        for (int n : againSecond.subList(2, againSecond.size())) {
+            pass(taskId, n);
+        }
 
-        // Failed again: the 79 unverified Items settle at 4.00 x (1 - 2/8) = 3.00 each.
+        // Failed again (4 wrong of 16): the 58 unverified Items settle at 4.00 x (1 - 4/16) = 3.00 each.
         JsonNode task = getTask(taskId);
         assertThat(task.get("status").asText()).isEqualTo("RESOLVED");
-        assertThat(statusCounts(task)).isEqualTo(Map.of("ACCEPTED", 17L, "CONCEDED", 4L, "PRO_RATA", 79L));
+        assertThat(statusCounts(task)).isEqualTo(Map.of("ACCEPTED", 36L, "CONCEDED", 6L, "PRO_RATA", 58L));
         JsonNode proRata = itemsWith(task, "PRO_RATA").get(0);
         assertThat(proRata.get("payoutAmount").decimalValue()).isEqualByComparingTo("2.55");
         assertThat(proRata.get("commissionAmount").decimalValue()).isEqualByComparingTo("0.45");
@@ -235,7 +253,7 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
         assertThat(done.get("status").asText()).isEqualTo("PRO_RATA");
         assertThat(done.get("errorRate").decimalValue()).isEqualByComparingTo("0.25");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM task_item_settlements WHERE task_id = ? AND type = 'SPLIT' "
-                + "AND net = 2.55 AND commission = 0.45 AND refund = 1.00", Integer.class, taskId)).isEqualTo(79);
+                + "AND net = 2.55 AND commission = 0.45 AND refund = 1.00", Integer.class, taskId)).isEqualTo(58);
         // Everything frozen left escrow exactly once: 400.00 = paid + fees + refunds.
         assertThat(escrowLeftFor(taskId)).isEqualByComparingTo("0.00");
         assertThat(task.get("payoutAmount").decimalValue().add(task.get("commissionAmount").decimalValue())
@@ -258,6 +276,7 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
         assertThat(notice.field("itemInput")).isEqualTo("invoice 1");
         assertThat(notice.field("itemResult")).isEqualTo("done: invoice 1");
         assertThat(notice.json().get("revisionAllowed").asBoolean()).isTrue();
+        assertThat(notice.json().get("contract").get("template").asText()).isNotBlank(); // the frozen Contract
         // The response window counts business days: 2h from Wednesday 10:00.
         assertThat(Instant.parse(notice.field("responseDeadline"))).isEqualTo(clock.instant().plus(Duration.ofHours(2)));
         assertThat(respond(agent, taskId, notice, "REVISE", null, "done again: invoice 1").statusCode()).isEqualTo(200);
@@ -375,11 +394,15 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
         UUID taskId = book(agentId, "1.00", inputs(40), null); // letter D: single 8, Ac 0
         awaitStatus(taskId, "PENDING_REVIEW");
         agent.replyWith(FakeAgentReply.accepted()); // the rework never comes back
-        List<Integer> sample = itemNos(inspection(taskId).get("draws").get(0));
-        reject(taskId, sample.get(0), "B_FACTUAL", "wrong");
-        concede(agent, taskId, sample.get(0));
-        for (int n : sample.subList(1, sample.size())) {
-            pass(taskId, n);
+        // A failed single-plan sample draws a second of the same size (D19); it fails too, so the Task is reworked.
+        for (int draw = 0; draw < 2; draw++) {
+            List<Integer> sample = itemNos(inspection(taskId).get("draws").get(draw));
+            assertThat(sample).hasSize(8);
+            reject(taskId, sample.get(0), "B_FACTUAL", "wrong");
+            concede(agent, taskId, sample.get(0));
+            for (int n : sample.subList(1, sample.size())) {
+                pass(taskId, n);
+            }
         }
         awaitStatus(taskId, "QUEUED", "EXECUTING");
 
@@ -387,9 +410,9 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
 
         assertThat(status(taskId)).isEqualTo("TIMED_OUT");
         assertThat(escrowLeftFor(taskId)).isEqualByComparingTo("0.00");
-        // 7 paid, 1 conceded, 32 refunded with the timeout: never the paid ones twice.
+        // 14 paid, 2 conceded, 24 refunded with the timeout: never the paid ones twice.
         assertThat(jdbc.queryForObject("SELECT COALESCE(SUM(amount), 0) FROM ledger_entries WHERE related_task_id = ? "
-                + "AND entry_type = 'REFUND'", BigDecimal.class, taskId)).isEqualByComparingTo("33.00");
+                + "AND entry_type = 'REFUND'", BigDecimal.class, taskId)).isEqualByComparingTo("26.00");
         // The Task ended, so the inspection can draw nothing more: the settled Items' receipts are issued now.
         List<JsonNode> itemReceipts = new ArrayList<>();
         JsonNode whole = null;
@@ -400,11 +423,11 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
                 itemReceipts.add(r.get("receipt"));
             }
         }
-        assertThat(itemReceipts).hasSize(8);
+        assertThat(itemReceipts).hasSize(16);
         assertThat(itemReceipts.get(0).get("sample").get("outcome").asText()).isEqualTo("REWORKING");
         // The whole-Task receipt for the timeout states what that refund returned: what was still held.
-        assertThat(whole.get("settlement").get("price").asText()).isEqualTo("32.00");
-        assertThat(whole.get("settlement").get("refunded").asText()).isEqualTo("32.00");
+        assertThat(whole.get("settlement").get("price").asText()).isEqualTo("24.00");
+        assertThat(whole.get("settlement").get("refunded").asText()).isEqualTo("24.00");
     }
 
     // --- the fake Agent ---

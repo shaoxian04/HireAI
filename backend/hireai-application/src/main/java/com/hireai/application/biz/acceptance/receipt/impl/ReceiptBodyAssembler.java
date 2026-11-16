@@ -18,6 +18,7 @@ import com.hireai.domain.biz.adjudication.repository.DisputeRepository;
 import com.hireai.domain.biz.adjudication.repository.ValidationReportRepository;
 import com.hireai.domain.biz.ledger.settlement.info.DisputeFeeCharge;
 import com.hireai.domain.biz.ledger.settlement.model.ItemSettlementModel;
+import com.hireai.domain.biz.ledger.settlement.model.TaskSettlementRecord;
 import com.hireai.domain.biz.ledger.settlement.model.SettlementModel;
 import com.hireai.domain.biz.ledger.settlement.repository.DisputeFeeRepository;
 import com.hireai.domain.biz.task.enums.TaskResolution;
@@ -57,8 +58,8 @@ import java.util.UUID;
 /**
  * Gathers what a receipt states about one settled subject and lays it out in format
  * {@value ReceiptModel#FORMAT} (docs/details/receipts.md). Absent facts are left out, never written as
- * null, so later fields (the sample of #105, SourceSnapshot hashes of #104) are added as new
- * optional members without changing the receipts already signed.
+ * null, so later fields (the sample of #105, an Item's {@code source} hash of #104, {@code findings}, the
+ * {@code aiReview}) are added as new optional members without changing the receipts already signed.
  */
 @Component
 @RequiredArgsConstructor
@@ -78,6 +79,10 @@ class ReceiptBodyAssembler {
     private final InspectionRepository inspectionRepository;
     private final ItemRejectionRepository itemRejectionRepository;
     private final ItemSettlementRepository itemSettlementRepository;
+    /** An Item's source document (spec S11: its hash, never its bytes). */
+    private final com.hireai.domain.biz.acceptance.source.repository.SourceSnapshotRepository sourceSnapshotRepository;
+    /** A Task's AI Review and its verdict (S10). */
+    private final com.hireai.domain.biz.acceptance.aireview.repository.AiReviewRepository aiReviewRepository;
 
     /** The facts about the subject that the caller has already loaded. */
     record Subject(TaskModel task, UUID builderId, TaskItemModel item, int itemCount,
@@ -104,10 +109,15 @@ class ReceiptBodyAssembler {
                 "agentVersionRef", partyRefs.ref(task.id(), ReceiptPartyRefs.AGENT_VERSION, task.agentVersionId())));
         body.put("contract", contract(task));
         body.put("input", map("sha256", Sha256.hex(s.item() != null ? s.item().input() : task.description())));
+        if (s.item() != null && s.item().sourceSnapshotId() != null) {
+            sourceSnapshotRepository.findById(s.item().sourceSnapshotId()).ifPresent(src -> body.put("source",
+                    map("sha256", src.sha256(), "mediaType", src.mediaType(), "sizeBytes", src.sizeBytes())));
+        }
 
         if (s.item() != null) {
             putIfPresent(body, "delivery", itemDelivery(s.item()));
             putIfPresent(body, "checks", itemChecks(s.item()));
+            putIfPresent(body, "findings", findings(s.item().findings()));
             putIfPresent(body, "sample", sample(s.item()));
             body.put("judgements", itemJudgements(s.item()));
             body.put("settlement", itemSettlement(task, s.itemSettlement()));
@@ -115,6 +125,9 @@ class ReceiptBodyAssembler {
             putIfPresent(body, "delivery", delivery(task.result()));
             putIfPresent(body, "checks", validationReportRepository.findLatestByTaskId(task.id())
                     .map(ReceiptBodyAssembler::checks).orElse(null));
+            putIfPresent(body, "findings", validationReportRepository.findLatestByTaskId(task.id())
+                    .map(r -> findings(r.findings())).orElse(null));
+            aiReviewRepository.findByTaskId(task.id()).ifPresent(r -> putIfPresent(body, "aiReview", aiReview(r)));
             body.put("judgements", judgements(task));
             Optional<DisputeModel> dispute = disputeRepository.findByTaskId(task.id());
             dispute.ifPresent(d -> putIfPresent(body, "ruling", ruling(d)));
@@ -122,6 +135,32 @@ class ReceiptBodyAssembler {
             body.put("settlement", settlement(task, s.settlement()));
         }
         return body;
+    }
+
+    /**
+     * Facts about the input (D45); they never changed the pay. Left out when there are none. Only each
+     * Finding's {@code code}: a receipt leaves HireAI, and a Finding's detail can name other tasks, a supplier's
+     * tax id or an invoice number, so that text stays in the Client's own task views.
+     */
+    private static List<Object> findings(List<com.hireai.domain.biz.acceptance.check.model.Finding> findings) {
+        if (findings == null || findings.isEmpty()) {
+            return null;
+        }
+        List<Object> list = new ArrayList<>();
+        findings.forEach(f -> list.add(map("code", f.code())));
+        return list;
+    }
+
+    /** The AI Review booked on the Task (S10): its fee, outcome and, once it ran, the verdict per criterion. */
+    private static Map<String, Object> aiReview(com.hireai.domain.biz.acceptance.aireview.model.AiReviewModel r) {
+        List<Object> verdicts = new ArrayList<>();
+        r.verdicts().forEach(v -> verdicts.add(map("criterion", v.criterion(), "passed", v.passed())));
+        Map<String, Object> out = map("status", r.status().name(), "decisive", r.decisive(), "fee", money(r.fee()));
+        if (!verdicts.isEmpty()) {
+            out.put("verdicts", verdicts);
+            out.put("rulingCategory", r.rulingCategory().name());
+        }
+        return out;
     }
 
     /** The Contract's Template and the SHA-256 of its RFC 8785 form (the Task's frozen Contract). */
@@ -308,8 +347,8 @@ class ReceiptBodyAssembler {
     private Map<String, Object> settlement(TaskModel task, SettlementModel settlement) {
         // A multi-Item Task some of whose Items settled on their own (sampling, spec S8) refunds only what
         // was still held: that is the whole-Task settlement's price.
-        Money price = task.budget().subtract(itemSettlementRepository.findByTaskId(task.id()).stream()
-                .map(ItemSettlementModel::gross).reduce(Money.ZERO, Money::add));
+        Money price = new TaskSettlementRecord(task.budget(), java.util.Optional.of(settlement),
+                itemSettlementRepository.findByTaskId(task.id())).stillHeld();
         BigDecimal refunded = price.value().subtract(settlement.net().value()).subtract(settlement.commission().value());
         return map("outcome", settlement.type().name(),
                 "price", money(price), "paid", money(settlement.net()),

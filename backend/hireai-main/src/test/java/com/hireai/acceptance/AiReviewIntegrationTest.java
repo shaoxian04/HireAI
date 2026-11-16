@@ -62,6 +62,8 @@ class AiReviewIntegrationTest extends WholeAppIntegrationTest {
 
     @Autowired
     private AiReviewAppService aiReviewAppService;
+    @Autowired
+    private com.hireai.application.biz.acceptance.receipt.ReceiptAppService receiptAppService;
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
@@ -170,6 +172,12 @@ class AiReviewIntegrationTest extends WholeAppIntegrationTest {
         assertThat(reputationEvents(booked.taskId)).containsExactly("AI_REVIEW_PASSED");
         assertThat(builderAvailable(booked.agentId)).isEqualByComparingTo("8.50");
         assertThat(available()).isEqualByComparingTo(before.subtract(new BigDecimal("10.30")));
+        // The receipt states the AI Review that settled it, with its verdict per criterion.
+        receiptAppService.issuePending(100);
+        JsonNode aiReview = get("/api/tasks/" + booked.taskId + "/receipts").get(0).path("receipt").path("aiReview");
+        assertThat(aiReview.path("rulingCategory").asText()).isEqualTo("FULFILLED");
+        assertThat(aiReview.path("fee").asText()).isEqualTo("0.30");
+        assertThat(aiReview.path("verdicts")).hasSize(2);
         // Final: there is no review left for anyone to accept or reject.
         assertThat(postRaw("/api/tasks/" + booked.taskId + "/reject",
                 "{\"reasonCategory\":\"A_MISMATCH\",\"reason\":\"no\"}").statusCode()).isNotEqualTo(200);

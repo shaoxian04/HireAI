@@ -64,6 +64,11 @@ public class WalletRepositoryImpl implements WalletRepository {
     }
 
     @Override
+    public Optional<WalletModel> findByUserIdForUpdate(UUID userId) {
+        return walletJpa.findByUserIdForUpdate(userId).map(this::toModel);
+    }
+
+    @Override
     public List<LedgerEntryModel> findLedger(UUID walletId, WalletLedgerQuery query) {
         return ledgerJpa.findByWalletIdOrderByCreatedAtDesc(
                         walletId, PageRequest.of(query.page(), query.size()))

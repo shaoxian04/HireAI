@@ -17,6 +17,7 @@ import com.hireai.domain.biz.adjudication.model.Ruling;
 import com.hireai.domain.biz.adjudication.repository.DisputeRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
+import com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -53,6 +54,7 @@ class DisputeAppServiceImplTest {
     ArbitrationGateway gateway;
     DeliverySnapshotAppService snapshots;
     ReputationWriteAppService reputationWriteAppService;
+    ApiKeyTaskRepository apiKeyTasks;
     DisputeAppServiceImpl service;
 
     UUID clientId = UUID.randomUUID();
@@ -69,11 +71,13 @@ class DisputeAppServiceImplTest {
         gateway = mock(ArbitrationGateway.class);
         reputationWriteAppService = mock(ReputationWriteAppService.class);
         snapshots = mock(DeliverySnapshotAppService.class);
+        apiKeyTasks = mock(ApiKeyTaskRepository.class);
+        when(apiKeyTasks.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
         when(snapshots.forArbitration(any())).thenReturn(Optional.empty());
         service = new DisputeAppServiceImpl(disputeRepository, taskRepository, agentRepository,
                 settlement, gateway, snapshots, reputationWriteAppService,
                 new DisputeFeeSchedule(new BigDecimal("3.00"), new BigDecimal("5.00"), Duration.ofHours(24)),
-                Clock.systemUTC());
+                Clock.systemUTC(), apiKeyTasks);
 
         when(disputeRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -327,6 +331,20 @@ class DisputeAppServiceImplTest {
                 eq(Set.of(DisputeParty.BUILDER)));
         verify(settlement, never()).chargeDisputeFee(any(), any(), any(), any(),
                 eq(DisputeFeeType.APPEAL_FEE), any(), any(), any());
+    }
+
+    @Test
+    void theBuilderMayNotAppealOnTheApiChannel() {
+        // D38: API/MCP has no Builder appeal; the Client's own appeal is unchanged.
+        DisputeModel ruled = ruledDispute(RulingCategory.NOT_FULFILLED);
+        when(disputeRepository.findById(ruled.id())).thenReturn(Optional.of(ruled));
+        when(apiKeyTasks.findApiKeyIdByTask(disputedTask.id())).thenReturn(Optional.of(UUID.randomUUID()));
+
+        assertThatThrownBy(() -> service.appeal(ruled.id(), builderId))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.resultCode()).isEqualTo(com.hireai.utility.result.ResultCode.DOMAIN_RULE_VIOLATION))
+                .hasMessageContaining("web");
+        verify(disputeRepository, never()).save(any());
     }
 
     @Test

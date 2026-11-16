@@ -144,8 +144,12 @@ export interface ContractDTO {
 /** What an AI Review would cost on a booking, and whether it is offered (`reason` says why not). */
 export interface AiReviewQuoteDTO {
   fee: number;
-  /** The gate: an AI Review may cost at most this (10% of the price). */
+  /** The gate: an AI Review may cost at most this (`maxFeeShare` of the price). */
   maxFee: number;
+  /** What the booking freezes: the price plus the fee, summed by the platform. */
+  total: number;
+  /** The largest share of the price an AI Review may cost (e.g. 0.1). */
+  maxFeeShare: number;
   available: boolean;
   reason: string | null;
   maxCriteria: number;
@@ -336,9 +340,7 @@ export type ItemStatus =
   /** The agent conceded the reviewer's rejection; refunded. */
   | "CONCEDED"
   /** Settled by extrapolation after a failed resample: paid price x (1 - error rate), the rest refunded. */
-  | "PRO_RATA"
-  /** A check sent it to your review and nobody judged it before the window closed: refunded (#106). */
-  | "UNREVIEWED";
+  | "PRO_RATA";
 
 /** One Item of a multi-Item Task and its outcome; amounts appear once it settled. */
 export interface TaskItemDTO {
@@ -731,6 +733,8 @@ export interface AdminOverviewDTO {
   agentsTotal: number;
   escrowHeld: number;
   commissionEarned: number;
+  /** AI Review fees charged (refunded ones excluded). */
+  aiReviewFeesEarned: number;
 }
 
 export interface AdminDisputeRowDTO {

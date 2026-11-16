@@ -270,12 +270,12 @@ class MultiItemTaskIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
-    void aBookingWithOneItemOrABlankItemIsRefusedAndFreezesNothing() {
+    void aBookingWithNoItemOrABlankItemIsRefusedAndFreezesNothing() {
         FakeAgent agent = itemAgent();
         UUID agentId = seedTextAgent(agent, "2.00");
         BigDecimal before = escrow();
 
-        for (List<String> items : List.of(List.of("only one"), List.of("a", " "))) {
+        for (List<String> items : List.of(List.of(" "), List.of("a", " "))) {
             assertThatThrownBy(() -> book(agentId, "2.00", items))
                     .isInstanceOfSatisfying(HttpClientErrorException.class,
                             e -> assertThat(e.getStatusCode().value()).isEqualTo(400));

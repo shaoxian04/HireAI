@@ -1,5 +1,8 @@
 package com.hireai.controller.biz.task;
 
+import com.hireai.domain.biz.ledger.settlement.model.SettlementModel;
+import com.hireai.domain.biz.ledger.settlement.model.TaskSettlementRecord;
+
 import com.hireai.application.biz.adjudication.validation.ValidationReadAppService;
 import com.hireai.application.biz.reputation.ReviewAppService;
 import com.hireai.application.biz.task.MatchPreviewAppService;
@@ -259,8 +262,11 @@ class TaskControllerTest {
         UUID taskId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
         when(taskReviewAppService.accept(eq(taskId), eq(clientId))).thenReturn(taskId);
-        when(taskReadAppService.getForClient(eq(taskId), eq(clientId)))
-                .thenReturn(resolvedTask(clientId, true));
+        TaskModel resolved = resolvedTask(clientId, true);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(resolved);
+        // The amounts shown are the recorded settlement's.
+        when(taskReadAppService.findSettlementRecord(resolved)).thenReturn(new TaskSettlementRecord(resolved.budget(),
+                Optional.of(SettlementModel.accepted(resolved.id(), Money.of("17.00"), Money.of("3.00"))), List.of()));
 
         mockMvc.perform(post("/api/tasks/{id}/accept", taskId))
                 .andExpect(status().isOk())
@@ -278,8 +284,10 @@ class TaskControllerTest {
         UUID taskId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
         when(taskReviewAppService.reject(eq(taskId), eq(clientId), eq(RejectReason.A_MISMATCH), eq("not what I asked"))).thenReturn(taskId);
-        when(taskReadAppService.getForClient(eq(taskId), eq(clientId)))
-                .thenReturn(resolvedTask(clientId, false));
+        TaskModel resolved = resolvedTask(clientId, false);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(resolved);
+        when(taskReadAppService.findSettlementRecord(resolved)).thenReturn(new TaskSettlementRecord(resolved.budget(),
+                Optional.of(SettlementModel.rejected(resolved.id())), List.of()));
 
         mockMvc.perform(post("/api/tasks/{id}/reject", taskId)
                         .contentType(MediaType.APPLICATION_JSON)

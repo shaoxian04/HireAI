@@ -34,6 +34,8 @@ public class WebhookOutboxAppServiceImpl implements WebhookOutboxAppService {
     private final WebhookSubscriptionRepository subscriptionRepository;
     private final WebhookDeliveryRepository deliveryRepository;
     private final Clock clock;
+    /** Reads the failure detail a NO_ELIGIBLE_AGENT task recorded (#91). */
+    private final com.hireai.domain.biz.task.repository.TaskRepository taskRepository;
 
     @Override
     public void enqueueCompleted(TaskModel task) {
@@ -51,7 +53,10 @@ public class WebhookOutboxAppServiceImpl implements WebhookOutboxAppService {
             Instant now = clock.instant();
             UUID eventId = UUID.randomUUID();
             java.math.BigDecimal refunded = task.budget().value(); // WebhookPayloads.failed owns numeric rendering
-            String payload = WebhookPayloads.failed(eventId, task.id(), reason, task.failureReason(), refunded, now);
+            String detail = task.failureReason() == com.hireai.domain.biz.task.enums.FailureReason.NO_ELIGIBLE_AGENT
+                    ? taskRepository.findFailureDetail(task.id()).orElse(null) : null;
+            String payload = WebhookPayloads.failed(eventId, task.id(), reason, task.failureReason(), detail,
+                    refunded, now);
             enqueue(eventId, task, sub, WebhookEventType.TASK_FAILED, payload, now);
         });
     }

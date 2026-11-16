@@ -61,6 +61,9 @@ class AcceptanceEngineIntegrationTest extends WholeAppIntegrationTest {
         registry.add("hireai.delivery.trust-store-password", () -> TestTls.PASSWORD);
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    com.hireai.application.biz.task.TaskReviewAppService taskReviewAppService;
+
     private final HttpClient http = HttpClient.newHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
     private FakeFileHost files;
@@ -195,6 +198,29 @@ class AcceptanceEngineIntegrationTest extends WholeAppIntegrationTest {
         assertThat(accepted.path("status").asText()).isEqualTo("RESOLVED");
         assertThat(jdbc.queryForList("SELECT event_type FROM reputation_events WHERE task_id = ?::uuid",
                 String.class, booking.taskId)).containsExactly("TASK_ACCEPTED");
+    }
+
+    @Test
+    void aResultTheChecksCouldNotDecideIsAcceptedAndPaidWhenTheClientStaysSilent() throws Exception {
+        // Owner decision on #87 (revised): no refund unless the Agent is shown wrong, so silence accepts an
+        // ANOMALY / UNDECIDED review like any other (D10).
+        for (Booking booking : List.of(
+                book(order -> "/red.png", ",\"anomalies\":[{\"check\":\"IMAGE_BACKGROUND_COLOUR\","
+                        + "\"description\":\"Red, so the white logo shows.\"}]"),
+                book(order -> "/logo.webp"))) {
+            awaitStatus(booking.taskId, "PENDING_REVIEW");
+            assertThat(reviewReason(booking.taskId)).isIn("ANOMALY", "UNDECIDED");
+            jdbc.update("UPDATE tasks SET review_deadline = now() - interval '1 minute' WHERE id = ?::uuid",
+                    booking.taskId);
+
+            taskReviewAppService.autoAcceptOne(UUID.fromString(booking.taskId));
+
+            JsonNode task = get("/api/tasks/" + booking.taskId);
+            assertThat(task.path("status").asText()).isEqualTo("RESOLVED");
+            assertThat(task.path("payoutAmount").decimalValue()).isEqualByComparingTo("8.50");
+            assertThat(jdbc.queryForList("SELECT event_type FROM reputation_events WHERE task_id = ?::uuid",
+                    String.class, booking.taskId)).containsExactly("TASK_ACCEPTED");
+        }
     }
 
     @Test

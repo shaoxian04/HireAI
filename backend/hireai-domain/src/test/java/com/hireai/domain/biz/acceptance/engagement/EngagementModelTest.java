@@ -47,6 +47,14 @@ class EngagementModelTest {
     }
 
     @Test
+    void thePlatformsRetentionIsConfigurable() {
+        // D41: hireai.source.retention-days sets both the default and the longest an Engagement may ask for.
+        assertThat(EngagementModel.open(client, agent, true, null, null, 14, NOW).retentionDays()).isEqualTo(14);
+        assertThatThrownBy(() -> EngagementModel.open(client, agent, true, null, 15, 14, NOW))
+                .isInstanceOf(DomainException.class).hasMessageContaining("between 1 and 14");
+    }
+
+    @Test
     void aVariantWaitsForTheAgentAndOnceAcceptedCoversExactlyThatContract() {
         EngagementModel waiting = EngagementModel.open(client, agent, true, variant, null, NOW);
         assertThat(waiting.status()).isEqualTo(EngagementStatus.AWAITING_AGENT_ACCEPTANCE);

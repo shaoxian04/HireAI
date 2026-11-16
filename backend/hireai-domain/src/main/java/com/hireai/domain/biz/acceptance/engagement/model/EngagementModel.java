@@ -33,14 +33,28 @@ public record EngagementModel(UUID id, UUID clientId, UUID agentId, EngagementSt
      */
     public static EngagementModel open(UUID clientId, UUID agentId, boolean confidentialConsent,
                                        Contract templateVariant, Integer retentionDays, Instant now) {
+        return open(clientId, agentId, confidentialConsent, templateVariant, retentionDays, DEFAULT_RETENTION_DAYS,
+                now);
+    }
+
+    /**
+     * {@link #open(UUID, UUID, boolean, Contract, Integer, Instant)} with the platform's longest retention
+     * ({@code hireai.source.retention-days}, D32/D41), which is also the default when none is asked for.
+     */
+    public static EngagementModel open(UUID clientId, UUID agentId, boolean confidentialConsent,
+                                       Contract templateVariant, Integer retentionDays, int maxRetentionDays,
+                                       Instant now) {
+        if (maxRetentionDays < MIN_RETENTION_DAYS) {
+            throw new IllegalArgumentException("retention days must be >= " + MIN_RETENTION_DAYS);
+        }
         if (!confidentialConsent) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "confidentialConsent: an Engagement records "
                     + "your consent to send this Agent confidential documents; it must be true");
         }
-        int days = retentionDays == null ? DEFAULT_RETENTION_DAYS : retentionDays;
-        if (days < MIN_RETENTION_DAYS || days > DEFAULT_RETENTION_DAYS) {
+        int days = retentionDays == null ? maxRetentionDays : retentionDays;
+        if (days < MIN_RETENTION_DAYS || days > maxRetentionDays) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "retentionDays: must be between "
-                    + MIN_RETENTION_DAYS + " and " + DEFAULT_RETENTION_DAYS + "; got " + days);
+                    + MIN_RETENTION_DAYS + " and " + maxRetentionDays + "; got " + days);
         }
         EngagementStatus status = templateVariant == null
                 ? EngagementStatus.ACTIVE : EngagementStatus.AWAITING_AGENT_ACCEPTANCE;

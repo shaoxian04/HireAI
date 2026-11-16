@@ -118,7 +118,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
                     return resolveExisting(existing.get(), fingerprint);
                 }
             }
-            extraction = contractDraftAppService.draft(info.title(), info.description(),
+            extraction = contractDraftAppService.draft(ctx.ownerId(), info.title(), info.description(),
                     info.outputSpec().acceptanceCriteria(), info.outputSpec().toContract());
             info = new TaskSubmitInfo(info.clientId(), info.title(), info.description(), info.budget(),
                     info.outputSpec(), info.category(), info.deadlineSeconds(), extraction.contract(), info.items());
@@ -160,8 +160,22 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
 
     @Transactional
     public UUID submitDirectTx(SubmitContext ctx, DirectBookingInfo info) {
-        return orchestrate(ctx, fingerprintDirect(info), info.escrow().value(),
-                () -> directBookingAppService.book(info));
+        return orchestrate(ctx, fingerprintDirect(info), frozenBy(ctx, info), () -> directBookingAppService.book(info));
+    }
+
+    /**
+     * What a booking freezes, which is what the spend caps count: the escrow, plus the AI Review fee the
+     * booking freezes beside it (the same quote the booking prices it with). A quote that is not offered
+     * adds nothing: the booking itself then refuses.
+     */
+    private BigDecimal frozenBy(SubmitContext ctx, DirectBookingInfo info) {
+        BigDecimal escrow = info.escrow().value();
+        if (!ctx.isApiKey() || info.aiReviewCriteria().isEmpty()) {
+            return escrow;
+        }
+        var quote = directBookingAppService.quoteAiReview(info.agentId(), info.contract(), info.budget(),
+                info.aiReviewCriteria().size());
+        return quote != null && quote.available() ? escrow.add(quote.fee().value()) : escrow;
     }
 
     /**

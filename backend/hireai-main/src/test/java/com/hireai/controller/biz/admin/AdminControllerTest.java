@@ -60,7 +60,7 @@ class AdminControllerTest {
     @WithMockUser(roles = "ADMIN")
     void overviewAllowsAdmin() throws Exception {
         when(adminReadAppService.overview()).thenReturn(new AdminViews.Overview(
-                1, 0, 2, 3, 10, 4, 2, new BigDecimal("20.00"), new BigDecimal("1.50")));
+                1, 0, 2, 3, 10, 4, 2, new BigDecimal("20.00"), new BigDecimal("1.50"), java.math.BigDecimal.ZERO));
         mockMvc.perform(get("/api/admin/overview"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))

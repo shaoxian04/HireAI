@@ -38,13 +38,17 @@ public class JdbcAdminQueryDao implements AdminQueryPort {
                   (SELECT COUNT(*) FROM agents)                                AS agents_total,
                   (SELECT COALESCE(SUM(escrow_balance), 0) FROM wallets)       AS escrow_held,
                   ((SELECT COALESCE(SUM(commission), 0) FROM settlements)
-                   + (SELECT COALESCE(SUM(commission), 0) FROM task_item_settlements)) AS commission_earned
+                   + (SELECT COALESCE(SUM(commission), 0) FROM task_item_settlements)) AS commission_earned,
+                  -- An AI Review fee leaves escrow as one AI_REVIEW_FEE entry when charged; a refunded one never does.
+                  (SELECT COALESCE(SUM(ABS(amount)), 0) FROM ledger_entries
+                     WHERE entry_type = 'AI_REVIEW_FEE')                       AS ai_review_fees_earned
                 """;
         return jdbc.queryForObject(sql, Map.of(), (rs, i) -> new AdminViews.Overview(
                 rs.getLong("disputes_open"), rs.getLong("disputes_arbitrating"),
                 rs.getLong("disputes_escalated"), rs.getLong("disputes_resolved"),
                 rs.getLong("tasks_total"), rs.getLong("users_total"), rs.getLong("agents_total"),
-                rs.getBigDecimal("escrow_held"), rs.getBigDecimal("commission_earned")));
+                rs.getBigDecimal("escrow_held"), rs.getBigDecimal("commission_earned"),
+                rs.getBigDecimal("ai_review_fees_earned")));
     }
 
     @Override

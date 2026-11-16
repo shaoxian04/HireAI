@@ -8,7 +8,6 @@ import type {
   ContractValue,
   OfferDTO,
   OfferRange,
-  OutputFormat,
   TemplateDTO,
   TemplateParameterDTO,
 } from "@/lib/types";
@@ -142,20 +141,13 @@ function TemplatesUnavailable() {
 }
 
 /**
- * A Task's Contract: the Template version it is judged under and the parameters frozen at submit.
- * `contract` is null on a task submitted before Contracts existed; `legacyFormat` names its output spec.
+ * A Task's Contract: the Template version it is judged under and the parameters frozen at submit. Every
+ * task has one (the output spec is retired, #110).
  */
-export function ContractPanel({ contract, legacyFormat }: { contract: ContractDTO | null | undefined; legacyFormat?: OutputFormat }) {
+export function ContractPanel({ contract }: { contract: ContractDTO | null | undefined }) {
   const templates = useTemplates(Boolean(contract));
 
-  if (!contract) {
-    return (
-      <p className="text-sm text-muted">
-        This task was submitted before contracts existed, so it is judged against its original output spec
-        {legacyFormat ? ` (${legacyFormat.toLowerCase()} result)` : ""}.
-      </p>
-    );
-  }
+  if (!contract) return null;
   if (templates.status === "loading") return <LoadingTerms label="Loading the contract terms" />;
 
   const refText = refOf(contract.template, contract.version);

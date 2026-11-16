@@ -15,6 +15,7 @@ import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.event.ItemRejectedDomainEvent;
 import com.hireai.domain.biz.task.info.AgentRejectionResponseInfo;
 import com.hireai.domain.biz.task.item.enums.ItemStatus;
+import com.hireai.domain.biz.task.item.model.FlaggedShareCap;
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
 import com.hireai.domain.biz.task.item.model.TaskItems;
 import com.hireai.domain.biz.task.model.ReviewWindow;
@@ -41,7 +42,6 @@ import com.hireai.domain.biz.task.sampling.repository.InspectionRepository;
 import com.hireai.domain.biz.task.sampling.repository.ItemRejectionRepository;
 import com.hireai.domain.biz.task.item.repository.TaskItemRepository;
 import com.hireai.domain.shared.model.Money;
-import com.hireai.utility.exception.DispatchTokenInvalidException;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 import lombok.extern.slf4j.Slf4j;
@@ -92,7 +92,9 @@ public class SamplingAppServiceImpl implements SamplingAppService {
     private final RejectionWindows itemWindows;
     private final ReviewWindow reviewWindow;
     private final Clock clock;
+    private final FlaggedShareCap flaggedShareCap;
     private final String publicBaseUrl;
+    private final com.hireai.application.biz.acceptance.AcceptanceJsonMapper acceptanceJsonMapper;
     private final SecureRandom seeds = new SecureRandom();
 
     public SamplingAppServiceImpl(TaskRepository taskRepository, TaskItemRepository taskItemRepository,
@@ -103,9 +105,11 @@ public class SamplingAppServiceImpl implements SamplingAppService {
                                   OutputSpecJsonMapper outputSpecJsonMapper,
                                   SourceSnapshotAppService sourceSnapshotAppService,
                                   ApplicationEventPublisher eventPublisher, RejectionWindows windows,
-                                  ReviewWindow reviewWindow, Clock clock,
+                                  ReviewWindow reviewWindow, Clock clock, FlaggedShareCap flaggedShareCap,
                                   @Value("${hireai.platform.public-base-url:http://localhost:8080}")
-                                  String publicBaseUrl) {
+                                  String publicBaseUrl,
+                                  com.hireai.application.biz.acceptance.AcceptanceJsonMapper acceptanceJsonMapper) {
+        this.acceptanceJsonMapper = acceptanceJsonMapper;
         this.taskRepository = taskRepository;
         this.taskItemRepository = taskItemRepository;
         this.taskItemAppService = taskItemAppService;
@@ -122,6 +126,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
         this.itemWindows = windows.countingBusinessDays();
         this.reviewWindow = reviewWindow;
         this.clock = clock;
+        this.flaggedShareCap = flaggedShareCap;
         this.publicBaseUrl = publicBaseUrl;
     }
 
@@ -140,9 +145,9 @@ public class SamplingAppServiceImpl implements SamplingAppService {
             taskItemAppService.resolveIfAllSettled(pendingReview);
             return;
         }
-        // The lot is the Items every check passed; an Item a check sent to review is the reviewer's to judge
-        // on its own (D7) and is never drawn.
-        List<Integer> lot = taskItemRepository.findByTaskId(taskId).lot().stream()
+        // The sample is drawn from the Items every check passed plus the flagged Items beyond the cap; a flagged
+        // Item within the cap is the reviewer's own extra check (D7) and is never drawn.
+        List<Integer> lot = taskItemRepository.findByTaskId(taskId).sampleable(flaggedShareCap).stream()
                 .map(TaskItemModel::itemNo).toList();
         if (lot.isEmpty()) {
             // Nothing passed the checks this round: every Item already settled, is on its own path, or
@@ -240,14 +245,14 @@ public class SamplingAppServiceImpl implements SamplingAppService {
         SampleTally cumulative = SampleTally.of(sampledInRound, outcomes);
         SamplingPlan plan = current.plan();
         SamplingDecision decision = SamplingDecision.after(plan, current.stage(), cumulative.defects(),
-                cumulative.sampled(), inspection.round());
+                cumulative.sampled(), stage.defects(), inspection.round());
         Instant now = clock.instant();
         if (decision.next() == SamplingDecision.Next.DRAW_SECOND) {
-            List<Integer> candidates = items.lot().stream().map(TaskItemModel::itemNo)
+            List<Integer> candidates = items.sampleable(flaggedShareCap).stream().map(TaskItemModel::itemNo)
                     .filter(n -> !sampledInRound.contains(n)).toList();
             if (candidates.isEmpty()) {
                 // The lot has nothing left to draw: the first sample was all of it, so judge it as both.
-                decision = SamplingDecision.after(plan, 2, cumulative.defects(), cumulative.sampled(),
+                decision = SamplingDecision.afterWholeLot(plan, cumulative.defects(), cumulative.sampled(),
                         inspection.round());
             } else {
                 inspectionRepository.recordDecision(current.decide(stage.defects(), decision.next(), now));
@@ -284,7 +289,8 @@ public class SamplingAppServiceImpl implements SamplingAppService {
             return;
         }
         inspectionRepository.save(inspection.startRework());
-        List<TaskItemModel> back = taskItemRepository.findByTaskId(task.id()).lot().stream()
+        // A failed lot takes back every Item the sample stood for, flagged Items beyond the cap included.
+        List<TaskItemModel> back = taskItemRepository.findByTaskId(task.id()).sampleable(flaggedShareCap).stream()
                 .map(TaskItemModel::returnForRework).toList();
         taskItemRepository.updateAll(back);
         ReworkRequest request = new ReworkRequest(SAMPLE_REWORKS, SAMPLE_REWORKS, List.of(
@@ -300,7 +306,8 @@ public class SamplingAppServiceImpl implements SamplingAppService {
 
     private void settleProRata(TaskModel task, InspectionModel inspection, BigDecimal errorRate) {
         inspectionRepository.save(inspection.settleProRata(errorRate));
-        for (TaskItemModel item : taskItemRepository.findByTaskId(task.id()).lot()) {
+        // Every unverified Item the sample stood for settles at the measured rate, flagged beyond the cap too.
+        for (TaskItemModel item : taskItemRepository.findByTaskId(task.id()).sampleable(flaggedShareCap)) {
             Money paid = ProRata.paidFor(item.price(), errorRate);
             if (paid.equals(item.price())) {
                 taskItemAppService.settleAccepted(task, item.accept());
@@ -315,15 +322,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
     private static Map<Integer, SampleItemOutcome> outcomes(TaskItems items) {
         Map<Integer, SampleItemOutcome> outcomes = new HashMap<>();
         for (TaskItemModel item : items.all()) {
-            SampleItemOutcome outcome;
-            if (item.status() == ItemStatus.ACCEPTED) {
-                outcome = SampleItemOutcome.PASS;
-            } else if (item.status().isRefunded()) {
-                outcome = SampleItemOutcome.DEFECT;
-            } else {
-                outcome = SampleItemOutcome.OPEN;
-            }
-            outcomes.put(item.itemNo(), outcome);
+            outcomes.put(item.itemNo(), SampleItemOutcome.of(item.status()));
         }
         return outcomes;
     }
@@ -344,17 +343,10 @@ public class SamplingAppServiceImpl implements SamplingAppService {
     @Override
     public void respondToItemRejection(UUID taskId, int itemNo, String bearerToken,
                                        AgentRejectionResponseInfo response) {
-        DispatchTokenClaims claims = dispatchTokenService.verify(bearerToken);
-        if (!claims.taskId().equals(taskId)) {
-            throw new DispatchTokenInvalidException(
-                    "Dispatch token task " + claims.taskId() + " does not match response task " + taskId);
-        }
+        DispatchTokenClaims claims = dispatchTokenService.verify(bearerToken).requireTask(taskId);
         TaskModel task = taskRepository.findByIdForUpdate(taskId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
-        if (!claims.agentVersionId().equals(task.agentVersionId())) {
-            throw new DispatchTokenInvalidException("Dispatch token agent version " + claims.agentVersionId()
-                    + " does not match task " + taskId + " assignment " + task.agentVersionId());
-        }
+        claims.requireAssignedVersion(task.agentVersionId());
         requireOpen(task);
         TaskItemModel item = taskItemRepository.findByTaskId(taskId).item(itemNo);
         ItemRejectionModel rejection = itemRejectionRepository.findLatest(item.id())
@@ -492,7 +484,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
                 round.reasonCategory().name(), round.reason(), round.responseDeadline(), round.revisionAllowed(),
                 publicBaseUrl + "/api/agent-callbacks/" + task.id() + "/items/" + item.itemNo() + "/rejection-response",
                 task.title(), task.description(), outputSpecJsonMapper.toJson(task.outputDescription()),
-                item.itemNo(), item.input(), item.resultPayload());
+                item.itemNo(), item.input(), item.resultPayload(), acceptanceJsonMapper.toJson(task.contract()));
         boolean delivered = agentNoticePort.sendRejectionNotice(webhookUrl, token, secret, notice);
         itemRejectionRepository.recordNoticeAttempt(round.id(), delivered ? now : null);
         if (delivered) {

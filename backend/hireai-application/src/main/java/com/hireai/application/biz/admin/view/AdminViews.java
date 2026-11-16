@@ -12,7 +12,9 @@ public final class AdminViews {
 
     public record Overview(long disputesOpen, long disputesArbitrating, long disputesEscalated,
                            long disputesResolved, long tasksTotal, long usersTotal, long agentsTotal,
-                           BigDecimal escrowHeld, BigDecimal commissionEarned) {}
+                           BigDecimal escrowHeld, BigDecimal commissionEarned,
+                           /** AI Review fees charged (refunded ones excluded), S10. */
+                           BigDecimal aiReviewFeesEarned) {}
 
     public record DisputeRow(UUID disputeId, UUID taskId, String taskTitle, String status,
                              String reasonCategory, Instant createdAt, String clientName,

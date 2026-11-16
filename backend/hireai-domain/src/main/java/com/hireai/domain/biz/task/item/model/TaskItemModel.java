@@ -74,8 +74,8 @@ public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Mone
 
     /**
      * True when a check could not decide, or an anomaly the Agent reported sent this Item to review (D7):
-     * it is paid only when the buyer's reviewer confirms it (refunded if nobody does in the window), so it is held
-     * out of the sampled lot and is never accepted, reworked or settled pro rata with the lot.
+     * it is never settled with the lot: the buyer's reviewer judges it (it may be drawn into the sample beyond
+     * the Task's {@link FlaggedShareCap}), or it is accepted when the review window closes.
      */
     public boolean needsReview() {
         return checks.stream().anyMatch(ItemCheck::sendsToReview);
@@ -118,19 +118,6 @@ public record TaskItemModel(UUID id, UUID taskId, int itemNo, String input, Mone
     public TaskItemModel acceptAutomatically() {
         TaskItemModel accepted = accept();
         return with(accepted.status(), agentStatus, resultPayload, resultUrl, checks, true, null);
-    }
-
-    /**
-     * PENDING_REVIEW -> UNREVIEWED: a check sent this Item to review (D7) and the review window closed with
-     * nobody judging it. It is refunded rather than accepted on silence (owner decision on #87).
-     */
-    public TaskItemModel refundUnreviewed() {
-        requireStatus(ItemStatus.PENDING_REVIEW, "refundUnreviewed");
-        if (!needsReview()) {
-            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
-                    "Item " + itemNo + ": only an Item a check sent to review is refunded unreviewed");
-        }
-        return with(ItemStatus.UNREVIEWED, agentStatus, resultPayload, resultUrl, checks, true, null);
     }
 
     /** PENDING_REVIEW -> REJECTED: the buyer's reviewer found it wrong; its rejection response path opens. */

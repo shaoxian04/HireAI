@@ -54,9 +54,13 @@ public class NetworkntSchemaValidator implements SchemaValidator {
     public JsonCheckResult check(String payloadJson, String schemaOrNull) {
         JsonNode payload;
         try {
-            payload = mapper.readTree(payloadJson);
+            payload = payloadJson == null ? null : mapper.readTree(payloadJson);
         } catch (Exception e) {
             return new JsonCheckResult(false, false, false, "payload is not valid JSON: " + e.getMessage());
+        }
+        // An empty or blank payload reads as a "missing" node, not as JSON: it is no result at all.
+        if (payload == null || payload.isMissingNode()) {
+            return new JsonCheckResult(false, false, false, "payload is empty, not JSON");
         }
         if (schemaOrNull == null || schemaOrNull.isBlank()) {
             return new JsonCheckResult(true, false, false, "valid JSON; no schema declared");

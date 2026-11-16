@@ -108,6 +108,15 @@ describe("ShortlistPanel — no-match explanation (#91)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /drop largest file accepted → 2 agents/i }));
     expect(onRelax).toHaveBeenCalledWith("max_bytes");
+    expect(screen.getByText(/ruled out by your output terms/i)).toBeTruthy();
+  });
+
+  it("says the terms came from the description when they were extracted (#101)", () => {
+    render(<ShortlistPanel open budget={30} shortlist={[]} nearMisses={[]} onSelect={noop} onClose={noop}
+      noMatch={noMatch} termsExtracted />);
+
+    expect(screen.getByText(/ruled out by the terms taken from your description/i)).toBeTruthy();
+    expect(screen.queryByText(/your output terms/i)).toBeNull();
   });
 
   it("keeps the close-match copy when only the relevance floor ruled agents out", () => {

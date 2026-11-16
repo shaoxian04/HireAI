@@ -161,7 +161,8 @@ public class TaskWriteAppServiceImpl implements TaskWriteAppService {
         String correlationId = UUID.randomUUID().toString();
         // A multi-Item Task's budget of record is what it freezes: the per-Item price × the Item count.
         Money escrow = taskSubmitInfo.escrow();
-        TaskModel task = taskSubmitDomainService.submit(taskSubmitInfo.withEscrowAsBudget());
+        // Stamped by the app's Clock, the one the SUBMITTED sweeper measures its cutoff with.
+        TaskModel task = taskSubmitDomainService.submit(taskSubmitInfo.withEscrowAsBudget()).submittedAt(clock.instant());
         templateReadAppService.requireValid(task.contract());
         UUID taskId = taskRepository.save(task).id();
         if (taskSubmitInfo.hasItems()) {
