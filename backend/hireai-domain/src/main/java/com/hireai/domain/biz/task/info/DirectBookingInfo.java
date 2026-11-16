@@ -18,13 +18,26 @@ import java.util.UUID;
  * <p>{@code items} are the inputs of a multi-Item Task (spec S3), empty for a single-deliverable
  * booking. With Items, {@code budget} is the per-Item price (it must cover the Agent's price) and the
  * Task freezes {@link #escrow()}.
+ *
+ * <p>{@code aiReviewCriteria} are the criteria the Client wants an AI Review to judge (spec S10),
+ * empty for none. The booking prices the review, checks it is offered and freezes it in the Contract.
  */
 public record DirectBookingInfo(UUID clientId, String title, String description,
                                 Money budget, UUID agentId, String category, Long deadlineSeconds,
-                                Contract contract, List<String> items) {
+                                Contract contract, List<String> items, List<String> aiReviewCriteria) {
 
     public DirectBookingInfo {
         items = items == null ? List.of() : List.copyOf(items);
+        aiReviewCriteria = aiReviewCriteria == null ? List.of() : List.copyOf(aiReviewCriteria);
+    }
+
+    public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,
+                             String category, Long deadlineSeconds, Contract contract, List<String> items) {
+        this(clientId, title, description, budget, agentId, category, deadlineSeconds, contract, items, List.of());
+    }
+
+    public boolean wantsAiReview() {
+        return !aiReviewCriteria.isEmpty();
     }
 
     public DirectBookingInfo(UUID clientId, String title, String description, Money budget, UUID agentId,

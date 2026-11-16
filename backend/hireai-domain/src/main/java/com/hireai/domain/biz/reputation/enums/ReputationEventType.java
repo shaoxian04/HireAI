@@ -48,6 +48,18 @@ public enum ReputationEventType {
     ITEMS_SETTLED(ReputationComponent.RELIABILITY, null),
 
     /**
+     * A decisive AI Review (API/MCP, spec D38) found every criterion met: settled as accepted. Scored
+     * like the ruling it maps to (FULFILLED), but named for what judged it, since no one disputed.
+     */
+    AI_REVIEW_PASSED(ReputationComponent.RELIABILITY, BigDecimal.ONE),
+
+    /** A decisive AI Review found some criteria met (PARTIALLY_FULFILLED): settled as a split. */
+    AI_REVIEW_PARTIAL(ReputationComponent.RELIABILITY, new BigDecimal("0.5")),
+
+    /** A decisive AI Review found no criterion met (NOT_FULFILLED): the Client was refunded. */
+    AI_REVIEW_FAILED(ReputationComponent.RELIABILITY, BigDecimal.ZERO),
+
+    /**
      * A client rating. Quality is carried per-event rather than by the constant, because it is
      * derived from the stars: (stars − 1) / 4.
      */

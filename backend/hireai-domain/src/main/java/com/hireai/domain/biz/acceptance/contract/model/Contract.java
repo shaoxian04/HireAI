@@ -1,5 +1,6 @@
 package com.hireai.domain.biz.acceptance.contract.model;
 
+import com.hireai.domain.biz.acceptance.aireview.model.AiReviewTerms;
 import com.hireai.domain.biz.acceptance.template.model.TemplateRef;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
@@ -14,9 +15,11 @@ import java.util.TreeMap;
  * equal Contracts serialise identically. Conformance to the Template's bounds is checked by
  * {@code TemplateModel#requireValid(Contract)}; this record checks only its own shape.
  *
- * <p>Later slices add the AI Review settings and their frozen fee (spec S10) here.
+ * <p>{@code aiReview} is the optional AI Review the Client chose at submit, with its frozen fee
+ * (spec S10); null when there is none. It never affects Offer coverage of the Template terms: the
+ * Offer's own AI Review flag is checked when the booking adds it.
  */
-public record Contract(TemplateRef template, Map<String, ParameterValue> params) {
+public record Contract(TemplateRef template, Map<String, ParameterValue> params, AiReviewTerms aiReview) {
 
     public Contract {
         if (template == null) {
@@ -27,5 +30,14 @@ public record Contract(TemplateRef template, Map<String, ParameterValue> params)
             throw new DomainException(ResultCode.VALIDATION_ERROR, "Contract parameters must be named and set");
         }
         params = Collections.unmodifiableSortedMap(new TreeMap<>(params));
+    }
+
+    public Contract(TemplateRef template, Map<String, ParameterValue> params) {
+        this(template, params, null);
+    }
+
+    /** This Contract with {@code terms} as its AI Review. */
+    public Contract withAiReview(AiReviewTerms terms) {
+        return new Contract(template, params, terms);
     }
 }

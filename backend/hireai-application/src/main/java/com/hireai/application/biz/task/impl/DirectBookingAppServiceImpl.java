@@ -1,7 +1,10 @@
 package com.hireai.application.biz.task.impl;
 
 import com.hireai.application.biz.acceptance.TemplateReadAppService;
+import com.hireai.domain.biz.acceptance.aireview.model.AiReviewPolicy;
+import com.hireai.domain.biz.acceptance.aireview.model.AiReviewQuote;
 import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.shared.model.Money;
 import com.hireai.domain.biz.acceptance.coverage.info.ContractTerms;
 import com.hireai.domain.biz.acceptance.offer.model.Offer;
 import com.hireai.domain.biz.acceptance.template.info.ContractResolution;
@@ -53,6 +56,8 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
     private final ExecutionGrace executionGrace;
     /** Refuses a booking whose adopted schema could not be checked (spec D8). */
     private final ValidationDomainService validationDomainService;
+    /** Prices AI Review and decides whether a booking may add it (spec S10). */
+    private final AiReviewPolicy aiReviewPolicy;
 
     @Override
     public UUID book(DirectBookingInfo info) {
@@ -87,12 +92,52 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
                     + "Its Builder needs to fix the schema.");
         }
 
-        // The Contract the booking freezes: the Client's own terms (#91), else the Agent's own spec's
-        // equivalent. New Contracts use the current Template version, or during a transition the
-        // previous one when this Agent's Offer covers only that (spec D36); either way the Agent's
-        // Offer must cover it, or the Agent would be held to terms it never offered.
-        Contract requested = info.contract() != null ? info.contract()
-                : agent.currentVersion().outputSpec().toContract();
+        ContractTerms terms = coveredTerms(agent, info.contract());
+        Contract frozen = terms.contract();
+        if (info.wantsAiReview()) {
+            if (!info.items().isEmpty()) {
+                throw new DomainException(ResultCode.VALIDATION_ERROR,
+                        "AI Review is not offered on a Task with several Items");
+            }
+            // Priced from the Item's type and the criteria, offered only within the gate and when the
+            // Offer accepts it (D37), then frozen with the Contract: never switched on mid-task (D5).
+            frozen = frozen.withAiReview(aiReviewPolicy.termsFor(terms.template().outputShape(),
+                    info.aiReviewCriteria(), info.budget(), agent.currentVersion().offer().acceptsAiReview()));
+        }
+
+        // Adopt the agent's declared output_spec as the task's binding contract (Invariant #4).
+        // The task category (stats/labels, rebook) is the client's choice when given, which the
+        // agent must serve; otherwise the agent's first capability category.
+        TaskSubmitInfo submitInfo = new TaskSubmitInfo(
+                info.clientId(), info.title(), info.description(), info.budget(),
+                agent.currentVersion().outputSpec(), agent.currentVersion().taskCategoryFor(info.category()),
+                info.deadlineSeconds(), frozen, info.items());
+
+        UUID taskId = taskWriteAppService.submitDirectlyBooked(submitInfo, agent.currentVersionId());
+        log.info("Task {} direct-booked to agent {} (version {})",
+                taskId, agent.id(), agent.currentVersionId());
+        return taskId;
+    }
+
+    @Override
+    public AiReviewQuote quoteAiReview(UUID agentId, Contract contract, Money budget, int criteria) {
+        AgentModel agent = agentRepository.findById(agentId).orElseThrow(this::notFound);
+        if (!agent.isActive() || !isListed(agent.id())) {
+            throw notFound();
+        }
+        ContractTerms terms = coveredTerms(agent, contract);
+        return aiReviewPolicy.quote(terms.template().outputShape(), criteria, budget,
+                agent.currentVersion().offer().acceptsAiReview());
+    }
+
+    /**
+     * The Contract the booking freezes: the Client's own terms (#91), else the Agent's own spec's
+     * equivalent. New Contracts use the current Template version, or during a transition the previous
+     * one when this Agent's Offer covers only that (spec D36); either way the Agent's Offer must cover
+     * it, or the Agent would be held to terms it never offered.
+     */
+    private ContractTerms coveredTerms(AgentModel agent, Contract contract) {
+        Contract requested = contract != null ? contract : agent.currentVersion().outputSpec().toContract();
         Offer offer = agent.currentVersion().offer();
         ContractResolution resolution = templateReadAppService.resolveNew(requested, t ->
                 offerCoverageDomainService.coverage(t.template(), t.contract(), offer).covered());
@@ -104,19 +149,7 @@ public class DirectBookingAppServiceImpl implements DirectBookingAppService {
                             coverage.blockingParameters())
                     : "This Agent does not offer Template " + terms.contract().template());
         }
-
-        // Adopt the agent's declared output_spec as the task's binding contract (Invariant #4).
-        // The task category (stats/labels, rebook) is the client's choice when given, which the
-        // agent must serve; otherwise the agent's first capability category.
-        TaskSubmitInfo submitInfo = new TaskSubmitInfo(
-                info.clientId(), info.title(), info.description(), info.budget(),
-                agent.currentVersion().outputSpec(), agent.currentVersion().taskCategoryFor(info.category()),
-                info.deadlineSeconds(), terms.contract(), info.items());
-
-        UUID taskId = taskWriteAppService.submitDirectlyBooked(submitInfo, agent.currentVersionId());
-        log.info("Task {} direct-booked to agent {} (version {})",
-                taskId, agent.id(), agent.currentVersionId());
-        return taskId;
+        return terms;
     }
 
     private boolean isListed(UUID agentId) {

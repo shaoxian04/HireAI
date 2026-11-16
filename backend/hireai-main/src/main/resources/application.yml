@@ -107,6 +107,28 @@ hireai:
     # the failing checks this many times; failing after the last one ends the Task SPEC_VIOLATION
     # with a refund. The rejection itself is not appealable.
     max-reworks: ${ACCEPTANCE_MAX_REWORKS:2}
+  ai-review:
+    # AI Review (spec S10, D37): an optional, Client-paid judgement of criteria code cannot check, on a
+    # direct booking whose Agent's Offer accepts it. Fee = (base-fee + fee-per-criterion x criteria),
+    # x media-multiplier for a file deliverable; offered only while fee <= max-fee-share of the Item price.
+    base-fee: ${AI_REVIEW_BASE_FEE:0.10}
+    fee-per-criterion: ${AI_REVIEW_FEE_PER_CRITERION:0.10}
+    media-multiplier: ${AI_REVIEW_MEDIA_MULTIPLIER:2}
+    max-fee-share: ${AI_REVIEW_MAX_FEE_SHARE:0.10}
+    max-criteria: ${AI_REVIEW_MAX_CRITERIA:5}
+    # The reviewer: a multimodal chat model, by default the arbitrator's provider and model. Without an
+    # API key every review fails and its fee is refunded.
+    base-url: ${AI_REVIEW_BASE_URL:${OPENAI_BASE_URL:https://api.openai.com/v1}}
+    api-key: ${AI_REVIEW_API_KEY:${OPENAI_API_KEY:}}
+    model: ${AI_REVIEW_MODEL:gpt-4o}
+    timeout: ${AI_REVIEW_TIMEOUT:PT60S}
+    # Images and PDFs larger than this are described, not attached (the arbitrator's limit).
+    media-max-bytes: ${AI_REVIEW_MEDIA_MAX_BYTES:8388608}
+    # A review that gave no verdict is retried by the sweeper after retry-after, max-attempts in all;
+    # then it fails, the fee is refunded and the result waits for the Client's own review.
+    max-attempts: ${AI_REVIEW_MAX_ATTEMPTS:3}
+    retry-after: ${AI_REVIEW_RETRY_AFTER:PT2M}
+    sweep-interval: ${AI_REVIEW_SWEEP_INTERVAL:PT1M}
   review:
     # Client review window (#94): a web-channel result that passed validation waits this long in
     # PENDING_REVIEW, then the review-window sweeper accepts and settles it on the Client's behalf.

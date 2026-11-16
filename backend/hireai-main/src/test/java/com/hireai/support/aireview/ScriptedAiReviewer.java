@@ -1,0 +1,48 @@
+package com.hireai.support.aireview;
+
+import com.hireai.application.port.aireview.AiReviewSubject;
+import com.hireai.application.port.aireview.AiReviewerPort;
+import com.hireai.application.port.aireview.AiReviewerUnavailableException;
+import com.hireai.domain.biz.acceptance.aireview.model.CriterionVerdict;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+/**
+ * The harness's scripted AI reviewer (spec S10 testing decisions): no test ever calls a real model.
+ * It answers from tags in each criterion's own text, so a test scripts the verdict where it books:
+ * <ul>
+ *   <li>{@code #fail} in a criterion → that criterion fails, every other one passes;</li>
+ *   <li>{@code #error} in any criterion → the reviewer is unavailable (every attempt).</li>
+ * </ul>
+ * Every subject it was asked to judge is recorded, so a test can see what reached the reviewer (the
+ * frozen deliverable, not the Agent's link). One JVM-wide instance, shared by every Spring context.
+ */
+public final class ScriptedAiReviewer implements AiReviewerPort {
+
+    public static final String MODEL = "scripted-reviewer";
+    private static final ScriptedAiReviewer SHARED = new ScriptedAiReviewer();
+
+    private final List<AiReviewSubject> subjects = new CopyOnWriteArrayList<>();
+
+    public static ScriptedAiReviewer shared() {
+        return SHARED;
+    }
+
+    @Override
+    public Answer review(AiReviewSubject subject) {
+        subjects.add(subject);
+        if (subject.criteria().stream().anyMatch(c -> c.contains("#error"))) {
+            throw new AiReviewerUnavailableException("scripted outage");
+        }
+        return new Answer(subject.criteria().stream()
+                .map(c -> new CriterionVerdict(c, !c.contains("#fail"),
+                        c.contains("#fail") ? "The deliverable does not show this." : "Seen in the deliverable."))
+                .toList(), MODEL);
+    }
+
+    /** The subjects reviewed for the Task titled {@code title}, oldest first. */
+    public List<AiReviewSubject> subjectsTitled(String title) {
+        return subjects.stream().filter(s -> s.title().equals(title)).toList();
+    }
+}

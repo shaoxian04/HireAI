@@ -50,7 +50,10 @@ class DirectBookingAppServiceTest {
             new com.hireai.domain.biz.acceptance.coverage.service.impl.OfferCoverageDomainServiceImpl(),
             java.time.Clock.systemUTC(),
             new com.hireai.domain.biz.task.model.ExecutionGrace(60),
-            mock(com.hireai.domain.biz.adjudication.service.ValidationDomainService.class));
+            mock(com.hireai.domain.biz.adjudication.service.ValidationDomainService.class),
+            new com.hireai.domain.biz.acceptance.aireview.model.AiReviewPolicy(
+                    com.hireai.domain.shared.model.Money.of("0.10"), com.hireai.domain.shared.model.Money.of("0.10"),
+                    new java.math.BigDecimal("2"), new java.math.BigDecimal("0.10"), 5));
 
     // ---- helpers ----
 

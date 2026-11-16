@@ -54,7 +54,8 @@ class TaskReviewRejectGateTest {
                 new com.hireai.domain.biz.task.rejection.model.RejectionWindows(
                         java.time.Duration.ofHours(2), java.time.Duration.ofHours(24)),
                 mock(org.springframework.context.ApplicationEventPublisher.class),
-                java.time.Clock.systemUTC(), mock(com.hireai.application.biz.task.item.TaskItemAppService.class));
+                java.time.Clock.systemUTC(), mock(com.hireai.application.biz.task.item.TaskItemAppService.class),
+                mock(com.hireai.application.biz.acceptance.aireview.AiReviewAppService.class));
 
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         when(agentRepository.findOwnerByVersionId(agentVersionId)).thenReturn(Optional.of(builderId));

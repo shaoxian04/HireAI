@@ -40,7 +40,9 @@ public final class Acceptance2DTOConverter {
             case ParameterValue.TextSet s -> List.copyOf(s.values());
             case ParameterValue.Flag f -> f.value();
         }));
-        return new ContractDTO(contract.template().key(), contract.template().version(), params);
+        return new ContractDTO(contract.template().key(), contract.template().version(), params,
+                contract.aiReview() == null ? null : new ContractDTO.AiReviewTermsDTO(
+                        contract.aiReview().criteria(), contract.aiReview().fee().value()));
     }
 
     public static OfferDTO toDTO(Offer offer, BigDecimal price) {
@@ -54,7 +56,7 @@ public final class Acceptance2DTOConverter {
             }));
             return new OfferDTO.TermDTO(term.template().key(), term.template().version(), params);
         }).toList();
-        return new OfferDTO(price, terms);
+        return new OfferDTO(price, terms, offer.acceptsAiReview());
     }
 
     /** Null when there was no fallback. */

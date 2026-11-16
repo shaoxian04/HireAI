@@ -1,6 +1,9 @@
 package com.hireai.application.biz.task;
 
+import com.hireai.domain.biz.acceptance.aireview.model.AiReviewQuote;
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
+import com.hireai.domain.shared.model.Money;
 import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
 
@@ -16,4 +19,11 @@ import java.util.UUID;
 public interface DirectBookingAppService {
 
     UUID book(@NonNull DirectBookingInfo info);
+
+    /**
+     * What an AI Review of {@code criteria} criteria would cost on a booking of {@code agentId} at
+     * {@code budget}, under {@code contract} (null = the Agent's own terms), and whether it is offered
+     * (spec S10, D37). Same NOT_FOUND rules as {@link #book}.
+     */
+    AiReviewQuote quoteAiReview(@NonNull UUID agentId, Contract contract, @NonNull Money budget, int criteria);
 }

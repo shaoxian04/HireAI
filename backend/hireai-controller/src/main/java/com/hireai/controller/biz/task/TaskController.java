@@ -133,7 +133,8 @@ public class TaskController extends BaseController {
                         Money.of(request.budget()), request.agentId(),
                         request.category() == null || request.category().isBlank() ? null : request.category(),
                         request.deadlineSeconds(), ContractRequest2ModelConverter.toModel(request.contract()),
-                        request.items()));
+                        request.items(),
+                        request.aiReview() == null ? List.of() : request.aiReview().criteria()));
         return ok(withTemplateFallback(readAppService.getForClient(taskId, clientId)));
     }
 

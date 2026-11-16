@@ -12,6 +12,7 @@ import com.hireai.domain.biz.ledger.settlement.model.SettlementModel;
 import com.hireai.domain.biz.ledger.settlement.repository.ItemSettlementRepository;
 import com.hireai.domain.biz.ledger.settlement.repository.SettlementRepository;
 import com.hireai.domain.biz.ledger.settlement.service.SettlementDomainService;
+import com.hireai.domain.biz.ledger.wallet.enums.LedgerEntryType;
 import com.hireai.domain.biz.ledger.wallet.model.WalletModel;
 import com.hireai.domain.biz.ledger.wallet.repository.WalletRepository;
 import com.hireai.utility.exception.DomainException;
@@ -124,6 +125,25 @@ public class SettlementWriteAppServiceImpl implements SettlementWriteAppService 
         settlementDomainService.settleRejection(clientWallet, price, taskId, itemCorrelation(taskId, itemNo));
         walletRepository.save(clientWallet);
         itemSettlementRepository.append(ItemSettlementModel.refunded(taskId, itemId, itemNo, price));
+    }
+
+    @Override
+    public void chargeAiReviewFee(UUID taskId, UUID clientId, Money fee) {
+        WalletModel clientWallet = requireWallet(clientId);
+        clientWallet.release(fee, taskId, LedgerEntryType.AI_REVIEW_FEE, aiReviewCorrelation(taskId));
+        walletRepository.save(clientWallet);
+    }
+
+    @Override
+    public void refundAiReviewFee(UUID taskId, UUID clientId, Money fee) {
+        WalletModel clientWallet = requireWallet(clientId);
+        clientWallet.refund(fee, taskId, aiReviewCorrelation(taskId));
+        walletRepository.save(clientWallet);
+    }
+
+    /** Ties the AI Review fee's freeze, charge or refund to the Task, apart from its settlement. */
+    public static String aiReviewCorrelation(UUID taskId) {
+        return "ai-review-" + taskId;
     }
 
     /** Ties an Item's ledger entries to it, so each Item's settlement is reconstructable on its own. */

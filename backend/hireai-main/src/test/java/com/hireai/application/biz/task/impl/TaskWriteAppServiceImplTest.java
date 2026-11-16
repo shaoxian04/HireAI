@@ -53,7 +53,8 @@ class TaskWriteAppServiceImplTest {
                 templateReadAppService,
                 org.mockito.Mockito.mock(com.hireai.application.biz.task.item.TaskItemAppService.class),
                 org.mockito.Mockito.mock(com.hireai.domain.biz.offering.agent.repository.AgentRepository.class),
-                org.mockito.Mockito.mock(com.hireai.domain.biz.acceptance.coverage.service.OfferCoverageDomainService.class));
+                org.mockito.Mockito.mock(com.hireai.domain.biz.acceptance.coverage.service.OfferCoverageDomainService.class),
+                org.mockito.Mockito.mock(com.hireai.application.biz.acceptance.aireview.AiReviewAppService.class));
     }
 
     private static com.hireai.domain.biz.acceptance.template.model.TemplateModel textBasic() {

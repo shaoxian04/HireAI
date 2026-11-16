@@ -38,6 +38,24 @@ public record DirectBookRequest(
          */
         @Size(max = 1000, message = "items: a Task can hold at most 1000 Items")
         List<@NotBlank(message = "items: an Item must not be blank")
-             @Size(max = 5000, message = "items: an Item must have at most 5000 characters") String> items
+             @Size(max = 5000, message = "items: an Item must have at most 5000 characters") String> items,
+        /**
+         * Optional (spec S10): an AI Review of these criteria, priced and frozen at booking. Offered
+         * only when the Agent's Offer accepts it and the fee is at most 10% of the price.
+         */
+        @Valid AiReviewRequest aiReview
 ) {
+
+    public DirectBookRequest(String title, String description, BigDecimal budget, UUID agentId, String category,
+                             Long deadlineSeconds, ContractRequest contract, List<String> items) {
+        this(title, description, budget, agentId, category, deadlineSeconds, contract, items, null);
+    }
+
+    /** The criteria code cannot check, in the Client's words. */
+    public record AiReviewRequest(
+            @NotNull @Size(min = 1, max = 10, message = "aiReview.criteria: 1 to 10 criteria")
+            List<@NotBlank(message = "aiReview.criteria: a criterion must not be blank")
+                 @Size(max = 300, message = "aiReview.criteria: a criterion must have at most 300 characters")
+                 String> criteria) {
+    }
 }
