@@ -14,6 +14,10 @@ One receipt per settled subject:
   after a failure, timeout or cancellation);
 - each Item of a [multi-Item Task](data-model.md#items), once that Item's `task_item_settlements` row
   exists. (A multi-Item Task refunded as a whole gets one whole-Task receipt with `itemCount`.)
+- an Item of a [sampled](sampling.md) Task, only once its inspection has ended (lot accepted, pro rata,
+  waived) or the Task closed: an Item receipt states the sample (seeds and membership), and issued while a
+  second sample or the resample could still be drawn it would let the Agent predict or redraw it. Items
+  settled earlier (passed or refunded mid-inspection) get theirs then, with the final `sample` member.
 
 Receipts are issued after the settlement commits, never inside it: `ReceiptIssueSweeper`
 (`hireai.receipts.issue-interval`) catches up, and reading a task's receipts issues any that are

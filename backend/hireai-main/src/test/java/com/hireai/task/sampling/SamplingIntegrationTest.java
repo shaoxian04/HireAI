@@ -62,6 +62,7 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
     @Autowired TaskReviewAppService taskReviewAppService;
     @Autowired SamplingAppService samplingAppService;
     @Autowired TaskExecutionPort taskExecutionPort;
+    @Autowired com.hireai.application.biz.acceptance.receipt.ReceiptAppService receiptAppService;
 
     private final RestTemplate rest = new RestTemplate();
     private final HttpClient http = HttpClient.newHttpClient();
@@ -118,12 +119,27 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
         reject(taskId, first.get(1), "B_FACTUAL", "the invoice number is wrong");
         concede(agent, taskId, first.get(0));
         concede(agent, taskId, first.get(1));
+        // Refunded mid-inspection, yet no receipt yet: it would state the seed and membership while the
+        // second sample can still be drawn. Neither the read nor the sweeper issues it.
+        String seed = inspection(taskId).get("draws").get(0).get("seed").asText();
+        receiptAppService.issuePending(1000);
+        assertThat(receiptsJson(taskId)).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM receipts WHERE task_id = ?", Integer.class, taskId))
+                .isZero();
         for (int n : first.subList(2, first.size())) {
             pass(taskId, n);
         }
 
         JsonNode inspection = inspection(taskId);
         assertThat(inspection.get("draws")).hasSize(2);
+        // Nothing the agent (or anyone reading the task) sees carries a seed while the inspection is open.
+        String secondSeed = inspection.get("draws").get(1).get("seed").asText();
+        String taskBody = rest.getForObject(platformUrl("/api/tasks/" + taskId), String.class);
+        assertThat(taskBody).doesNotContain(seed).doesNotContain(secondSeed).doesNotContain("\"seed\"");
+        for (RecordedWorkOrder sent : agent.workOrders()) {
+            assertThat(sent.bodyText()).doesNotContain(seed).doesNotContain(secondSeed).doesNotContain("\"seed\"");
+        }
+        assertThat(receiptsJson(taskId)).isEmpty();
         assertThat(inspection.get("draws").get(0).get("defects").asInt()).isEqualTo(2);
         assertThat(inspection.get("draws").get(0).get("decision").asText()).isEqualTo("DRAW_SECOND");
         List<Integer> second = itemNos(inspection.get("draws").get(1));
@@ -149,8 +165,8 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM item_judgements WHERE task_id = ? AND sampled",
                 Integer.class, taskId)).isEqualTo(64);
         // Each settled Item's signed receipt carries its sample membership and the seeds (D6, D40).
-        JsonNode receipts = JSON.readTree(rest.getForObject(platformUrl("/api/tasks/" + taskId + "/receipts"),
-                String.class)).get("data");
+        JsonNode receipts = receiptsJson(taskId);
+        assertThat(receipts).hasSize(500);
         JsonNode sampledReceipt = null;
         for (JsonNode r : receipts) {
             if (r.get("itemNo").asInt() == first.get(0)) {
@@ -374,6 +390,21 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
         // 7 paid, 1 conceded, 32 refunded with the timeout: never the paid ones twice.
         assertThat(jdbc.queryForObject("SELECT COALESCE(SUM(amount), 0) FROM ledger_entries WHERE related_task_id = ? "
                 + "AND entry_type = 'REFUND'", BigDecimal.class, taskId)).isEqualByComparingTo("33.00");
+        // The Task ended, so the inspection can draw nothing more: the settled Items' receipts are issued now.
+        List<JsonNode> itemReceipts = new ArrayList<>();
+        JsonNode whole = null;
+        for (JsonNode r : receiptsJson(taskId)) {
+            if (r.get("itemNo").isNull()) {
+                whole = r.get("receipt");
+            } else {
+                itemReceipts.add(r.get("receipt"));
+            }
+        }
+        assertThat(itemReceipts).hasSize(8);
+        assertThat(itemReceipts.get(0).get("sample").get("outcome").asText()).isEqualTo("REWORKING");
+        // The whole-Task receipt for the timeout states what that refund returned: what was still held.
+        assertThat(whole.get("settlement").get("price").asText()).isEqualTo("32.00");
+        assertThat(whole.get("settlement").get("refunded").asText()).isEqualTo("32.00");
     }
 
     // --- the fake Agent ---
@@ -510,6 +541,11 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
 
     private JsonNode getTask(UUID taskId) throws Exception {
         return JSON.readTree(rest.getForObject(platformUrl("/api/tasks/" + taskId), String.class)).get("data");
+    }
+
+    private JsonNode receiptsJson(UUID taskId) throws Exception {
+        return JSON.readTree(rest.getForObject(platformUrl("/api/tasks/" + taskId + "/receipts"), String.class))
+                .get("data");
     }
 
     private JsonNode inspection(UUID taskId) throws Exception {

@@ -23,7 +23,10 @@ D19, D21 in the [decision log](../superpowers/specs/2026-11-15-acceptance-contra
 The first sample is drawn when the Items are delivered, the second when the first is inconclusive, and
 a fresh first sample when the reworked Items come back (D6). Each draw takes a new 64-bit seed from
 `SecureRandom` and records it (`sample_draws.seed`, the inspection API, and each Item's
-[receipt](receipts.md)). The Agent never sees it: it is not in any WorkOrder.
+[receipt](receipts.md)). The Agent never sees it while the inspection is open: no WorkOrder, rework
+WorkOrder or rejection notice carries it, the inspection API is the buyer's only, and Item receipts
+(which the Builder can read) are issued only once the inspection has ended. A rejection notice does tell
+the Agent that one Item was judged wrong, but not whether it was sampled or an extra check.
 
 Anyone with the seed can redraw a sample: sort the candidate Item numbers ascending, run a partial
 Fisher–Yates shuffle with `java.util.Random(seed)` (`j = i + nextInt(n - i)`, swap, for the first `size`

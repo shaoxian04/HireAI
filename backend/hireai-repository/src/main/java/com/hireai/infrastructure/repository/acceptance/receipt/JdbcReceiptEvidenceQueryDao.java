@@ -26,6 +26,11 @@ public class JdbcReceiptEvidenceQueryDao implements ReceiptEvidenceQueryPort {
                     UNION ALL
                     SELECT i.task_id, i.item_no, i.created_at FROM task_item_settlements i
                     WHERE NOT EXISTS (SELECT 1 FROM receipts r WHERE r.task_id = i.task_id AND r.item_no = i.item_no)
+                      -- A sampled Task's Item receipts wait for its inspection to end (spec S8, D6).
+                      AND NOT EXISTS (SELECT 1 FROM task_inspections ti JOIN tasks t ON t.id = ti.task_id
+                                      WHERE ti.task_id = i.task_id AND ti.status IN ('SAMPLING', 'REWORKING')
+                                        AND t.status NOT IN ('RESOLVED', 'TIMED_OUT', 'SPEC_VIOLATION', 'FAILED',
+                                                             'CANCELLED'))
                 ) pending
                 ORDER BY created_at, task_id, item_no
                 LIMIT ?""",

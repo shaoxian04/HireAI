@@ -166,9 +166,9 @@ class ReceiptIntegrationTest extends WholeAppIntegrationTest {
         UUID taskId = book(seeded.agentId(), "3.00", List.of("invoice A", "invoice B #empty", "invoice C #fail"));
         awaitStatus(taskId, "PENDING_REVIEW");
 
-        // Items 2 and 3 were refunded at once; item 1 waits for review.
-        assertThat(getData("/api/tasks/" + taskId + "/receipts"))
-                .extracting(r -> r.get("itemNo").asInt()).containsExactly(2, 3);
+        // Items 2 and 3 were refunded at once, but the Task is sampled (#105): no Item receipt is issued while
+        // its inspection is open, since a receipt states the sample. Item 1 waits for review.
+        assertThat(getData("/api/tasks/" + taskId + "/receipts")).isEmpty();
         post("/api/tasks/" + taskId + "/items/1/accept");
 
         JsonNode list = getData("/api/tasks/" + taskId + "/receipts");

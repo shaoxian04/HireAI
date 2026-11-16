@@ -29,6 +29,7 @@ import com.hireai.domain.biz.task.sampling.model.ItemRejectionModel;
 import com.hireai.domain.biz.task.sampling.model.SampleDrawModel;
 import com.hireai.domain.biz.task.sampling.model.SampleSizeTable;
 import com.hireai.domain.biz.task.sampling.repository.InspectionRepository;
+import com.hireai.domain.biz.ledger.settlement.repository.ItemSettlementRepository;
 import com.hireai.domain.biz.task.sampling.repository.ItemRejectionRepository;
 import com.hireai.domain.biz.task.item.model.ItemCheck;
 import com.hireai.domain.biz.task.item.model.TaskItemModel;
@@ -76,6 +77,7 @@ class ReceiptBodyAssembler {
     /** A sampled multi-Item Task's draws and reviewer judgements (spec S8, D6/D21: membership and seed). */
     private final InspectionRepository inspectionRepository;
     private final ItemRejectionRepository itemRejectionRepository;
+    private final ItemSettlementRepository itemSettlementRepository;
 
     /** The facts about the subject that the caller has already loaded. */
     record Subject(TaskModel task, UUID builderId, TaskItemModel item, int itemCount,
@@ -301,7 +303,10 @@ class ReceiptBodyAssembler {
     }
 
     private Map<String, Object> settlement(TaskModel task, SettlementModel settlement) {
-        Money price = task.budget();
+        // A multi-Item Task some of whose Items settled on their own (sampling, spec S8) refunds only what
+        // was still held: that is the whole-Task settlement's price.
+        Money price = task.budget().subtract(itemSettlementRepository.findByTaskId(task.id()).stream()
+                .map(ItemSettlementModel::gross).reduce(Money.ZERO, Money::add));
         BigDecimal refunded = price.value().subtract(settlement.net().value()).subtract(settlement.commission().value());
         return map("outcome", settlement.type().name(),
                 "price", money(price), "paid", money(settlement.net()),
