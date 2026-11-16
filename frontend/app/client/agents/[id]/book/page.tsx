@@ -11,6 +11,8 @@ import { errorFor, toFormError, useFocusOnFieldError, validateForm, type FormErr
 import type { AgentProfileDTO, DirectBookRequest, TaskDTO } from "@/lib/types";
 import { directBookSignature, useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { PageHeader } from "@/components/PageHeader";
+import { AiReviewOption, filledCriteria } from "@/components/AiReviewOption";
+import type { AiReviewQuoteDTO } from "@/lib/types";
 
 function BookingForm() {
   const { id } = useParams<{ id: string }>();
@@ -21,6 +23,9 @@ function BookingForm() {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  // AI Review (spec S10): null while off; the quote is the fee to freeze, null until priced and offered.
+  const [aiCriteria, setAiCriteria] = useState<string[] | null>(null);
+  const [aiQuote, setAiQuote] = useState<AiReviewQuoteDTO | null>(null);
 
   const [error, setError] = useState<FormError | null>(null);
   // A field error clears the moment that field (or any other) is edited, so it never goes stale.
@@ -30,8 +35,15 @@ function BookingForm() {
   // Built here rather than in onSubmit so the idempotency signature is derived from the very
   // object that gets sent: retrying the same booking reuses one key (deduped server-side),
   // while an edited title or description starts a fresh one.
+  const aiReview = aiCriteria ? filledCriteria(aiCriteria) : [];
   const bookingBody: DirectBookRequest | null = profile
-    ? { title, description, budget: profile.card.price, agentId: id }
+    ? {
+        title,
+        description,
+        budget: profile.card.price,
+        agentId: id,
+        ...(aiCriteria ? { aiReview: { criteria: aiReview } } : {}),
+      }
     : null;
   const getIdempotencyKey = useIdempotencyKey(directBookSignature(bookingBody));
 
@@ -63,6 +75,10 @@ function BookingForm() {
   const { card } = profile;
 
   const bookErrors = { title: "Title", description: "Description" };
+  const fee = aiCriteria && aiQuote ? aiQuote.fee : 0;
+  const total = Math.round((card.price + fee) * 100) / 100;
+  // With AI Review on, book only once it is priced, offered and has a criterion to judge.
+  const aiReviewBlocks = aiCriteria !== null && (aiQuote === null || aiReview.length === 0);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -70,6 +86,10 @@ function BookingForm() {
     const invalid = validateForm(e.currentTarget as HTMLFormElement);
     if (invalid) {
       setError(invalid);
+      return;
+    }
+    if (aiCriteria !== null && aiReview.length === 0) {
+      setError({ field: null, message: "Write at least one AI Review criterion, or turn AI Review off." });
       return;
     }
     setSubmitting(true);
@@ -136,10 +156,23 @@ function BookingForm() {
             />
           </Field>
 
+          <h2 className="eyebrow pt-2">Review</h2>
+          <AiReviewOption
+            agentId={id}
+            budget={card.price}
+            offerAccepts={profile.offer?.acceptsAiReview ?? false}
+            criteria={aiCriteria}
+            onChange={(c) => { setAiCriteria(c); clearFieldError(); }}
+            onQuote={setAiQuote}
+          />
+
           <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line text-sm">
             <div className="bg-surface px-4 py-3">
               <dt className="text-xs text-dim">You&apos;ll pay</dt>
-              <dd className="display tabular mt-0.5 text-2xl text-accent">{card.price} cr</dd>
+              <dd className="display tabular mt-0.5 text-2xl text-accent">{`${total.toFixed(2)} cr`}</dd>
+              {fee > 0 && (
+                <dd className="tabular mt-0.5 text-xs text-dim">{`${card.price.toFixed(2)} price + ${fee.toFixed(2)} AI Review`}</dd>
+              )}
             </div>
             <div className="bg-surface px-4 py-3">
               <dt className="text-xs text-dim">Agent must deliver within</dt>
@@ -158,8 +191,8 @@ function BookingForm() {
               {error.message}
             </p>
           )}
-          <Button type="submit" disabled={submitting} className="w-full">
-            {submitting ? "Booking…" : `Book and freeze ${card.price} cr`}
+          <Button type="submit" disabled={submitting || aiReviewBlocks} className="w-full">
+            {submitting ? "Booking…" : `Book and freeze ${total.toFixed(2)} cr`}
           </Button>
         </form>
       </div>

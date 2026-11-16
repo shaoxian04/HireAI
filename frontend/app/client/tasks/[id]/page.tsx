@@ -10,6 +10,7 @@ import { AppShell } from "@/components/AppShell";
 import { StatusTrack } from "@/components/StatusTrack";
 import { InspectionReport } from "@/components/InspectionReport";
 import { ReworkNotice } from "@/components/ReworkNotice";
+import { AiReviewReport } from "@/components/AiReviewReport";
 import { TaskFailurePanel } from "@/components/TaskFailurePanel";
 import { DeliverablePanel, LegacyDeliverableLink } from "@/components/DeliverablePanel";
 import WebhookDeliveryStatus from "@/components/WebhookDeliveryStatus";
@@ -411,6 +412,10 @@ function TaskDetail() {
           awaitingYou={task.status === "PENDING_REVIEW"}
           autoAccepted={!!task.autoAccepted}
         />
+      )}
+
+      {task.contract?.aiReview && (
+        <AiReviewReport taskId={task.id} taskStatus={task.status} frozen={task.contract.aiReview} />
       )}
 
       {result && (

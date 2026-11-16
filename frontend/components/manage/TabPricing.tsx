@@ -38,12 +38,14 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
   const own = ownContractOf(ver.outputSpec);
   const [draft, setDraft] = useState<OfferDraft | null>(null);
   const [showProblems, setShowProblems] = useState(false);
+  const [acceptsAiReview, setAcceptsAiReview] = useState(ver.offer?.acceptsAiReview ?? false);
   const templates = useTemplates(draft !== null);
   const templateList = templates.status === "ready" ? [...templates.byRef.values()] : [];
   const problems = draft && showProblems ? offerDraftProblems(draft, templateList) : {};
 
   function startEditing() {
     setDraft(offerDraftOf(ver.offer, own));
+    setAcceptsAiReview(ver.offer?.acceptsAiReview ?? false);
     setShowProblems(false);
   }
 
@@ -87,7 +89,7 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
           maxExecutionSeconds: maxExec,
           capabilityCategories: categories,
           ...(suggestedCategory.trim() ? { suggestedCategory: suggestedCategory.trim() } : {}),
-          ...(draft ? { offer: { terms: offerTermsFromDraft(draft, templateList) } } : {}),
+          ...(draft ? { offer: { terms: offerTermsFromDraft(draft, templateList), acceptsAiReview } } : {}),
         }),
       });
       onAgentChange(updated);
@@ -132,6 +134,11 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
           {draft === null ? (
             <div className="space-y-4">
               <OfferPanel offer={ver.offer} />
+              <p className="text-sm text-muted">
+                {ver.offer?.acceptsAiReview
+                  ? "Accepts AI Review: clients may pay for a model to judge criteria code can't check. On the API its verdict settles the task and is final."
+                  : "Doesn't accept AI Review: clients can't add one when they book this agent."}
+              </p>
               <Button variant="secondary" size="sm" onClick={startEditing}>
                 Edit offer
               </Button>
@@ -159,6 +166,21 @@ export function TabPricing({ agentId, agent, onAgentChange }: Props) {
               {templates.status === "ready" && (
                 <OfferEditor templates={templateList} value={draft} own={own} problems={problems} onChange={setDraft} />
               )}
+              <label className="flex items-start gap-3 rounded-lg border border-line bg-surface px-4 py-3">
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4 accent-[var(--color-accent)]"
+                  checked={acceptsAiReview}
+                  onChange={(e) => setAcceptsAiReview(e.target.checked)}
+                />
+                <span>
+                  <span className="block text-sm font-medium text-fg">Accept AI Review</span>
+                  <span className="mt-0.5 block text-sm text-muted">
+                    Clients may pay a small fee for a model to judge criteria code can&apos;t check. On the web it only
+                    advises the client; on the API its verdict settles the task and is final, with no appeal.
+                  </span>
+                </span>
+              </label>
               <Button variant="ghost" size="sm" onClick={stopEditing}>
                 Keep the current offer
               </Button>
