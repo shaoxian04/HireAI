@@ -1009,6 +1009,8 @@ export interface InspectionDTO {
   judgements: ItemJudgementDTO[];
   /** Every rejection round of every Item, oldest first. */
   itemRejections: { itemNo: number; rejection: RejectionDTO }[];
+}
+
 /** The settlement a receipt records (format hireai.receipt.v1, docs/details/receipts.md); amounts are strings. */
 export interface ReceiptSettlement {
   outcome: "ACCEPT" | "REJECT" | "SPLIT";

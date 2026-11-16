@@ -136,7 +136,17 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   Engagement's documents with type, size, SHA-256 and the agent's download log, each with a checkbox. The
   ticked documents become the Items (`items: [{sourceId}]` + `engagementId`), the price shows as price ×
   count, and fewer than two is refused before sending; the idempotency signature covers the Items. On the
-  task page, `ItemsPanel` marks a document Item. The `client/tasks/[id]` view also shows a per-task `WebhookDeliveryStatus`
+  task page, `ItemsPanel` marks a document Item (it lists 50 Items, then "Show all"). With Items and an Offer that
+  allows it, the booking page offers stricter inspection (`inspectionLevel: "III"`).
+- **Sampling reviewer** (`client/tasks/[id]/review`, [sampling.md](sampling.md)). The task page's `InspectionCard`
+  (`components/sampling/InspectionSummary.tsx`) says where the sample stands and links here. The page polls
+  `GET /tasks/{id}` and `GET /tasks/{id}/inspection` every 4 s: `PlanFacts` (lot, level, sample size, ISO letter,
+  the stage's rule in words from `lib/sampling.ts` `ruleText`, the seed with copy), `SamplingPath` (first sample →
+  second → rework → resample → pro rata), `InspectionOutcome`, the current sample's `SampleItemCard`s (source
+  beside the agent's result, `SourceDocument` fetching an Item's document by `apiBlob` from
+  `/tasks/{id}/items/{n}/source`; "Correct" / "Wrong…" with an A/B/C reason and text, `POST …/judgement`; a
+  stood-by Item's "Accept the Item", `POST …/decision`), a "Check another Item" box for extra checks outside the
+  sample, and the samples drawn so far. The `client/tasks/[id]` view also shows a per-task `WebhookDeliveryStatus`
   indicator with a resend action.
 - **Rebook a failed task.** "Choose another agent" links to `/client/tasks/new?rebook=<taskId>` (`rebookHref`); only
   the id is in the URL. The new-task page reads `GET /api/tasks/{id}` and fills title, description, category and

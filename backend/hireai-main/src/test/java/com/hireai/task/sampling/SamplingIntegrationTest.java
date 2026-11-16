@@ -148,6 +148,21 @@ class SamplingIntegrationTest extends WholeAppIntegrationTest {
         // The reviewer's judgements are kept: 62 passes, 2 rejections, all inside the random sample.
         assertThat(jdbc.queryForObject("SELECT count(*) FROM item_judgements WHERE task_id = ? AND sampled",
                 Integer.class, taskId)).isEqualTo(64);
+        // Each settled Item's signed receipt carries its sample membership and the seeds (D6, D40).
+        JsonNode receipts = JSON.readTree(rest.getForObject(platformUrl("/api/tasks/" + taskId + "/receipts"),
+                String.class)).get("data");
+        JsonNode sampledReceipt = null;
+        for (JsonNode r : receipts) {
+            if (r.get("itemNo").asInt() == first.get(0)) {
+                sampledReceipt = r.get("receipt");
+            }
+        }
+        assertThat(sampledReceipt).isNotNull();
+        assertThat(sampledReceipt.get("sample").get("sampled").asBoolean()).isTrue();
+        assertThat(sampledReceipt.get("sample").get("draws").get(0).get("seed").asText())
+                .isEqualTo(inspection(taskId).get("draws").get(0).get("seed").asText());
+        assertThat(sampledReceipt.get("judgements").get(0).get("by").asText()).isEqualTo("REVIEWER");
+        assertThat(sampledReceipt.get("settlement").get("outcome").asText()).isEqualTo("REJECT");
     }
 
     @Test
