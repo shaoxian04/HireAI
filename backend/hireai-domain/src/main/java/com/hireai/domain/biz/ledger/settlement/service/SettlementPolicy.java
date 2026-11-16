@@ -39,6 +39,11 @@ public final class SettlementPolicy {
      */
     public static final BigDecimal DISPUTE_FEE_CAP_RATE = new BigDecimal("0.20");
 
+    /** The Client's half of a (capped) dispute fee both sides bear on a split ruling; the Builder bears the rest. */
+    public static Money clientShareOfSplitFee(Money cappedFee) {
+        return cappedFee.percentage(PARTIAL_BUILDER_FRACTION);
+    }
+
     /** What a loser can be asked to bear of a dispute fee at the default cap. */
     public static Money disputeFeeCap(Money fee, Money itemPrice) {
         return disputeFeeCap(fee, itemPrice, DISPUTE_FEE_CAP_RATE);

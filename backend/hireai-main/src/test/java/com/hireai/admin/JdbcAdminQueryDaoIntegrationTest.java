@@ -133,5 +133,7 @@ class JdbcAdminQueryDaoIntegrationTest {
         assertThat(ev.get().budget()).isEqualByComparingTo(new BigDecimal("20.00"));
         assertThat(ev.get().category()).isEqualTo("summarisation");
         assertThat(ev.get().submittedAt()).isNotNull();
+        // The task's frozen Contract, the binding terms (not the agent version's output spec).
+        assertThat(ev.get().contractJson()).contains("\"template\"");
     }
 }

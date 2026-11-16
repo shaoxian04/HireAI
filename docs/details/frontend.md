@@ -156,7 +156,7 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   escrow freeze. The failed task, already refunded, is not touched. If the task can't be loaded, the page says so
   and shows a blank form. The page component sits in a `Suspense` boundary because it reads `useSearchParams`.
 - `admin/` — overview plus read-only task, user-wallet and agent browsers; `admin/disputes` — the dispute queue; `admin/disputes/[id]` — dispute detail with
-  the tier-2 human-backstop ruling.
+  the evidence (the task's frozen Contract, the result, the frozen file) and the tier-2 human-backstop ruling, each outcome previewing the credits it moves and the dispute fees the side it goes against bears.
 
 **`AgentDTO` is nested** — read `agent.currentVersion.{ capabilityCategories, price, webhookUrl }`, not the root.
 

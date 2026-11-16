@@ -758,6 +758,11 @@ export interface AdminSettlementPreviewDTO {
   notFulfilledRefund: number;
   partialBuilderNet: number;
   partialClientRefund: number;
+  /** Loser pays: the dispute fees each side would bear under each outcome. */
+  fulfilledClientFees: number;
+  notFulfilledBuilderFees: number;
+  partialClientFees: number;
+  partialBuilderFees: number;
 }
 
 export interface AdminDisputeDetailDTO {
@@ -779,7 +784,8 @@ export interface AdminDisputeDetailDTO {
   builderName: string | null;
   agentReputation: number | null;
   agentPrice: number | null;
-  outputSpecJson: string | null;
+  /** The task's frozen Contract (JSON), the binding terms. */
+  contractJson: string | null;
   resultPayloadJson: string | null;
   resultUrl: string | null;
   agentStatus: string | null;

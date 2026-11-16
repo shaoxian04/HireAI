@@ -127,11 +127,17 @@ function AdminDisputeDetail() {
   const p = detail.settlementPreview;
   function outcomeHint(cat: RulingCategory): string {
     if (!p) return "";
+    // Loser pays (#96): the side an outcome goes against bears the dispute fees.
+    const fees = (who: string, amount: number) => (amount > 0 ? ` · ${who} bears ${amount} cr in dispute fees` : "");
     if (cat === "FULFILLED")
-      return `builder +${p.fulfilledPayout} cr · ${p.fulfilledCommission} cr commission`;
+      return `builder +${p.fulfilledPayout} cr · ${p.fulfilledCommission} cr commission${fees("client", p.fulfilledClientFees)}`;
     if (cat === "NOT_FULFILLED")
-      return `client refunded ${p.notFulfilledRefund} cr in full`;
-    return `builder +${p.partialBuilderNet} cr · client refunded ${p.partialClientRefund} cr`;
+      return `client refunded ${p.notFulfilledRefund} cr in full${fees("builder", p.notFulfilledBuilderFees)}`;
+    const split =
+      p.partialClientFees + p.partialBuilderFees > 0
+        ? ` · client bears ${p.partialClientFees} cr and builder ${p.partialBuilderFees} cr in dispute fees`
+        : "";
+    return `builder +${p.partialBuilderNet} cr · client refunded ${p.partialClientRefund} cr${split}`;
   }
 
   const escalatedNoRuling = detail.actionable && detail.rulings.length === 0;
@@ -234,8 +240,8 @@ function AdminDisputeDetail() {
           The evidence
         </h2>
         <Evidence
-          label="Output spec (the binding contract)"
-          body={prettyJson(detail.outputSpecJson)}
+          label="Contract frozen on the task (the binding terms)"
+          body={prettyJson(detail.contractJson)}
         />
         <Evidence
           label="Agent result (what was delivered)"

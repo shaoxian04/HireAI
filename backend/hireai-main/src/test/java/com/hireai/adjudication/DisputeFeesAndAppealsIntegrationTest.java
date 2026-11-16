@@ -57,6 +57,7 @@ class DisputeFeesAndAppealsIntegrationTest extends WholeAppIntegrationTest {
 
     @Autowired TaskWriteAppService taskWriteAppService;
     @Autowired DisputeAppService disputeAppService;
+    @Autowired com.hireai.application.biz.admin.AdminReadAppService adminReadAppService;
     @Autowired ApplicationContext context;
     @Autowired ObjectMapper objectMapper;
 
@@ -82,6 +83,13 @@ class DisputeFeesAndAppealsIntegrationTest extends WholeAppIntegrationTest {
         assertThat(appealed.get("status").asText()).isEqualTo("ESCALATED");
         assertThat(appealed.get("appealedBy").asText()).isEqualTo("BUILDER");
         assertThat(wallet(client)).containsExactly(new BigDecimal("10.00"), new BigDecimal("20.00")); // still held
+
+        // The admin's outcome preview includes what the loser bears: 3.00 cost + 4.00 capped Appeal Fee.
+        var preview = adminReadAppService.disputeDetail(f.disputeId()).settlementPreview();
+        assertThat(preview.fulfilledClientFees()).isEqualByComparingTo("7.00");
+        assertThat(preview.notFulfilledBuilderFees()).isEqualByComparingTo("7.00");
+        assertThat(preview.partialClientFees()).isEqualByComparingTo("3.50");
+        assertThat(preview.partialBuilderFees()).isEqualByComparingTo("3.50");
 
         disputeAppService.adminRule(f.disputeId(), RulingCategory.NOT_FULFILLED, "upheld", ADMIN);
 

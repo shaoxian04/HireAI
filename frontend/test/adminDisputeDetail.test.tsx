@@ -35,6 +35,14 @@ describe("admin dispute detail", () => {
     expect(screen.getByText(/completely different company/i)).toBeInTheDocument();
     expect(screen.getByText("Demo Summariser")).toBeInTheDocument();
     expect(screen.getByText(/client refunded 40 cr in full/i)).toBeInTheDocument();
+    // The evidence is the task's frozen Contract, not the agent's output spec.
+    expect(screen.queryByText(/output spec \(the binding contract\)/i)).toBeNull();
+    expect(screen.getByText(/contract frozen on the task/i)).toBeInTheDocument();
+    expect(screen.getByText(/"max_length": 800/)).toBeInTheDocument();
+    // Loser pays: each outcome says what the side it goes against bears in dispute fees.
+    expect(screen.getByText(/client refunded 40 cr in full · builder bears 3 cr in dispute fees/i)).toBeInTheDocument();
+    expect(screen.getByText(/6 cr commission · client bears 3 cr in dispute fees/i)).toBeInTheDocument();
+    expect(screen.getByText(/client bears 1.5 cr and builder 1.5 cr in dispute fees/i)).toBeInTheDocument();
 
     // Choose NOT_FULFILLED + rationale, submit → the detail becomes RESOLVED.
     await userEvent.click(await screen.findByLabelText(/not fulfilled/i));

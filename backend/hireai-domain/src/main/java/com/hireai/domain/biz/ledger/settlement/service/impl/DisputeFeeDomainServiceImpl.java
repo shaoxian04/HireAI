@@ -33,7 +33,7 @@ public class DisputeFeeDomainServiceImpl implements DisputeFeeDomainService {
         Money clientShare = Money.ZERO;
         Money builderShare = Money.ZERO;
         if (payers.contains(DisputeParty.CLIENT) && payers.contains(DisputeParty.BUILDER)) {
-            clientShare = capped.percentage(SettlementPolicy.PARTIAL_BUILDER_FRACTION);
+            clientShare = SettlementPolicy.clientShareOfSplitFee(capped);
             builderShare = capped.subtract(clientShare); // by subtraction → exact reconciliation
         } else if (payers.contains(DisputeParty.CLIENT)) {
             clientShare = capped;

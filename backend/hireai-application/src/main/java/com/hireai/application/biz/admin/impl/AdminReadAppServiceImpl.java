@@ -31,13 +31,16 @@ public class AdminReadAppServiceImpl implements AdminReadAppService {
     private final DisputeRepository disputeRepository;
     private final TaskRepository taskRepository;
     private final DeliverySnapshotAppService deliverySnapshotAppService;
+    private final com.hireai.application.biz.adjudication.dispute.DisputeFeeSchedule feeSchedule;
 
     public AdminReadAppServiceImpl(AdminQueryPort adminQueryPort, DisputeRepository disputeRepository,
-                                   TaskRepository taskRepository, DeliverySnapshotAppService deliverySnapshotAppService) {
+                                   TaskRepository taskRepository, DeliverySnapshotAppService deliverySnapshotAppService,
+                                   com.hireai.application.biz.adjudication.dispute.DisputeFeeSchedule feeSchedule) {
         this.adminQueryPort = adminQueryPort;
         this.disputeRepository = disputeRepository;
         this.taskRepository = taskRepository;
         this.deliverySnapshotAppService = deliverySnapshotAppService;
+        this.feeSchedule = feeSchedule;
     }
 
     /** The disputed task's result snapshot, if any. */
@@ -87,29 +90,35 @@ public class AdminReadAppServiceImpl implements AdminReadAppService {
             case OPEN, ARBITRATING, ESCALATED -> true;
             case RULED, RESOLVED -> false;
         };
-        AdminViews.SettlementPreview preview = settlementPreview(ev.budget());
+        AdminViews.SettlementPreview preview = settlementPreview(ev.budget(), dispute.appealedBy() != null);
         return new AdminViews.DisputeDetail(disputeId, dispute.taskId(), ev.taskTitle(), ev.taskDescription(),
                 dispute.status().name(), dispute.reasonCategory().name(), ev.clientReason(),
                 dispute.createdAt(), ev.clientName(),
                 ev.budget(), ev.category(), ev.outputFormat(), ev.submittedAt(), ev.resultReceivedAt(),
                 ev.agentName(), ev.builderName(), ev.agentReputation(), ev.agentPrice(),
-                ev.outputSpecJson(), ev.resultPayloadJson(), ev.resultUrl(), ev.agentStatus(),
+                ev.contractJson(), ev.resultPayloadJson(), ev.resultUrl(), ev.agentStatus(),
                 snapshotFor(dispute.taskId()).map(s -> new AdminViews.DeliverableView(s.mediaType(),
                         s.declaredMediaType(), s.sizeBytes(), s.sha256(), s.fetchedAt())).orElse(null),
                 actionable, preview, rulings);
     }
 
     /** What each ruling category would move for this budget (authoritative math via SettlementPolicy). */
-    private AdminViews.SettlementPreview settlementPreview(BigDecimal budgetValue) {
+    private AdminViews.SettlementPreview settlementPreview(BigDecimal budgetValue, boolean appealed) {
         Money budget = Money.of(budgetValue);
         Money splitBuilderGross = SettlementPolicy.builderShareOnSplit(budget);
+        // Loser pays (D43), as DisputeAppServiceImpl charges it: each fee capped, split per fee on a split ruling.
+        Money cost = feeSchedule.arbitrationCostFor(budget);
+        Money appeal = appealed ? feeSchedule.appealFeeFor(budget) : Money.ZERO;
+        Money splitClient = SettlementPolicy.clientShareOfSplitFee(cost).add(SettlementPolicy.clientShareOfSplitFee(appeal));
+        Money all = cost.add(appeal);
         return new AdminViews.SettlementPreview(
                 budget.value(),
                 SettlementPolicy.netOf(budget).value(),
                 SettlementPolicy.commissionOn(budget).value(),
                 budget.value(),
                 SettlementPolicy.netOf(splitBuilderGross).value(),
-                budget.subtract(splitBuilderGross).value());
+                budget.subtract(splitBuilderGross).value(),
+                all.value(), all.value(), splitClient.value(), all.subtract(splitClient).value());
     }
 
     @Override
