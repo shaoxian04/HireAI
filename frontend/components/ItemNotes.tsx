@@ -31,7 +31,7 @@ export function ItemNotes({ item }: { item: TaskItemDTO }) {
           ))}
           <p className="text-xs text-dim">
             {item.status === "PENDING_REVIEW"
-              ? "This Item is outside the random sample: it is paid only if you confirm it against the document. If nobody checks it before the review window closes, it is refunded."
+              ? "This Item is checked on its own, not with the batch: confirm or reject it against the document. If nobody checks it before the review window closes, it is accepted."
               : "This Item was held for your own check, outside the random sample."}
           </p>
         </div>

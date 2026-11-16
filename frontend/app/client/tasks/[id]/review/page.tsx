@@ -220,8 +220,8 @@ function Reviewer() {
           </div>
           <p className="text-sm text-muted">
             {"A check couldn't decide these, such as an invoice whose figures don't add up. They are not in the sample "
-              + "and don't count towards it: each is paid only if you confirm it against its document. Anything you "
-              + "haven't judged when the review window closes is refunded to you."}
+              + "and are never paid with the rest of the batch: check each against its document. Any you haven't "
+              + "judged when the review window closes is accepted and paid, like every other Item."}
           </p>
           {!open && actionError && (
             <p role="alert" className="rounded-lg border border-red/30 bg-red/10 px-4 py-3 text-sm text-red">{actionError}</p>
