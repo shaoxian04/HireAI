@@ -31,6 +31,7 @@ import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTem
 import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTemplate.IMAGE_DIMENSIONS;
 import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTemplate.IMAGE_FORMAT;
 import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTemplate.IMAGE_TYPES;
+import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTemplate.MAX_DIMENSION;
 import static com.hireai.domain.biz.acceptance.template.model.ImageGenerationTemplate.WIDTH;
 
 /**
@@ -122,6 +123,13 @@ public final class CheckLibrary {
             return Optional.of(new CheckResult(IMAGE_FORMAT, false, "the file looks like " + type + " but "
                     + (s.image() == null ? "its header" : "its pixel data") + " could not be read; accepted: " + list));
         }
+        // The Template's own bound applies whatever the Contract asks: a canvas declared beyond it is
+        // never decoded, so it is rejected here rather than leaving its pixels unchecked.
+        DecodedImage image = s.image();
+        if (image != null && (image.width() > MAX_DIMENSION || image.height() > MAX_DIMENSION)) {
+            return Optional.of(new CheckResult(IMAGE_FORMAT, false, "the image declares " + image.width() + " x "
+                    + image.height() + " px; at most " + MAX_DIMENSION + " px a side is allowed"));
+        }
         return Optional.of(new CheckResult(IMAGE_FORMAT, true, "the file is " + type + "; accepted: " + list));
     }
 
@@ -173,8 +181,9 @@ public final class CheckLibrary {
                 + " per channel)";
         DecodedImage image = s.image();
         if (image != null && image.pixels() == DecodedImage.Pixels.TOO_LARGE) {
-            return Optional.of(CheckResult.review(IMAGE_BACKGROUND_COLOUR, "the image is larger than the platform "
-                    + "decodes, so you judge the background; " + asked + " asked"));
+            // Never review: a canvas too large to decode could otherwise dodge this check.
+            return Optional.of(new CheckResult(IMAGE_BACKGROUND_COLOUR, false, "the image (" + image.width() + " x "
+                    + image.height() + " px) is too large for its background to be checked; " + asked + " asked"));
         }
         if (image == null || !image.hasPixels()) {
             return Optional.of(unreadable(IMAGE_BACKGROUND_COLOUR, s, asked));

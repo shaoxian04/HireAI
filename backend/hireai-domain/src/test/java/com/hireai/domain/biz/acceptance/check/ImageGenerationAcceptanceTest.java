@@ -206,11 +206,15 @@ class ImageGenerationAcceptanceTest {
     }
 
     @Test
-    void anImageTooLargeToDecodeIsStillJudgedOnItsSizeAndLeavesTheBackgroundToReview() {
-        ValidationReportModel report = judge(contract(512, 512, "#ffffff"), "image/png", DecodedImage.headerOnly(9000, 9000));
+    void aCanvasDeclaredBeyondTheTemplatesBoundIsRejectedNeverReviewedEvenWithNoSizeAsked() {
+        ValidationReportModel sized = judge(contract(512, 512, "#ffffff"), "image/png", DecodedImage.headerOnly(9000, 9000));
+        ValidationReportModel unsized = judge(contract(null, null, "#ffffff"), "image/png", DecodedImage.headerOnly(4097, 16));
 
-        assertThat(report.verdict()).isEqualTo(Verdict.FAIL);
-        assertThat(rules(report)).contains("IMAGE_DIMENSIONS:REJECT", "IMAGE_BACKGROUND_COLOUR:REVIEW");
+        assertThat(rules(sized)).contains("IMAGE_FORMAT:REJECT", "IMAGE_DIMENSIONS:REJECT", "IMAGE_BACKGROUND_COLOUR:REJECT");
+        assertThat(unsized.verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(rules(unsized)).contains("IMAGE_FORMAT:REJECT", "IMAGE_BACKGROUND_COLOUR:REJECT")
+                .noneMatch(r -> r.endsWith(":REVIEW"));
+        assertThat(unsized.rejectingChecks().get(0).detail()).contains("4097 x 16").contains("4096");
     }
 
     @Test

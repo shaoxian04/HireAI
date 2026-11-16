@@ -29,8 +29,7 @@ import java.util.Optional;
  * <p>Memory is bounded before any pixel is decoded. The header is read first; an image wider or
  * taller than the Template allows ({@link ImageGenerationTemplate#MAX_DIMENSION}), or whose edge
  * would take more than {@link #MAX_EDGE_BYTES} at its own bit depth and band count, is answered
- * with its size only ({@link DecodedImage#headerOnly}): the size check still runs on it, the
- * background is left to review. Otherwise only the edge is decoded, in two subsampled reads (the
+ * with its size only ({@link DecodedImage#headerOnly}) and never decoded; the checks reject it. Otherwise only the edge is decoded, in two subsampled reads (the
  * top and bottom rows, then the left and right columns), so a read allocates at most two rows or
  * two columns, never the whole canvas.
  */

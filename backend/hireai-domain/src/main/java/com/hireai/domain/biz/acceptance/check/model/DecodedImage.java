@@ -5,8 +5,8 @@ package com.hireai.domain.biz.acceptance.check.model;
  * port: its size, from the header, and the ARGB value of every pixel on its outermost ring (the
  * "background"). {@code borderArgb} is null when only the header was read; {@code pixels} says why:
  * <ul>
- *   <li>{@link Pixels#TOO_LARGE}: the image is larger than the platform decodes, so the size is
- *       still judged and the background is left to the Client's review;</li>
+ *   <li>{@link Pixels#TOO_LARGE}: the image is larger than the platform decodes (beyond the
+ *       Template's bound), so it is never decoded and the checks reject it;</li>
  *   <li>{@link Pixels#CORRUPT}: the header was readable but the pixels were not, so the file is not
  *       the image it claims to be and the pixel checks reject it (it goes back for rework).</li>
  * </ul>

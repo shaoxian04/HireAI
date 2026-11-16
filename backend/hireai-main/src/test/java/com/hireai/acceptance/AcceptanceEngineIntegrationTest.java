@@ -73,6 +73,7 @@ class AcceptanceEngineIntegrationTest extends WholeAppIntegrationTest {
         files.serve("/small.png", png(32, 32, Color.WHITE), "image/png");
         byte[] noisy = noisyPng(64, 64);
         files.serve("/truncated.png", java.util.Arrays.copyOf(noisy, noisy.length / 2), "image/png");
+        files.serve("/huge-canvas.png", pngHeaderOnly(100_000, 100_000), "image/png");
         files.serve("/garbage.png", "not an image at all, just text".getBytes(StandardCharsets.US_ASCII), "image/png");
         files.serve("/logo.webp", "RIFF\u0000\u0000\u0000\u0000WEBPVP8 ".getBytes(StandardCharsets.ISO_8859_1), "image/webp");
         jdbc.update("INSERT INTO wallets (id, user_id, available_balance, escrow_balance) VALUES (?, ?, 1000.00, 0.00) "
@@ -211,6 +212,18 @@ class AcceptanceEngineIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
+    void aCanvasDeclaredBeyondTheTemplatesBoundIsReworkedNeverSentToReview() throws Exception {
+        Booking booking = book(order -> order.json().has("rework") ? "/white.png" : "/huge-canvas.png");
+
+        awaitStatus(booking.taskId, "PENDING_REVIEW");
+        JsonNode failed = booking.agent.awaitWorkOrders(2, Duration.ofSeconds(30)).get(1).json()
+                .path("rework").path("failedChecks");
+        assertThat(failed.findValuesAsText("rule")).contains("IMAGE_FORMAT", "IMAGE_BACKGROUND_COLOUR");
+        assertThat(failed.findValuesAsText("detail").get(0)).contains("100000 x 100000");
+        assertThat(reviewReason(booking.taskId)).isNull();
+    }
+
+    @Test
     void garbageLabelledAsAPngIsRejectedAndEndsRefundedAfterTheReworks() throws Exception {
         BigDecimal before = available();
         Booking booking = book(order -> "/garbage.png");
@@ -339,6 +352,19 @@ class AcceptanceEngineIntegrationTest extends WholeAppIntegrationTest {
                         + "VALUES (?, ?, 1, '{\"format\":\"FILE\"}'::jsonb, ?, ?, 60, ?, ?::jsonb)",
                 versionId, agentId, new String[]{category}, webhookUrl, new BigDecimal("10.00"), IMAGE_OFFER);
         return agentId;
+    }
+
+    /** A PNG signature and IHDR chunk declaring {@code width} x {@code height}, and nothing else. */
+    private static byte[] pngHeaderOnly(int width, int height) {
+        java.nio.ByteBuffer ihdr = java.nio.ByteBuffer.allocate(17);
+        ihdr.put("IHDR".getBytes(StandardCharsets.US_ASCII)).putInt(width).putInt(height)
+                .put((byte) 8).put((byte) 6).put((byte) 0).put((byte) 0).put((byte) 0);
+        java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+        crc.update(ihdr.array());
+        java.nio.ByteBuffer png = java.nio.ByteBuffer.allocate(8 + 4 + 17 + 4);
+        png.put(new byte[]{(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}).putInt(13).put(ihdr.array())
+                .putInt((int) crc.getValue());
+        return png.array();
     }
 
     /** A PNG of random pixels: incompressible, so cutting it in half cuts its image data mid-stream. */
