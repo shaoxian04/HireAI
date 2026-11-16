@@ -16,11 +16,20 @@ const RULE_TEXT: Record<string, string> = {
   IMAGE_DIMENSIONS: "The image is exactly the size the contract asks",
   IMAGE_BACKGROUND_COLOUR: "The background is the colour the contract asks",
   SELF_REPORTED_ANOMALY: "The agent flagged something about your brief",
+  INVOICE_JSON: "The result is one JSON object with the invoice's fields",
+  INVOICE_FIELDS: "Every invoice field is there and well formed",
+  INVOICE_LINE_ARITHMETIC: "Each line's quantity × unit price is its amount",
+  INVOICE_LINES_SUM: "The lines add up to the subtotal",
+  INVOICE_TAX_ARITHMETIC: "The tax total matches the lines' tax or the tax rate",
+  INVOICE_TOTAL: "Subtotal plus tax is the grand total",
 };
 
 /** Findings, in the client's words. */
 const FINDING_TEXT: Record<string, string> = {
   DUPLICATE_BRIEF: "You have sent this exact brief before",
+  DUPLICATE_DOCUMENT: "You sent this very file before",
+  DUPLICATE_INVOICE: "This invoice number from this supplier was extracted before",
+  INVOICE_ARITHMETIC: "The invoice's figures don't add up",
 };
 
 /** A check's short name, for "failed the … check". */
@@ -37,6 +46,12 @@ const CHECK_NAME: Record<string, string> = {
   IMAGE_FORMAT: "image format",
   IMAGE_DIMENSIONS: "image size",
   IMAGE_BACKGROUND_COLOUR: "background colour",
+  INVOICE_JSON: "invoice JSON",
+  INVOICE_FIELDS: "invoice fields",
+  INVOICE_LINE_ARITHMETIC: "line arithmetic",
+  INVOICE_LINES_SUM: "lines sum",
+  INVOICE_TAX_ARITHMETIC: "tax arithmetic",
+  INVOICE_TOTAL: "grand total",
 };
 
 export function checkName(rule: string): string {
@@ -44,6 +59,11 @@ export function checkName(rule: string): string {
 }
 
 /** A check rule in plain words (unknown rules fall back to their name). */
+/** A Finding's headline, in the client's words. */
+export function findingText(code: string): string {
+  return FINDING_TEXT[code] ?? ruleText(code);
+}
+
 export function ruleText(rule: string): string {
   return RULE_TEXT[rule] ?? rule.toLowerCase().replace(/_/g, " ");
 }

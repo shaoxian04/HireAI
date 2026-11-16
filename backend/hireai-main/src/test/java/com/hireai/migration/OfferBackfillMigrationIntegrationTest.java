@@ -68,7 +68,7 @@ class OfferBackfillMigrationIntegrationTest {
 
         assertThat(jdbc.queryForList("SELECT template_key || '@' || version FROM contract_templates "
                 + "WHERE status = 'ACTIVE' ORDER BY 1", String.class))
-                .containsExactly("custom_json@1", "file_basic@1", "image_generation@1", "text_basic@1");
+                .containsExactly("ap_invoice_extraction@1", "custom_json@1", "file_basic@1", "image_generation@1", "text_basic@1");
     }
 
     @Test

@@ -77,18 +77,22 @@ public class AgentCallbackController extends BaseController {
             throw new DispatchTokenInvalidException(
                     "Signed callback body is for task " + request.taskId() + ", not " + taskId);
         }
-        List<SelfReportedAnomaly> anomalies = request.anomalies() == null ? List.of()
-                : request.anomalies().stream().map(a -> new SelfReportedAnomaly(a.check(), a.description())).toList();
+        List<SelfReportedAnomaly> anomalies = anomaliesOf(request.anomalies());
         AgentResultInfo result = new AgentResultInfo(
                 request.agentStatus(), payloadOf(request), request.resultUrl(), request.message(),
                 request.hasItems() ? request.items().stream()
                         .map(i -> new AgentItemResultInfo(i.itemNo(), i.agentStatus(), i.resultPayloadJson(),
-                                i.resultUrl()))
+                                i.resultUrl(), anomaliesOf(i.anomalies())))
                         .toList() : List.of(),
                 anomalies);
 
         agentCallbackAppService.recordResult(taskId, token, result);
         return ok();
+    }
+
+    private static List<SelfReportedAnomaly> anomaliesOf(List<AgentResultCallbackRequest.Anomaly> reported) {
+        return reported == null ? List.of()
+                : reported.stream().map(a -> new SelfReportedAnomaly(a.check(), a.description())).toList();
     }
 
     /**

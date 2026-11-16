@@ -89,7 +89,10 @@ export function InspectionOutcome({ inspection, task }: { inspection: Inspection
   if (inspection.status === "ACCEPTED") {
     headline = "The sample passed";
     body = `${wrong} of ${sampled} sampled Items were wrong, within what the table accepts, so every Item still `
-      + "awaiting review was accepted with it. Wrong Items were refunded on their own.";
+      + "awaiting review was accepted with it. Wrong Items were refunded on their own."
+      + ((task.items ?? []).some((i) => i.needsReview)
+        ? " Items flagged for your own check were not part of it: each is settled by your judgement."
+        : "");
   } else if (inspection.status === "PRO_RATA") {
     const rate = Number(inspection.errorRate ?? 0);
     headline = "Settled pro rata";

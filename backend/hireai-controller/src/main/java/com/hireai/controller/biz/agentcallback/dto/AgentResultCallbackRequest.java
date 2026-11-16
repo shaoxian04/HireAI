@@ -49,13 +49,21 @@ public record AgentResultCallbackRequest(
         return items != null && !items.isEmpty();
     }
 
-    /** One Item's result. */
+    /**
+     * One Item's result. {@code anomalies} are what the Agent reports about this Item's source (D7), such
+     * as an invoice whose figures don't add up: one naming an arithmetic check sends the Item to the buyer's
+     * review instead of a rework.
+     */
     public record ItemResult(
             @NotNull @Min(1) Integer itemNo,
             @NotBlank String agentStatus,
             String resultPayloadJson,
-            @Size(max = 2000) String resultUrl
+            @Size(max = 2000) String resultUrl,
+            @Size(max = 20) List<@Valid @NotNull Anomaly> anomalies
     ) {
+        public ItemResult(Integer itemNo, String agentStatus, String resultPayloadJson, String resultUrl) {
+            this(itemNo, agentStatus, resultPayloadJson, resultUrl, null);
+        }
     }
 
     /** One self-reported anomaly. */

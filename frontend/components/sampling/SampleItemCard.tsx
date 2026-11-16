@@ -7,6 +7,7 @@ import { ResultView } from "@/components/ResultView";
 import { REJECT_REASON_LABEL } from "@/components/RejectionPanel";
 import { timeLeft } from "@/components/ReviewWindowNotice";
 import { SourceDocument } from "@/components/sampling/SourceDocument";
+import { ItemNotes } from "@/components/ItemNotes";
 import { standing, type Standing } from "@/lib/sampling";
 
 export interface Judgement {
@@ -144,7 +145,13 @@ export function SampleItemCard({ taskId, item, rejection, sampled, canJudge, bus
         <div className="flex items-center gap-3">
           <span className="tabular font-mono text-sm font-bold text-fg">#{String(item.itemNo).padStart(3, "0")}</span>
           <Badge status={STANDING[s].status}>{STANDING[s].label}</Badge>
-          {!sampled && <span className="text-xs text-dim">Extra check · doesn&apos;t count towards the sample</span>}
+          {!sampled && (
+            <span className="text-xs text-dim">
+              {item.needsReview
+                ? "Flagged by the checks · outside the sample, doesn’t count towards it"
+                : "Extra check · doesn’t count towards the sample"}
+            </span>
+          )}
         </div>
         {revised && <span className="text-xs font-semibold text-accent">Revised by the agent: check it again</span>}
       </div>
@@ -162,6 +169,8 @@ export function SampleItemCard({ taskId, item, rejection, sampled, canJudge, bus
             : <p className="text-sm text-dim">No result text{item.resultUrl ? " (a file link only)" : ""}.</p>}
         </div>
       </div>
+
+      <ItemNotes item={item} />
 
       {rejection && s !== "to-judge" && (
         <RejectionStatus item={item} rejection={rejection} now={now} busy={busy} canAccept={canJudge}

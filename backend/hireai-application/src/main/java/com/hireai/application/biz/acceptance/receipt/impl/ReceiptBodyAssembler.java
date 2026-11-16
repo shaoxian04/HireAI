@@ -182,10 +182,13 @@ class ReceiptBodyAssembler {
         }
         List<Object> results = new ArrayList<>();
         for (ItemCheck c : item.checks()) {
-            results.add(map("rule", c.rule(), "passed", c.passed(), "detail", c.detail()));
+            // A check that sent the Item to review (D7) says so; PASS and REJECT read from "passed" as before.
+            results.add(map("rule", c.rule(), "passed", c.passed(), "detail", c.detail(),
+                    "outcome", c.sendsToReview() ? c.outcome().name() : null));
         }
-        boolean pass = item.checks().stream().allMatch(ItemCheck::passed);
-        return map("verdict", pass ? "PASS" : "FAIL", "results", results);
+        String verdict = item.checks().stream().anyMatch(ItemCheck::rejects) ? "FAIL"
+                : item.needsReview() ? "REVIEW" : "PASS";
+        return map("verdict", verdict, "results", results);
     }
 
     /** The rejection rounds (#95) and the Client's final decision on the result, in order. */

@@ -38,6 +38,9 @@ public interface ValidationDomainService {
     /** True when the Contract's Template lists a Finding, so the caller must gather its outside facts. */
     boolean needsFindingFacts(Contract contract);
 
+    /** True when the checks read the result as an invoice, so the caller must read it first (InvoiceReader). */
+    boolean needsInvoice(Contract contract);
+
     /** {@link #validate(Contract, TaskResultModel, DeliveryOutcome, int)} for a result that needs no delivery. */
     default ValidationReportModel validate(Contract contract, TaskResultModel result, int attemptNo) {
         return validate(contract, result, null, attemptNo);

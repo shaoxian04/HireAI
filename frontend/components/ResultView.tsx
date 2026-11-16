@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { InvoiceView, isInvoice } from "@/components/InvoiceView";
 
 /** `summary_text` / `summaryText` → "Summary text". */
 function humanizeKey(key: string): string {
@@ -60,7 +61,9 @@ export function ResultView({ payload }: { payload: string }) {
   const pretty = parsed.ok ? JSON.stringify(parsed.value, null, 2) : payload;
 
   let body;
-  if (!parsed.ok || isPrimitive(parsed.value) || Array.isArray(parsed.value)) {
+  if (parsed.ok && isInvoice(parsed.value)) {
+    body = <InvoiceView invoice={parsed.value} />;
+  } else if (!parsed.ok || isPrimitive(parsed.value) || Array.isArray(parsed.value)) {
     body = <Value value={parsed.ok ? parsed.value : payload} />;
   } else {
     const entries = Object.entries(parsed.value as Record<string, unknown>);

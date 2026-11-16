@@ -140,10 +140,13 @@ public class SamplingAppServiceImpl implements SamplingAppService {
             taskItemAppService.resolveIfAllSettled(pendingReview);
             return;
         }
-        List<Integer> lot = taskItemRepository.findByTaskId(taskId).awaitingReview().stream()
+        // The lot is the Items every check passed; an Item a check sent to review is the reviewer's to judge
+        // on its own (D7) and is never drawn.
+        List<Integer> lot = taskItemRepository.findByTaskId(taskId).lot().stream()
                 .map(TaskItemModel::itemNo).toList();
         if (lot.isEmpty()) {
-            // Nothing passed the checks this round: every Item already settled (or is on its own path).
+            // Nothing passed the checks this round: every Item already settled, is on its own path, or
+            // awaits the reviewer's own judgement.
             taskItemAppService.resolveIfAllSettled(pendingReview);
             return;
         }
@@ -240,7 +243,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
                 cumulative.sampled(), inspection.round());
         Instant now = clock.instant();
         if (decision.next() == SamplingDecision.Next.DRAW_SECOND) {
-            List<Integer> candidates = items.awaitingReview().stream().map(TaskItemModel::itemNo)
+            List<Integer> candidates = items.lot().stream().map(TaskItemModel::itemNo)
                     .filter(n -> !sampledInRound.contains(n)).toList();
             if (candidates.isEmpty()) {
                 // The lot has nothing left to draw: the first sample was all of it, so judge it as both.
@@ -264,7 +267,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
         switch (decision.next()) {
             case ACCEPT_LOT -> {
                 inspectionRepository.save(inspection.acceptLot());
-                taskItemAppService.acceptAllAwaitingReview(task, false);
+                taskItemAppService.acceptLot(task);
             }
             case REWORK -> rework(task, inspection, cumulative);
             case PRO_RATA -> settleProRata(task, inspection, decision.errorRate());
@@ -281,7 +284,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
             return;
         }
         inspectionRepository.save(inspection.startRework());
-        List<TaskItemModel> back = taskItemRepository.findByTaskId(task.id()).awaitingReview().stream()
+        List<TaskItemModel> back = taskItemRepository.findByTaskId(task.id()).lot().stream()
                 .map(TaskItemModel::returnForRework).toList();
         taskItemRepository.updateAll(back);
         ReworkRequest request = new ReworkRequest(SAMPLE_REWORKS, SAMPLE_REWORKS, List.of(
@@ -297,7 +300,7 @@ public class SamplingAppServiceImpl implements SamplingAppService {
 
     private void settleProRata(TaskModel task, InspectionModel inspection, BigDecimal errorRate) {
         inspectionRepository.save(inspection.settleProRata(errorRate));
-        for (TaskItemModel item : taskItemRepository.findByTaskId(task.id()).awaitingReview()) {
+        for (TaskItemModel item : taskItemRepository.findByTaskId(task.id()).lot()) {
             Money paid = ProRata.paidFor(item.price(), errorRate);
             if (paid.equals(item.price())) {
                 taskItemAppService.settleAccepted(task, item.accept());
