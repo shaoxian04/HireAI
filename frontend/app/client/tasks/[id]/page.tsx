@@ -25,6 +25,7 @@ import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
 import { ContractPanel } from "@/components/AcceptanceTerms";
 import { ItemsPanel } from "@/components/ItemsPanel";
 import { InspectionCard } from "@/components/sampling/InspectionSummary";
+import { settlementStamp } from "@/lib/settlement";
 import { ReceiptsPanel } from "@/components/ReceiptsPanel";
 import { VersionFallbackNotice } from "@/components/VersionFallbackNotice";
 import { DispatchHistory } from "@/components/ContractDeclines";
@@ -478,7 +479,7 @@ function TaskDetail() {
               <h2 className="eyebrow">Settlement</h2>
               <p className="text-[0.9375rem] text-fg">
                 <span className="tabular font-bold text-green">{Number(task.payoutAmount ?? 0).toFixed(2)} cr</span>{" "}paid
-                to the builder for {task.items!.filter((i) => i.status === "ACCEPTED").length} of {task.itemCount} Items
+                to the builder for {task.items!.filter((i) => i.status === "ACCEPTED" || i.status === "PRO_RATA").length} of {task.itemCount} Items
               </p>
               {task.refundAmount ? (
                 <p className="text-sm text-muted">
@@ -492,12 +493,7 @@ function TaskDetail() {
                 </p>
               )}
             </div>
-            <span aria-hidden style={{ animationDelay: "250ms" }} className="inspect-stamp stamp mr-2 text-green">
-              PAID
-              <small>
-                {task.items!.filter((i) => i.status === "ACCEPTED").length} of {task.itemCount} accepted
-              </small>
-            </span>
+            <SettlementStampMark task={task} />
           </div>
           {task.resolution === "ACCEPTED" && (
             <div className="mt-5 border-t border-line pt-5">
@@ -528,6 +524,14 @@ function TaskDetail() {
                     </p>
                   )}
                 </>
+              ) : task.resolution === "PARTIALLY_ACCEPTED" ? (
+                <>
+                  <p className="text-[0.9375rem] text-fg">
+                    <span className="tabular font-bold text-green">{Number(task.payoutAmount ?? 0).toFixed(2)} cr</span> paid to the builder
+                    {" · "}<span className="tabular font-bold text-fg">{Number(task.refundAmount ?? 0).toFixed(2)} cr</span> refunded to your wallet
+                  </p>
+                  <p className="text-sm text-muted">The work was ruled partly fulfilled, so the price was split.</p>
+                </>
               ) : (
                 <>
                   <p className="text-[0.9375rem] text-fg">
@@ -540,18 +544,7 @@ function TaskDetail() {
                 </>
               )}
             </div>
-            <span aria-hidden style={{ animationDelay: "250ms" }} className={`inspect-stamp stamp mr-2 ${task.resolution === "ACCEPTED" ? "text-green" : "text-fg"}`}>
-              {task.resolution === "ACCEPTED" ? "PAID" : "REFUNDED"}
-              <small>
-                {task.resolution === "ACCEPTED"
-                  ? task.autoAccepted || task.rejection?.decisionSilent
-                    ? "auto-accepted"
-                    : "work accepted"
-                  : task.rejection?.response === "CONCEDE"
-                    ? "agent conceded"
-                    : "work rejected"}
-              </small>
-            </span>
+            <SettlementStampMark task={task} />
           </div>
           {task.resolution === "ACCEPTED" && (
             // Rating is a separate call, so it can be skipped here and left later.
@@ -575,6 +568,19 @@ function TaskDetail() {
         <ReceiptsPanel taskId={task.id} refreshKey={`${task.status}:${settledItems}`} />
       )}
     </div>
+  );
+}
+
+const STAMP_TONE = { paid: "text-green", refunded: "text-fg", split: "text-violet" } as const;
+
+/** The Settlement card's stamp, always agreeing with how the task settled. */
+function SettlementStampMark({ task }: { task: TaskDTO }) {
+  const s = settlementStamp(task);
+  return (
+    <span aria-hidden style={{ animationDelay: "250ms" }} className={`inspect-stamp stamp mr-2 ${STAMP_TONE[s.tone]}`}>
+      {s.stamp}
+      <small>{s.note}</small>
+    </span>
   );
 }
 
