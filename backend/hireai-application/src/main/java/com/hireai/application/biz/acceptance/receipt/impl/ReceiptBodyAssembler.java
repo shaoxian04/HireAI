@@ -137,13 +137,17 @@ class ReceiptBodyAssembler {
         return body;
     }
 
-    /** Facts about the input (D45); they never changed the pay. Left out when there are none. */
+    /**
+     * Facts about the input (D45); they never changed the pay. Left out when there are none. Only each
+     * Finding's {@code code}: a receipt leaves HireAI, and a Finding's detail can name other tasks, a supplier's
+     * tax id or an invoice number, so that text stays in the Client's own task views.
+     */
     private static List<Object> findings(List<com.hireai.domain.biz.acceptance.check.model.Finding> findings) {
         if (findings == null || findings.isEmpty()) {
             return null;
         }
         List<Object> list = new ArrayList<>();
-        findings.forEach(f -> list.add(map("code", f.code(), "detail", f.detail())));
+        findings.forEach(f -> list.add(map("code", f.code())));
         return list;
     }
 

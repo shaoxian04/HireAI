@@ -203,6 +203,17 @@ class InvoiceExtractionIntegrationTest extends WholeAppIntegrationTest {
         assertThat(flaggedReceipt.get("source").get("sha256").asText()).hasSize(64);
         assertThat(flaggedReceipt.get("source").get("mediaType").asText()).isEqualTo("application/pdf");
         assertThat(flaggedReceipt.get("findings").get(0).get("code").asText()).isEqualTo("INVOICE_ARITHMETIC");
+        // A receipt leaves HireAI: its Findings name no task, user or document (no UUID), tax id or invoice number.
+        for (JsonNode r : receipts) {
+            JsonNode findings = r.get("receipt").get("findings");
+            if (findings == null) {
+                continue;
+            }
+            assertThat(findings.toString())
+                    .doesNotContainPattern("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+                    .doesNotContain("GB 123 4567 89").doesNotContain("INV-").doesNotContain("Item ");
+            findings.forEach(f -> assertThat(f.fieldNames()).toIterable().containsExactly("code"));
+        }
     }
 
     @Test
