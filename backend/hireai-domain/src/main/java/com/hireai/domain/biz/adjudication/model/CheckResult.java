@@ -10,6 +10,10 @@ import com.hireai.utility.result.ResultCode;
  * PASS or REJECT from {@code passed}.
  */
 public record CheckResult(String rule, boolean passed, String detail, CheckOutcome outcome) {
+
+    /** The review entry for an anomaly the Agent reported that no check of the result explains (D7). */
+    public static final String SELF_REPORTED_ANOMALY = "SELF_REPORTED_ANOMALY";
+
     public CheckResult {
         if (rule == null || rule.isBlank()) {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "Check rule is required");

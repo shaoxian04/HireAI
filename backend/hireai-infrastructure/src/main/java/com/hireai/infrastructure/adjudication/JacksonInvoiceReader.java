@@ -24,6 +24,10 @@ public class JacksonInvoiceReader implements InvoiceReader {
     /** Results larger than this are not read as an invoice at all. */
     static final int MAX_CHARS = 200_000;
     private static final int MAX_LINES = 500;
+    /** The largest figure an invoice amount may be: 30 significant digits, 10 decimals, 18 whole digits. */
+    static final int MAX_PRECISION = 30;
+    static final int MAX_SCALE = 10;
+    static final int MAX_INTEGER_DIGITS = 18;
 
     private final ObjectMapper mapper = new ObjectMapper()
             .enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
@@ -99,6 +103,14 @@ public class JacksonInvoiceReader implements InvoiceReader {
             problems.add(at + field);
             return null;
         }
-        return value.decimalValue();
+        BigDecimal number = value.decimalValue();
+        // Bounded before any arithmetic: an exponent like 1E999999999 is cheap to hold but not to multiply,
+        // rescale or print, so a figure no invoice has is a type problem (rejected), never computed with.
+        if (number.precision() > MAX_PRECISION || Math.abs(number.scale()) > MAX_SCALE
+                || number.precision() - number.scale() > MAX_INTEGER_DIGITS) {
+            problems.add(at + field + " (out of range)");
+            return null;
+        }
+        return number;
     }
 }

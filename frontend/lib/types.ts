@@ -263,7 +263,9 @@ export type ItemStatus =
   /** The agent conceded the reviewer's rejection; refunded. */
   | "CONCEDED"
   /** Settled by extrapolation after a failed resample: paid price x (1 - error rate), the rest refunded. */
-  | "PRO_RATA";
+  | "PRO_RATA"
+  /** A check sent it to your review and nobody judged it before the window closed: refunded (#106). */
+  | "UNREVIEWED";
 
 /** One Item of a multi-Item Task and its outcome; amounts appear once it settled. */
 export interface TaskItemDTO {

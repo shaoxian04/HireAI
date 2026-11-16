@@ -9,6 +9,12 @@ D19, D21 in the [decision log](../superpowers/specs/2026-11-15-acceptance-contra
 
 - **The lot** is the Items that passed the Contract's checks when the Agent delivered (`PENDING_REVIEW`).
   Items that failed their checks or that the Agent could not do were refunded at once and are not in it.
+- **Items flagged for review are not in the lot** (#106, D7): an Item a check sent to review (for an invoice,
+  figures that don't add up) is never drawn, accepted with the lot, reworked with it or settled pro rata. The
+  reviewer judges it on its own, like an extra check (never counted), on the reviewer page's "Flagged for your own
+  check" list. An Agent's anomaly holds an Item out only by softening a failed anomaly-eligible check on it; one
+  that explains nothing is ignored here. When the review window closes, a flagged Item nobody judged is refunded
+  (`UNREVIEWED`, owner decision on #87) and is left out of the reputation event; the rest are accepted as below.
 - **One table for every Template** (`SampleSizeTable`, D21): ISO 2859-1 Table I gives the code letter for
   the lot size and inspection level; Table III-A gives the double sampling plan for that letter at
   **AQL 2.5**, normal inspection. Where the table has no double plan (its single plan accepts on zero

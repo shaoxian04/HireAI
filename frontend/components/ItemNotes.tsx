@@ -21,7 +21,7 @@ export function ItemNotes({ item }: { item: TaskItemDTO }) {
       {review.length > 0 && (
         <div aria-label={`Why Item ${item.itemNo} needs your review`}
           className="space-y-1.5 rounded-lg border border-amber/30 bg-amber/10 px-4 py-3">
-          <p className="eyebrow text-amber">Needs your own check</p>
+          <p className="eyebrow text-amber">Sent to your review</p>
           {review.map((c) => (
             <p key={c.rule} className="text-sm text-fg">
               <span className="font-medium">{ruleText(c.rule)}</span>
@@ -30,7 +30,7 @@ export function ItemNotes({ item }: { item: TaskItemDTO }) {
           ))}
           <p className="text-xs text-dim">
             {item.status === "PENDING_REVIEW"
-              ? "This Item is outside the random sample: it is paid only if you confirm it against the document, or when the review window closes."
+              ? "This Item is outside the random sample: it is paid only if you confirm it against the document. If nobody checks it before the review window closes, it is refunded."
               : "This Item was held for your own check, outside the random sample."}
           </p>
         </div>

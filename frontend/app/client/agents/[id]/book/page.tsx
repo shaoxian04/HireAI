@@ -12,6 +12,7 @@ import type { AgentProfileDTO, DirectBookRequest, TaskDTO } from "@/lib/types";
 import { directBookSignature, useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { PageHeader } from "@/components/PageHeader";
 import { EngagementDocuments, type DocumentSelection } from "@/components/EngagementDocuments";
+import { invoiceContract, invoiceTerm, offersBusinessValid, type InvoiceExpectation } from "@/lib/invoice";
 
 /** A multi-Item Task holds two Items or more; a single piece of work is described in the brief. */
 const MIN_ITEMS = 2;
@@ -32,6 +33,8 @@ function BookingForm() {
   const [submitting, setSubmitting] = useState(false);
   const [documents, setDocuments] = useState<DocumentSelection>({ engagementId: null, sourceIds: [] });
   const [stricter, setStricter] = useState(false);
+  const [asInvoices, setAsInvoices] = useState(true);
+  const [expectation, setExpectation] = useState<InvoiceExpectation>("faithful_to_source");
   const onDocumentsChange = useCallback((s: DocumentSelection) => setDocuments(s), []);
   useFocusOnFieldError(error);
   // Built here rather than in onSubmit so the idempotency signature is derived from the very
@@ -39,6 +42,8 @@ function BookingForm() {
   // while an edited title or description starts a fresh one.
   const itemCount = documents.engagementId ? documents.sourceIds.length : 0;
   const strictAllowed = profile?.offer?.strictestInspectionLevel === "III";
+  // Documents booked as invoices (#106) freeze the invoice Contract when the agent offers it.
+  const invoice = itemCount > 0 && asInvoices && profile?.offer ? invoiceContract(profile.offer, expectation) : null;
   const bookingBody: DirectBookRequest | null = profile
     ? {
         title, description, budget: profile.card.price, agentId: id,
@@ -48,6 +53,7 @@ function BookingForm() {
               engagementId: documents.engagementId,
               items: documents.sourceIds.map((sourceId) => ({ sourceId })),
               ...(stricter && strictAllowed ? { inspectionLevel: "III" as const } : {}),
+              ...(invoice ? { contract: invoice } : {}),
             }
           : {}),
       }
@@ -162,6 +168,47 @@ function BookingForm() {
           </Field>
 
           <EngagementDocuments agentId={id} agentName={card.name} onChange={onDocumentsChange} />
+
+          {itemCount > 0 && invoiceTerm(profile.offer) && (
+            <fieldset className="space-y-3 rounded-lg border border-line bg-surface px-4 py-3">
+              <legend className="px-1 text-xs font-semibold text-muted">What each document is</legend>
+              <label className="flex items-start gap-2 text-sm text-fg">
+                <input type="checkbox" className="mt-1" checked={asInvoices} onChange={(e) => setAsInvoices(e.target.checked)} />
+                <span>
+                  <span className="font-medium">Supplier invoices.</span>{" "}
+                  <span className="text-muted">
+                    {"The agent extracts each invoice's fields. The platform checks they are all there and that the "
+                      + "figures add up, and tells you about duplicates. A Finding never changes what the agent is paid."}
+                  </span>
+                </span>
+              </label>
+              {asInvoices && (
+                <div className="space-y-2 border-t border-line pt-3">
+                  <p className="text-xs font-semibold text-muted">When an invoice&apos;s figures don&apos;t add up</p>
+                  <label className="flex items-start gap-2 text-sm text-fg">
+                    <input type="radio" name="expectation" className="mt-1" checked={expectation === "faithful_to_source"}
+                      onChange={() => setExpectation("faithful_to_source")} />
+                    <span>
+                      {"Copy the document as it is, and let me check it "}
+                      <span className="text-muted">(recommended: the supplier may have got it wrong)</span>
+                    </span>
+                  </label>
+                  {offersBusinessValid(profile.offer) ? (
+                    <label className="flex items-start gap-2 text-sm text-fg">
+                      <input type="radio" name="expectation" className="mt-1" checked={expectation === "business_valid"}
+                        onChange={() => setExpectation("business_valid")} />
+                      <span>
+                        {"The figures must add up "}
+                        <span className="text-muted">(the agent reports why when they can&apos;t; if it doesn&apos;t, the invoice is refunded)</span>
+                      </span>
+                    </label>
+                  ) : (
+                    <p className="text-xs text-dim">This agent works faithful to the document only.</p>
+                  )}
+                </div>
+              )}
+            </fieldset>
+          )}
 
           {itemCount >= MIN_ITEMS && (
             <fieldset className="space-y-2 rounded-lg border border-line bg-surface px-4 py-3">

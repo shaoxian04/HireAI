@@ -38,6 +38,26 @@ class JacksonInvoiceReaderTest {
     }
 
     @Test
+    void anAmountNoInvoiceHasIsRefusedBeforeAnyArithmetic() {
+        String digits = "9".repeat(10_000);
+        long started = System.nanoTime();
+        ExtractedInvoice huge = ((InvoiceReading.Read) reader.read(
+                "{\"subtotal\":1E999999999,\"tax_total\":1E-999999999,\"grand_total\":1234567890123456789.5}")).invoice();
+        InvoiceReading longNumber = reader.read("{\"subtotal\":" + digits + "}");
+
+        assertThat(huge.subtotal()).isNull();
+        assertThat(huge.taxTotal()).isNull();
+        assertThat(huge.grandTotal()).isNull();
+        assertThat(huge.typeProblems()).containsExactlyInAnyOrder("subtotal (out of range)", "tax_total (out of range)",
+                "grand_total (out of range)");
+        // Refused by the parser's number-length limit, or as out of range: either way never computed with.
+        if (longNumber instanceof InvoiceReading.Read read) {
+            assertThat(read.invoice().subtotal()).isNull();
+        }
+        assertThat(java.time.Duration.ofNanos(System.nanoTime() - started)).isLessThan(java.time.Duration.ofSeconds(2));
+    }
+
+    @Test
     void somethingThatIsNotAJsonObjectIsUnreadable() {
         assertThat(reader.read("Extracted from item 1")).isInstanceOf(InvoiceReading.Unreadable.class);
         assertThat(reader.read("[1,2]")).isInstanceOf(InvoiceReading.Unreadable.class);

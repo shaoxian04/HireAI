@@ -47,3 +47,11 @@ INSERT INTO contract_templates (template_key, version, definition) VALUES
   "expectationMode": "FAITHFUL_TO_SOURCE",
   "rulingSettlement": {"FULFILLED": 1, "PARTIALLY_FULFILLED": 0.5, "NOT_FULFILLED": 0}
 }');
+
+-- 4. UNREVIEWED: an Item a check sent to review (D7) that nobody judged before the review window closed is
+--    refunded, not accepted on silence (owner decision on #87, 2026-11-16), and does not count towards
+--    the Agent's reputation.
+ALTER TABLE task_items DROP CONSTRAINT IF EXISTS task_items_status_check;
+ALTER TABLE task_items ADD CONSTRAINT task_items_status_check CHECK (status IN (
+    'AWAITING_RESULT', 'PENDING_REVIEW', 'ACCEPTED', 'SPEC_VIOLATION', 'FAILED',
+    'REJECTED', 'CONCEDED', 'PRO_RATA', 'UNREVIEWED'));

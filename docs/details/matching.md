@@ -314,8 +314,10 @@ with your **current** signing secret and the current time. Body:
 required and must be the WorkOrder's `taskId`: the signature covers only the timestamp and body, so the body
 naming its task is what stops a signed result from being replayed onto another task's callback.
 
-For a multi-Item Task, send `items: [{itemNo, agentStatus, resultPayloadJson, resultUrl}]`, one per Item of the
-WorkOrder; the top-level `resultPayloadJson` may then be left out. Each Item is checked against the Task's
+For a multi-Item Task, send `items: [{itemNo, agentStatus, resultPayloadJson, resultUrl, anomalies?}]`, one per Item of the
+WorkOrder; the top-level `resultPayloadJson` may then be left out. An Item's `anomalies` (up to 20) are what you report
+about that Item's source, such as an invoice whose figures don't add up (name the arithmetic check, e.g.
+`INVOICE_TOTAL`; see [`ap_invoice_extraction`](data-model.md#invoice-extraction)). Each Item is checked against the Task's
 Contract and settled on its own. An Item reported `FAILED` or left out is refunded; an `itemNo` the Task does not
 have, or one named twice, or an Item `resultUrl` that is not an absolute https URL, makes the whole callback a
 400 (nothing recorded, so it can be resent). A top-level

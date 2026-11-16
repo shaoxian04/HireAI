@@ -148,6 +148,14 @@ public record TaskItems(List<TaskItemModel> all) {
         return acceptedCount() + proRata.setScale(0, RoundingMode.DOWN).intValue();
     }
 
+    /**
+     * How many Items the Task's reputation event weighs (D22): all of them except those refunded because
+     * nobody judged them ({@code UNREVIEWED}), whose work was never shown wrong (owner decision on #87).
+     */
+    public int reputationCount() {
+        return (int) all.stream().filter(i -> i.status() != ItemStatus.UNREVIEWED).count();
+    }
+
     public int acceptedCount() {
         return (int) all.stream().filter(i -> i.status() == ItemStatus.ACCEPTED).count();
     }

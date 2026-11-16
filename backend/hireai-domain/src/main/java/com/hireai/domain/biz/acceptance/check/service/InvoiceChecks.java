@@ -59,7 +59,10 @@ final class InvoiceChecks {
         }
         List<String> problems = new ArrayList<>();
         for (String wrongType : invoice.typeProblems()) {
-            problems.add(wrongType + " has the wrong type");
+            problems.add(wrongType.endsWith(" (out of range)")
+                    ? wrongType.substring(0, wrongType.length() - " (out of range)".length())
+                    + " is out of range for an invoice amount"
+                    : wrongType + " has the wrong type");
         }
         requireText(problems, "supplier_name", invoice.supplierName());
         requireText(problems, "supplier_tax_id", invoice.supplierTaxId());

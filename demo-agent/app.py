@@ -212,6 +212,77 @@ async def read_sources(items: list[dict], client: httpx.AsyncClient) -> dict[int
     return documents
 
 
+_PDF_TEXT = re.compile(rb"\(((?:[^()\\]|\\.)*)\)\s*Tj")
+_FIELD = re.compile(r"^\s*([A-Za-z ]+?)\s*:\s*(.+?)\s*$")
+
+
+def document_lines(document: bytes) -> list[str]:
+    """The text lines of a document: the strings a simple PDF draws (``(...) Tj``), else its bytes as text."""
+    drawn = [m.group(1).decode("latin-1").replace("\\(", "(").replace("\\)", ")") for m in _PDF_TEXT.finditer(document)]
+    return drawn or document.decode("latin-1", errors="replace").splitlines()
+
+
+def _money(value: str) -> float:
+    return round(float(value.replace(",", "")), 2)
+
+
+def extract_invoice(document: bytes) -> dict | None:
+    """The ap_invoice_extraction fields of a demo invoice: "Key: value" lines and "Line: desc | qty | unit | amount"
+    lines, copied as they are (faithful to the source, mistakes included). None when it is not an invoice."""
+    fields: dict[str, str] = {}
+    lines: list[dict] = []
+    for text in document_lines(document):
+        match = _FIELD.match(text)
+        if not match:
+            continue
+        key, value = match.group(1).strip().lower(), match.group(2)
+        if key == "line":
+            parts = [p.strip() for p in value.split("|")]
+            if len(parts) == 4:
+                lines.append({"description": parts[0], "quantity": float(parts[1]), "unit_price": _money(parts[2]),
+                              "amount": _money(parts[3])})
+        else:
+            fields[key] = value
+    if "invoice number" not in fields:
+        return None
+    invoice = {
+        "supplier_name": fields.get("supplier"),
+        "supplier_tax_id": fields.get("tax id"),
+        "invoice_number": fields["invoice number"],
+        "invoice_date": fields.get("date"),
+        "currency": fields.get("currency"),
+        "po_number": fields.get("po"),
+        "line_items": lines,
+        "subtotal": _money(fields.get("subtotal", "0")),
+        "tax_total": _money(fields.get("tax", "0")),
+        "grand_total": _money(fields.get("total", "0")),
+    }
+    if "tax rate" in fields:
+        invoice["tax_rate"] = float(fields["tax rate"].rstrip("% "))
+    return invoice
+
+
+def invoice_anomalies(invoice: dict) -> list[dict]:
+    """What a careful extractor reports about the source: each place the invoice's own figures disagree."""
+    found = []
+    for i, line in enumerate(invoice["line_items"], start=1):
+        if abs(line["quantity"] * line["unit_price"] - line["amount"]) > 0.01:
+            found.append({"check": "INVOICE_LINE_ARITHMETIC",
+                          "description": f"Line {i} on the document: {line['quantity']:g} x {line['unit_price']:.2f} "
+                                         f"is not its amount {line['amount']:.2f}; copied as printed."})
+    lines_sum = round(sum(line["amount"] for line in invoice["line_items"]), 2)
+    if abs(lines_sum - invoice["subtotal"]) > 0.01:
+        found.append({"check": "INVOICE_LINES_SUM",
+                      "description": f"The document's lines add up to {lines_sum:.2f}, but it prints a subtotal of "
+                                     f"{invoice['subtotal']:.2f}; copied as printed."})
+    total = round(invoice["subtotal"] + invoice["tax_total"], 2)
+    if abs(total - invoice["grand_total"]) > 0.01:
+        found.append({"check": "INVOICE_TOTAL",
+                      "description": f"The document's subtotal and tax come to {total:.2f}, but it prints a grand "
+                                     f"total of {invoice['grand_total']:.2f}; copied as printed."})
+    return found
+
+
 def item_results(items: list[dict], documents: dict[int, bytes | None] | None = None) -> list[dict]:
     """One result per Item of a multi-Item WorkOrder. Tags in an Item's input stage the outcome:
     #fail -> the Item is reported FAILED, #empty -> an empty result (fails a text Contract),
@@ -226,8 +297,18 @@ def item_results(items: list[dict], documents: dict[int, bytes | None] | None = 
         if "#fail" in text or (item["itemNo"] in documents and documents[item["itemNo"]] is None):
             results.append({"itemNo": item["itemNo"], "agentStatus": "FAILED"})
             continue
-        payload = "" if "#empty" in text else f"Extracted from item {item['itemNo']}: {text}"
         document = documents.get(item["itemNo"])
+        invoice = extract_invoice(document) if document is not None else None
+        if invoice is not None:
+            # An invoice document (ap_invoice_extraction): its fields as JSON, and an anomaly for each figure
+            # that doesn't add up, unless the Item's input carries #unreported (to demo the forced review).
+            result = {"itemNo": item["itemNo"], "agentStatus": "COMPLETED", "resultPayloadJson": json.dumps(invoice)}
+            anomalies = [] if "#unreported" in text else invoice_anomalies(invoice)
+            if anomalies:
+                result["anomalies"] = anomalies
+            results.append(result)
+            continue
+        payload = "" if "#empty" in text else f"Extracted from item {item['itemNo']}: {text}"
         if document is not None and payload:
             payload += f" (read {len(document)} bytes, sha256 verified)"
         results.append({"itemNo": item["itemNo"], "agentStatus": "COMPLETED", "resultPayloadJson": payload})

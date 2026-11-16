@@ -61,7 +61,7 @@ public class ValidationDomainServiceImpl implements ValidationDomainService {
     static final String FILE_MEDIA_TYPE = "FILE_MEDIA_TYPE";
     static final String FILE_MAX_BYTES = "FILE_MAX_BYTES";
     /** A review entry for an anomaly the Agent reported that no rejecting check explains. */
-    static final String SELF_REPORTED_ANOMALY = "SELF_REPORTED_ANOMALY";
+    static final String SELF_REPORTED_ANOMALY = CheckResult.SELF_REPORTED_ANOMALY;
 
     private final SchemaValidator schemaValidator;
 

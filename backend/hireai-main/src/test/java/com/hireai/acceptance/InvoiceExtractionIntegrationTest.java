@@ -63,6 +63,7 @@ class InvoiceExtractionIntegrationTest extends WholeAppIntegrationTest {
 
     @Autowired MutableTestClock clock;
     @Autowired ReceiptAppService receiptAppService;
+    @Autowired com.hireai.application.biz.task.TaskReviewAppService taskReviewAppService;
 
     private final RestTemplate http = new RestTemplate();
     private final HttpClient client = HttpClient.newHttpClient();
@@ -218,6 +219,64 @@ class InvoiceExtractionIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
+    void anAgentFlaggingEveryItemChangesNeitherTheSampledLotNorAnyVerdict() throws Exception {
+        FakeAgent agent = invoiceAgent();
+        UUID agentId = seedInvoiceAgent(agent, "1.00");
+        UUID engagementId = openEngagement(agentId);
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (int i = 1; i <= 4; i++) {
+            items.add(item(engagementId, i + ".pdf", pdf("flag-" + i), "flags"));
+        }
+
+        UUID taskId = book(agentId, engagementId, items, null);
+        awaitStatus(taskId, "PENDING_REVIEW");
+
+        // Each Item carries an anomaly naming nothing, one naming a check that passed and one naming no check at
+        // all: none of them softened a failed check, so none holds its Item out of the random sample.
+        JsonNode task = getTask(taskId);
+        for (JsonNode i : task.get("items")) {
+            assertThat(i.get("status").asText()).isEqualTo("PENDING_REVIEW");
+            assertThat(i.get("needsReview")).as("Item %s", i.get("itemNo")).isNull();
+            assertThat(i.get("anomalies")).hasSize(3); // still shown to the reviewer
+            List<String> rules = new ArrayList<>();
+            i.get("checks").forEach(c -> rules.add(c.get("rule").asText()));
+            assertThat(rules).doesNotContain("SELF_REPORTED_ANOMALY");
+        }
+        List<Integer> sampled = new ArrayList<>();
+        get("/api/tasks/" + taskId + "/inspection").get("draws").get(0).get("itemNos").forEach(n -> sampled.add(n.asInt()));
+        assertThat(sampled).containsExactly(1, 2, 3, 4);
+    }
+
+    @Test
+    void aFlaggedItemNobodyJudgesIsRefundedWhenTheReviewWindowClosesWithoutCountingAgainstTheAgent()
+            throws Exception {
+        FakeAgent agent = invoiceAgent();
+        UUID agentId = seedInvoiceAgent(agent, "1.00");
+        UUID engagementId = openEngagement(agentId);
+        List<Map<String, Object>> items = List.of(
+                item(engagementId, "a.pdf", pdf("w-a"), "ok"),
+                item(engagementId, "b.pdf", pdf("w-b"), "ok"),
+                item(engagementId, "c.pdf", pdf("w-c"), "silent"));
+
+        UUID taskId = book(agentId, engagementId, items, null);
+        awaitStatus(taskId, "PENDING_REVIEW");
+        judge(taskId, 1, Map.of("passed", true));
+        judge(taskId, 2, Map.of("passed", true));
+        assertThat(item(getTask(taskId), 3).get("status").asText()).isEqualTo("PENDING_REVIEW");
+
+        clock.set(Instant.parse(getTask(taskId).get("reviewDeadline").asText()));
+        taskReviewAppService.autoAcceptOne(taskId);
+
+        JsonNode task = getTask(taskId);
+        assertThat(task.get("status").asText()).isEqualTo("RESOLVED");
+        assertThat(statuses(task)).containsExactly("ACCEPTED", "ACCEPTED", "UNREVIEWED");
+        assertThat(item(task, 3).get("refundAmount").decimalValue()).isEqualByComparingTo("1.00");
+        // Its work was never shown wrong: the Task's one reputation event weighs only the 2 judged Items.
+        assertThat(jdbc.queryForObject("SELECT quality FROM reputation_events WHERE task_id = ?", BigDecimal.class,
+                taskId)).isEqualByComparingTo("1.000");
+    }
+
+    @Test
     void aBookingUnderTheInvoiceContractNeedsAnAgentWhoseOfferCoversIt() throws Exception {
         FakeAgent agent = invoiceAgent();
         UUID agentId = seedInvoiceAgent(agent, "1.00");
@@ -262,6 +321,12 @@ class InvoiceExtractionIntegrationTest extends WholeAppIntegrationTest {
             String number = stage.equals("dup") ? "INV-" + run + "-1" : "INV-" + run + "-" + no;
             boolean wrongTotal = stage.equals("reported") || stage.equals("silent");
             result.put("resultPayloadJson", invoiceJson(number, wrongTotal ? "150.00" : "144.00"));
+            if (stage.equals("flags")) {
+                ArrayNode anomalies = result.putArray("anomalies");
+                anomalies.addObject().put("description", "Something looks odd about this invoice");
+                anomalies.addObject().put("check", "INVOICE_TOTAL").put("description", "The total may be wrong");
+                anomalies.addObject().put("check", "MADE_UP_CHECK").put("description", "Please look at this one");
+            }
             if (stage.equals("reported")) {
                 ObjectNode anomaly = result.putArray("anomalies").addObject();
                 anomaly.put("check", "INVOICE_TOTAL");
