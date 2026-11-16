@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hireai:format:receipt.v1",
+  "title": "HireAI signed receipt document (hireai.receipt.v1)",
+  "description": "The document served by GET /api/receipts/{id}. Prose: docs/details/receipts.md. Unknown members are allowed: new facts arrive as new optional members, and a verifier must ignore what it does not know.",
+  "type": "object",
+  "required": ["receipt", "signature"],
+  "properties": {
+    "receipt": { "$ref": "#/$defs/body" },
+    "signature": {
+      "type": "object",
+      "required": ["alg", "keyId", "value"],
+      "properties": {
+        "alg": { "const": "Ed25519" },
+        "keyId": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "#/$defs/base64url" }
+      }
+    }
+  },
+  "$defs": {
+    "body": {
+      "type": "object",
+      "required": ["format", "receiptId", "issuedAt", "keyId", "task", "parties", "contract", "input", "judgements", "settlement"],
+      "properties": {
+        "format": { "const": "hireai.receipt.v1" },
+        "receiptId": { "$ref": "#/$defs/uuid" },
+        "issuedAt": { "$ref": "#/$defs/time" },
+        "keyId": { "type": "string", "minLength": 1 },
+        "task": {
+          "type": "object",
+          "required": ["id", "submittedAt"],
+          "properties": { "id": { "$ref": "#/$defs/uuid" }, "submittedAt": { "$ref": "#/$defs/time" } }
+        },
+        "item": {
+          "type": "object",
+          "required": ["no", "count"],
+          "properties": { "no": { "type": "integer", "minimum": 1 }, "count": { "type": "integer", "minimum": 1 } }
+        },
+        "itemCount": { "type": "integer", "minimum": 1 },
+        "parties": {
+          "type": "object",
+          "required": ["clientRef"],
+          "properties": {
+            "clientRef": { "$ref": "#/$defs/hex64" },
+            "builderRef": { "$ref": "#/$defs/hex64" },
+            "agentVersionRef": { "$ref": "#/$defs/hex64" }
+          }
+        },
+        "contract": {
+          "type": "object",
+          "required": ["template", "templateKey", "templateVersion", "sha256"],
+          "properties": {
+            "template": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}@[1-9][0-9]*$" },
+            "templateKey": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+            "templateVersion": { "type": "integer", "minimum": 1 },
+            "sha256": { "$ref": "#/$defs/hex64" }
+          }
+        },
+        "input": {
+          "type": "object",
+          "required": ["sha256"],
+          "properties": { "sha256": { "$ref": "#/$defs/hex64" } }
+        },
+        "delivery": {
+          "type": "object",
+          "required": ["agentStatus"],
+          "properties": {
+            "agentStatus": { "type": "string", "minLength": 1 },
+            "receivedAt": { "$ref": "#/$defs/time" },
+            "payloadSha256": { "$ref": "#/$defs/hex64" },
+            "file": {
+              "type": "object",
+              "required": ["sha256", "mediaType", "sizeBytes", "fetchedAt"],
+              "properties": {
+                "sha256": { "$ref": "#/$defs/hex64" },
+                "mediaType": { "type": "string", "minLength": 1 },
+                "sizeBytes": { "type": "integer", "minimum": 0 },
+                "fetchedAt": { "$ref": "#/$defs/time" }
+              }
+            }
+          }
+        },
+        "checks": {
+          "type": "object",
+          "required": ["verdict", "results"],
+          "properties": {
+            "attempt": { "type": "integer", "minimum": 1 },
+            "verdict": { "enum": ["PASS", "FAIL"] },
+            "results": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["rule", "passed"],
+                "properties": {
+                  "rule": { "type": "string", "minLength": 1 },
+                  "passed": { "type": "boolean" },
+                  "detail": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "judgements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["by"],
+            "properties": {
+              "by": { "enum": ["CLIENT", "AGENT"] },
+              "decision": { "enum": ["REJECTED", "ACCEPT", "ARBITRATE", "ACCEPTED"] },
+              "response": { "enum": ["REVISE", "CONCEDE", "STAND_BY"] },
+              "round": { "type": "integer", "minimum": 1 },
+              "reasonCategory": { "type": "string" },
+              "silent": { "const": true },
+              "automatic": { "const": true },
+              "at": { "$ref": "#/$defs/time" }
+            }
+          }
+        },
+        "ruling": {
+          "type": "object",
+          "required": ["disputeId", "category", "rulings"],
+          "properties": {
+            "disputeId": { "$ref": "#/$defs/uuid" },
+            "category": { "type": "string", "minLength": 1 },
+            "appealedBy": { "type": "string" },
+            "rulings": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["tier", "category", "decidedBy"],
+                "properties": {
+                  "tier": { "type": "integer", "minimum": 1 },
+                  "category": { "type": "string" },
+                  "decidedBy": { "type": "string" },
+                  "decidedAt": { "$ref": "#/$defs/time" },
+                  "rationale": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "fees": {
+          "type": "object",
+          "required": ["charges", "ledgerEntries"],
+          "properties": {
+            "charges": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["type", "clientCharged", "builderCharged", "platformCovered"],
+                "properties": {
+                  "type": { "type": "string" },
+                  "clientCharged": { "$ref": "#/$defs/money" },
+                  "builderCharged": { "$ref": "#/$defs/money" },
+                  "platformCovered": { "$ref": "#/$defs/money" }
+                }
+              }
+            },
+            "ledgerEntries": { "$ref": "#/$defs/ledgerEntries" }
+          }
+        },
+        "settlement": {
+          "type": "object",
+          "required": ["outcome", "price", "paid", "commission", "refunded", "settledAt", "ledgerEntries"],
+          "properties": {
+            "outcome": { "enum": ["ACCEPT", "REJECT", "SPLIT"] },
+            "price": { "$ref": "#/$defs/money" },
+            "paid": { "$ref": "#/$defs/money" },
+            "commission": { "$ref": "#/$defs/money" },
+            "refunded": { "$ref": "#/$defs/money" },
+            "failureReason": { "type": "string" },
+            "settledAt": { "$ref": "#/$defs/time" },
+            "ledgerEntries": { "$ref": "#/$defs/ledgerEntries" }
+          }
+        }
+      }
+    },
+    "ledgerEntries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "party", "type", "amount", "at"],
+        "properties": {
+          "id": { "$ref": "#/$defs/uuid" },
+          "party": { "enum": ["CLIENT", "BUILDER"] },
+          "type": { "type": "string", "minLength": 1 },
+          "amount": { "$ref": "#/$defs/money" },
+          "at": { "$ref": "#/$defs/time" }
+        }
+      }
+    },
+    "uuid": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "hex64": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "base64url": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+    "money": { "type": "string", "pattern": "^-?[0-9]+\\.[0-9]{2}$" },
+    "time": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,9})?)?Z$" }
+  }
+}

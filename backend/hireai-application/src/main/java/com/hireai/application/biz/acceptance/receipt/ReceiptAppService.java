@@ -23,6 +23,19 @@ public interface ReceiptAppService {
     /** One receipt, to the same two parties; NOT_FOUND for anyone else (existence is not leaked). */
     ReceiptModel receipt(UUID receiptId, Reader reader);
 
+    /**
+     * The receipt as a W3C Verifiable Credential 2.0 with an {@code eddsa-jcs-2022} Data Integrity
+     * proof by the active signing key (RFC 8785 text). Derived from the stored receipt, which it
+     * carries unchanged; same readers as {@link #receipt}.
+     */
+    String credential(UUID receiptId, Reader reader);
+
+    /**
+     * The receipt as OpenTelemetry {@code gen_ai.evaluation.result} events, an OTLP/JSON logs export
+     * request (RFC 8785 text). Derived from the stored receipt; same readers as {@link #receipt}.
+     */
+    String otelEvents(UUID receiptId, Reader reader);
+
     /** Issues receipts for up to {@code limit} settled subjects that lack one (the sweeper's pass). */
     int issuePending(int limit);
 

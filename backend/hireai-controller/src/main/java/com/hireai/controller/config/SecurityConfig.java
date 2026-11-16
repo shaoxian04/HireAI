@@ -105,7 +105,8 @@ public class SecurityConfig {
                         // assigned Agent's Builder; the app service checks which (Hard Invariant #5).
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/receipt-keys").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET,
-                                "/api/tasks/*/receipts", "/api/receipts/*")
+                                "/api/tasks/*/receipts", "/api/receipts/*", "/api/receipts/*/credential",
+                                "/api/receipts/*/otel")
                                 .hasAnyRole("CLIENT", "BUILDER", "ADMIN", "API_CLIENT")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // Agent signing-secret rotation: the owning BUILDER only, JWT-only (a leaked API
