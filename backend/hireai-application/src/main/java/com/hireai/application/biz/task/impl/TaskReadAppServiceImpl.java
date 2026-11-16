@@ -77,6 +77,11 @@ public class TaskReadAppServiceImpl implements TaskReadAppService {
     }
 
     @Override
+    public Optional<String> findReviewReason(TaskModel task) {
+        return taskRepository.findReviewReason(task.id());
+    }
+
+    @Override
     public Optional<ReviewWindowState> findReviewWindow(TaskModel task) {
         return taskRepository.findReviewWindow(task.id());
     }

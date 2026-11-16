@@ -63,11 +63,14 @@ async def submit_task(description: str, budget: float, category: str = "", outpu
 async def get_task_status(task_id: str) -> str:
     """Get the current status of a HireAI task (e.g. SUBMITTED, EXECUTING, RESOLVED, FAILED).
     For a task that ended without a result, failure_reason says why (e.g. AGENT_UNREACHABLE,
-    AGENT_BUSY, NO_ELIGIBLE_AGENT, EXECUTION_TIMEOUT, SPEC_VIOLATION); otherwise it is null."""
+    AGENT_BUSY, NO_ELIGIBLE_AGENT, EXECUTION_TIMEOUT, SPEC_VIOLATION); otherwise it is null.
+    For a task waiting in PENDING_REVIEW for a human, review_reason says why (ANOMALY, UNDECIDED, or
+    AI_REVIEW_UNAVAILABLE when a booked AI Review gave no usable verdict); otherwise it is null."""
     task = await _client().get_task(task_id)
     return json.dumps({"task_id": task.get("id"), "status": task.get("status"),
                        "resolution": task.get("resolution"),
-                       "failure_reason": task.get("failureReason")}, default=str)
+                       "failure_reason": task.get("failureReason"),
+                       "review_reason": task.get("reviewReason")}, default=str)
 
 
 # Statuses in which an Agent's result can still arrive; any other status with no result is final.

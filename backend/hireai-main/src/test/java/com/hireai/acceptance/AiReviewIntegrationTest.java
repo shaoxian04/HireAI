@@ -203,60 +203,96 @@ class AiReviewIntegrationTest extends WholeAppIntegrationTest {
     }
 
     @Test
-    void aReviewerThatNeverAnswersFailsClosedAndTheChecksSettleTheApiTask() throws Exception {
+    void aReviewerThatKeepsTimingOutFailsClosedAndSettlesNothing() throws Exception {
         BigDecimal before = available();
         Booked booked = bookOnTheApi("Polite tone #error");
 
-        // First attempt failed; while the decisive review is still deciding, nobody else may settle it.
-        await().atMost(Duration.ofSeconds(30)).until(() ->
-                get("/api/tasks/" + booked.taskId + "/ai-review").path("attempts").asInt() == 1);
-        assertThat(get("/api/tasks/" + booked.taskId).path("status").asText()).isEqualTo("PENDING_REVIEW");
-        assertThat(postRaw("/api/tasks/" + booked.taskId + "/accept", "{}").statusCode()).isNotEqualTo(200);
-
-        aiReviewAppService.run(UUID.fromString(booked.taskId)); // the sweeper's retries
-        aiReviewAppService.run(UUID.fromString(booked.taskId));
-
-        JsonNode review = get("/api/tasks/" + booked.taskId + "/ai-review");
-        assertThat(review.path("status").asText()).isEqualTo("FAILED");
-        assertThat(review.path("attempts").asInt()).isEqualTo(3);
-        assertThat(ledger(booked.taskId, "REFUND", "ai-review-" + booked.taskId)).isEqualByComparingTo("0.20");
-        // As if no AI Review had been chosen: an API result that passed its checks auto-settles.
-        assertThat(get("/api/tasks/" + booked.taskId).path("resolution").asText()).isEqualTo("ACCEPTED");
-        assertThat(reputationEvents(booked.taskId)).containsExactly("TASK_ACCEPTED");
-        assertThat(available()).isEqualByComparingTo(before.subtract(new BigDecimal("10.00")));
+        JsonNode review = awaitReview(booked.taskId, "FAILED");
+        assertThat(review.path("attempts").asInt()).isEqualTo(3); // retried with backoff, then given up
+        assertUnavailableAndUnsettled(booked, "0.20", before);
+        // Handled like any result no machine could pass: the Client decides it.
+        assertThat(post("/api/tasks/" + booked.taskId + "/accept", "{}").path("status").asText())
+                .isEqualTo("RESOLVED");
     }
 
     @Test
-    void aVerdictLeavingACriterionUnjudgedIsNotAPassTheFeeIsRefundedAndTheChecksDecide() throws Exception {
+    void aReviewerThatRefusesTwiceFailsClosedAndSettlesNothing() throws Exception {
+        BigDecimal before = available();
+        Booked booked = bookOnTheApi("Polite tone #refuse");
+
+        JsonNode review = awaitReview(booked.taskId, "FAILED");
+        assertThat(review.path("attempts").asInt()).isEqualTo(2); // an unusable answer is retried once
+        assertUnavailableAndUnsettled(booked, "0.20", before);
+    }
+
+    @Test
+    void aVerdictLeavingACriterionUnjudgedIsNotAPassAndSettlesNothing() throws Exception {
         BigDecimal before = available();
         Booked booked = bookOnTheApi("Polite tone", "Mentions the order number #partial");
 
-        awaitStatus(booked.taskId, "RESOLVED");
-        JsonNode review = get("/api/tasks/" + booked.taskId + "/ai-review");
-        assertThat(review.path("status").asText()).isEqualTo("FAILED");
-        assertThat(review.path("attempts").asInt()).isEqualTo(1); // an unusable answer is not retried
+        JsonNode review = awaitReview(booked.taskId, "FAILED");
+        assertThat(review.path("attempts").asInt()).isEqualTo(2);
         assertThat(review.path("verdicts")).isEmpty();
-        assertThat(ledger(booked.taskId, "AI_REVIEW_FEE", "ai-review-" + booked.taskId)).isEqualByComparingTo("0");
-        assertThat(ledger(booked.taskId, "REFUND", "ai-review-" + booked.taskId)).isEqualByComparingTo("0.30");
-        // The fallback is the deterministic checks' own result, never the partial verdict's.
-        assertThat(get("/api/tasks/" + booked.taskId).path("resolution").asText()).isEqualTo("ACCEPTED");
-        assertThat(reputationEvents(booked.taskId)).containsExactly("TASK_ACCEPTED");
-        assertThat(available()).isEqualByComparingTo(before.subtract(new BigDecimal("10.00")));
+        assertUnavailableAndUnsettled(booked, "0.30", before);
     }
 
     @Test
-    void onTheWebAMalformedAnswerLeavesTheClientsReviewAsItWouldHaveBeen() throws Exception {
+    void aRefusalThenAVerdictUsesTheRetryAndAppliesTheVerdict() throws Exception {
+        Booked booked = bookOnTheApi("Polite tone #refuse-once");
+
+        awaitStatus(booked.taskId, "RESOLVED");
+        JsonNode review = get("/api/tasks/" + booked.taskId + "/ai-review");
+        assertThat(review.path("status").asText()).isEqualTo("COMPLETED");
+        assertThat(review.path("attempts").asInt()).isEqualTo(2);
+        assertThat(reputationEvents(booked.taskId)).containsExactly("AI_REVIEW_PASSED");
+        assertThat(ledger(booked.taskId, "AI_REVIEW_FEE", "ai-review-" + booked.taskId)).isEqualByComparingTo("0.20");
+    }
+
+    @Test
+    void aTimeoutThenAVerdictUsesTheRetryAndAppliesTheVerdict() throws Exception {
+        Booked booked = bookOnTheApi("Polite tone #timeout-once #fail");
+
+        awaitStatus(booked.taskId, "RESOLVED");
+        JsonNode review = get("/api/tasks/" + booked.taskId + "/ai-review");
+        assertThat(review.path("attempts").asInt()).isEqualTo(2);
+        assertThat(review.path("rulingCategory").asText()).isEqualTo("NOT_FULFILLED");
+        assertThat(get("/api/tasks/" + booked.taskId).path("resolution").asText()).isEqualTo("REJECTED");
+        assertThat(reputationEvents(booked.taskId)).containsExactly("AI_REVIEW_FAILED");
+    }
+
+    /**
+     * Fail closed (D38 hardening): no usable verdict never settles the Task. The fee comes back, and
+     * the result waits for the Client's review, like the other results no machine could pass.
+     */
+    private void assertUnavailableAndUnsettled(Booked booked, String fee, BigDecimal before) throws Exception {
+        assertThat(ledger(booked.taskId, "AI_REVIEW_FEE", "ai-review-" + booked.taskId)).isEqualByComparingTo("0");
+        assertThat(ledger(booked.taskId, "REFUND", "ai-review-" + booked.taskId)).isEqualByComparingTo(fee);
+        JsonNode task = get("/api/tasks/" + booked.taskId);
+        assertThat(task.path("status").asText()).isEqualTo("PENDING_REVIEW");
+        assertThat(task.path("reviewReason").asText()).isEqualTo("AI_REVIEW_UNAVAILABLE");
+        assertThat(task.path("reviewDeadline").isTextual()).isTrue();
+        assertThat(reputationEvents(booked.taskId)).isEmpty();
+        assertThat(builderAvailable(booked.agentId)).isEqualByComparingTo("0.00");
+        assertThat(ledger(booked.taskId, "PAYOUT", "settle-" + booked.taskId)).isEqualByComparingTo("0");
+        assertThat(available()).isEqualByComparingTo(before.subtract(new BigDecimal("10.00"))); // price still frozen
+    }
+
+    @Test
+    void onTheWebAnUnusableAnswerMeansNoReportAndTheUsualReview() throws Exception {
         BigDecimal before = available();
         FakeAgent agent = completingAgent(null);
         UUID agentId = seedTextAgent(TEXT_OFFER, agent.webhookUrl());
         shareSigningSecret(agent);
-        String taskId = post("/api/tasks/direct", booking(agentId, "10.00", "Polite tone #malformed"))
+        String taskId = post("/api/tasks/direct", booking(agentId, "10.00", "Polite tone #refuse"))
                 .path("id").asText();
 
         JsonNode review = awaitReview(taskId, "FAILED");
-        assertThat(review.path("attempts").asInt()).isEqualTo(1);
+        assertThat(review.path("attempts").asInt()).isEqualTo(2);
+        assertThat(review.path("verdicts")).isEmpty();
         assertThat(ledger(taskId, "REFUND", "ai-review-" + taskId)).isEqualByComparingTo("0.20");
-        assertThat(get("/api/tasks/" + taskId).path("status").asText()).isEqualTo("PENDING_REVIEW");
+        JsonNode task = get("/api/tasks/" + taskId);
+        assertThat(task.path("status").asText()).isEqualTo("PENDING_REVIEW");
+        assertThat(task.has("reviewReason")).isFalse();
         assertThat(available()).isEqualByComparingTo(before.subtract(new BigDecimal("10.00")));
     }
 

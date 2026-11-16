@@ -29,6 +29,12 @@ CREATE TABLE ai_reviews (
 CREATE INDEX ix_ai_reviews_open ON ai_reviews (status, requested_at)
     WHERE status IN ('FROZEN', 'REQUESTED');
 
+-- An API result whose decisive AI Review gave no usable verdict waits for the Client's review like the
+-- other results no machine could pass (V48: ANOMALY, UNDECIDED). It is never settled by the failure.
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_review_reason_check;
+ALTER TABLE tasks ADD CONSTRAINT tasks_review_reason_check
+    CHECK (review_reason IN ('ANOMALY', 'UNDECIDED', 'AI_REVIEW_UNAVAILABLE'));
+
 -- The fee leaves escrow to the platform, like commission. Keeps every value V45 (#96) allowed.
 ALTER TABLE ledger_entries DROP CONSTRAINT IF EXISTS ledger_entries_entry_type_check;
 ALTER TABLE ledger_entries ADD CONSTRAINT ledger_entries_entry_type_check

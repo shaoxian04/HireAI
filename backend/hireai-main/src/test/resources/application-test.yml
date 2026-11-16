@@ -5,3 +5,6 @@ hireai:
     # DisputeFeesAndAppealsIntegrationTest turns them on with its own values.
     cost: 0
     appeal-fee: 0
+  ai-review:
+    # The scripted reviewer's transient failures are retried without a real wait (#107).
+    retry-backoff: PT0.05S

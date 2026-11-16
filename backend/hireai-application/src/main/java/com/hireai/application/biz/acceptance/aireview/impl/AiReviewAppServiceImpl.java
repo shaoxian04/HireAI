@@ -11,8 +11,6 @@ import com.hireai.application.config.AiReviewSettings;
 import com.hireai.application.port.aireview.AiReviewSubject;
 import com.hireai.application.port.aireview.AiReviewerPort;
 import com.hireai.application.port.aireview.AiReviewerUnavailableException;
-import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
-import com.hireai.domain.biz.adjudication.repository.ValidationReportRepository;
 import com.hireai.domain.biz.acceptance.aireview.enums.AiReviewStatus;
 import com.hireai.domain.biz.acceptance.aireview.event.AiReviewRequestedDomainEvent;
 import com.hireai.domain.biz.acceptance.aireview.model.AiReviewModel;
@@ -60,7 +58,6 @@ public class AiReviewAppServiceImpl implements AiReviewAppService {
     private final WebhookOutboxAppService webhookOutboxAppService;
     private final DeliverySnapshotAppService deliverySnapshotAppService;
     private final AiReviewerPort reviewer;
-    private final ValidationReportRepository reportRepository;
     private final AiReviewSettings settings;
     private final ReviewWindow reviewWindow;
     private final ApplicationEventPublisher eventPublisher;
@@ -73,7 +70,6 @@ public class AiReviewAppServiceImpl implements AiReviewAppService {
                                   ReputationWriteAppService reputationWriteAppService,
                                   WebhookOutboxAppService webhookOutboxAppService,
                                   DeliverySnapshotAppService deliverySnapshotAppService, AiReviewerPort reviewer,
-                                  ValidationReportRepository reportRepository,
                                   AiReviewSettings settings, ReviewWindow reviewWindow,
                                   ApplicationEventPublisher eventPublisher, Clock clock,
                                   PlatformTransactionManager transactionManager) {
@@ -86,7 +82,6 @@ public class AiReviewAppServiceImpl implements AiReviewAppService {
         this.webhookOutboxAppService = webhookOutboxAppService;
         this.deliverySnapshotAppService = deliverySnapshotAppService;
         this.reviewer = reviewer;
-        this.reportRepository = reportRepository;
         this.settings = settings;
         this.reviewWindow = reviewWindow;
         this.eventPublisher = eventPublisher;
@@ -121,31 +116,67 @@ public class AiReviewAppServiceImpl implements AiReviewAppService {
         return Boolean.TRUE.equals(requested);
     }
 
+    /**
+     * Fails closed: an answer counts only when it judges every frozen criterion exactly once. An
+     * unusable answer (a refusal, malformed, a criterion missing or judged twice) is retried once, as
+     * the Agent's deliverable may provoke one on purpose; a transient failure (timeout, 5xx) is retried
+     * with a doubling backoff, up to {@code hireai.ai-review.max-attempts} in all. Each attempt is
+     * recorded, so a crash mid-run leaves the review REQUESTED for the sweeper.
+     */
     @Override
     public void run(UUID taskId) {
-        AiReviewModel review = aiReviewRepository.findByTaskId(taskId).orElse(null);
-        if (review == null || review.status() != AiReviewStatus.REQUESTED) {
-            return;
+        int unusable = 0;
+        long backoffMillis = settings.retryBackoff().toMillis();
+        while (true) {
+            AiReviewModel review = aiReviewRepository.findByTaskId(taskId).orElse(null);
+            if (review == null || review.status() != AiReviewStatus.REQUESTED) {
+                return;
+            }
+            TaskModel task = taskRepository.findById(taskId).orElse(null);
+            if (task == null || task.status() != TaskStatus.PENDING_REVIEW) {
+                // The Client decided (web) before the reviewer ran: an advisory report is moot now.
+                releaseRequested(taskId);
+                return;
+            }
+            String failure;
+            boolean transientFailure;
+            try {
+                AiReviewerPort.Answer answer = reviewer.review(subjectFor(task, review));
+                review.complete(answer.verdicts(), answer.model(), clock.instant()); // every criterion, once
+                recordVerdict(taskId, answer);
+                return;
+            } catch (AiReviewerUnavailableException e) {
+                failure = e.getMessage();
+                transientFailure = e.retryable();
+            } catch (DomainException e) {
+                failure = e.getMessage(); // a criterion missing or judged twice: unusable
+                transientFailure = false;
+            } catch (RuntimeException e) {
+                failure = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                transientFailure = true;
+            }
+            if (!transientFailure) {
+                unusable++;
+            }
+            boolean lastTry = !transientFailure && unusable >= 2;
+            log.warn("Task {}: the AI reviewer gave no {} verdict (attempt {} of {}): {}", taskId,
+                    transientFailure ? "" : "usable", review.attempts() + 1, settings.maxAttempts(), failure);
+            if (!recordFailure(taskId, failure, lastTry)) {
+                return; // gave up (fee refunded), or someone else finished it
+            }
+            if (transientFailure) {
+                try {
+                    Thread.sleep(backoffMillis);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return; // still REQUESTED: the sweeper picks it up
+                }
+                backoffMillis = Math.min(backoffMillis * 2, MAX_BACKOFF_MILLIS);
+            }
         }
-        TaskModel task = taskRepository.findById(taskId).orElse(null);
-        if (task == null || task.status() != TaskStatus.PENDING_REVIEW) {
-            // The Client decided (web) before the reviewer ran: an advisory report is moot now.
-            releaseRequested(taskId);
-            return;
-        }
-        AiReviewerPort.Answer answer;
-        try {
-            answer = reviewer.review(subjectFor(task, review));
-        } catch (RuntimeException e) {
-            // Fail closed: no usable verdict is never a pass.
-            boolean retryable = !(e instanceof AiReviewerUnavailableException u) || u.retryable();
-            log.warn("Task {}: the AI reviewer gave no verdict (attempt {} of {}{}): {}", taskId,
-                    review.attempts() + 1, settings.maxAttempts(), retryable ? "" : ", not retried", e.getMessage());
-            recordFailure(taskId, e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(), retryable);
-            return;
-        }
-        recordVerdict(taskId, answer);
     }
+
+    private static final long MAX_BACKOFF_MILLIS = 30_000;
 
     private AiReviewSubject subjectFor(TaskModel task, AiReviewModel review) {
         if (task.result() != null && task.result().resultUrl() != null && !task.result().resultUrl().isBlank()) {
@@ -174,8 +205,8 @@ public class AiReviewAppServiceImpl implements AiReviewAppService {
             try {
                 done = review.complete(answer.verdicts(), answer.model(), clock.instant());
             } catch (DomainException unusable) {
-                // A criterion missing or judged twice: unusable, so unavailable and not retried.
-                failLocked(task, review, unusable.getMessage(), false);
+                // Checked before this transaction too; an unusable verdict is never applied.
+                failLocked(task, review, unusable.getMessage(), true);
                 return;
             }
             if (task.status() != TaskStatus.PENDING_REVIEW) {
@@ -226,60 +257,45 @@ public class AiReviewAppServiceImpl implements AiReviewAppService {
         log.info("Task {} settled by its decisive AI Review: {} -> {}", task.id(), category, resolved.resolution());
     }
 
-    private void recordFailure(UUID taskId, String reason, boolean retryable) {
-        tx.executeWithoutResult(status -> {
+    /** Records one failed attempt; true while the review is still REQUESTED (worth another try). */
+    private boolean recordFailure(UUID taskId, String reason, boolean lastTry) {
+        Boolean stillRequested = tx.execute(status -> {
             TaskModel task = taskRepository.findByIdForUpdate(taskId).orElseThrow();
             AiReviewModel review = aiReviewRepository.lockByTaskId(taskId).orElseThrow();
-            if (review.status() == AiReviewStatus.REQUESTED) {
-                failLocked(task, review, reason, retryable);
+            if (review.status() != AiReviewStatus.REQUESTED) {
+                return false;
             }
+            return failLocked(task, review, reason, lastTry).status() == AiReviewStatus.REQUESTED;
         });
+        return Boolean.TRUE.equals(stillRequested);
     }
 
     /**
-     * One failed attempt, under the locks. Once it gives up the review is "unavailable": the fee is
-     * refunded, and the Task settles as it would have without AI Review. On the web that changes
-     * nothing (the Client reviews as usual); on API/MCP it is the deterministic checks' result.
+     * One failed attempt, under the locks. Once it gives up the review is unavailable and the fee is
+     * refunded. It never settles anything: on the web the Client simply reviews without the report; on
+     * API/MCP the result waits in PENDING_REVIEW with {@code review_reason = AI_REVIEW_UNAVAILABLE} and
+     * a review window, like the other results no machine could pass (ANOMALY, UNDECIDED). An unusable
+     * verdict may have been provoked by the deliverable, so it must not fall through to a payout.
      */
-    private void failLocked(TaskModel task, AiReviewModel review, String reason, boolean retryable) {
-        AiReviewModel failed = review.recordFailure(reason, retryable, settings.maxAttempts(), clock.instant());
+    private AiReviewModel failLocked(TaskModel task, AiReviewModel review, String reason, boolean lastTry) {
+        AiReviewModel failed = review.recordFailure(reason, lastTry, settings.maxAttempts(), clock.instant());
         aiReviewRepository.save(failed);
         if (failed.status() != AiReviewStatus.FAILED) {
-            return; // retried by the sweeper
+            return failed;
         }
         settlementWriteAppService.refundAiReviewFee(task.id(), task.clientId(), failed.fee());
         log.warn("Task {}: AI Review unavailable after {} attempt(s); fee {} refunded", task.id(),
                 failed.attempts(), failed.fee());
         if (failed.decisive() && task.status() == TaskStatus.PENDING_REVIEW) {
-            fallBackToTheChecks(task);
+            taskRepository.stampReviewDeadline(task.id(), reviewWindow.closesAt(clock.instant()));
+            taskRepository.stampReviewReason(task.id(), AI_REVIEW_UNAVAILABLE);
+            log.info("API task {}: no usable AI Review verdict; it waits for the Client's review", task.id());
         }
+        return failed;
     }
 
-    /**
-     * What an API task gets without AI Review (as in ValidationAppServiceImpl): a PASS auto-settles as
-     * accepted; a result the checks sent to review waits for the Client's review window.
-     */
-    private void fallBackToTheChecks(TaskModel task) {
-        ValidationReportModel report = reportRepository.findLatestByTaskId(task.id()).orElse(null);
-        if (report != null && report.isPass()) {
-            UUID builderId = agentRepository.findOwnerByVersionId(task.agentVersionId())
-                    .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
-                            "No agent owner for version " + task.agentVersionId()));
-            TaskModel resolved = task.accept();
-            settlementWriteAppService.settleAccepted(task.id(), task.clientId(), builderId, task.budget());
-            reputationWriteAppService.recordOutcome(task.id(), task.agentVersionId(), task.clientId(),
-                    ReputationEventType.TASK_ACCEPTED);
-            taskRepository.save(resolved);
-            webhookOutboxAppService.enqueueCompleted(resolved);
-            log.info("API task {}: no AI Review verdict, so its passed checks settle it (auto-accepted)", task.id());
-            return;
-        }
-        taskRepository.stampReviewDeadline(task.id(), reviewWindow.closesAt(clock.instant()));
-        if (report != null && report.needsReview()) {
-            taskRepository.stampReviewReason(task.id(), report.anomalies().isEmpty() ? "UNDECIDED" : "ANOMALY");
-        }
-        log.info("API task {}: no AI Review verdict; the result waits for the Client's review", task.id());
-    }
+    /** The review reason (V49) of an API result whose decisive AI Review gave no usable verdict. */
+    public static final String AI_REVIEW_UNAVAILABLE = "AI_REVIEW_UNAVAILABLE";
 
     private void releaseRequested(UUID taskId) {
         tx.executeWithoutResult(status -> {

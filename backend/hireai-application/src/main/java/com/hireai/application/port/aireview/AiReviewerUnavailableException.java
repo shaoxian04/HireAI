@@ -1,11 +1,11 @@
 package com.hireai.application.port.aireview;
 
 /**
- * The reviewer gave no usable verdict. Never a pass: the review fails closed, its fee is refunded and
- * the Task settles as it would have without AI Review. {@code retryable} is true for a transport
- * failure (down, timeout, not configured), which the sweeper tries again up to the attempt limit; an
- * answer that came back but is unusable (malformed, a criterion missing or judged twice, no reason, a
- * refusal) is not retried, since the same evidence would most likely get the same answer.
+ * The reviewer gave no usable verdict. Never a pass: the review fails closed. {@code retryable} is
+ * true for a transient failure (down, timeout, 5xx, not configured), retried with a bounded backoff
+ * up to the attempt limit; false for an answer that came back unusable (malformed, a criterion missing
+ * or judged twice, no reason, a refusal), which is retried once only, since the Agent's deliverable
+ * may provoke it on purpose.
  */
 public class AiReviewerUnavailableException extends RuntimeException {
 

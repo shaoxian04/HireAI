@@ -68,7 +68,13 @@ public record TaskDTO(
          * (spec D36): no Agent's Offer covered the current version when it was submitted. Absent
          * otherwise and on list responses.
          */
-        VersionFallbackDTO templateFallback
+        VersionFallbackDTO templateFallback,
+        /**
+         * Why a result that no machine could pass waits for the Client's review: ANOMALY (the Agent
+         * flagged something), UNDECIDED (a check could not decide) or AI_REVIEW_UNAVAILABLE (a decisive
+         * AI Review gave no usable verdict, #107). Absent otherwise and on list/command responses.
+         */
+        String reviewReason
 ) {
 
     /** This task with its version-fallback notice (null leaves it out). */
@@ -76,7 +82,15 @@ public record TaskDTO(
         return new TaskDTO(id, clientId, title, description, budget, status, outputSpec, contract, createdAt,
                 resolution, resolvedAt, rejectionReason, payoutAmount, commissionAmount, refundAmount,
                 failureReason, category, agentId, reviewDeadline, autoAccepted, rejection, failureDetail,
-                itemCount, itemPrice, items, fallback);
+                itemCount, itemPrice, items, fallback, reviewReason);
+    }
+
+    /** This task with why its result waits for the Client's review (null leaves it out). */
+    public TaskDTO withReviewReason(String reason) {
+        return new TaskDTO(id, clientId, title, description, budget, status, outputSpec, contract, createdAt,
+                resolution, resolvedAt, rejectionReason, payoutAmount, commissionAmount, refundAmount,
+                failureReason, category, agentId, reviewDeadline, autoAccepted, rejection, failureDetail,
+                itemCount, itemPrice, items, templateFallback, reason);
     }
 
     public record OutputSpecDTO(String format, String schema, String acceptanceCriteria) {

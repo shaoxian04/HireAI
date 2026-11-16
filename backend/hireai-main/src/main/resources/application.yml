@@ -124,10 +124,14 @@ hireai:
     timeout: ${AI_REVIEW_TIMEOUT:PT60S}
     # Images and PDFs larger than this are described, not attached (the arbitrator's limit).
     media-max-bytes: ${AI_REVIEW_MEDIA_MAX_BYTES:8388608}
-    # A review that gave no verdict is retried by the sweeper after retry-after, max-attempts in all;
-    # then it fails, the fee is refunded and the result waits for the Client's own review.
+    # Fail closed: no usable verdict is never a pass. A run tries max-attempts times in all: an unusable
+    # answer (refusal, malformed, a criterion missing) is retried once, a transient failure after
+    # retry-backoff (doubling). Then the review fails, the fee is refunded and nothing is settled: an
+    # API result waits for the Client's review (review_reason AI_REVIEW_UNAVAILABLE). A review still
+    # running retry-after after it was requested (a restart mid-run) is run again by the sweeper.
     max-attempts: ${AI_REVIEW_MAX_ATTEMPTS:3}
-    retry-after: ${AI_REVIEW_RETRY_AFTER:PT2M}
+    retry-backoff: ${AI_REVIEW_RETRY_BACKOFF:PT2S}
+    retry-after: ${AI_REVIEW_RETRY_AFTER:PT5M}
     sweep-interval: ${AI_REVIEW_SWEEP_INTERVAL:PT1M}
   review:
     # Client review window (#94): a web-channel result that passed validation waits this long in

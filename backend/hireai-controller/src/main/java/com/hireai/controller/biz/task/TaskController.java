@@ -167,7 +167,8 @@ public class TaskController extends BaseController {
                 rejectionAppService.findLatest(task.id()).orElse(null),
                 readAppService.findFailureDetail(task).orElse(null), readAppService.findItems(task), true)
                 .withTemplateFallback(Acceptance2DTOConverter.toDTO(
-                        readAppService.findTemplateFallback(task).orElse(null))));
+                        readAppService.findTemplateFallback(task).orElse(null)))
+                .withReviewReason(readAppService.findReviewReason(task).orElse(null)));
     }
 
     @GetMapping("/{taskId}/result")

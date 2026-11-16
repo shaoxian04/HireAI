@@ -27,7 +27,8 @@ public class AiReviewConfig {
     @Bean
     public AiReviewSettings aiReviewSettings(
             @Value("${hireai.ai-review.max-attempts:3}") int maxAttempts,
-            @Value("${hireai.ai-review.retry-after:PT2M}") Duration retryAfter) {
-        return new AiReviewSettings(maxAttempts, retryAfter);
+            @Value("${hireai.ai-review.retry-after:PT5M}") Duration retryAfter,
+            @Value("${hireai.ai-review.retry-backoff:PT2S}") Duration retryBackoff) {
+        return new AiReviewSettings(maxAttempts, retryAfter, retryBackoff);
     }
 }
