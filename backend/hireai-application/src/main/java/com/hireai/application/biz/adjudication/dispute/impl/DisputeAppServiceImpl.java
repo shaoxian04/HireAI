@@ -18,6 +18,7 @@ import com.hireai.domain.biz.adjudication.model.Ruling;
 import com.hireai.domain.biz.adjudication.repository.DisputeRepository;
 import com.hireai.domain.biz.ledger.settlement.enums.DisputeFeeType;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
+import com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.model.TaskModel;
@@ -55,6 +56,8 @@ public class DisputeAppServiceImpl implements DisputeAppService {
     private final ReputationWriteAppService reputationWriteAppService;
     private final DisputeFeeSchedule feeSchedule;
     private final Clock clock;
+    /** A Task submitted with an API key is on the API/MCP channel, where only the Client may appeal (D38). */
+    private final ApiKeyTaskRepository apiKeyTaskRepository;
 
     @Override
     public UUID openDispute(TaskModel disputedTask, UUID raisedBy, RejectReason reasonCategory) {
@@ -136,6 +139,10 @@ public class DisputeAppServiceImpl implements DisputeAppService {
         Set<DisputeParty> sides = requireSides(dispute, userId);
         Set<DisputeParty> acting = actingSides(dispute, sides);
         DisputeParty side = acting.isEmpty() ? sides.iterator().next() : acting.iterator().next();
+        if (side == DisputeParty.BUILDER && apiKeyTaskRepository.findApiKeyIdByTask(dispute.taskId()).isPresent()) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION, "Dispute " + disputeId + " is on a task "
+                    + "submitted through the API; a Builder may appeal a ruling only on a web-channel task");
+        }
         disputeRepository.save(dispute.appeal(side, clock.instant()));
         log.info("{} appealed dispute {} to the admin backstop", side, disputeId);
     }

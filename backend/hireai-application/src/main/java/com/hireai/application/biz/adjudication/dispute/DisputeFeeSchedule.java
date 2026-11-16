@@ -21,7 +21,7 @@ public class DisputeFeeSchedule {
 
     public DisputeFeeSchedule(@Value("${hireai.arbitration.cost:3.00}") BigDecimal arbitrationCost,
                               @Value("${hireai.arbitration.appeal-fee:5.00}") BigDecimal appealFee,
-                              @Value("${hireai.arbitration.ruling-accept-after:PT2M}") Duration appealWindow) {
+                              @Value("${hireai.arbitration.appeal-window:PT24H}") Duration appealWindow) {
         this.arbitrationCost = Money.of(arbitrationCost);
         this.appealFee = Money.of(appealFee);
         this.appealWindow = appealWindow;

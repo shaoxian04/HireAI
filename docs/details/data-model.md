@@ -168,7 +168,7 @@ An optional, Client-paid judgement of criteria code cannot check (spec S10, D5, 
 An [AI Review](#ai-review) fee is separate from this table: the Client pays it to the platform once the review ran, whatever the verdict.
 
 - **Rejecting does not refund by itself.** A/B/C moves no money until the Agent concedes, the Client accepts, or a ruling is final.
-- **Disputes settle late.** The arbitrator's ruling is a proposal, and escrow holds at `RULED` until every side it goes against accepts it, one of them appeals, or a sweeper auto-accepts (`hireai.arbitration.ruling-accept-after`). `settleFromEffective` then moves money once, under the task row lock. The arbitrator callback never settles.
+- **Disputes settle late.** The arbitrator's ruling is a proposal, and escrow holds at `RULED` until every side it goes against accepts it, one of them appeals, or a sweeper auto-accepts (`hireai.arbitration.appeal-window`). `settleFromEffective` then moves money once, under the task row lock. The arbitrator callback never settles.
 - **Loser pays (#96, spec D43).** After a dispute settles, the side(s) the effective ruling goes against bear the arbitration cost (`hireai.arbitration.cost`) and, if it was appealed, the Appeal Fee (`hireai.arbitration.appeal-fee`); a split shares each half and half. Each is capped at 20% of the price (`SettlementPolicy.disputeFeeCap`) and debited from the loser's available balance as far as it goes; the platform covers the excess and any shortfall. `DisputeFeeDomainService` computes it from the category alone (Inv #3).
 - **There is no retry after a spec violation.** It is an immediate full refund.
 - The builder's wallet opens on first payout. Escrow is reconstructable from `ledger_entries`.

@@ -221,14 +221,14 @@ hireai:
     # Human-backstop sweeper: an ARBITRATING dispute older than this is escalated to the admin.
     stale-after: ${ARBITRATION_STALE_AFTER:PT2M}
     sweep-interval: ${ARBITRATION_SWEEP_INTERVAL:PT1M}
-    # Auto-accept sweeper: a RULED (proposed) dispute the client never acted on is auto-accepted
-    # after this long, so escrow doesn't hang forever.
-    ruling-accept-after: ${RULING_ACCEPT_AFTER:PT2M}
+    # Appeal window (D42): how long either side may accept or appeal a proposed (RULED) ruling; after
+    # it the auto-accept sweeper accepts it on everyone's behalf, so escrow doesn't hang forever.
+    # Defaults to the Client's decision window.
+    appeal-window: ${APPEAL_WINDOW:${hireai.rejection.client-decision-window}}
     accept-sweep-interval: ${RULING_ACCEPT_SWEEP_INTERVAL:PT1M}
     # Loser pays (#96, spec D43): the arbitration cost and the Appeal Fee of a web appeal to an
     # admin, in credits. The side the effective ruling goes against bears each, capped at 20% of
     # the Item price (domain policy); the platform covers the excess. 0 turns a fee off.
-    # ruling-accept-after above is also the window in which either side may accept or appeal.
     cost: ${ARBITRATION_COST:3.00}
     appeal-fee: ${APPEAL_FEE:5.00}
   receipts:
