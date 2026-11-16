@@ -68,9 +68,11 @@ class TaskItemsTest {
     }
 
     @Test
-    void aTaskNeedsAtLeastTwoItemsAndAtMostTheLimit() {
-        assertThatThrownBy(() -> TaskItems.submit(taskId, List.of("only one"), Money.of("1.00")))
-                .isInstanceOf(DomainException.class).hasMessageContaining("at least 2");
+    void aTaskHoldsOneToTheLimitOfItems() {
+        // Spec S3: a Task holds 1..n Items, so a single document can be booked as a one-Item Task.
+        assertThat(TaskItems.submit(taskId, List.of("only one"), Money.of("1.00")).count()).isEqualTo(1);
+        assertThatThrownBy(() -> TaskItems.submit(taskId, List.of(), Money.of("1.00")))
+                .isInstanceOf(DomainException.class).hasMessageContaining("at least 1");
         List<String> tooMany = new ArrayList<>(Collections.nCopies(TaskItems.MAX_ITEMS + 1, "x"));
         assertThatThrownBy(() -> TaskItems.submit(taskId, tooMany, Money.of("1.00")))
                 .isInstanceOf(DomainException.class).hasMessageContaining("at most " + TaskItems.MAX_ITEMS);

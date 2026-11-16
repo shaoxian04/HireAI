@@ -15,7 +15,7 @@ The current schema and domain model, from the code. `backend/hireai-main/src/mai
 | offering | `StorefrontModel` | `Media` | `StorefrontRepository` | Listing is separate from agent status; bookable = ACTIVE and listed. |
 | offering | `AgentEmbeddingModel` | `AgentProfileText` | `AgentEmbeddingRepository` | At most one vector per Agent, always 1536-dimensional and tagged with its model and text hash; replaced, never compared across models. |
 | task | `TaskModel` | `TaskResultModel`, `OutputSpec` | `TaskRepository` | Legal transitions only; a result exists only after dispatch. |
-| task | `TaskItems` ([Items](#items)) | `TaskItemModel`, `ItemCheck` | `TaskItemRepository` | 2..1000 Items numbered from 1; each Item settles once; changed only under the Task row lock. |
+| task | `TaskItems` ([Items](#items)) | `TaskItemModel`, `ItemCheck` | `TaskItemRepository` | 1..1000 Items numbered from 1; each Item settles once; changed only under the Task row lock. |
 | ledger | `ItemSettlementModel` | | `ItemSettlementRepository` | One per Item (append-only); the money moves through the ledger. |
 | task | `IdempotencyRecord` | | `IdempotencyRepository` | `UNIQUE (owner, key)` in the same transaction as the freeze, so a race rolls the freeze back. |
 | task | `WebhookDeliveryModel` | | `WebhookDeliveryRepository` | One row per terminal event, written in the settling transaction and retried until delivered or dead. |

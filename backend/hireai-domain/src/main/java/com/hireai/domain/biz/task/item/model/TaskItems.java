@@ -15,14 +15,14 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * The Items of one multi-Item Task, in Item order (spec S3). A Task without Items is today's
- * single-deliverable Task: its one Item is the Task's own result, so the Items list starts at 2.
+ * The Items of one Task, in Item order (spec S3: 1..n). A Task without Items is the single-deliverable Task,
+ * whose one result is the Task's own.
  * Escrow is frozen once for the Task as the per-Item price × the Item count.
  */
 public record TaskItems(List<TaskItemModel> all) {
 
-    /** A Task with fewer Items is an ordinary single-deliverable Task. */
-    public static final int MIN_ITEMS = 2;
+    /** Spec S3: a Task holds 1..n Items (a single document is a one-Item Task); without Items it is single-deliverable. */
+    public static final int MIN_ITEMS = 1;
     public static final int MAX_ITEMS = 1000;
     /** Same limit as a Task description, which is what an Item's input stands in for. */
     public static final int MAX_INPUT_LENGTH = 5000;
@@ -51,8 +51,8 @@ public record TaskItems(List<TaskItemModel> all) {
     public static TaskItems submitInputs(UUID taskId, List<ItemInput> inputs, Money price) {
         if (inputs == null || inputs.size() < MIN_ITEMS) {
             throw new DomainException(ResultCode.VALIDATION_ERROR,
-                    "items: a multi-Item Task needs at least " + MIN_ITEMS + " Items; for one, leave items out "
-                            + "and describe the work in the description");
+                    "items: give at least " + MIN_ITEMS + " Item, or leave items out and describe the work "
+                            + "in the description");
         }
         if (inputs.size() > MAX_ITEMS) {
             throw new DomainException(ResultCode.VALIDATION_ERROR,

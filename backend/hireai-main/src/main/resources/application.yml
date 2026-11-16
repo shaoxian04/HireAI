@@ -29,8 +29,8 @@ spring:
     locations: classpath:db/migration
   servlet:
     multipart:
-      # The largest upload is an Engagement document (hireai.source.max-bytes); storefront images
-      # keep their own 2 MB check in the service.
+      # Sized for the largest upload, an Engagement document (hireai.source.max-bytes). Every other
+      # multipart endpoint is held to hireai.upload.default-max-bytes by UploadSizeFilter (413).
       max-file-size: 25MB
       max-request-size: 26MB
   rabbitmq:

@@ -17,7 +17,6 @@ import { EngagementDocuments, type DocumentSelection } from "@/components/Engage
 import { invoiceContract, invoiceTerm, offersBusinessValid, type InvoiceExpectation } from "@/lib/invoice";
 
 /** A multi-Item Task holds two Items or more; a single piece of work is described in the brief. */
-const MIN_ITEMS = 2;
 
 function BookingForm() {
   const { id } = useParams<{ id: string }>();
@@ -108,11 +107,6 @@ function BookingForm() {
     const invalid = validateForm(e.currentTarget as HTMLFormElement);
     if (invalid) {
       setError(invalid);
-      return;
-    }
-    if (itemCount > 0 && itemCount < MIN_ITEMS) {
-      setError({ field: null, message: "Choose at least two documents: each document is one Item, and a batch holds two or more. "
-        + "For a single piece of work, untick the document and describe it in the brief." });
       return;
     }
     if (aiCriteria !== null && itemCount > 0) {
@@ -266,7 +260,7 @@ function BookingForm() {
             </fieldset>
           )}
 
-          {itemCount >= MIN_ITEMS && (
+          {itemCount > 0 && (
             <fieldset className="space-y-2 rounded-lg border border-line bg-surface px-4 py-3">
               <legend className="px-1 text-xs font-semibold text-muted">How the batch is checked</legend>
               <p className="text-sm text-muted">

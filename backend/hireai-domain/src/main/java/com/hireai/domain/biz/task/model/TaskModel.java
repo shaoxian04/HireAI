@@ -378,6 +378,18 @@ public final class TaskModel {
         return withRejection(TaskStatus.DISPUTED, this.result, this.rejectionReason, this.rejectReasonCategory);
     }
 
+    /**
+     * The submitted task stamped with the platform clock's submit time, so every age measured from it (the
+     * SUBMITTED sweeper's) uses the same clock as the cutoff it is compared with. SUBMITTED only.
+     */
+    public TaskModel submittedAt(Instant at) {
+        requireStatus(TaskStatus.SUBMITTED, "submittedAt");
+        requirePresent(at, "submit time");
+        return new TaskModel(id, clientId, title, description, budget, outputDescription, contract, category,
+                status, agentVersionId, result, at, resolution, resolvedAt, rejectionReason, rejectReasonCategory,
+                failureReason);
+    }
+
     private TaskModel withRejection(TaskStatus newStatus, TaskResultModel newResult, String reason,
                                     RejectReason reasonCategory) {
         return new TaskModel(id, clientId, title, description, budget, outputDescription, contract, category,
