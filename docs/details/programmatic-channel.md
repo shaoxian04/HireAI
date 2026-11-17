@@ -14,7 +14,7 @@ API key ──(Authorization: ApiKey <raw>)──► submit (open | direct)
   → atomic escrow freeze                 (Inv #1)
   → routing → RabbitMQ dispatch → signed HTTPS webhook to the Agent
   → Agent callback (dispatch token + agent signature)
-  → validation gate on the frozen output_spec
+  → acceptance gate on the frozen Contract
         PASS → settleAccepted (85/15) → RESOLVED
         FAIL → refund → SPEC_VIOLATION
   → outbox row written in the settling transaction
@@ -40,6 +40,8 @@ Two independent optional caps per key; exceeding either is `409 SPEND_CAP_EXCEED
 - `spend_cap`: the sum of currently frozen escrow across the key's in-flight tasks.
 - `daily_spend_cap`: budget committed in the rolling last 24h.
 
+Both count what a submit freezes: the price (× the Item count) plus any AI Review fee frozen with a direct booking.
+
 Both are an authorization **read** over `api_key_task`, never a second ledger (Inv #2).
 
 ## 4. Submit modes
@@ -48,15 +50,27 @@ Both go through `SubmitOrchestrationAppService` (idempotency, caps, attribution)
 
 | Mode | Endpoint | Body | Agent | Spec |
 |---|---|---|---|---|
-| **Open** | `POST /api/tasks` | `{title, description, category, budget, outputSpec, deadlineSeconds?}` | Matcher picks | The client's submitted spec |
-| **Direct** | `POST /api/tasks/direct` | `{title, description, budget, agentId, category?, deadlineSeconds?}` | Pinned | Inherits the agent's spec |
+| **Open** | `POST /api/tasks` | `{title, description, category, budget, outputSpec?, contract?, deadlineSeconds?}` | Matcher picks | Description only: extracted and adopted; with `contract`: that Contract ([requirement extraction](#4a-requirement-extraction-and-the-two-open-submit-modes)) |
+| **Direct** | `POST /api/tasks/direct` | `{title, description, budget, agentId, category?, deadlineSeconds?, contract?, extraction?}` | Pinned | Freezes the agent's own terms as the Contract; an optional `contract` must be [covered](matching.md#offer-coverage) by the agent's Offer (else 400) and is frozen as the task's Contract; an optional `extraction` (a [draft](#4a-requirement-extraction-and-the-two-open-submit-modes)'s, naming that Contract's Template version, else 400) is kept on the task as the record of what each requirement became, and returned as the task's `extraction` |
 
 - **Categories come from one platform-owned list** ([`categories`](data-model.md#categories), served by `GET /api/catalogue/categories`). An unknown slug on open submit, on a direct booking's optional `category`, or on match-preview is `400 VALIDATION_ERROR` whose message lists the valid slugs (`Unknown category 'x'. Valid categories: …`); input is trimmed and lowercased first. Nothing is frozen. A direct booking's `category` must also be one the agent serves (else 400); without it the task takes the agent's first category.
-- **An optional deadline** (`deadlineSeconds`, 1 to 2592000 = 30 days, else 400) says how soon the result is needed, counted from the request and fixed on the task at submit. Only Agents that can finish in time are picked, at routing and at every failover hop ([eligibility](matching.md#client-deadline)); a routed task no Agent fits waits `AWAITING_AGENT` and ends `CANCELLED` with `NO_ELIGIBLE_AGENT` and a refund. A direct booking of an Agent that can't fit is `400 VALIDATION_ERROR` and nothing is frozen. A given `deadlineSeconds` is part of the idempotency fingerprint.
+- **An optional deadline** (`deadlineSeconds`, 1 to 2592000 = 30 days, else 400) says how soon the result is needed, counted from the request and fixed on the task at submit. Only Agents that can finish in time are picked, at routing and at every failover hop ([eligibility](matching.md#client-deadline)); a routed task no Agent fits waits `AWAITING_AGENT` and ends `CANCELLED` with `NO_ELIGIBLE_AGENT` and a refund. A direct booking of an Agent that can't fit is `400 VALIDATION_ERROR` and nothing is frozen. A given `deadlineSeconds` is part of the idempotency fingerprint, as is a direct booking's `contract`.
 - **Open mode is API and MCP only.** The web UI always books direct, after a shortlist from `POST /api/tasks/match-preview`.
 - **Open mode picks only listed agents:** the same eligibility and score as the web shortlist ([matching](matching.md#one-ranking-engine-three-uses)).
 - **Direct mode needs `ACTIVE` and listed.** Anything else is `404 NOT_FOUND`, deliberately, to avoid leaking existence.
+- **Multi-Item Tasks** ([Items](data-model.md#items)): both modes take an optional `items` (1 to 1000 strings, each 1 to 5000 characters; else 400 and nothing frozen). With Items, `budget` is the price of **one** Item: the Task freezes `budget × count`, spend caps count that total, a routed task matches on the per-Item price, and the Items join the idempotency fingerprint. MCP's `submit_task` does not take Items yet.
+- **Confidential documents** go only to an Agent the buyer chose, under an [Engagement](data-model.md#engagements) (ADR 0010). A person opens it (`POST /api/engagements {agentId, confidentialConsent: true, templateVariant?, retentionDays?}`, JWT only); a key may then upload (`POST /api/engagements/{id}/sources`, multipart `file`) and list (`GET /api/engagements/{id}/sources`, with the download log). A direct booking with `engagementId` may give an Item as `{"sourceId": "<document id>", "input"?: "..."}` (a plain string is still a text Item); documents on open submit, or without `engagementId`, are `400`.
 - **Direct budget:** must be at least the agent's price, or `400 VALIDATION_ERROR`. **The submitted budget is what freezes and settles**, so a caller who over-budgets pays that amount. Only the web UI sends `budget = price`. See [Known gaps](build-status.md#known-gaps).
+
+## 4a. Requirement extraction and the two open-submit modes
+
+An open submit (`POST /api/tasks`) is in one of two modes (spec S6, D28). There is no confirm step.
+
+- **Mode 1, description only** (no `contract`). The platform extracts the requirements of `title`, `description` and `outputSpec.acceptanceCriteria` onto the Template `outputSpec` maps onto (`text_basic@1` when `outputSpec` is left out), and adopts the result: submitting is acceptance. The response (and `GET /api/tasks/{id}`) carries the frozen `contract` and an `extraction` `{template, version, status, requirements[{text, mapped, check?, params?, unmappedReason?}]}`. A mapped requirement set Contract parameters; an unmapped one is checked by no automatic check and stays as evidence for the Client's review and arbitration.
+- **Mode 2, description + structured Contract** (`contract: {template, version, params, checks?}`, the shape the task API returns). Nothing is extracted; the Contract is the only basis for acceptance and the description is instructions to the Agent. Unknown Template or parameter, a value out of bounds, or a named `checks` entry the Template doesn't list or the `params` don't switch on (e.g. `IMAGE_BACKGROUND_COLOUR` without `background_colour`) is `400 VALIDATION_ERROR`, and nothing is frozen. `outputSpec` may be left out (the task records the shape the Contract's Template implies); if given, its `format` must match that shape (else 400).
+- **Preview: `POST /api/contracts/draft`** `{title?, description, template? | outputSpec?}` returns `{contract, extraction}` for that text without creating a Task or freezing anything. `template` names a Template key (its current version is used), so a draft can target a Template that no output format maps onto (e.g. `image_generation`). Edit the draft's `contract` and submit it in mode 2. Drafts and description-only submits share a per-user cap on extractions (`hireai.extraction.rate-limit.*`); beyond it the call is a **429** `RATE_LIMITED`, before anything is frozen. A mode-2 submit (with a `contract`) is never capped.
+
+How extraction works: **one** LLM call (`RequirementExtractorPort`, OpenAI chat completions with strict structured output, `hireai.extraction.*`) receives the Template's checks (never its Findings) and parameters, with the reply's schema constrained to those checks (or `UNMAPPED`) and to each parameter's value kind. The task text is client-controlled, so it is sent as data in its own message and the reply is **untrusted**: `RequirementExtractionDomainService` keeps a mapping only if it names a check the Template lists, sets only parameters that check reads ([`CheckLibrary.parametersOf`](data-model.md#acceptance-engine)) and switches it on, agrees with every value already set (the output spec's schema is never overridden), counts in the unit its parameters measure (`ParameterUnit`: a requirement whose own words count words, sentences, lines, paragraphs, pages, items or another parameter unit, as in "20 to 200 words" against `max_length`'s characters, is ambiguous; the prompt also states each parameter's unit), and leaves a Contract the full submit check accepts (bounds, version, `requireCheckable`); anything else is downgraded to unmapped with the reason. At most 20 requirements are kept, each cut to 300 characters. When the provider is unavailable (no API key, down, past the timeout, a refusal or an unusable reply) the Contract is the Template's defaults (the output spec's equivalent, as before) with `status: UNAVAILABLE`; a submit never fails for that. Extraction runs outside the submit transaction. The idempotency fingerprint is the client's request (a mode-2 `contract` joins it), so a mode-1 retry with the same `Idempotency-Key` returns the first task without a second LLM call. The record is stored on `tasks.contract_extraction` ([data model](data-model.md#tables)).
 
 ## 5. Deterministic auto-settlement
 
@@ -64,16 +78,18 @@ A machine client must not be asked for a human "review, then accept or reject". 
 
 - **PASS:** `settleAccepted`, `RESOLVED`, and reputation `TASK_ACCEPTED`.
 - **FAIL:** refund, `SPEC_VIOLATION`, and reputation `SPEC_VIOLATION`.
+- **AI Review booked** (spec D38): validation passing (or sending the result to review) does not settle; the decisive [AI Review](data-model.md#ai-review) does, from its ruling category, and is final. If it gives no usable verdict the fee is refunded and the task waits in `PENDING_REVIEW` with `reviewReason = AI_REVIEW_UNAVAILABLE` (MCP `get_task_status` shows it as `review_reason`); it never falls back to a payout.
+- **Multi-Item Task:** each Item is judged on its own; passing Items are paid at once, failing or missing ones refunded, and the Task ends `RESOLVED` (`ACCEPTED` or `PARTIALLY_ACCEPTED`), or `SPEC_VIOLATION` when none passed, with one `ITEMS_SETTLED` event (`TaskItemAppServiceImpl`).
 
 This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject are denied to API keys (401), API tasks have no dispute path, and they can't be reviewed, so they never produce a Satisfaction event. Human-submitted tasks are unchanged. Settlement is fully deterministic with no LLM (Inv #3).
 
-**What the gate actually checks** (`ValidationDomainServiceImpl`) is format and JSON Schema only:
-- `TEXT` passes on any non-blank payload.
-- `JSON` must parse, and a blank or non-JSON-Schema `schema` is skipped.
-- `FILE` needs a valid HTTPS URL.
-- `acceptanceCriteria` is **never evaluated** here. It is only arbitration evidence, and API tasks don't reach arbitration.
+**What the gate actually checks** (`ValidationDomainServiceImpl`) is the task's frozen [Contract](data-model.md#acceptance): format, optional text length, and JSON Schema only:
+- `text_basic` (TEXT) passes on any non-blank payload, within `min_length`/`max_length` when the Contract sets them (characters of the payload).
+- `custom_json` (JSON) must parse and, when the Contract has a `schema`, match it. A non-blank `schema` that is not a valid JSON Schema 2020-12 object is a **400 at submit** (nothing frozen), so a schema is never silently skipped. A schema is one self-contained document: only local `#...` references, no `$id`, and `$schema` (if given) must be 2020-12. The validator never fetches a URL or file a schema names (`NetworkntSchemaValidator`). A task from before Contracts carries the Contract its output spec mapped onto ([the retired output spec](data-model.md#the-retired-output-spec)), so it is judged exactly as before; a prose schema it kept from before D8 is still skipped.
+- `file_basic` (FILE) needs a valid HTTPS URL.
+- `acceptanceCriteria` is **never evaluated** here: it maps onto no Template parameter and is kept beside the Contract as intent evidence. On a description-only submit extraction reads it like the description, so a requirement written there can still become a checked parameter. API tasks don't reach arbitration.
 
-**Accepted limitation:** a fully autonomous client has no recourse for output that is spec-valid but poor; it pays. Its levers are a real JSON Schema (or a stricter format) and agent choice. A programmatic dispute API is out of scope.
+**Accepted limitation:** a fully autonomous client has no recourse for output that is spec-valid but poor; it pays. Its levers are a real JSON Schema (or a stricter format), agent choice, and booking an [AI Review](data-model.md#ai-review) of the criteria code cannot check. A programmatic dispute API is out of scope.
 
 ## 6. Push webhooks
 
@@ -83,13 +99,13 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 
 **SSRF guard** (`WebhookUrlValidator`, Inv #6 outbound), checked **at registration and before every delivery attempt**: HTTPS only; the host is DNS-resolved; loopback, link-local (incl. cloud metadata), RFC1918, CGNAT and IPv6 ULA are blocked. `WEBHOOKS_ALLOW_INSECURE_LOCALHOST` exempts `http://localhost` for dev. Agent webhook URLs go through the same guard ([`matching.md`](matching.md#the-workorder)). DNS rebinding between the check and the connection is a known gap.
 
-**Events:** `task.completed` (doorbell) and `task.failed` (doorbell plus `reason`, `failure_reason` and `refunded`). `reason` is the terminal status: `SPEC_VIOLATION`, `FAILED`, `TIMED_OUT` or `CANCELLED`. `failure_reason` is the task's [FailureReason](data-model.md#failure-reason) (why it ended), the same value `GET /api/tasks/{id}` returns as `failureReason`; it is `null` only for tasks that ended before reasons were recorded.
+**Events:** `task.completed` (doorbell) and `task.failed` (doorbell plus `reason`, `failure_reason` and `refunded`). `reason` is the terminal status: `SPEC_VIOLATION`, `FAILED`, `TIMED_OUT` or `CANCELLED`. `failure_reason` is the task's [FailureReason](data-model.md#failure-reason) (why it ended), the same value `GET /api/tasks/{id}` returns as `failureReason`; it is `null` only for tasks that ended before reasons were recorded. On `NO_ELIGIBLE_AGENT` the event also carries `failure_detail`, the task's `failureDetail` (what ruled the agents out).
 
 **Outbox and sweeper (at-least-once):**
 - The terminal transition writes a `webhook_deliveries` row in the settling transaction. Its `id` doubles as the client-facing event id.
 - An API task whose key has no active subscription gets no row, and registering later does not replay it.
 - A routed task (no `agent_id`) whose Agent is busy (429/503) or unreachable after every send attempt fails over to another eligible Agent within the same budget, up to 3 distinct Agents, with no event in between ([routed failover](matching.md#routed-failover)). With none left it ends `FAILED` with a refund and a `task.failed` event (`failure_reason` `NO_ALTERNATIVE_AGENT`, or `NO_ELIGIBLE_AGENT` when only the client deadline rules the untried Agents out). `GET /api/tasks/{id}/attempts` shows each Agent tried.
-- A direct (`agent_id`) task is never moved: every send attempt failing ends it `FAILED` with a refund and a `task.failed` event (`reason` `FAILED`, `failure_reason` `AGENT_UNREACHABLE`); a busy decline is not retried and ends it the same way with `failure_reason` `AGENT_BUSY`. Retry schedule: [`matching.md`](matching.md#the-workorder).
+- A direct (`agent_id`) task is never moved: every send attempt failing ends it `FAILED` with a refund and a `task.failed` event (`reason` `FAILED`, `failure_reason` `AGENT_UNREACHABLE`); a busy decline is not retried and ends it the same way with `failure_reason` `AGENT_BUSY`, and a contract decline (422) with `CONTRACT_DECLINED`. Retry schedule: [`matching.md`](matching.md#the-workorder).
 - `WebhookDeliverySweeper` claims due rows with `FOR UPDATE SKIP LOCKED`, which is safe across instances, then signs and POSTs over a redirect-disabled `RestClient`. Failures back off exponentially with a cap until `DEAD`. Values: `hireai.webhooks.*` in `application.yml`.
 
 **Signature:** `X-HireAI-Signature: t=<unix-ts>,v1=<hex hmac-sha256(secret,"{ts}.{body}")>`, with `X-HireAI-Event-Id` and `X-HireAI-Event-Type`. The client recomputes over `"{t}.{rawBody}"` and constant-time-compares `v1`.
@@ -98,7 +114,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 
 ## 6a. MCP server facade
 
-`mcp/` (official MCP SDK, stdio) exposes this channel as five tools with no business logic, authenticating with an API key from env. `list_categories` returns the [category list](data-model.md#categories) from `GET /api/catalogue/categories`, so an LLM caller picks a real slug. `get_task_status` passes the task's `failureReason` through as `failure_reason`. Tools, arguments and caveats: [`mcp/README.md`](../../mcp/README.md). springdoc publishes the REST surface as the `programmatic` group at `/v3/api-docs/programmatic`, with Swagger UI at `/swagger-ui/index.html`.
+`mcp/` (official MCP SDK, stdio) exposes this channel as six tools with no business logic, authenticating with an API key from env. `submit_task` takes a description and an optional `contract`, i.e. the [two submit modes](#4a-requirement-extraction-and-the-two-open-submit-modes), and returns the frozen `contract` and `extraction`; `draft_contract` wraps `POST /api/contracts/draft`. `list_categories` returns the [category list](data-model.md#categories) from `GET /api/catalogue/categories`, so an LLM caller picks a real slug. `get_task_status` passes the task's `failureReason` and `failureDetail` through as `failure_reason` and `failure_detail`. Tools, arguments and caveats: [`mcp/README.md`](../../mcp/README.md). springdoc publishes the REST surface as the `programmatic` group at `/v3/api-docs/programmatic`, with Swagger UI at `/swagger-ui/index.html`.
 
 ## 7. Endpoint catalog
 
@@ -107,9 +123,11 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 | `POST /api/keys`, `GET /api/keys`, `POST /api/keys/{id}/revoke` | JWT `CLIENT` | Key management |
 | `POST /api/tasks` | `CLIENT`, `API_CLIENT` | Open submit |
 | `POST /api/tasks/direct` | `CLIENT`, `API_CLIENT` | Direct submit |
+| `POST /api/contracts/draft` | `CLIENT`, `API_CLIENT` | Extract a description into a draft Contract ([§4a](#4a-requirement-extraction-and-the-two-open-submit-modes)); creates no task and freezes nothing |
 | `GET /api/tasks`, `/api/tasks/{id}`, `/result`, `/validation`, `/attempts` | `CLIENT`, `API_CLIENT` | Track (incl. `failureReason` once a task ends without a result; `/{id}` also gives the `category` and the `agentId` it was booked with), result, failing check, dispatch history ([`dispatch_attempts`](data-model.md#dispatch-attempts)) |
 | `POST /api/tasks/match-preview` `{title, description, category, budget, deadlineSeconds?, exclude?}` | `CLIENT`, `API_CLIENT` | Ranked shortlist; creates no task and freezes nothing. A POST so the task text never travels in a URL. `exclude` (at most 20 Agent ids) leaves those Agents out of both lists. `deadlineSeconds` (same limits as submit, counted from this request) leaves out Agents that can't finish in time. `title`/`description` (same limits as submit) are the task text the [relevance floor and ranking](matching.md#relevance) use; its vector is cached, so a submit or booking with the same text makes no second embedding call. The response is `{shortlist, nearMisses, noCloseMatch}`; `noCloseMatch` is true when the shortlist is empty only because every in-budget Agent is below the floor. There is no GET form |
 | `GET /api/catalogue/**` | Any human role, `API_CLIENT` | Browse agents; `/categories` is the category list (`category` slug, `label`, `agentCount`) |
+| `GET /api/tasks/{id}/receipts`, `/api/receipts/{id}` (+ `/credential`, `/otel`), `/api/receipt-keys` | `CLIENT`, `API_CLIENT` (keys public) | The signed receipt of each settled Item, its W3C VC 2.0 and OTel exports, and the keys to verify it ([`receipts.md`](receipts.md)) |
 | `/api/webhooks/subscription/**` | JWT `CLIENT` | Subscription |
 | `GET /api/webhooks/deliveries`, `POST …/{id}/redeliver` | `CLIENT`, `API_CLIENT` | Delivery log, resend |
 
@@ -117,6 +135,7 @@ This skips `PENDING_REVIEW`, accept/reject and all disputes. So accept/reject ar
 
 - **Auth:** `ApiKeyAuthenticationFilter`, `HttpCurrentApiKeyProvider` (`hireai-controller`); `ApiKeyAuthService` (`hireai-application`); `ApiKeyModel`, `SpendCaps` (`hireai-domain`).
 - **Orchestration:** `SubmitOrchestrationAppService`, `SubmitFingerprint`.
+- **Extraction:** `ContractController`, `ContractDraftAppService`, `RequirementExtractorPort` (infra `OpenAiRequirementExtractor`), domain `RequirementExtractionDomainService`; test fake `support/extraction/FakeExtractionProvider`.
 - **Settlement gate:** `ValidationAppServiceImpl`, `AgentCallbackAppServiceImpl`.
 - **Webhooks:** `WebhookOutboxAppService`, `WebhookDeliveryAppService`, `WebhookDeliverySweeper`, `WebhookSubscriptionAppService`; domain `WebhookSignature`, `WebhookPayloads`, `WebhookBackoffPolicy`, `IpClassifier`; infra `WebhookSender`, `WebhookUrlValidator`, `WebhookRestClientConfig`.
 

@@ -1,5 +1,8 @@
 package com.hireai.controller.biz.task;
 
+import com.hireai.domain.biz.ledger.settlement.model.SettlementModel;
+import com.hireai.domain.biz.ledger.settlement.model.TaskSettlementRecord;
+
 import com.hireai.application.biz.adjudication.validation.ValidationReadAppService;
 import com.hireai.application.biz.reputation.ReviewAppService;
 import com.hireai.application.biz.task.MatchPreviewAppService;
@@ -75,6 +78,8 @@ class TaskControllerTest {
     @MockBean MatchPreviewAppService matchPreviewAppService;
     @MockBean ValidationReadAppService validationReadAppService;
     @MockBean ReviewAppService reviewAppService;
+    @MockBean com.hireai.application.biz.task.RejectionAppService rejectionAppService;
+    @MockBean com.hireai.application.biz.acceptance.TemplateReadAppService templateReadAppService;
 
     @BeforeEach
     void noApiKeyByDefault() {
@@ -257,8 +262,11 @@ class TaskControllerTest {
         UUID taskId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
         when(taskReviewAppService.accept(eq(taskId), eq(clientId))).thenReturn(taskId);
-        when(taskReadAppService.getForClient(eq(taskId), eq(clientId)))
-                .thenReturn(resolvedTask(clientId, true));
+        TaskModel resolved = resolvedTask(clientId, true);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(resolved);
+        // The amounts shown are the recorded settlement's.
+        when(taskReadAppService.findSettlementRecord(resolved)).thenReturn(new TaskSettlementRecord(resolved.budget(),
+                Optional.of(SettlementModel.accepted(resolved.id(), Money.of("17.00"), Money.of("3.00"))), List.of()));
 
         mockMvc.perform(post("/api/tasks/{id}/accept", taskId))
                 .andExpect(status().isOk())
@@ -276,8 +284,10 @@ class TaskControllerTest {
         UUID taskId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
         when(taskReviewAppService.reject(eq(taskId), eq(clientId), eq(RejectReason.A_MISMATCH), eq("not what I asked"))).thenReturn(taskId);
-        when(taskReadAppService.getForClient(eq(taskId), eq(clientId)))
-                .thenReturn(resolvedTask(clientId, false));
+        TaskModel resolved = resolvedTask(clientId, false);
+        when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(resolved);
+        when(taskReadAppService.findSettlementRecord(resolved)).thenReturn(new TaskSettlementRecord(resolved.budget(),
+                Optional.of(SettlementModel.rejected(resolved.id())), List.of()));
 
         mockMvc.perform(post("/api/tasks/{id}/reject", taskId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -337,14 +347,16 @@ class TaskControllerTest {
         UUID agentId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
         when(matchPreviewAppService.preview(eq("Summarise"), eq("Private contract text"), eq("summarisation"),
-                eq(Money.of(new BigDecimal("30"))), eq(Set.of()), isNull()))
+                eq(Money.of(new BigDecimal("30"))), eq(Set.of()), isNull(), isNull()))
                 .thenReturn(new MatchPreview(
                         List.of(new AgentOption(agentId, versionId, "Alpha", "tag", "logo",
                                 new BigDecimal("12.00"), new BigDecimal("80.00"), true, "JSON",
-                                List.of("summarisation"), new BigDecimal("9.000"), 10L)),
+                                List.of("summarisation"), new BigDecimal("9.000"), 10L,
+                                new com.hireai.domain.biz.task.dispatchattempt.info.ContractDeclineRate(1, 4))),
                         List.of(new AgentOption(UUID.randomUUID(), UUID.randomUUID(), "Pricey", null, null,
                                 new BigDecimal("40.00"), new BigDecimal("90.00"), false, "JSON",
-                                List.of("summarisation"), new BigDecimal("0.000"), 0L)), false));
+                                List.of("summarisation"), new BigDecimal("0.000"), 0L,
+                                com.hireai.domain.biz.task.dispatchattempt.info.ContractDeclineRate.NONE)), false));
 
         mockMvc.perform(post("/api/tasks/match-preview")
                         .contentType(MediaType.APPLICATION_JSON).content(previewBody("")))
@@ -353,6 +365,11 @@ class TaskControllerTest {
                 .andExpect(jsonPath("$.data.shortlist[0].agentName").value("Alpha"))
                 .andExpect(jsonPath("$.data.shortlist[0].price").value(12.00))
                 .andExpect(jsonPath("$.data.shortlist[0].availability").value("AVAILABLE"))
+                .andExpect(jsonPath("$.data.shortlist[0].reliabilityCount").value(10))
+                .andExpect(jsonPath("$.data.shortlist[0].contractDeclines.declined").value(1))
+                .andExpect(jsonPath("$.data.shortlist[0].contractDeclines.answered").value(4))
+                .andExpect(jsonPath("$.data.shortlist[0].contractDeclines.rate").value(0.25))
+                .andExpect(jsonPath("$.data.nearMisses[0].contractDeclines.answered").value(0))
                 .andExpect(jsonPath("$.data.nearMisses[0].agentName").value("Pricey"))
                 .andExpect(jsonPath("$.data.nearMisses[0].availability").value("BUSY"))
                 .andExpect(jsonPath("$.data.noCloseMatch").value(false));
@@ -360,7 +377,7 @@ class TaskControllerTest {
 
     @Test
     void matchPreviewSaysWhenNoAgentMatchesTheTaskClosely() throws Exception {
-        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), isNull()))
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), isNull(), isNull()))
                 .thenReturn(new MatchPreview(List.of(), List.of(), true));
 
         mockMvc.perform(post("/api/tasks/match-preview")
@@ -368,6 +385,44 @@ class TaskControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.shortlist").isEmpty())
                 .andExpect(jsonPath("$.data.noCloseMatch").value(true));
+    }
+
+    @Test
+    void matchPreviewReadsTheContractAndExplainsAnEmptyShortlist() throws Exception {
+        var contract = new com.hireai.domain.biz.acceptance.contract.model.Contract(
+                new com.hireai.domain.biz.acceptance.template.model.TemplateRef("file_basic", 1), java.util.Map.of(
+                "max_bytes", new com.hireai.domain.biz.acceptance.contract.model.ParameterValue.Number(
+                        new BigDecimal("1000")),
+                "media_types", new com.hireai.domain.biz.acceptance.contract.model.ParameterValue.TextSet(
+                        Set.of("image/png"))));
+        var explanation = new com.hireai.domain.biz.task.routing.info.NoMatchExplanation(contract.template(),
+                List.of(new com.hireai.domain.biz.task.routing.info.NoMatchExplanation.Exclusion(
+                        com.hireai.domain.biz.task.routing.info.NoMatchExplanation.Blocker.PARAMETER, "max_bytes", 2)),
+                List.of(new com.hireai.domain.biz.task.routing.info.NoMatchExplanation.RelaxSuggestion("max_bytes", 2)));
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), isNull(),
+                eq(contract)))
+                .thenReturn(new MatchPreview(List.of(), List.of(), false, explanation));
+
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(previewBody(",\"contract\":{\"template\":\"file_basic\",\"version\":1,"
+                                + "\"params\":{\"max_bytes\":1000,\"media_types\":[\"image/png\"]}}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.noMatch.summary")
+                        .value("No eligible Agent: parameter max_bytes excluded 2 Agents."))
+                .andExpect(jsonPath("$.data.noMatch.exclusions[0].blocker").value("PARAMETER"))
+                .andExpect(jsonPath("$.data.noMatch.exclusions[0].parameter").value("max_bytes"))
+                .andExpect(jsonPath("$.data.noMatch.suggestions[0].agents").value(2));
+    }
+
+    @Test
+    void matchPreviewRejectsAContractValueOfNoKnownKind() throws Exception {
+        mockMvc.perform(post("/api/tasks/match-preview")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(previewBody(",\"contract\":{\"template\":\"file_basic\",\"version\":1,"
+                                + "\"params\":{\"max_bytes\":{\"nested\":1}}}")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     @Test
@@ -382,7 +437,7 @@ class TaskControllerTest {
     void matchPreviewPassesEveryExcludedAgentToTheService() throws Exception {
         UUID failed = UUID.randomUUID();
         UUID other = UUID.randomUUID();
-        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of(failed, other)), isNull()))
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of(failed, other)), isNull(), isNull()))
                 .thenReturn(new MatchPreview(List.of(), List.of(), false));
 
         mockMvc.perform(post("/api/tasks/match-preview")
@@ -394,7 +449,7 @@ class TaskControllerTest {
 
     @Test
     void matchPreviewPassesTheOptionalDeadlineOn() throws Exception {
-        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), eq(3600L)))
+        when(matchPreviewAppService.preview(any(), any(), eq("summarisation"), any(), eq(Set.of()), eq(3600L), isNull()))
                 .thenReturn(new MatchPreview(List.of(), List.of(), false));
 
         mockMvc.perform(post("/api/tasks/match-preview")
@@ -494,16 +549,20 @@ class TaskControllerTest {
         UUID taskId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
         when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(null);
-        when(validationReadAppService.latestForTask(eq(taskId)))
-                .thenReturn(Optional.of(ValidationReportModel.of(taskId, 1,
+        when(validationReadAppService.historyForTask(eq(taskId)))
+                .thenReturn(List.of(ValidationReportModel.of(taskId, 1,
                         List.of(new CheckResult("format", false, "expected FILE, got none")))));
+        when(validationReadAppService.maxReworks()).thenReturn(2);
 
         mockMvc.perform(get("/api/tasks/{id}/validation", taskId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.verdict").value("FAIL"))
                 .andExpect(jsonPath("$.data.checks[0].rule").value("format"))
                 .andExpect(jsonPath("$.data.checks[0].passed").value(false))
-                .andExpect(jsonPath("$.data.checks[0].detail").value("expected FILE, got none"));
+                .andExpect(jsonPath("$.data.checks[0].outcome").value("REJECT"))
+                .andExpect(jsonPath("$.data.checks[0].detail").value("expected FILE, got none"))
+                .andExpect(jsonPath("$.data.rejectedAttempts").value(1))
+                .andExpect(jsonPath("$.data.maxReworks").value(2));
     }
 
     @Test
@@ -512,7 +571,7 @@ class TaskControllerTest {
         UUID taskId = UUID.randomUUID();
         when(currentUserProvider.currentUserId()).thenReturn(clientId);
         when(taskReadAppService.getForClient(eq(taskId), eq(clientId))).thenReturn(null);
-        when(validationReadAppService.latestForTask(eq(taskId))).thenReturn(Optional.empty());
+        when(validationReadAppService.historyForTask(eq(taskId))).thenReturn(List.of());
 
         mockMvc.perform(get("/api/tasks/{id}/validation", taskId))
                 .andExpect(status().isNotFound())

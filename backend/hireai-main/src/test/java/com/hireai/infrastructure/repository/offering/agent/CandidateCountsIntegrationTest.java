@@ -134,8 +134,8 @@ class CandidateCountsIntegrationTest {
     }
 
     private void insertTask(UUID clientId, String status, UUID agentVersionId) {
-        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, output_spec, status, " +
-                        "agent_version_id) VALUES (?, ?, 'Task', 'desc', 10.00, ?::jsonb, ?, ?)",
+        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, contract, status, " +
+                        "agent_version_id) VALUES (?, ?, 'Task', 'desc', 10.00, contract_from_output_spec(?::jsonb), ?, ?)",
                 UUID.randomUUID(), clientId, "{\"format\":\"JSON\"}", status, agentVersionId);
     }
 

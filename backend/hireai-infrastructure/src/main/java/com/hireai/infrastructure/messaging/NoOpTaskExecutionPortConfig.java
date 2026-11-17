@@ -46,6 +46,11 @@ public class NoOpTaskExecutionPortConfig {
             }
 
             @Override
+            public void markExecuting(UUID taskId, java.time.Instant executionDeadline) {
+                log.debug("No-op markExecuting for task {}", taskId);
+            }
+
+            @Override
             public void markTimedOut(UUID taskId) {
                 log.debug("No-op markTimedOut for task {}", taskId);
             }
@@ -58,6 +63,11 @@ public class NoOpTaskExecutionPortConfig {
             @Override
             public void declineAsBusy(UUID taskId, UUID agentVersionId) {
                 log.debug("No-op declineAsBusy for task {}", taskId);
+            }
+
+            @Override
+            public void declineContract(UUID taskId, UUID agentVersionId, String reason) {
+                log.debug("No-op declineContract for task {}", taskId);
             }
         };
     }

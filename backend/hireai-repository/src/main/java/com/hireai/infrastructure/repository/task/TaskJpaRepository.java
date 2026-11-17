@@ -27,6 +27,27 @@ public interface TaskJpaRepository extends JpaRepository<TaskDO, UUID> {
     void stampExecutionDeadline(@Param("id") UUID id, @Param("deadline") Instant deadline);
 
     @Modifying
+    @Query(value = "UPDATE tasks SET review_deadline = :deadline WHERE id = :id", nativeQuery = true)
+    void stampReviewDeadline(@Param("id") UUID id, @Param("deadline") Instant deadline);
+
+    @Modifying
+    @Query(value = "UPDATE tasks SET review_auto_accepted = TRUE WHERE id = :id", nativeQuery = true)
+    void markReviewAutoAccepted(@Param("id") UUID id);
+
+    @Query(value = "SELECT review_deadline FROM tasks WHERE id = :id AND review_deadline IS NOT NULL",
+            nativeQuery = true)
+    Optional<Instant> findReviewDeadline(@Param("id") UUID id);
+
+    @Query(value = "SELECT review_auto_accepted FROM tasks WHERE id = :id", nativeQuery = true)
+    boolean isReviewAutoAccepted(@Param("id") UUID id);
+
+    @Query(value = """
+            SELECT id FROM tasks WHERE status = 'PENDING_REVIEW'
+              AND review_deadline IS NOT NULL AND review_deadline <= :now
+            """, nativeQuery = true)
+    List<UUID> findIdsReviewExpired(@Param("now") Instant now);
+
+    @Modifying
     @Query(value = "UPDATE tasks SET client_deadline = :deadline WHERE id = :id", nativeQuery = true)
     void stampClientDeadline(@Param("id") UUID id, @Param("deadline") Instant deadline);
 
@@ -35,8 +56,44 @@ public interface TaskJpaRepository extends JpaRepository<TaskDO, UUID> {
     Optional<Instant> findClientDeadline(@Param("id") UUID id);
 
     @Modifying
+    @Query(value = "UPDATE tasks SET failure_detail = :detail WHERE id = :id", nativeQuery = true)
+    void stampFailureDetail(@Param("id") UUID id, @Param("detail") String detail);
+
+    @Query(value = "SELECT failure_detail FROM tasks WHERE id = :id AND failure_detail IS NOT NULL",
+            nativeQuery = true)
+    Optional<String> findFailureDetail(@Param("id") UUID id);
+
+    @Modifying
+    @Query(value = "UPDATE tasks SET contract_extraction = CAST(:json AS jsonb) WHERE id = :id", nativeQuery = true)
+    void stampContractExtraction(@Param("id") UUID id, @Param("json") String json);
+
+    @Query(value = "SELECT CAST(contract_extraction AS text) FROM tasks WHERE id = :id AND contract_extraction IS NOT NULL",
+            nativeQuery = true)
+    Optional<String> findContractExtraction(@Param("id") UUID id);
+
+    @Modifying
     @Query(value = "UPDATE tasks SET pinned_agent_version_id = :versionId WHERE id = :id", nativeQuery = true)
     void pinAgentVersion(@Param("id") UUID id, @Param("versionId") UUID versionId);
+
+    @Query(value = """
+            SELECT t.id FROM tasks t, tasks me
+            WHERE me.id = :taskId AND t.client_id = :clientId AND t.id <> me.id
+              AND t.gmt_create < me.gmt_create AND t.title = :title AND t.description = :description
+            ORDER BY t.gmt_create LIMIT 5
+            """, nativeQuery = true)
+    List<UUID> findEarlierIdsWithSameBrief(@Param("taskId") UUID taskId, @Param("clientId") UUID clientId,
+                                           @Param("title") String title, @Param("description") String description);
+
+    @Query(value = "SELECT execution_deadline FROM tasks WHERE id = :id AND execution_deadline IS NOT NULL",
+            nativeQuery = true)
+    Optional<Instant> findExecutionDeadline(@Param("id") UUID id);
+
+    @Modifying
+    @Query(value = "UPDATE tasks SET review_reason = :reason WHERE id = :id", nativeQuery = true)
+    void stampReviewReason(@Param("id") UUID id, @Param("reason") String reason);
+
+    @Query(value = "SELECT review_reason FROM tasks WHERE id = :id AND review_reason IS NOT NULL", nativeQuery = true)
+    Optional<String> findReviewReason(@Param("id") UUID id);
 
     @Query(value = "SELECT id FROM tasks WHERE status = 'AWAITING_AGENT'", nativeQuery = true)
     List<UUID> findIdsAwaitingAgent();

@@ -13,6 +13,8 @@ export type TaskStatus =
   | "EXECUTING"
   | "RESULT_RECEIVED"
   | "PENDING_REVIEW"
+  | "AWAITING_AGENT_RESPONSE"
+  | "AWAITING_CLIENT_DECISION"
   | "RESOLVED"
   | "AWAITING_AGENT"
   | "TIMED_OUT"
@@ -79,10 +81,115 @@ export interface OutputSpecDTO {
   acceptanceCriteria: string;
 }
 
+// ── Acceptance: Template → Offer → Contract (ADR 0009) ──
+
+/** The one comparison a Template parameter follows. */
+export type ParameterComparison = "max" | "min" | "subset" | "enum" | "flag";
+
+/** `GET /catalogue/templates` — a published, versioned Template. */
+export interface TemplateDTO {
+  key: string;
+  version: number;
+  title: string;
+  description: string | null;
+  outputShape: OutputFormat;
+  checks: string[];
+  parameters: TemplateParameterDTO[];
+  expectationMode: string;
+  /** Fraction of the price the Builder's side receives under each ruling. */
+  rulingSettlement: Record<string, number>;
+  status: "ACTIVE" | "RETIRED";
+  publishedAt: string;
+  /** New Contracts use this version: the newest active one of its key (absent from older backends). */
+  current?: boolean;
+  /** Current, or the previous version during its transition. Offers may name only these. */
+  takesNewContracts?: boolean;
+  /** When the previous version's transition ends; absent for the current version and closed ones. */
+  takesNewContractsUntil?: string;
+}
+
+/**
+ * A Contract made under the previous Template version during a transition, because no agent's Offer
+ * covers the current one yet. `usedVersion` takes new Contracts until `transitionEndsAt`.
+ */
+export interface VersionFallbackDTO {
+  template: string;
+  currentVersion: number;
+  usedVersion: number;
+  transitionEndsAt: string;
+  summary: string;
+}
+
+export interface TemplateParameterDTO {
+  name: string;
+  label: string;
+  description: string | null;
+  comparison: ParameterComparison;
+  /** Only the fields the comparison uses are present. */
+  bounds: { minimum?: number; maximum?: number; allowedValues?: string[]; maxLength?: number };
+}
+
+/** A contract parameter value: number (max/min), string (enum), string[] (subset), boolean (flag). */
+export type ContractValue = number | string | string[] | boolean;
+
+/** The Contract a Task froze at submit. */
+export interface ContractDTO {
+  template: string;
+  version: number;
+  params: Record<string, ContractValue>;
+  /** The AI Review booked with the task and its fee, frozen at booking (absent when none). */
+  aiReview?: { criteria: string[]; fee: number };
+}
+
+/** What an AI Review would cost on a booking, and whether it is offered (`reason` says why not). */
+export interface AiReviewQuoteDTO {
+  fee: number;
+  /** The gate: an AI Review may cost at most this (`maxFeeShare` of the price). */
+  maxFee: number;
+  /** What the booking freezes: the price plus the fee, summed by the platform. */
+  total: number;
+  /** The largest share of the price an AI Review may cost (e.g. 0.1). */
+  maxFeeShare: number;
+  available: boolean;
+  reason: string | null;
+  maxCriteria: number;
+}
+
+export type AiReviewStatus = "FROZEN" | "REQUESTED" | "COMPLETED" | "FAILED" | "RELEASED";
+
+/** A task's AI Review: an advisory report on the web, the final verdict on API/MCP (`decisive`). */
+export interface AiReviewDTO {
+  status: AiReviewStatus;
+  decisive: boolean;
+  fee: number;
+  criteria: string[];
+  verdicts: { criterion: string; passed: boolean; reason: string }[];
+  rulingCategory: "FULFILLED" | "PARTIALLY_FULFILLED" | "NOT_FULFILLED" | null;
+  model: string | null;
+  attempts: number;
+  requestedAt: string | null;
+  completedAt: string | null;
+}
+
+/** The range an Offer accepts for one parameter. */
+export type OfferRange = { bound: number } | { oneOf: string[] } | { any: true } | { acceptsTrue: boolean };
+
+/** An agent version's Offer: its price and the Templates and ranges it accepts. */
+export interface OfferDTO {
+  price: number;
+  terms: { template: string; version: number; params: Record<string, OfferRange> }[];
+  /** Clients may book an AI Review of this agent's results (final on API/MCP). */
+  acceptsAiReview?: boolean;
+  /** The strictest sampling level (#105) a buyer may choose for a multi-Item booking; "II" is the default. */
+  strictestInspectionLevel?: InspectionLevel;
+}
+
 // ── Agents ──
 
 export interface AgentVersionDTO {
   outputSpec: OutputSpecDTO;
+  /** The version's Offer (absent only in old fixtures). */
+  offer?: OfferDTO;
   capabilityCategories: string[];
   webhookUrl: string;
   maxExecutionSeconds: number;
@@ -137,6 +244,8 @@ export interface TaskDTO {
   budget: number;
   status: TaskStatus;
   outputSpec: OutputSpecDTO;
+  /** The Contract frozen at submit; absent on tasks submitted before Contracts existed. */
+  contract?: ContractDTO | null;
   createdAt: string;
   resolution?: TaskResolution | null;
   resolvedAt?: string | null;
@@ -150,6 +259,140 @@ export interface TaskDTO {
   category?: string;
   /** The Agent the task was booked with (`GET /tasks/{id}` only; absent when none was). */
   agentId?: string | null;
+  /**
+   * When the client's review window closes (`GET /tasks/{id}` only): set once the result awaits
+   * review, kept after it resolves. Past it, the platform accepts on the client's behalf (#94).
+   */
+  reviewDeadline?: string | null;
+  /** True when the window closed unreviewed and the result was accepted automatically. */
+  autoAccepted?: boolean | null;
+  /**
+   * The latest round of the rejection response path (`GET /tasks/{id}` only), once the client
+   * rejected for reason A/B/C (#95); kept after it settles.
+   */
+  rejection?: RejectionDTO | null;
+  /** Why no agent matched (`GET /tasks/{id}` only): while AWAITING_AGENT and after NO_ELIGIBLE_AGENT. */
+  failureDetail?: string | null;
+  /**
+   * A multi-Item Task (#103): how many Items, the price of one (`budget` is the escrow, price × count),
+   * and each Item with its outcome (`GET /tasks/{id}` and review responses only). All absent on a
+   * single-deliverable task.
+   */
+  itemCount?: number | null;
+  itemPrice?: number | null;
+  items?: TaskItemDTO[] | null;
+  /** The frozen Contract uses the previous Template version during its transition (no agent covered the current one). */
+  templateFallback?: VersionFallbackDTO | null;
+  /**
+   * Why a result no machine could pass waits for the client: ANOMALY, UNDECIDED, or
+   * AI_REVIEW_UNAVAILABLE (a decisive AI Review gave no usable verdict). Absent otherwise.
+   */
+  reviewReason?: "ANOMALY" | "UNDECIDED" | "AI_REVIEW_UNAVAILABLE";
+  /** What requirement extraction made of the description, on a description-only submit (#100). */
+  extraction?: ExtractionDTO | null;
+}
+
+/**
+ * One requirement found in a task's description (#100, spec S6): `mapped` onto an automatic check
+ * (`check`, with the Contract `params` it sets), or not, with `unmappedReason`. An unmapped one is not
+ * checked automatically: the Client judges it (or AI Review, or arbitration as evidence).
+ */
+export interface RequirementDTO {
+  text: string;
+  mapped: boolean;
+  check?: string;
+  params?: Record<string, ContractValue>;
+  unmappedReason?: string;
+}
+
+/** UNAVAILABLE: the extractor could not answer, so the Template's defaults apply and nothing was mapped. */
+export type ExtractionStatus = "EXTRACTED" | "UNAVAILABLE";
+
+export interface ExtractionDTO {
+  template: string;
+  version: number;
+  status: ExtractionStatus;
+  requirements: RequirementDTO[];
+}
+
+/** `POST /contracts/draft`: the Contract a description would be held to. Creates and freezes nothing. */
+export interface ContractDraftDTO {
+  contract: ContractDTO;
+  extraction: ExtractionDTO;
+}
+
+/** `GET /catalogue/review-windows`: the windows every booking agrees to, in seconds. */
+export interface ReviewWindowsDTO {
+  reviewSeconds: number;
+  agentResponseSeconds: number;
+  clientDecisionSeconds: number;
+}
+
+/** An Item's own state inside a multi-Item Task. */
+export type ItemStatus =
+  | "AWAITING_RESULT"
+  | "PENDING_REVIEW"
+  | "ACCEPTED"
+  | "SPEC_VIOLATION"
+  | "FAILED"
+  /** The buyer's reviewer found it wrong (#105); on its rejection response path, still in escrow. */
+  | "REJECTED"
+  /** The agent conceded the reviewer's rejection; refunded. */
+  | "CONCEDED"
+  /** Settled by extrapolation after a failed resample: paid price x (1 - error rate), the rest refunded. */
+  | "PRO_RATA";
+
+/** One Item of a multi-Item Task and its outcome; amounts appear once it settled. */
+export interface TaskItemDTO {
+  itemNo: number;
+  input: string;
+  status: ItemStatus;
+  price: number;
+  resultPayload?: string | null;
+  resultUrl?: string | null;
+  checks?: { rule: string; passed: boolean; detail?: string | null; outcome?: CheckOutcome }[] | null;
+  autoAccepted?: boolean | null;
+  payoutAmount?: number | null;
+  commissionAmount?: number | null;
+  refundAmount?: number | null;
+  /** The document this Item's input is (an Engagement's SourceSnapshot); absent for a text Item. */
+  sourceId?: string | null;
+  /**
+   * A check sent this Item to your review (#106, D7): you judge it on its own, outside the sample, and it is
+   * paid only when you confirm it (or when the review window closes).
+   */
+  needsReview?: boolean | null;
+  /** Facts about the Item's input (duplicates, figures that don't add up); they never change the pay. */
+  findings?: FindingDTO[] | null;
+  /** What the agent reported about this Item's source with its result. */
+  anomalies?: AnomalyDTO[] | null;
+}
+
+/** What the agent did with an A/B/C rejection (task/rejection/enums/AgentResponse.java). */
+export type AgentRejectionResponse = "REVISE" | "CONCEDE" | "STAND_BY";
+
+/** One round of the rejection response path (#95, spec D20). */
+export interface RejectionDTO {
+  round: number;
+  reasonCategory: RejectReason;
+  reason?: string | null;
+  rejectedAt: string;
+  /** Until when the agent may revise (if `revisionAllowed`), concede or stand by. */
+  responseDeadline: string;
+  /** False once the agent has revised this task: it may only concede or stand by. */
+  revisionAllowed: boolean;
+  response?: AgentRejectionResponse | null;
+  /** The agent's reason for standing by its result; absent when it stayed silent. */
+  responseReason?: string | null;
+  /** True when the agent's window closed without a response (counts as standing by). */
+  responseSilent: boolean;
+  respondedAt?: string | null;
+  /** After a stand-by: until when the client may accept or request arbitration. */
+  decisionDeadline?: string | null;
+  decision?: "ACCEPT" | "ARBITRATE" | null;
+  /** True when the client's window closed without a decision (counts as acceptance). */
+  decisionSilent: boolean;
+  decidedAt?: string | null;
 }
 
 /** Mirrors the backend FailureReason enum (set once when a task ends without a result). */
@@ -162,7 +405,8 @@ export type FailureReason =
   | "DISPATCH_ABANDONED"
   | "EXECUTION_TIMEOUT"
   | "AGENT_REPORTED_FAILURE"
-  | "SPEC_VIOLATION";
+  | "SPEC_VIOLATION"
+  | "CONTRACT_DECLINED";
 
 export interface CreateTaskRequest {
   title: string;
@@ -176,8 +420,22 @@ export interface TaskResultDTO {
   taskId: string;
   agentStatus: string;
   resultPayloadJson: string;
+  /** Where a FILE result was fetched from. Never followed again once a `deliverable` exists. */
   resultUrl: string | null;
   receivedAt: string;
+  /** The frozen copy of a FILE result (DeliverySnapshot, #97); absent when none was kept. */
+  deliverable?: DeliverableDTO;
+}
+
+/** A DeliverySnapshot's metadata; the bytes come from `GET /tasks/{id}/deliverable`. */
+export interface DeliverableDTO {
+  /** What the platform judged the bytes to be, e.g. `image/png`. */
+  mediaType: string;
+  /** The agent's Content-Type, when it sent one. */
+  declaredMediaType: string | null;
+  sizeBytes: number;
+  sha256: string;
+  fetchedAt: string;
 }
 
 // ── Catalogue (public discovery) ──
@@ -217,6 +475,8 @@ export interface CatalogueStatsDTO {
   completedCount: number;
   successRate: number | null;
   avgTurnaroundSeconds: number | null;
+  /** Public contract-decline rate (#93). */
+  contractDeclines?: ContractDeclineRateDTO;
 }
 
 export interface AgentProfileDTO {
@@ -225,6 +485,8 @@ export interface AgentProfileDTO {
   sampleOutput: string | null;
   galleryUrls: string[];
   outputSpec: OutputSpecDTO;
+  /** The terms the Agent works under; a booking freezes the matching Contract. */
+  offer?: OfferDTO;
   stats: CatalogueStatsDTO;
   reviews: CatalogueReviewDTO[];
 }
@@ -247,6 +509,73 @@ export interface DirectBookRequest {
   category?: string;
   /** Optional: seconds from booking the result is needed by; a slower agent is refused. */
   deadlineSeconds?: number;
+  /** Optional: the Contract to book under; the agent's Offer must cover it, and it is frozen on the task. */
+  contract?: ContractDTO;
+  /** Optional, with `contract`: the draft's extraction the booking was made from, kept on the task (D7). */
+  extraction?: ExtractionDTO;
+  /**
+   * Optional: a multi-Item Task's Items (2+). A string is a text Item; `{ sourceId }` is an Item whose
+   * input is a document uploaded to the Engagement (`input` defaults to its file name). With Items,
+   * `budget` is the price of one Item.
+   */
+  items?: (string | { sourceId: string; input?: string })[];
+  /** Optional: book under your Engagement with this agent; required for document Items (ADR 0010). */
+  engagementId?: string;
+  /** Optional: an AI Review of these criteria, priced and frozen at booking. */
+  aiReview?: { criteria: string[] };
+  /** Optional, with Items (#105): the sampling level, "II" (default) or "III" when the agent's Offer allows it. */
+  inspectionLevel?: InspectionLevel;
+}
+
+/** An Engagement's lifecycle (acceptance/engagement/enums/EngagementStatus.java). */
+export type EngagementStatus = "AWAITING_AGENT_ACCEPTANCE" | "ACTIVE" | "ENDED";
+
+/**
+ * A standing agreement with an agent you chose (spec S4, D44): it records your consent to send that agent
+ * confidential documents. Mirrors controller/biz/engagement/dto/EngagementDTOs.EngagementDTO.
+ */
+export interface EngagementDTO {
+  id: string;
+  clientId: string;
+  agentId: string;
+  status: EngagementStatus;
+  consentedAt: string;
+  templateVariant?: ContractDTO | null;
+  agentAcceptedAt?: string | null;
+  retentionDays: number;
+  createdAt: string;
+  endedAt?: string | null;
+}
+
+export interface OpenEngagementRequest {
+  agentId: string;
+  confidentialConsent: boolean;
+  templateVariant?: ContractDTO;
+  retentionDays?: number;
+}
+
+/** One attempt to fetch a document through an Item's signed link. */
+export interface SourceDownloadDTO {
+  at: string;
+  taskId: string;
+  itemNo: number;
+  outcome: "SERVED" | "EXPIRED" | "RETIRED";
+  remoteAddress?: string | null;
+}
+
+/** A document uploaded under an Engagement: a frozen, content-hashed SourceSnapshot. */
+export interface SourceDTO {
+  id: string;
+  engagementId: string;
+  filename: string;
+  mediaType: string;
+  sizeBytes: number;
+  sha256: string;
+  uploadedAt: string;
+  retentionStartedAt?: string | null;
+  /** Set once retention deleted the content; only the hash is kept. */
+  contentDeletedAt?: string | null;
+  downloads?: SourceDownloadDTO[] | null;
 }
 
 export type CatalogueSort = "hot" | "rating" | "price_asc" | "price_desc" | "newest";
@@ -324,7 +653,7 @@ export interface BuilderEarningsDTO {
 // ── Dispute / arbitration ──────────────────────────────────────────────────
 
 /**
- * Dispute reason categories exposed in the reject UI (A/B/C open a dispute;
+ * Reject reason categories exposed in the reject UI (A/B/C start the rejection response path, #95;
  * D_CHANGED_MIND is a backend-only option that charges the client in full — NOT
  * offered through this UI).
  */
@@ -341,6 +670,21 @@ export interface RulingDTO {
   decidedAt: string; // ISO-8601
 }
 
+/** The two sides of a dispute (#96). */
+export type DisputeSide = "CLIENT" | "BUILDER";
+
+/** How one dispute fee was borne: fullCost = clientCharged + builderCharged + platformCovered. */
+export interface DisputeFeeDTO {
+  type: "ARBITRATION_COST" | "APPEAL_FEE";
+  fullCost: number;
+  cappedAmount: number;
+  clientCharged: number;
+  builderCharged: number;
+  platformCovered: number;
+  /** Set when nobody was charged by rule: NO_AI_RULING = the AI arbitrator gave no ruling. */
+  waivedReason?: string | null;
+}
+
 export interface DisputeOutcomeDTO {
   disputeId: string;
   taskId: string;
@@ -348,9 +692,30 @@ export interface DisputeOutcomeDTO {
   reasonCategory: RejectReason | null;
   effectiveCategory: RulingCategory | null;
   rulings: RulingDTO[];
+  taskTitle?: string;
+  /** The task's price, in credits (the fee caps are 20% of it). */
+  price?: number;
+  /** The viewer's side(s): CLIENT, BUILDER, or both on a self-booked task. */
+  yourSides?: DisputeSide[];
+  /** Sides the proposed ruling goes against that may still accept or appeal it. */
+  awaiting?: DisputeSide[];
+  appealedBy?: DisputeSide | null;
+  /** While RULED: when the proposed ruling is accepted on everyone's behalf. */
+  appealDeadline?: string | null;
+  /** Capped amounts the loser bears (credits). */
+  arbitrationCost?: number;
+  appealFee?: number;
+  /** How each fee was borne, once settled. */
+  fees?: DisputeFeeDTO[];
+  clientReason?: string | null;
+  agentResponse?: "REVISE" | "CONCEDE" | "STAND_BY" | null;
+  agentReason?: string | null;
+  agentSilent?: boolean;
+  /** The AI arbitrator gave no ruling (it failed), so nobody pays the arbitration cost (it is 0). */
+  arbitrationCostWaived?: boolean;
 }
 
-/** Row shape for a client's own dispute list (future "my disputes" view). */
+/** Row shape for a user's own dispute list (/client/disputes, /builder/disputes). */
 export interface DisputeMineRowDTO {
   disputeId: string;
   taskId: string;
@@ -358,6 +723,8 @@ export interface DisputeMineRowDTO {
   status: string; // OPEN | ARBITRATING | RULED | ESCALATED | RESOLVED
   proposedCategory: RulingCategory | null;
   updatedAt: string;
+  /** The proposed ruling goes against the viewer's side, which has not accepted or appealed it yet. */
+  awaitingYou?: boolean;
 }
 
 // ── Admin surface ───────────────────────────────────────────────────────────
@@ -372,6 +739,8 @@ export interface AdminOverviewDTO {
   agentsTotal: number;
   escrowHeld: number;
   commissionEarned: number;
+  /** AI Review fees charged (refunded ones excluded). */
+  aiReviewFeesEarned: number;
 }
 
 export interface AdminDisputeRowDTO {
@@ -393,6 +762,13 @@ export interface AdminSettlementPreviewDTO {
   notFulfilledRefund: number;
   partialBuilderNet: number;
   partialClientRefund: number;
+  /** Loser pays: the dispute fees each side would bear under each outcome. */
+  fulfilledClientFees: number;
+  notFulfilledBuilderFees: number;
+  partialClientFees: number;
+  partialBuilderFees: number;
+  /** No AI ruling (the arbitrator failed): the arbitration cost is waived and left out of the fees. */
+  arbitrationCostWaived?: boolean;
 }
 
 export interface AdminDisputeDetailDTO {
@@ -414,10 +790,13 @@ export interface AdminDisputeDetailDTO {
   builderName: string | null;
   agentReputation: number | null;
   agentPrice: number | null;
-  outputSpecJson: string | null;
+  /** The task's frozen Contract (JSON), the binding terms. */
+  contractJson: string | null;
   resultPayloadJson: string | null;
   resultUrl: string | null;
   agentStatus: string | null;
+  /** The disputed result's frozen file (#97); null when none was kept. */
+  deliverable: DeliverableDTO | null;
   actionable: boolean;
   settlementPreview: AdminSettlementPreviewDTO | null;
   rulings: RulingDTO[];
@@ -466,6 +845,33 @@ export interface AgentOptionDTO {
   availability: "AVAILABLE" | "BUSY";
   outputFormat: string | null;
   capabilityCategories: string[];
+  /** Public contract-decline rate (#93). */
+  contractDeclines?: ContractDeclineRateDTO;
+}
+
+/**
+ * An agent's public contract-decline rate: `declined` of the `answered` work orders whose terms it
+ * took or turned down (busy or unreachable replies don't count). `rate` is null when it answered none.
+ */
+export interface ContractDeclineRateDTO {
+  declined: number;
+  answered: number;
+  rate: number | null;
+}
+
+/** Mirrors the backend DispatchOutcome enum. */
+export type DispatchOutcome = "ACCEPTED" | "UNREACHABLE" | "BUSY" | "UNAVAILABLE" | "CONTRACT_DECLINED";
+
+/** One row of `GET /tasks/{id}/attempts`: which agent the task was handed to, and how that ended. */
+export interface DispatchAttemptDTO {
+  attemptNumber: number;
+  agentId: string | null;
+  agentName: string | null;
+  agentVersionId: string;
+  outcome: DispatchOutcome;
+  occurredAt: string;
+  /** The agent's own reason on a CONTRACT_DECLINED row. */
+  declineReason: string | null;
 }
 
 /**
@@ -481,6 +887,8 @@ export interface MatchPreviewRequest {
   deadlineSeconds?: number;
   /** Agents to leave out of both lists (the Agent that failed a rebooked task). */
   exclude?: string[];
+  /** Optional: only agents whose Offer covers this Contract are listed. */
+  contract?: ContractDTO;
 }
 
 export interface MatchPreviewDTO {
@@ -488,19 +896,64 @@ export interface MatchPreviewDTO {
   nearMisses: AgentOptionDTO[];
   /** True when the shortlist is empty only because no in-budget agent's profile fits the task text. */
   noCloseMatch?: boolean;
+  /** Why the shortlist is empty (absent when it isn't): what excluded the in-budget agents. */
+  noMatch?: NoMatchDTO;
+  /** The terms were matched under the previous Template version: no agent accepts the current one yet. */
+  fallback?: VersionFallbackDTO;
+}
+
+/** What excluded an agent: a Contract parameter its Offer doesn't cover, the relevance floor, or the Template. */
+export type NoMatchBlocker = "PARAMETER" | "RELEVANCE_FLOOR" | "TEMPLATE";
+
+export interface NoMatchDTO {
+  summary: string;
+  /** Each blocker with the number of in-budget agents it excluded, most first. */
+  exclusions: { blocker: NoMatchBlocker; parameter?: string | null; agents: number }[];
+  /** Leaving `parameter` unset would make `agents` more agents eligible. Never applied for you. */
+  suggestions: { parameter: string; agents: number }[];
 }
 
 // ── Validation report (spec-violation reason) ───────────────────────────────
+
+/** PASS, a deterministic REJECT (reworked, then refunded), or REVIEW: the check could not decide (#98). */
+export type CheckOutcome = "PASS" | "REJECT" | "REVIEW";
 
 export interface ValidationCheckDTO {
   rule: string;
   passed: boolean;
   detail: string | null;
+  outcome?: CheckOutcome;
+}
+
+/** A fact about the brief noticed while accepting (spec D7): shown to the client, never moves money. */
+export interface FindingDTO {
+  code: string;
+  detail: string | null;
+}
+
+/** Something the agent itself reported with its result; it sends the result to the client's review. */
+export interface AnomalyDTO {
+  check: string | null;
+  description: string;
+}
+
+export interface ValidationAttemptDTO {
+  attemptNo: number;
+  verdict: "PASS" | "FAIL" | "REVIEW";
+  failedChecks: ValidationCheckDTO[];
 }
 
 export interface ValidationReportDTO {
-  verdict: "PASS" | "FAIL";
+  /** FAIL: a check rejected it; REVIEW: none did, but one could not decide or the agent flagged an anomaly. */
+  verdict: "PASS" | "FAIL" | "REVIEW";
   checks: ValidationCheckDTO[];
+  attemptNo?: number;
+  findings?: FindingDTO[];
+  anomalies?: AnomalyDTO[];
+  /** How many of the task's results a check rejected (each but the last was sent back for rework). */
+  rejectedAttempts?: number;
+  maxReworks?: number;
+  previousAttempts?: ValidationAttemptDTO[];
 }
 
 // ── API keys (programmatic submission) ──────────────────────────────────────
@@ -593,6 +1046,7 @@ export type ReputationEventDTO = {
     | "DISPUTE_WON"
     | "DISPUTE_PARTIAL"
     | "DISPUTE_LOST"
+    | "REJECTION_CONCEDED"
     | "RATING";
   quality: number;
   weight: number;
@@ -606,3 +1060,80 @@ export type AgentReputationDTO = {
   unproven: boolean;
   recentEvents: ReputationEventDTO[];
 };
+
+// ── Sampling inspection (#105, spec S8) ──
+
+export type InspectionLevel = "I" | "II" | "III";
+export type InspectionStatus = "SAMPLING" | "REWORKING" | "ACCEPTED" | "PRO_RATA" | "WAIVED" | "CLOSED";
+export type SampleDecision = "ACCEPT_LOT" | "DRAW_SECOND" | "REWORK" | "PRO_RATA";
+
+/** One sample drawn after delivery from a recorded seed, under the plan the lot-size table set. */
+export interface SampleDrawDTO {
+  round: number;
+  stage: number;
+  /** A 64-bit number, as a string. */
+  seed: string;
+  codeLetter: string;
+  lotSize: number;
+  firstSampleSize: number;
+  /** 0 for a single plan (no second sample). */
+  secondSampleSize: number;
+  firstAccept: number;
+  firstReject: number;
+  secondAccept: number;
+  secondReject: number;
+  fullInspection: boolean;
+  itemNos: number[];
+  drawnAt: string;
+  /** Set once every sampled Item settled: the wrong ones found in this sample. */
+  defects?: number | null;
+  decision?: SampleDecision | null;
+  decidedAt?: string | null;
+}
+
+export interface ItemJudgementDTO {
+  itemNo: number;
+  round: number;
+  passed: boolean;
+  reasonCategory?: RejectReason | null;
+  reason?: string | null;
+  /** In a sample of its round when judged; otherwise an extra check that never feeds the error rate. */
+  sampled: boolean;
+  judgedAt: string;
+}
+
+export interface InspectionDTO {
+  level: InspectionLevel;
+  round: number;
+  status: InspectionStatus;
+  /** Set once the Task settled pro rata. */
+  errorRate?: number | null;
+  aql: number;
+  draws: SampleDrawDTO[];
+  judgements: ItemJudgementDTO[];
+  /** Every rejection round of every Item, oldest first. */
+  itemRejections: { itemNo: number; rejection: RejectionDTO }[];
+}
+
+/** The settlement a receipt records (format hireai.receipt.v1, docs/details/receipts.md); amounts are strings. */
+export interface ReceiptSettlement {
+  outcome: "ACCEPT" | "REJECT" | "SPLIT";
+  price: string;
+  paid: string;
+  commission: string;
+  refunded: string;
+  settledAt: string;
+  failureReason?: string;
+}
+
+/** One signed receipt in `GET /tasks/{id}/receipts`; the signed bytes come from `GET /receipts/{id}`. */
+export interface ReceiptDTO {
+  id: string;
+  taskId: string;
+  /** Null for a single-deliverable task. */
+  itemNo: number | null;
+  keyId: string;
+  issuedAt: string;
+  receipt: { settlement: ReceiptSettlement; [field: string]: unknown };
+  signature: string;
+}

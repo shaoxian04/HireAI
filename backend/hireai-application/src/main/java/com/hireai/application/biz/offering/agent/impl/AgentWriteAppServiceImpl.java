@@ -1,6 +1,7 @@
 package com.hireai.application.biz.offering.agent.impl;
 
 import com.hireai.application.biz.offering.agent.AgentWriteAppService;
+import com.hireai.application.biz.acceptance.TemplateReadAppService;
 import com.hireai.application.port.webhook.WebhookUrlValidatorPort;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.offering.agent.event.AgentActivatedDomainEvent;
@@ -51,11 +52,14 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
     private final WebhookUrlValidatorPort urlValidator;
     private final CategoryRepository categoryRepository;
     private final CategorySuggestionRepository categorySuggestionRepository;
+    /** Checks a new version's Offer against the Templates before it is saved (ADR 0009). */
+    private final TemplateReadAppService templateReadAppService;
 
     @Override
     public AgentRegistration register(AgentRegisterInfo registerInfo) {
         categoryRepository.load().requireAllKnown(registerInfo.capabilityCategories());
         AgentModel agent = registerDomainService.register(registerInfo);
+        templateReadAppService.requireValid(agent.currentVersion().offer());
         assertWebhookDeliverable(agent);
         Instant now = Instant.now();
         Optional<CategorySuggestion> suggestion = CategorySuggestion.of(registerInfo.suggestedCategory(),
@@ -99,15 +103,19 @@ public class AgentWriteAppServiceImpl implements AgentWriteAppService {
         AgentModel agent = loadOwned(agentId, ownerId);
         categoryRepository.load().requireAllKnown(info.capabilityCategories());
         assertWebhookDeliverable(agent);
+        if (info.offer() != null) {
+            // An edited Offer must fit the Templates it names; an unchanged one was checked when set.
+            templateReadAppService.requireValid(info.offer());
+        }
         AgentModel updated = agent.publishNewVersion(Pricing.of(info.price()),
-                info.maxExecutionSeconds(), info.capabilityCategories());
+                info.maxExecutionSeconds(), info.capabilityCategories(), info.offer());
         Optional<CategorySuggestion> suggestion = CategorySuggestion.of(info.suggestedCategory(),
                 agentId, updated.currentVersion().id(), ownerId, Instant.now());
         agentRepository.publishNewVersion(updated);
         suggestion.ifPresent(categorySuggestionRepository::record);
-        log.info("Agent {} published version {} by owner {} (price={}, maxExec={})",
+        log.info("Agent {} published version {} by owner {} (price={}, maxExec={}, offerEdited={})",
                 agentId, updated.currentVersion().versionNumber(), ownerId,
-                info.price(), info.maxExecutionSeconds());
+                info.price(), info.maxExecutionSeconds(), info.offer() != null);
         return agentRepository.findById(agentId)
                 .orElseThrow(() -> new DomainException(ResultCode.INTERNAL_ERROR,
                         "Agent disappeared after publishing a version: " + agentId));

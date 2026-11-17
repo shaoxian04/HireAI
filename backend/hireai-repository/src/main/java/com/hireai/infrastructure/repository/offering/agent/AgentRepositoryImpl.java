@@ -12,6 +12,7 @@ import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
 import com.hireai.domain.biz.offering.agent.model.Pricing;
 import com.hireai.domain.biz.offering.agent.repository.AgentQuery;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
+import com.hireai.application.biz.acceptance.AcceptanceJsonMapper;
 import com.hireai.application.biz.task.OutputSpecJsonMapper;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.utility.exception.DomainException;
@@ -35,25 +36,26 @@ public class AgentRepositoryImpl implements AgentRepository {
     private final AgentJpaRepository agentJpa;
     private final AgentVersionJpaRepository versionJpa;
     private final OutputSpecJsonMapper outputSpecJsonMapper;
+    private final AcceptanceJsonMapper acceptanceJsonMapper;
 
     public AgentRepositoryImpl(AgentJpaRepository agentJpa, AgentVersionJpaRepository versionJpa,
-                               OutputSpecJsonMapper outputSpecJsonMapper) {
+                               OutputSpecJsonMapper outputSpecJsonMapper, AcceptanceJsonMapper acceptanceJsonMapper) {
         this.agentJpa = agentJpa;
         this.versionJpa = versionJpa;
         this.outputSpecJsonMapper = outputSpecJsonMapper;
+        this.acceptanceJsonMapper = acceptanceJsonMapper;
     }
 
     @Override
     public AgentModel save(AgentModel agent) {
-        agentJpa.save(new AgentDO(
-                agent.id(), agent.ownerId(), agent.name(), agent.status().name(),
-                agent.currentVersionId(), agent.reputationScore(), agent.createdAt()));
+        saveAgentRow(agent);
 
         AgentVersionModel version = agent.currentVersion();
         if (version != null && versionJpa.findById(version.id()).isEmpty()) {
             versionJpa.save(new AgentVersionDO(
                     version.id(), version.agentId(), version.versionNumber(),
                     outputSpecJsonMapper.toJson(version.outputSpec()),
+                    acceptanceJsonMapper.toJson(version.offer()),
                     version.capabilityCategories(), version.webhookUrl(),
                     version.maxExecutionSeconds(), version.maxConcurrent(), version.pricing().price(),
                     version.status().name(), version.createdAt()));
@@ -71,13 +73,22 @@ public class AgentRepositoryImpl implements AgentRepository {
         versionJpa.save(new AgentVersionDO(
                 v.id(), v.agentId(), v.versionNumber(),
                 outputSpecJsonMapper.toJson(v.outputSpec()),
+                acceptanceJsonMapper.toJson(v.offer()),
                 v.capabilityCategories(), v.webhookUrl(),
                 v.maxExecutionSeconds(), v.maxConcurrent(), v.pricing().price(),
                 v.status().name(), v.createdAt()));
         // 3. update the agent row (current_version_id now points at the new version when ACTIVE).
-        agentJpa.save(new AgentDO(
-                agent.id(), agent.ownerId(), agent.name(), agent.status().name(),
-                agent.currentVersionId(), agent.reputationScore(), agent.createdAt()));
+        saveAgentRow(agent);
+    }
+
+    /** Inserts the agent row, or updates the managed one in place (keeping its signing-secret flag). */
+    private void saveAgentRow(AgentModel agent) {
+        agentJpa.findById(agent.id()).ifPresentOrElse(
+                row -> row.update(agent.name(), agent.status().name(), agent.currentVersionId(),
+                        agent.reputationScore()),
+                () -> agentJpa.save(new AgentDO(
+                        agent.id(), agent.ownerId(), agent.name(), agent.status().name(),
+                        agent.currentVersionId(), agent.reputationScore(), agent.createdAt())));
     }
 
     @Override
@@ -90,6 +101,11 @@ public class AgentRepositoryImpl implements AgentRepository {
     @Override
     public Optional<String> findSigningSecretByVersionId(UUID agentVersionId) {
         return agentJpa.findSigningSecretByVersionId(agentVersionId);
+    }
+
+    @Override
+    public Optional<String> findWebhookUrlByVersionId(UUID agentVersionId) {
+        return agentJpa.findWebhookUrlByVersionId(agentVersionId);
     }
 
     @Override
@@ -169,7 +185,8 @@ public class AgentRepositoryImpl implements AgentRepository {
                 row.getMaxConcurrent() == null ? 5 : row.getMaxConcurrent(),
                 row.getInFlight() == null ? 0L : row.getInFlight(),
                 row.getSampleCount() == null ? 0L : row.getSampleCount(),
-                row.getSimilarity());
+                row.getSimilarity(),
+                row.getOffer() == null ? null : acceptanceJsonMapper.offerFromJson(row.getOffer()));
     }
 
     private AgentModel toModel(AgentDO entity) {
@@ -188,6 +205,7 @@ public class AgentRepositoryImpl implements AgentRepository {
         return new AgentVersionModel(
                 entity.getId(), entity.getAgentId(), entity.getVersionNumber(),
                 outputSpecJsonMapper.fromJson(entity.getOutputSpec()),
+                acceptanceJsonMapper.offerFromJson(entity.getOffer()),
                 entity.getCapabilityCategories(), entity.getWebhookUrl(),
                 entity.getMaxExecutionSeconds(), entity.getMaxConcurrent(), Pricing.of(entity.getPrice()),
                 AgentVersionStatus.valueOf(entity.getStatus()), entity.getGmtCreate());

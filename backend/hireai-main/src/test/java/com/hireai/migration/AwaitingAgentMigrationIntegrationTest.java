@@ -45,10 +45,20 @@ class AwaitingAgentMigrationIntegrationTest {
 
         assertThat(status(jdbc, waiting)).isEqualTo("AWAITING_AGENT");
         assertThat(status(jdbc, queued)).isEqualTo("QUEUED");
-        assertThatThrownBy(() -> insertTask(jdbc, client, "AWAITING_CAPACITY"))
-                .isInstanceOf(DataIntegrityViolationException.class);
-        UUID fresh = insertTask(jdbc, client, "AWAITING_AGENT");
+        assertThatThrownBy(() -> insertCurrentTask(jdbc, client, "AWAITING_CAPACITY"))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("status");
+        UUID fresh = insertCurrentTask(jdbc, client, "AWAITING_AGENT");
         assertThat(status(jdbc, fresh)).isEqualTo("AWAITING_AGENT");
+    }
+
+    /** A task row in today's schema: since V55 (#110) a Task has a Contract and needs no output spec. */
+    private static UUID insertCurrentTask(JdbcTemplate jdbc, UUID client, String status) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, contract, status) "
+                        + "VALUES (?, ?, 'Task', 'desc', 10.00, contract_from_output_spec(?::jsonb), ?)",
+                id, client, "{\"format\":\"JSON\"}", status);
+        return id;
     }
 
     private static Flyway flyway(JdbcTemplate jdbc, String target) {

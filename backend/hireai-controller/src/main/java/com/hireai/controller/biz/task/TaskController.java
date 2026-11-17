@@ -6,6 +6,7 @@ import com.hireai.application.biz.task.SubmitContext;
 import com.hireai.application.biz.task.SubmitOrchestrationAppService;
 import com.hireai.application.biz.task.TaskReadAppService;
 import com.hireai.application.biz.reputation.ReviewAppService;
+import com.hireai.application.biz.task.RejectionAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
 import com.hireai.controller.base.BaseController;
 import com.hireai.controller.biz.agent.dto.ReviewDTO;
@@ -20,6 +21,12 @@ import com.hireai.controller.biz.task.dto.DirectBookRequest;
 import com.hireai.controller.biz.task.dto.DispatchAttemptDTO;
 import com.hireai.controller.biz.task.dto.MatchPreviewDTO;
 import com.hireai.controller.biz.task.dto.MatchPreviewRequest;
+import com.hireai.controller.biz.acceptance.converter.Acceptance2DTOConverter;
+import com.hireai.controller.biz.acceptance.converter.ContractRequest2ModelConverter;
+import com.hireai.controller.biz.acceptance.dto.ContractRequest;
+import com.hireai.application.biz.acceptance.TemplateReadAppService;
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.task.enums.OutputFormat;
 import com.hireai.controller.biz.task.dto.RejectTaskRequest;
 import com.hireai.controller.biz.task.dto.SubmitTaskRequest;
 import com.hireai.controller.biz.task.dto.TaskDTO;
@@ -29,9 +36,12 @@ import com.hireai.controller.config.CurrentApiKeyProvider;
 import com.hireai.controller.config.CurrentUserProvider;
 import com.hireai.domain.biz.adjudication.model.ValidationReportModel;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
+import com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.domain.biz.task.model.TaskModel;
+import com.hireai.domain.biz.task.model.TaskResultModel;
+import org.springframework.http.ResponseEntity;
 import com.hireai.domain.biz.task.repository.TaskQuery;
 import com.hireai.domain.shared.model.Money;
 import com.hireai.utility.exception.DomainException;
@@ -47,6 +57,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
+import com.hireai.domain.biz.task.item.info.ItemInput;
+import com.hireai.domain.biz.task.item.model.TaskItems;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -72,6 +85,9 @@ public class TaskController extends BaseController {
     private final ValidationReadAppService validationReadAppService;
     /** The client's star rating — distinct from reviewAppService, which is accept/reject. */
     private final ReviewAppService ratingAppService;
+    private final RejectionAppService rejectionAppService;
+    /** Checks the checks a structured Contract names (spec D15). */
+    private final TemplateReadAppService templateReadAppService;
 
     public TaskController(SubmitOrchestrationAppService submitOrchestrationAppService,
                           TaskReadAppService readAppService,
@@ -80,7 +96,9 @@ public class TaskController extends BaseController {
                           TaskReviewAppService reviewAppService,
                           MatchPreviewAppService matchPreviewAppService,
                           ValidationReadAppService validationReadAppService,
-                          ReviewAppService ratingAppService) {
+                          ReviewAppService ratingAppService,
+                          RejectionAppService rejectionAppService,
+                          TemplateReadAppService templateReadAppService) {
         this.submitOrchestrationAppService = submitOrchestrationAppService;
         this.readAppService = readAppService;
         this.currentUser = currentUser;
@@ -89,26 +107,52 @@ public class TaskController extends BaseController {
         this.matchPreviewAppService = matchPreviewAppService;
         this.validationReadAppService = validationReadAppService;
         this.ratingAppService = ratingAppService;
+        this.rejectionAppService = rejectionAppService;
+        this.templateReadAppService = templateReadAppService;
     }
 
+    /**
+     * Submits a routed task in one of two modes (spec S6, D28). Without {@code contract} (mode 1) the
+     * description is extracted onto the output spec's Template and the result adopted: submitting is
+     * acceptance, and the response's {@code extraction} says how each requirement was mapped. With a
+     * {@code contract} (mode 2) nothing is extracted. Either way the response carries the frozen Contract.
+     */
     @PostMapping
     public WebResult<TaskDTO> submit(@Valid @RequestBody SubmitTaskRequest request,
                                      @RequestHeader(value = "Idempotency-Key", required = false)
                                      String idempotencyKey) {
         UUID clientId = currentUser.currentUserId();
+        Contract contract = contractOf(request.contract());
         SubmitTaskRequest.OutputSpecRequest specRequest = request.outputSpec();
+        OutputSpec outputSpec = specRequest != null
+                ? new OutputSpec(specRequest.format(), specRequest.schema(), specRequest.acceptanceCriteria())
+                // Mode 1 without an output spec extracts onto text_basic; mode 2 takes the Contract's shape.
+                : contract == null ? new OutputSpec(OutputFormat.TEXT, null, null) : null;
         TaskSubmitInfo info = new TaskSubmitInfo(
                 clientId,
                 request.title(),
                 request.description(),
                 Money.of(request.budget()),
-                new OutputSpec(specRequest.format(), specRequest.schema(), specRequest.acceptanceCriteria()),
+                outputSpec,
                 request.category(),
-                request.deadlineSeconds());
+                request.deadlineSeconds(),
+                contract,
+                // Text Items only: documents travel only under an Engagement (ADR 0010).
+                request.items() == null ? null : request.items().stream().map(ItemInput::text).toList());
         UUID taskId = submitOrchestrationAppService.submitRouted(
                 submitContext(clientId, idempotencyKey), info);
-        TaskDTO dto = TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId));
-        return ok(dto);
+        TaskModel task = readAppService.getForClient(taskId, clientId);
+        return ok(withTemplateFallback(task).withExtraction(
+                Acceptance2DTOConverter.toDTO(readAppService.findContractExtraction(task).orElse(null))));
+    }
+
+    /** The request's structured Contract (null when none), after checking the checks it names. */
+    private Contract contractOf(ContractRequest request) {
+        Contract contract = ContractRequest2ModelConverter.toModel(request);
+        if (contract != null) {
+            templateReadAppService.requireNamedChecks(contract, request.checks());
+        }
+        return contract;
     }
 
     @PostMapping("/direct")
@@ -116,13 +160,27 @@ public class TaskController extends BaseController {
                                          @RequestHeader(value = "Idempotency-Key", required = false)
                                          String idempotencyKey) {
         UUID clientId = currentUser.currentUserId();
-        UUID taskId = submitOrchestrationAppService.submitDirect(
-                submitContext(clientId, idempotencyKey),
-                new DirectBookingInfo(clientId, request.title(), request.description(),
-                        Money.of(request.budget()), request.agentId(),
-                        request.category() == null || request.category().isBlank() ? null : request.category(),
-                        request.deadlineSeconds()));
-        return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(taskId, clientId)));
+        SubmitContext ctx = submitContext(clientId, idempotencyKey);
+        DirectBookingInfo info = new DirectBookingInfo(clientId, request.title(), request.description(),
+                Money.of(request.budget()), request.agentId(),
+                request.category() == null || request.category().isBlank() ? null : request.category(),
+                request.deadlineSeconds(), contractOf(request.contract()),
+                request.itemInputs(), request.engagementId(),
+                request.aiReview() == null ? List.of() : request.aiReview().criteria(),
+                request.inspectionLevel());
+        ExtractionRecord extraction = ContractRequest2ModelConverter.toModel(request.extraction());
+        UUID taskId = extraction == null
+                ? submitOrchestrationAppService.submitDirect(ctx, info)
+                : submitOrchestrationAppService.submitDirect(ctx, info, extraction);
+        TaskModel task = readAppService.getForClient(taskId, clientId);
+        return ok(withTemplateFallback(task).withExtraction(
+                Acceptance2DTOConverter.toDTO(readAppService.findContractExtraction(task).orElse(null))));
+    }
+
+    /** A submit/booking response: the task, and whether its Contract fell back a version (spec D36). */
+    private TaskDTO withTemplateFallback(TaskModel task) {
+        return TaskModel2DTOConverter.toDTO(task).withTemplateFallback(
+                Acceptance2DTOConverter.toDTO(readAppService.findTemplateFallback(task).orElse(null)));
     }
 
     /**
@@ -143,24 +201,48 @@ public class TaskController extends BaseController {
         UUID clientId = currentUser.currentUserId();
         TaskModel task = readAppService.getForClient(id, clientId);
         UUID agentId = readAppService.findBookedAgentId(task).orElse(null);
-        return ok(TaskModel2DTOConverter.toDTO(task, agentId));
+        return ok(TaskModel2DTOConverter.toDTO(task, agentId,
+                readAppService.findReviewWindow(task).orElse(null),
+                rejectionAppService.findLatest(task.id()).orElse(null),
+                readAppService.findFailureDetail(task).orElse(null), readAppService.findItems(task), true,
+                readAppService.findSettlementRecord(task))
+                .withTemplateFallback(Acceptance2DTOConverter.toDTO(
+                        readAppService.findTemplateFallback(task).orElse(null)))
+                .withReviewReason(readAppService.findReviewReason(task).orElse(null))
+                .withExtraction(Acceptance2DTOConverter.toDTO(
+                        readAppService.findContractExtraction(task).orElse(null))));
     }
 
     @GetMapping("/{taskId}/result")
     public WebResult<TaskResultDTO> getResult(@PathVariable("taskId") UUID taskId) {
         UUID clientId = currentUser.currentUserId();
-        TaskResultDTO dto = TaskResult2DTOConverter.toDTO(readAppService.getResult(taskId, clientId));
+        TaskResultModel result = readAppService.getResult(taskId, clientId);
+        TaskResultDTO dto = TaskResult2DTOConverter.toDTO(result,
+                readAppService.findDeliverySnapshot(result).orElse(null));
         return ok(dto);
+    }
+
+    /**
+     * The frozen file of a FILE result (D24), owner-only: the DeliverySnapshot's bytes, never the
+     * Agent's link. The bytes are Agent-supplied, so they are always sent as an attachment with
+     * {@code nosniff} and a sandbox CSP, and as {@code application/octet-stream} unless the platform
+     * recognised them as one of the file_basic types ({@link DeliverableResponse}).
+     */
+    @GetMapping("/{taskId}/deliverable")
+    public ResponseEntity<byte[]> getDeliverable(@PathVariable("taskId") UUID taskId) {
+        UUID clientId = currentUser.currentUserId();
+        return DeliverableResponse.of(taskId, readAppService.getDeliverable(taskId, clientId));
     }
 
     @GetMapping("/{id}/validation")
     public WebResult<ValidationReportDTO> getValidation(@PathVariable("id") UUID id) {
         UUID clientId = currentUser.currentUserId();
         readAppService.getForClient(id, clientId); // ownership guard (Hard Invariant #5)
-        ValidationReportModel report = validationReadAppService.latestForTask(id)
-                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
-                        "No validation report for task: " + id));
-        return ok(ValidationReport2DTOConverter.toDTO(report));
+        List<ValidationReportModel> history = validationReadAppService.historyForTask(id);
+        if (history.isEmpty()) {
+            throw new DomainException(ResultCode.NOT_FOUND, "No validation report for task: " + id);
+        }
+        return ok(ValidationReport2DTOConverter.toDTO(history, validationReadAppService.maxReworks()));
     }
 
     /** The task's dispatch history (#75), owner-only: another client gets 404, not the rows. */
@@ -177,9 +259,12 @@ public class TaskController extends BaseController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
         UUID clientId = currentUser.currentUserId();
-        List<TaskDTO> tasks = readAppService.listForClient(clientId, new TaskQuery(page, size))
-                .stream()
-                .map(TaskModel2DTOConverter::toDTO)
+        List<TaskModel> owned = readAppService.listForClient(clientId, new TaskQuery(page, size));
+        // One read for the page's Items; the amounts come from each Task's recorded settlements.
+        Map<UUID, TaskItems> items = readAppService.findItems(owned.stream().map(TaskModel::id).toList());
+        List<TaskDTO> tasks = owned.stream()
+                .map(task -> TaskModel2DTOConverter.toDTO(task, null, null, null, null, items.get(task.id()), false,
+                        readAppService.findSettlementRecord(task)))
                 .toList();
         return ok(tasks);
     }
@@ -188,7 +273,28 @@ public class TaskController extends BaseController {
     public WebResult<TaskDTO> accept(@PathVariable("id") UUID id) {
         UUID clientId = currentUser.currentUserId();
         reviewAppService.accept(id, clientId);
-        return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
+        return ok(withItems(readAppService.getForClient(id, clientId)));
+    }
+
+    /** Accept one Item of a multi-Item Task (spec S3); the Task resolves once every Item has settled. */
+    @PostMapping("/{id}/items/{itemNo}/accept")
+    public WebResult<TaskDTO> acceptItem(@PathVariable("id") UUID id, @PathVariable("itemNo") int itemNo) {
+        UUID clientId = currentUser.currentUserId();
+        reviewAppService.acceptItem(id, clientId, itemNo);
+        return ok(withItems(readAppService.getForClient(id, clientId)));
+    }
+
+    private TaskDTO withItems(TaskModel task) {
+        // Same view as GET /{id}: the page replaces its task with this, so keep the review window.
+        return TaskModel2DTOConverter.toDTO(task, readAppService.findBookedAgentId(task).orElse(null),
+                readAppService.findReviewWindow(task).orElse(null),
+                rejectionAppService.findLatest(task.id()).orElse(null), null, readAppService.findItems(task), true,
+                readAppService.findSettlementRecord(task));
+    }
+
+    /** A task with the amounts its recorded settlements say. */
+    private TaskDTO settled(TaskModel task) {
+        return TaskModel2DTOConverter.toDTO(task, readAppService.findSettlementRecord(task));
     }
 
     @PostMapping("/{id}/reject")
@@ -196,7 +302,18 @@ public class TaskController extends BaseController {
                                      @Valid @RequestBody RejectTaskRequest request) {
         UUID clientId = currentUser.currentUserId();
         reviewAppService.reject(id, clientId, request.reasonCategory(), request.reason());
-        return ok(TaskModel2DTOConverter.toDTO(readAppService.getForClient(id, clientId)));
+        return ok(settled(readAppService.getForClient(id, clientId)));
+    }
+
+    /**
+     * Ask for AI arbitration of a result the Agent stood by after your A/B/C rejection (#95). Only the
+     * task's Client can, only while it awaits their decision (409 otherwise), and no deposit is taken.
+     */
+    @PostMapping("/{id}/arbitration")
+    public WebResult<TaskDTO> requestArbitration(@PathVariable("id") UUID id) {
+        UUID clientId = currentUser.currentUserId();
+        rejectionAppService.requestArbitration(id, clientId);
+        return ok(settled(readAppService.getForClient(id, clientId)));
     }
 
     /**
@@ -217,12 +334,14 @@ public class TaskController extends BaseController {
      * lists: the web rebook passes the Agent that just failed the task (#79). {@code deadlineSeconds}
      * leaves out Agents that can't finish in time, counted from this request (#83). {@code title} and
      * {@code description} are the task text the relevance floor and ranking compare profiles with (#85).
+     * {@code contract} (optional) keeps only Agents whose Offer covers it; an empty shortlist comes with
+     * {@code noMatch}, naming what excluded the Agents and how relaxing it would help (#91).
      */
     @PostMapping("/match-preview")
     public WebResult<MatchPreviewDTO> matchPreview(@Valid @RequestBody MatchPreviewRequest request) {
         return ok(MatchPreview2DTOConverter.toDTO(matchPreviewAppService.preview(
                 request.title(), request.description(), request.category(), Money.of(request.budget()), excludedAgents(request.exclude()),
-                request.deadlineSeconds())));
+                request.deadlineSeconds(), contractOf(request.contract()))));
     }
 
     private static Set<UUID> excludedAgents(List<UUID> exclude) {

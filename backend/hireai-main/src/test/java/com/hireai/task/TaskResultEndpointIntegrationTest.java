@@ -71,9 +71,9 @@ class TaskResultEndpointIntegrationTest {
     private UUID newTask(UUID clientId, String status) {
         UUID taskId = UUID.randomUUID();
         jdbc.update("""
-                INSERT INTO tasks (id, client_id, title, description, budget, output_spec, status, category)
+                INSERT INTO tasks (id, client_id, title, description, budget, contract, status, category)
                 VALUES (?, ?, 'Summarise report', 'Summarise the attached quarterly report',
-                        30.00, CAST(? AS jsonb), ?, 'summarisation')""",
+                        30.00, contract_from_output_spec(CAST(? AS jsonb)), ?, 'summarisation')""",
                 taskId, clientId,
                 "{\"format\":\"JSON\",\"schema\":\"{}\",\"acceptanceCriteria\":\"valid JSON\"}",
                 status);

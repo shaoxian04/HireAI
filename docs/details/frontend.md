@@ -88,10 +88,10 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   view (lifetime/pending totals from `GET /api/builder/earnings`, per-agent breakdown, payout
   history; amounts derived server-side from `SettlementPolicy`); `builder/agents/new` — register
   an agent (the form shows the WorkOrder acknowledgement contract, `components/AckContract.tsx`), then reveal its signing secret once (`RegisteredAgentDTO.signingSecret`) before routing to
-  `/builder`; `builder/agents/[id]` — manage console. Above the tabs, `components/manage/SigningSecretPanel.tsx`
+  `/builder`; `builder/agents/[id]` — manage console. Above the tabs, `components/manage/EngagementsPanel.tsx` lists buyers' Engagements with the agent (only when there are some) and accepts a waiting Template variant behind a confirm, `POST /engagements/{id}/accept`; and `components/manage/SigningSecretPanel.tsx`
   shows whether a signing secret is set (`AgentDTO.hasSigningSecret`; the value is never readable) and
   offers rotation behind a confirm dialog, `POST /agents/{id}/rotate-secret`, revealing the new value
-  once in a modal. An agent without a secret gets an amber prompt to get one instead. Tabs: Storefront · Pricing · Stats ·
+  once in a modal. An agent without a secret gets an amber prompt to get one instead. Tabs: Storefront · Pricing (the output contract plus the version's Offer, `OfferPanel`, with "Edit offer" opening `OfferEditor`: a Template per card, a range per parameter, published as `offer` with the new version) · Stats ·
   **Reputation** · Reviews; image uploader via `apiUpload`). **Reputation** renders the owner-only
   breakdown from `GET /api/agents/{id}/reputation`: the score on a marked 0–100 scale (50 = the
   neutral start), Reliability and Satisfaction as separate meters, and the event stream with each
@@ -101,6 +101,7 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   editor that also *edits* an already-published reply (`PUT …/reviews/{id}/response` replaces).
 - `client/` — **Marketplace** (search/category/sort/hot strip/agent grid); `client/tasks` — task list +
   wallet (resolution badges on each task row); `client/tasks/new` — **searchable category picker** (`CategoryCombobox` from `/catalogue/categories`, strict —
+  plus optional **Output terms** (`ContractTermsField`: a Template from `/catalogue/templates` and its parameters; "The agent's own terms" sends no Contract), sent as `contract` with the preview and the booking; the shortlist lists only agents whose Offer covers them, and an empty one shows the no-match explanation with a "Drop X → N agents" button per relax suggestion, which only the Client presses (a dropped term stays dropped on a re-search until the title, description or Template changes) — before the search, **requirement extraction** sends the title, description and chosen Template to `POST /contracts/draft` (`lib/extraction.ts`): when the Client chose a Template in Output terms, its mapped terms join the Contract searched and booked and the Client's own terms win over an extracted value for the same term; with none chosen ("The agent's own terms") extraction is advice only: the draft is read against the text default while the description may ask for JSON or a file, and the platform never rules an Agent out by a Template the Client didn't choose, so the search and booking use each agent's own terms and the booking card lists every requirement under "you judge these" with a prompt to choose Output terms to have it checked; a failed call counts as unavailable and the search goes ahead. A booking whose Contract is the draft's Template sends the draft's `extraction` with it, so the task page's inspection report lists the requirements the Client judges (unmapped, dropped or overridden ones) instead of saying the contract sets none; the booking card labels each term by its real source (the Client's output terms, else the quoted requirement). The confirm-booking card's `BookingChecks` ("What booking agrees to": booking is acceptance, no extra step) lists each term checked automatically with where it came from, the requirements not checked automatically (unmapped, dropped, or overridden by the Client's terms) with why, an amber note when extraction was unavailable, and the review and agent-response windows from `GET /catalogue/review-windows` —
   Find-agents gated on a real category) → match-preview **shortlist → pick → book** at the
   agent's price (the `ShortlistPanel` opens in a `Modal` popout of ranked agent cards: profile avatars,
   best-match highlight, a plain-language `DeliveryRecord`, above-budget near-miss drawer, and a
@@ -112,21 +113,40 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   preview call is a `POST /tasks/match-preview` with the task text in the body (never in the URL), sent only by `fetchMatchPreview` in `lib/rebook.ts`, the one place that sends `exclude` — **no reputation number and no stars**: the shortlist once divided the routing composite by 20
   and drew it as a five-star client rating, which is a different quantity entirely); `client/tasks/[id]` — polls
   the task every 2 s, backing off to 30 s while nothing changes and snapping back on any status change;
-  shows an `InspectionReport` above the result; at `PENDING_REVIEW` renders the `ResultReviewBar` (accept, confirmed in a `ConfirmDialog` naming the escrowed amount / reject with an A/B/C reason), then on
-  `RESOLVED` shows the settled summary plus a dismissible `RatingPrompt` (`POST /api/tasks/{id}/review`,
+  shows the task's frozen Contract in plain words in the work-order docket (`ContractPanel` in `components/AcceptanceTerms.tsx`, Template titles and labels from `GET /catalogue/templates`); shows an `InspectionReport` above the result; a FILE result shows its frozen copy in a `DeliverablePanel` (type judged from the bytes, size, SHA-256, an inline preview for PNG/JPEG/WebP drawn from a blob URL, and a download, both through `apiBlob` from `GET /tasks/{id}/deliverable`; the agent's link is plain text, never a link), or, for a result from before snapshots, a `LegacyDeliverableLink` labelled as the agent's link (the admin dispute page does the same from `/admin/disputes/{id}/deliverable`); at `PENDING_REVIEW` renders the `ResultReviewBar` (accept, confirmed in a `ConfirmDialog` naming the escrowed amount / reject with an A/B/C reason), headed by a `ReviewWindowNotice` counting down `TaskDTO.reviewDeadline` (once it reaches zero the controls go and the notice says the result is being accepted automatically). The rejection response path (`components/RejectionPanel.tsx`, from `TaskDTO.rejection`): `AgentResponsePending` at `AWAITING_AGENT_RESPONSE` (the rejection quoted back, the Agent's countdown), `ClientDecisionPanel` at `AWAITING_CLIENT_DECISION` (the Agent's reason, a countdown, Accept / Request AI arbitration, each confirmed), and `RevisedResultNotice` above a revised result; then on
+  `RESOLVED` shows the settled summary (saying so when `autoAccepted`) plus a dismissible `RatingPrompt` (`POST /api/tasks/{id}/review`,
   accepted-only and once per task — a rating left later beats one never given, so it must stay skippable).
+  Once anything has settled (a terminal status, or any settled Item of a multi-Item task), a `ReceiptsPanel` lists the task's [signed receipts](receipts.md) from `GET /tasks/{id}/receipts` (what each settled, the signing key) with a download of the exact signed document through `apiBlob` (`GET /receipts/{id}`), plus loading, empty and retry states.
   On a **terminal failure** (`SPEC_VIOLATION`/`TIMED_OUT`/`FAILED`/`CANCELLED`)
-  it renders a `TaskFailurePanel` (plain-English cause from the task's `failureReason`, falling back to per-status copy when it is absent, + `{budget} cr refunded` line; the spec-violation panel
+  it renders a `TaskFailurePanel` (plain-English cause from the task's `failureReason`, falling back to per-status copy when it is absent, + `{budget} cr refunded` line; a `NO_ELIGIBLE_AGENT` panel also shows the task's `failureDetail`; the spec-violation panel
   fetches the real failing-check reason from `GET /api/tasks/{id}/validation`). Every failure panel's action is
   **Choose another agent**, the rebook flow below. **Once the task is in a dispute** the execution pipeline is replaced by a
-  `DisputeProgressPanel` — a reject→arbitrator→admin **timeline** with Accept-ruling / Appeal actions while a
-  proposed ruling awaits; it persists after `RESOLVED`. `client/disputes` — the client's dispute list ("awaiting
+  `DisputeProgressPanel` — a reject→agent stood by→arbitrator→admin **timeline**; while a proposed ruling awaits,
+  the side it goes against gets Accept ruling / Appeal (confirmed, naming the capped fees) and a countdown, the
+  other side a "waiting for…" line; after `RESOLVED` it lists who bore each fee. It persists after `RESOLVED`. `client/disputes` — the client's dispute list ("awaiting
   your decision" `RULED` rows first); `client/keys` — API-key management (create, with a reveal-once `Modal`
   showing the raw key + copy button + a "won't see it again" warning; list; revoke); `client/webhooks` —
   webhooks console (register/replace an HTTPS callback per API key, reveal/rotate the signing secret, a
   delivery log with `DELIVERED`/`PENDING`/`DEAD` badges + an account-scoped `DEAD`-failure banner, manual
-  resend); `client/agents/[id]` — agent storefront; `client/agents/[id]/book` — direct-booking form (adopts
-  agent's `output_spec`). The `client/tasks/[id]` view also shows a per-task `WebhookDeliveryStatus`
+  resend); `client/agents/[id]` — agent storefront (output contract and the Offer, "What this agent accepts"); `client/agents/[id]/book` — direct-booking form (freezes the
+  agent's own terms as the Contract), with a **Confidential documents** section (`components/EngagementDocuments.tsx`):
+  without an open Engagement with the agent it offers to start one (a consent checkbox and a retention
+  choice, `POST /engagements`); while the Engagement waits for the builder it says so; once active it
+  uploads documents (`apiUpload` to `/engagements/{id}/sources`, several at once) and lists the
+  Engagement's documents with type, size, SHA-256 and the agent's download log, each with a checkbox. The
+  ticked documents become the Items (`items: [{sourceId}]` + `engagementId`), the price shows as price ×
+  count, and fewer than two is refused before sending; the idempotency signature covers the Items. On the
+  task page, `ItemsPanel` marks a document Item (it lists 50 Items, then "Show all"). With Items and an Offer that
+  allows it, the booking page offers stricter inspection (`inspectionLevel: "III"`).
+- **Sampling reviewer** (`client/tasks/[id]/review`, [sampling.md](sampling.md)). The task page's `InspectionCard`
+  (`components/sampling/InspectionSummary.tsx`) says where the sample stands and links here. The page polls
+  `GET /tasks/{id}` and `GET /tasks/{id}/inspection` every 4 s: `PlanFacts` (lot, level, sample size, ISO letter,
+  the stage's rule in words from `lib/sampling.ts` `ruleText`, the seed with copy), `SamplingPath` (first sample →
+  second → rework → resample → pro rata), `InspectionOutcome`, the current sample's `SampleItemCard`s (source
+  beside the agent's result, `SourceDocument` fetching an Item's document by `apiBlob` from
+  `/tasks/{id}/items/{n}/source`; "Correct" / "Wrong…" with an A/B/C reason and text, `POST …/judgement`; a
+  stood-by Item's "Accept the Item", `POST …/decision`), a "Check another Item" box for extra checks outside the
+  sample, and the samples drawn so far. The `client/tasks/[id]` view also shows a per-task `WebhookDeliveryStatus`
   indicator with a resend action.
 - **Rebook a failed task.** "Choose another agent" links to `/client/tasks/new?rebook=<taskId>` (`rebookHref`); only
   the id is in the URL. The new-task page reads `GET /api/tasks/{id}` and fills title, description, category and
@@ -136,7 +156,7 @@ claim and the legacy `role` string claim. Returns `null` if the token is unparsa
   escrow freeze. The failed task, already refunded, is not touched. If the task can't be loaded, the page says so
   and shows a blank form. The page component sits in a `Suspense` boundary because it reads `useSearchParams`.
 - `admin/` — overview plus read-only task, user-wallet and agent browsers; `admin/disputes` — the dispute queue; `admin/disputes/[id]` — dispute detail with
-  the tier-2 human-backstop ruling.
+  the evidence (the task's frozen Contract, the result, the frozen file) and the tier-2 human-backstop ruling, each outcome previewing the credits it moves and the dispute fees the side it goes against bears.
 
 **`AgentDTO` is nested** — read `agent.currentVersion.{ capabilityCategories, price, webhookUrl }`, not the root.
 
@@ -148,8 +168,10 @@ option is a `<Link>` (routes to that surface's home) that also calls `setActiveS
 role users see no switcher; the nav links shown depend on `activeSurface`:
 
 - **CLIENT:** Marketplace · My tasks · API keys · Webhooks · Disputes. Disputes carries a count badge of
-  disputes awaiting the client's decision (`RULED`), from `lib/useDisputeCount.ts` (`GET /api/disputes/mine`).
-- **BUILDER:** My agents · Earnings.
+  disputes awaiting the client's decision (`awaitingYou`: a `RULED` ruling against the client), from `lib/useDisputeCount.ts` (`GET /api/disputes/mine`).
+- **BUILDER:** My agents · Earnings · Disputes. Disputes carries the count of rulings awaiting the builder's
+  accept-or-appeal (`awaitingYou`, `GET /api/disputes/builder`); `builder/disputes/[taskId]` shows the same
+  `DisputeProgressPanel` from the builder's side.
 - **ADMIN:** Overview · Disputes.
 
 ## Role guards
@@ -159,7 +181,7 @@ directly so it doesn't bounce an authenticated user before context rehydrates.
 
 ## Design rules
 
-The identity is a **work docket**: a task is a work order, its output spec is a contract, and money moves
+The identity is a **work docket**: a task is a work order, its Contract is binding, and money moves
 only when the work passes. Tokens live in `app/globals.css` (`@theme`, with a `:root[data-theme="dark"]`
 override block). Follow these rules on every surface:
 
@@ -215,7 +237,10 @@ override block). Follow these rules on every surface:
   searchable category picker), `components/CategoryPicker.tsx` (a builder's categories as checkboxes from the
   platform-owned list, plus the optional "suggest a category" field), `components/ContractTerms.tsx` (an output contract as a labelled list),
   `components/InspectionReport.tsx` (the validation report above a delivered result: each automated check
-  ticked or crossed, then the acceptance criteria left for the client to judge),
+  ticked, crossed or marked for the client to judge when it could not decide, a "Reworked" line for earlier
+  failed attempts, what the agent flagged, Findings about the brief, then the acceptance criteria left for the
+  client to judge), `components/ReworkNotice.tsx` (while a task is QUEUED/EXECUTING after a check rejected its
+  result: "Rework n of max", the failed checks, and that a failed check is not disputable),
   `components/StartLink.tsx` (landing CTAs that route by sign-in state and role),
   `components/FlashBanner.tsx` + `lib/flash.ts` (a one-shot success message carried across a navigation,
   shown by `AppShell`), `components/BottomBar.tsx` (a phone-only bar pinned to the screen, portalled to

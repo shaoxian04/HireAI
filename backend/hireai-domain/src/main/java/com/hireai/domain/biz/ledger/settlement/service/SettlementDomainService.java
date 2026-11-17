@@ -27,6 +27,14 @@ public interface SettlementDomainService {
                                          Money budget, UUID taskId, String correlationId);
 
     /**
+     * {@link #settleAcceptance(WalletModel, WalletModel, Money, UUID, String)} with the commission given: an
+     * Item's commission is allocated on its Task's running total (see {@code TaskSettlementRecord}).
+     * {@code commission} must be in [0, budget].
+     */
+    SettlementBreakdown settleAcceptance(WalletModel clientWallet, WalletModel builderWallet,
+                                         Money budget, Money commission, UUID taskId, String correlationId);
+
+    /**
      * Client rejected: return the full budget from escrow to the client's available balance.
      *
      * <p>{@code budget} MUST be the task's frozen escrow amount of record ({@code task.budget()});
@@ -41,4 +49,16 @@ public interface SettlementDomainService {
      */
     SettlementBreakdown settleSplit(WalletModel clientWallet, WalletModel builderWallet,
                                     Money budget, UUID taskId, String correlationId);
+
+    /**
+     * Pro-rata (spec D19): the builder is paid 85/15 on {@code builderGross} (0 &lt; gross &lt; budget)
+     * and the rest of {@code budget} is refunded to the client, by subtraction so it reconciles exactly.
+     */
+    SettlementBreakdown settlePartial(WalletModel clientWallet, WalletModel builderWallet,
+                                      Money budget, Money builderGross, UUID taskId, String correlationId);
+
+    /** {@link #settlePartial(WalletModel, WalletModel, Money, Money, UUID, String)} with the commission given. */
+    SettlementBreakdown settlePartial(WalletModel clientWallet, WalletModel builderWallet,
+                                      Money budget, Money builderGross, Money commission, UUID taskId,
+                                      String correlationId);
 }

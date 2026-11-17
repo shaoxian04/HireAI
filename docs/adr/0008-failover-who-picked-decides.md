@@ -34,4 +34,7 @@ failure, times out, or breaks the spec) are never failed over.
   once a fair retry window has passed.
 - Agents must acknowledge a WorkOrder with 2xx within 15s and execute asynchronously. A slow
   acknowledgement looks like "unreachable".
-- Until #46, a routed task whose spec no Agent can meet can still penalise up to 3 Builders in a row.
+- A routed task's spec can penalise at most one Builder: a spec violation happens after the Agent
+  started, so it is never failed over. (Corrected 2026-11-16, #110: this line said "up to 3 Builders in a
+  row", which contradicted the rule above. Since spec #87 an Agent is also routed only a Contract its
+  Offer covers, and may decline one with a 422 at no reputation cost.)

@@ -125,13 +125,15 @@ class TaskSubmissionIntegrationTest {
     }
 
     @Test
-    void outputSpecRoundTripsThroughJsonb() {
+    void theContractAndCriteriaRoundTripAndDescribeTheOutput() {
         UUID client = newClient();
         walletWriteAppService.topUp(client, Money.of("100.00"), "seed");
 
         UUID taskId = taskWriteAppService.submit(info(client, "20.00"));
 
-        OutputSpec spec = taskReadAppService.getForClient(taskId, client).outputSpec();
+        // output_spec is retired (#110): the description is rebuilt from the frozen Contract, its
+        // Template's shape and the stored criteria.
+        OutputSpec spec = taskReadAppService.getForClient(taskId, client).outputDescription();
         assertThat(spec.format()).isEqualTo(OutputFormat.JSON);
         assertThat(spec.schema()).isEqualTo("{\"type\":\"object\"}");
         assertThat(spec.acceptanceCriteria()).isEqualTo("valid JSON summary");

@@ -29,6 +29,7 @@ public class GlobalExceptionConfiguration {
     public ResponseEntity<WebResult<Void>> handleDomain(DomainException ex) {
         HttpStatus status = switch (ex.resultCode()) {
             case NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
             // Genuine state conflicts → 409. VALIDATION_ERROR is bad input, so it falls through
             // to the default 400 Bad Request.
             case INSUFFICIENT_BALANCE, DOMAIN_RULE_VIOLATION,
@@ -64,7 +65,9 @@ public class GlobalExceptionConfiguration {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<WebResult<Void>> handleOversizeUpload(MaxUploadSizeExceededException ex) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
-                .body(WebResult.error(ResultCode.VALIDATION_ERROR, "Upload exceeds the 2 MB limit"));
+                .body(WebResult.error(ResultCode.VALIDATION_ERROR, ex.getMaxUploadSize() > 0
+                        ? "Upload exceeds the " + Math.max(1, ex.getMaxUploadSize() / (1024 * 1024)) + " MB limit"
+                        : "Upload exceeds the size limit"));
     }
 
     @ExceptionHandler(AuthenticationFailedException.class)

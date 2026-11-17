@@ -47,6 +47,14 @@ public class ReputationWriteAppServiceImpl implements ReputationWriteAppService 
     }
 
     @Override
+    public void recordItemsOutcome(UUID taskId, UUID agentVersionId, UUID clientId,
+                                   int acceptedItems, int totalItems) {
+        resolveEmittableAgent(taskId, agentVersionId, clientId, ReputationEventType.ITEMS_SETTLED)
+                .ifPresent(target -> appendAndRescore(ReputationEventModel.itemsSettled(
+                        target.agentId(), taskId, acceptedItems, totalItems)));
+    }
+
+    @Override
     public void recordRating(UUID taskId, UUID agentVersionId, UUID clientId, int stars) {
         resolveEmittableAgent(taskId, agentVersionId, clientId, ReputationEventType.RATING)
                 .ifPresent(target ->

@@ -31,6 +31,7 @@ describe("TaskFailurePanel", () => {
     ["TIMED_OUT", "EXECUTION_TIMEOUT", /ran out of time/i],
     ["FAILED", "AGENT_REPORTED_FAILURE", /agent couldn't complete/i],
     ["SPEC_VIOLATION", "SPEC_VIOLATION", /didn't meet the spec/i],
+    ["FAILED", "CONTRACT_DECLINED", /agent declined your terms/i],
   ] as const)("explains %s with reason %s in plain words", (status, failureReason, headline) => {
     render(<TaskFailurePanel taskId="t-1" status={status} failureReason={failureReason} budget={8} />);
     expect(screen.getByRole("heading", { name: headline })).toBeTruthy();
@@ -41,6 +42,13 @@ describe("TaskFailurePanel", () => {
     // A timeout while still queued is not the agent running out of time.
     render(<TaskFailurePanel taskId="t-1" status="TIMED_OUT" failureReason="DISPATCH_ABANDONED" budget={5} />);
     expect(screen.queryByText(/ran out of time/i)).toBeNull();
+  });
+
+  it("says what ruled agents out when no agent was eligible (#91)", () => {
+    render(<TaskFailurePanel taskId="t-1" status="CANCELLED" failureReason="NO_ELIGIBLE_AGENT" budget={5}
+      failureDetail="No eligible Agent: parameter schema excluded 2 Agents." />);
+    expect(screen.getByText(/what ruled agents out/i)).toBeTruthy();
+    expect(screen.getByText(/parameter schema excluded 2 agents/i)).toBeTruthy();
   });
 
   it("shows the failed-check reason for spec-violation when detail is provided", () => {

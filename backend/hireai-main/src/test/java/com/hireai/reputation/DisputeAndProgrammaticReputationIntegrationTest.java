@@ -20,6 +20,9 @@ import com.hireai.domain.shared.model.Money;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import com.hireai.support.dispute.RulingSteps;
+import com.hireai.support.rejection.RejectionSteps;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -69,6 +72,8 @@ class DisputeAndProgrammaticReputationIntegrationTest {
     }
 
     @Autowired TaskReviewAppService reviewAppService;
+
+    @Autowired ApplicationContext context;
     @Autowired DisputeAppService disputeAppService;
     @Autowired DisputeRepository disputeRepository;
     @Autowired ValidationAppService validationAppService;
@@ -126,9 +131,9 @@ class DisputeAndProgrammaticReputationIntegrationTest {
 
     /** Rejects with {@code reason}, then accepts the arbitrator's proposal so it takes effect. */
     private void disputeAndAcceptRuling(TaskModel task, UUID client, RejectReason reason) {
-        reviewAppService.reject(task.id(), client, reason, "see rationale");
+        RejectionSteps.rejectThenArbitrate(context, task.id(), client, reason, "see rationale");
         UUID disputeId = disputeRepository.findByTaskId(task.id()).orElseThrow().id();
-        disputeAppService.acceptRuling(disputeId, client);
+        RulingSteps.acceptAsEverySide(context, disputeId);
     }
 
     // -------------------------------------------------------------------- #38 dispute rulings
@@ -212,12 +217,13 @@ class DisputeAndProgrammaticReputationIntegrationTest {
     void anAdminOverrideEmitsFromTheRulingThatTookEffect() {
         UUID client = newUser("CLIENT");
         UUID admin = newUser("ADMIN");
-        UUID[] agent = newAgent(newUser("BUILDER"));
+        UUID builder = newUser("BUILDER");
+        UUID[] agent = newAgent(builder);
         TaskModel task = seedReviewableTask(client, agent[1]);
 
-        reviewAppService.reject(task.id(), client, RejectReason.A_MISMATCH, "not what I asked");
+        RejectionSteps.rejectThenArbitrate(context, task.id(), client, RejectReason.A_MISMATCH, "not what I asked");
         UUID disputeId = disputeRepository.findByTaskId(task.id()).orElseThrow().id();
-        disputeAppService.appeal(disputeId, client);
+        disputeAppService.appeal(disputeId, builder); // the ruling went against the Builder (#96)
 
         disputeAppService.adminRule(disputeId, RulingCategory.FULFILLED, "spec was met", admin);
 

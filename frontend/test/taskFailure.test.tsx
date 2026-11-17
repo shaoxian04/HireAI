@@ -78,6 +78,24 @@ describe("task detail — failure panel", () => {
     expect(screen.queryByText(/couldn't reach the agent/i)).toBeNull();
   });
 
+  it("shows a declined contract with the agent's reason in the hand-offs", async () => {
+    server.use(
+      http.get("*/api/tasks/t-fail", () =>
+        ok({ ...specViolationTask(), status: "FAILED", failureReason: "CONTRACT_DECLINED" }),
+      ),
+      http.get("*/api/tasks/t-fail/attempts", () =>
+        ok([{ attemptNumber: 1, agentId: "a1", agentName: "Ledger Bot", agentVersionId: "v1",
+          outcome: "CONTRACT_DECLINED", occurredAt: "2026-07-13T10:00:01Z",
+          declineReason: "I only summarise English text" }]),
+      ),
+    );
+    render(<AuthProvider><TaskDetailPage /></AuthProvider>);
+    expect(await screen.findByText(/the agent declined your terms/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Hand-offs" })).toBeInTheDocument();
+    expect(screen.getByText("“I only summarise English text”")).toBeInTheDocument();
+    expect(screen.getByText(/10 cr refunded/i)).toBeInTheDocument();
+  });
+
   it("explains an AWAITING_AGENT task as waiting for an eligible agent, not for capacity", async () => {
     server.use(
       http.get("*/api/tasks/t-fail", () =>
@@ -86,7 +104,7 @@ describe("task detail — failure panel", () => {
     );
     render(<AuthProvider><TaskDetailPage /></AuthProvider>);
     expect(await screen.findByText("Awaiting an agent")).toBeInTheDocument();
-    expect(screen.getByText(/no agent takes this category within your budget/i)).toBeInTheDocument();
+    expect(screen.getByText(/no agent takes this category and its output terms within your budget/i)).toBeInTheDocument();
     expect(screen.getByText(/credits are refunded/i)).toBeInTheDocument();
     expect(screen.queryByText(/capacity/i)).toBeNull();
   });

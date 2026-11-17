@@ -66,7 +66,7 @@ class DispatchRaceIntegrationTest extends WholeAppIntegrationTest {
 
     @Test
     void aFailureAfterASuccessfulSendProducesExactlyOneWorkOrder() {
-        doThrow(new IllegalStateException("database blip")).when(taskExecutionPort).markExecuting(any());
+        doThrow(new IllegalStateException("database blip")).when(taskExecutionPort).markExecuting(any(), any());
         FakeAgent agent = fakeAgent().replyWith(FakeAgentReply.accepted()
                 .withCallback(AgentCallback.completed().afterReply(Duration.ofSeconds(2))));
         String category = "x-" + UUID.randomUUID();
@@ -153,6 +153,7 @@ class DispatchRaceIntegrationTest extends WholeAppIntegrationTest {
                         + "webhook_url, max_execution_seconds, price) VALUES (?, ?, 1, ?::jsonb, ?, ?, 60, ?)",
                 versionId, agentId, "{\"format\":\"JSON\"}", new String[]{category}, webhookUrl,
                 new BigDecimal("10.00"));
+        acceptAnyJsonSchema(versionId);
         return versionId;
     }
 }

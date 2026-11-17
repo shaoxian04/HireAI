@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hireai:format:receipt-otel.v1",
+  "title": "HireAI receipt as OpenTelemetry gen_ai.evaluation.result events",
+  "description": "The document served by GET /api/receipts/{id}/otel: an OTLP/JSON logs export request (ExportLogsServiceRequest) whose log records are gen_ai.evaluation.result events (OTel GenAI semantic conventions). Prose: docs/details/receipts.md#exports.",
+  "type": "object",
+  "required": ["resourceLogs"],
+  "properties": {
+    "resourceLogs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["resource", "scopeLogs"],
+        "properties": {
+          "resource": {
+            "type": "object",
+            "required": ["attributes"],
+            "properties": {
+              "attributes": {
+                "$ref": "#/$defs/attributes",
+                "contains": { "$ref": "#/$defs/stringAttr", "properties": { "key": { "const": "service.name" } } }
+              }
+            }
+          },
+          "scopeLogs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["scope", "logRecords"],
+              "properties": {
+                "scope": {
+                  "type": "object",
+                  "required": ["name"],
+                  "properties": { "name": { "const": "hireai.receipts" }, "version": { "type": "string" } }
+                },
+                "logRecords": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/evaluationEvent" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "evaluationEvent": {
+      "type": "object",
+      "required": ["timeUnixNano", "observedTimeUnixNano", "eventName", "severityNumber", "attributes"],
+      "properties": {
+        "timeUnixNano": { "$ref": "#/$defs/uint64" },
+        "observedTimeUnixNano": { "$ref": "#/$defs/uint64" },
+        "eventName": { "const": "gen_ai.evaluation.result" },
+        "severityNumber": { "const": 9 },
+        "severityText": { "const": "INFO" },
+        "attributes": {
+          "$ref": "#/$defs/attributes",
+          "allOf": [
+            { "contains": { "$ref": "#/$defs/stringAttr", "properties": { "key": { "const": "gen_ai.evaluation.name" } } } },
+            { "contains": { "$ref": "#/$defs/stringAttr", "properties": { "key": { "const": "gen_ai.evaluation.score.label" } } } },
+            { "contains": { "$ref": "#/$defs/stringAttr", "properties": { "key": { "const": "gen_ai.response.id" } } } },
+            { "contains": { "$ref": "#/$defs/stringAttr", "properties": { "key": { "const": "hireai.receipt.id" } } } },
+            { "contains": { "$ref": "#/$defs/stringAttr", "properties": { "key": { "const": "hireai.receipt.sha256" } } } },
+            {
+              "contains": {
+                "type": "object",
+                "required": ["key", "value"],
+                "properties": {
+                  "key": { "const": "hireai.evaluation.kind" },
+                  "value": {
+                    "type": "object",
+                    "required": ["stringValue"],
+                    "properties": { "stringValue": { "enum": ["checks", "check", "acceptance"] } }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "attributes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "value"],
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "value": {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 1,
+            "additionalProperties": false,
+            "properties": {
+              "stringValue": { "type": "string" },
+              "doubleValue": { "type": "number" },
+              "intValue": { "$ref": "#/$defs/int64" },
+              "boolValue": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "stringAttr": {
+      "type": "object",
+      "required": ["key", "value"],
+      "properties": { "value": { "type": "object", "required": ["stringValue"] } }
+    },
+    "uint64": { "type": "string", "pattern": "^[0-9]{1,20}$" },
+    "int64": { "type": "string", "pattern": "^-?[0-9]{1,19}$" }
+  }
+}

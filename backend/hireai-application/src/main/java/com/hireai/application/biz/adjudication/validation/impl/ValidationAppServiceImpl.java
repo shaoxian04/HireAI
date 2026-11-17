@@ -1,6 +1,18 @@
 package com.hireai.application.biz.adjudication.validation.impl;
 
+import com.hireai.application.biz.acceptance.delivery.DeliverySnapshotAppService;
 import com.hireai.application.biz.adjudication.validation.ValidationAppService;
+import com.hireai.application.biz.task.routing.RoutingAppService;
+import com.hireai.domain.biz.acceptance.check.model.AcceptanceEvidence;
+import com.hireai.domain.biz.acceptance.check.model.DecodedImage;
+import com.hireai.domain.biz.acceptance.check.model.FindingFacts;
+import com.hireai.domain.biz.acceptance.check.model.SelfReportedAnomaly;
+import com.hireai.domain.biz.acceptance.check.service.ImageDecoder;
+import com.hireai.domain.biz.acceptance.check.service.InvoiceReader;
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.adjudication.model.ReworkPolicy;
+import com.hireai.domain.biz.task.routing.info.ReworkRequest;
+import com.hireai.domain.biz.acceptance.delivery.model.DeliveryOutcome;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
@@ -10,6 +22,7 @@ import com.hireai.domain.biz.adjudication.repository.ValidationReportRepository;
 import com.hireai.domain.biz.adjudication.service.ValidationDomainService;
 import com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
+import com.hireai.domain.biz.task.model.ReviewWindow;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
 import com.hireai.utility.exception.DomainException;
@@ -19,6 +32,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -28,6 +44,7 @@ import java.util.UUID;
 public class ValidationAppServiceImpl implements ValidationAppService {
 
     private final ValidationDomainService validationDomainService;
+    private final DeliverySnapshotAppService deliverySnapshotAppService;
     private final ValidationReportRepository reportRepository;
     private final TaskRepository taskRepository;
     private final SettlementWriteAppService settlementWriteAppService;
@@ -35,18 +52,59 @@ public class ValidationAppServiceImpl implements ValidationAppService {
     private final ApiKeyTaskRepository apiKeyTaskRepository;
     private final WebhookOutboxAppService webhookOutboxAppService;
     private final ReputationWriteAppService reputationWriteAppService;
-
-    private static final int FIRST_ATTEMPT = 1; // retry attempts arrive in Plan 2
+    private final ReviewWindow reviewWindow;
+    private final ReworkPolicy reworkPolicy;
+    private final RoutingAppService routingAppService;
+    private final ImageDecoder imageDecoder;
+    /** Requests a booked AI Review once a result passed the deterministic checks (spec S10). */
+    private final com.hireai.application.biz.acceptance.aireview.AiReviewAppService aiReviewAppService;
+    /** The app's Clock bean (ClockConfig): the review window opens at this instant. */
+    private final Clock clock;
+    /** Reads an ap_invoice_extraction result (#106). */
+    private final InvoiceReader invoiceReader;
 
     @Override
     public TaskModel validateAndGate(TaskModel task) {
-        ValidationReportModel report =
-                validationDomainService.validate(task.outputSpec(), task.result(), FIRST_ATTEMPT);
+        return validateAndGate(task, List.of());
+    }
+
+    @Override
+    public TaskModel validateAndGate(TaskModel task, List<SelfReportedAnomaly> anomalies) {
+        // The first result is attempt 1; an Agent's revision after a rejection (#95) is the next one.
+        int attempt = reportRepository.findLatestByTaskId(task.id())
+                .map(previous -> previous.attemptNo() + 1).orElse(1);
+        // The frozen Contract is the binding contract (Invariant #4). Every Task has one: V55 gave the
+        // Tasks submitted before Contracts existed the one their output spec mapped onto (D39, #110).
+        Contract contract = task.contract();
+        // A file is fetched and frozen once, here, before any check (D24): every later step judges
+        // the DeliverySnapshot, never the Agent's link.
+        DeliveryOutcome delivery = validationDomainService.needsDelivery(contract, task.result())
+                ? deliverySnapshotAppService.capture(contract, task.result())
+                : null;
+        // A single invoice Task has no document of its own (documents come as Items under an Engagement), so
+        // its only outside facts are the brief's; the duplicate Findings are gathered for Items.
+        AcceptanceEvidence evidence = new AcceptanceEvidence(delivery, pixelsOf(contract, delivery), anomalies,
+                validationDomainService.needsFindingFacts(contract) ? findingFactsFor(task) : FindingFacts.NONE,
+                validationDomainService.needsInvoice(contract)
+                        ? invoiceReader.read(task.result().resultPayloadJson()) : null);
+        ValidationReportModel report = validationDomainService.judge(contract, task.result(), evidence, attempt);
         reportRepository.save(report);
 
-        if (report.isPass()) {
+        if (!report.isRejected()) {
             TaskModel gated = task.passValidation(); // -> PENDING_REVIEW
-            boolean apiSubmitted = apiKeyTaskRepository.findApiKeyIdByTask(task.id()).isPresent();
+            boolean apiChannel = apiKeyTaskRepository.findApiKeyIdByTask(task.id()).isPresent();
+            // A booked AI Review (spec S10) judges the criteria code cannot check, after the commit.
+            // On API/MCP its verdict settles the Task and is final (D38): the result waits for it,
+            // with no review window. On the web it is an advisory report beside the Client's review.
+            if (aiReviewAppService.requestIfFrozen(task, apiChannel) && apiChannel) {
+                taskRepository.save(gated);
+                log.info("API task {} {} validation -> PENDING_REVIEW, awaiting its decisive AI Review",
+                        task.id(), report.isPass() ? "passed" : "was sent to review by");
+                return gated;
+            }
+            // A result sent to review (an undecidable check, a self-reported anomaly) always waits
+            // for the Client, on either channel: it is paid only when the Client confirms it (D7).
+            boolean apiSubmitted = report.isPass() && apiChannel;
             if (apiSubmitted) {
                 // Programmatic channel: deterministic immediate auto-settle. Reuse the accept settlement
                 // (Invariant #3 — same money path, no LLM/human). Disputes stay human-channel only.
@@ -56,7 +114,7 @@ public class ValidationAppServiceImpl implements ValidationAppService {
                                 "No agent owner for version " + task.agentVersionId()));
                 TaskModel resolved = gated.accept(); // PENDING_REVIEW -> RESOLVED
                 settlementWriteAppService.settleAccepted(task.id(), task.clientId(), builderId, task.budget());
-                // Machine-verified conformance against the binding output_spec is real evidence and
+                // Machine-verified conformance against the binding Contract is real evidence and
                 // is NOT discounted (#39). No Satisfaction event is possible — no human judged it —
                 // which caps an API-only agent below one with human approval without any rule
                 // saying so; the two-component model produces that ceiling on its own.
@@ -69,18 +127,56 @@ public class ValidationAppServiceImpl implements ValidationAppService {
                 return resolved;
             }
             taskRepository.save(gated);
-            log.info("Task {} passed validation -> PENDING_REVIEW", task.id());
+            // Web channel: the Client reviews within the window, or silence counts as acceptance (#94).
+            Instant reviewDeadline = reviewWindow.closesAt(clock.instant());
+            taskRepository.stampReviewDeadline(task.id(), reviewDeadline);
+            if (report.needsReview()) {
+                // Recorded so the review sweeper can one day treat an anomaly differently; for now the
+                // window still accepts on silence like any other result (owner decision pending).
+                taskRepository.stampReviewReason(task.id(), report.anomalies().isEmpty() ? "UNDECIDED" : "ANOMALY");
+            }
+            log.info("Task {} {} validation -> PENDING_REVIEW (review window closes {})",
+                    task.id(), report.isPass() ? "passed" : "was sent to review by", reviewDeadline);
             return gated;
+        }
+        // A deterministic check rejected it (not appealable, D17): back to the same Agent with the
+        // failing checks while reworks remain, else SPEC_VIOLATION with a refund.
+        int rejections = reportRepository.countRejectedByTaskId(task.id());
+        if (reworkPolicy.allowsRework(rejections)) {
+            ReworkRequest rework = new ReworkRequest(rejections, reworkPolicy.maxReworks(),
+                    report.rejectingChecks().stream()
+                            .map(c -> new ReworkRequest.FailedCheck(c.rule(), c.detail())).toList());
+            if (routingAppService.redispatchForRework(task.id(), task.agentVersionId(), rework)) {
+                log.info("Task {} failed validation -> rework {}/{} by the same Agent", task.id(),
+                        rework.reworkNo(), rework.maxReworks());
+                return taskRepository.findById(task.id()).orElseThrow();
+            }
         }
         TaskModel gated = task.failValidation();
         taskRepository.save(gated);
         settlementWriteAppService.settleRejected(task.id(), task.clientId(), task.budget());
+        aiReviewAppService.releaseIfUnused(task.id()); // nothing passed, so nothing was reviewed: fee back
         // The output missed the contract the builder declared (Invariant #4) — a zero-quality
         // sample against Reliability.
         reputationWriteAppService.recordOutcome(task.id(), task.agentVersionId(),
                 task.clientId(), ReputationEventType.SPEC_VIOLATION);
         webhookOutboxAppService.enqueueFailed(gated, gated.status().name());
-        log.info("Task {} failed validation -> SPEC_VIOLATION (refunded)", task.id());
+        log.info("Task {} failed validation after {} rework(s) -> SPEC_VIOLATION (refunded)", task.id(),
+                rejections - 1);
         return gated;
+    }
+
+    /** The frozen copy's pixels when the checks read them; null when there is no decodable image. */
+    private DecodedImage pixelsOf(Contract contract, DeliveryOutcome delivery) {
+        if (!validationDomainService.needsPixels(contract) || !(delivery instanceof DeliveryOutcome.Captured c)) {
+            return null;
+        }
+        return deliverySnapshotAppService.content(c.snapshot()).flatMap(imageDecoder::decode).orElse(null);
+    }
+
+    /** Outside data for the Findings (D7): the same Client's earlier Tasks with this very brief. */
+    private FindingFacts findingFactsFor(TaskModel task) {
+        return new FindingFacts(taskRepository.findEarlierTaskIdsWithSameBrief(task.id(), task.clientId(),
+                task.title(), task.description()));
     }
 }

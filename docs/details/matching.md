@@ -26,6 +26,14 @@ near-miss above that budget. When the shortlist is empty only because every in-b
 floor, the response says `noCloseMatch: true` and the web shows "No agent matches this task closely" above
 any near-misses (an empty category gives `false`).
 
+**No-match explanation** (spec D35). When nothing ranks, `RoutingMatchDomainService.explainNoMatch` looks at
+the Agents that serve the category within budget (and the deadline) and counts, per blocker, how many it
+excluded: each Contract parameter, the Template version (`TEMPLATE`), and the relevance floor
+(`RELEVANCE_FLOOR`); one Agent can count under several. Its relax suggestions say, per parameter, how many
+Agents leaving it unset would make eligible (only Agents that parameter alone excluded, above the floor). The
+platform never applies one: match-preview returns it as `noMatch`, the web shows it with a "Drop X → N agents"
+button per suggestion, and a routed task stores its one-line `summary()` as the task's `failureDetail`.
+
 **One eligibility, one score.** The shortlist, routed selection and failover consider the same Agents
 and score them the same way; only the platform's own picks (`selectOne`) add the ε lottery. An Agent is
 eligible when:
@@ -45,9 +53,32 @@ eligible when:
   Agent can rule out a slower one. An Agent admitted this way never gets an execution deadline after the
   Client's. A direct booking of an Agent that can't fit is refused with a 400 before anything is frozen;
   a booked task's pinned dispatch is not re-checked.
+- <a id="offer-coverage"></a>its version's **Offer covers the Contract** (spec D34, `OfferCoverageDomainService`;
+  checked in `rank`): the Offer has a term for the Contract's exact Template version, and every parameter the
+  Contract sets passes its comparison against the term's range (`max` value <= bound, `min` value >= bound,
+  `subset` all values in the set, `enum` value in the set, `any` covering both, `flag` false or accepted). A
+  parameter the Contract leaves unset, or a false flag, is always covered; one set by the Contract but not named
+  by the term is not. A routed task's Contract is its frozen one; match-preview and direct booking take an optional `contract`, and without one the preview
+  filters no Offer. A direct booking under a Contract its Agent's Offer doesn't cover is a 400, and the Contract
+  is frozen on the task. The above-budget near-misses must be covered too. Which Template version a new
+  Contract uses is decided first, by the [version transition](#template-version-transition);
 - <a id="relevance-floor"></a>its profile is not clearly irrelevant: the **raw** cosine similarity between
   the task text's vector and the Agent's profile vector is at least τ (`hireai.matching.relevance-floor`,
   provisional; checked in `rank`). See [relevance](#relevance) for the vectors and the fallbacks.
+
+<a id="template-version-transition"></a>**Template version transition** (spec D36, `TemplateVersions`). An Offer
+covers only the versions it names. Before a new Contract is matched or frozen, its version is chosen: the
+**current** version (the newest ACTIVE one of its key), with the requested Contract's parameter values carried
+over. While the **previous** version is in transition (`hireai.acceptance.template-transition`, counted from the
+current version's `published_at`), a Contract falls back to it when no Offer covers the current one, or when its
+values fit only the previous version's bounds. The Client is told: match-preview returns `fallback`, and the task
+returns `templateFallback` while its frozen version is still in transition. "No Offer covers" is asked of the
+listed candidates on match-preview, of the booked Agent's Offer on a direct booking, and of the active Agents in
+the task's category and budget on a routed submit. After the transition the previous version takes no new
+Contracts, and no Offer term may name it, nor a RETIRED version (400). A frozen Contract is always judged, and
+re-matched on failover, under its own version. `GET /api/catalogue/templates` reports each version's `current`,
+`takesNewContracts` and `takesNewContractsUntil`; the web offers Clients only current versions and Builders only
+versions that take new Contracts.
 
 ## Relevance
 
@@ -146,13 +177,15 @@ invite a second, paid submit.
 | Re-match attempts exhausted | `CANCELLED` | Yes | Yes | No |
 | Past `execution_deadline` while `EXECUTING` | `TIMED_OUT` | Yes | Yes | `EXECUTION_TIMEOUT` |
 | Past `execution_deadline` while still `QUEUED` | `TIMED_OUT` | Yes | Yes | No |
-| Routed task: the Agent is busy, or every dispatch attempt failed, and an untried eligible Agent is left | Stays `QUEUED`, reassigned (see **Routed failover**) | No | No | `EXECUTION_FAILED` if unreachable, none if busy |
+| Routed task: the Agent is busy or declined the Contract, or every dispatch attempt failed, and an untried eligible Agent is left | Stays `QUEUED`, reassigned (see **Routed failover**) | No | No | `EXECUTION_FAILED` if unreachable, none if busy or declined |
 | Routed task: same, but no untried eligible Agent is left (or 3 Agents tried) | `FAILED` (`NO_ALTERNATIVE_AGENT`; `NO_ELIGIBLE_AGENT` when only the client deadline rules the untried ones out) | Yes | Yes | As above, for the last Agent |
 | Pinned task: every dispatch attempt failed (Agent unreachable, timed out or non-2xx) | `FAILED` (`AGENT_UNREACHABLE`) | Yes | Yes | `EXECUTION_FAILED` |
 | Pinned task: the Agent declined as busy (429/503) | `FAILED` (`AGENT_BUSY`) | Yes | Yes | No |
+| Pinned task: the Agent declined the Contract (422 ContractDecline) | `FAILED` (`CONTRACT_DECLINED`) | Yes | Yes | No |
 
-- **`AWAITING_AGENT`** means no eligible (`ACTIVE`, listed) agent covers the category within budget and,
-  when set, the Client's deadline. Only routed tasks wait there. Load is soft, so a busy agent never causes
+- **`AWAITING_AGENT`** means no eligible (`ACTIVE`, listed) agent covers the category and the Contract within
+  budget and, when set, the Client's deadline. Each no-match pass records the explanation's summary as the
+  task's `failureDetail` (`GET /api/tasks/{id}`, the web task page), kept when the task ends `NO_ELIGIBLE_AGENT`. Only routed tasks wait there. Load is soft, so a busy agent never causes
   it. The re-match sweeper (`AwaitingAgentRematchSweeper`) retries it up to
   `hireai.matching.rematch-max-attempts` times, then cancels with a refund and `NO_ELIGIBLE_AGENT`.
 - **Pinned tasks never substitute, and fail fast.** A direct booking is dispatched only to its exact version,
@@ -167,13 +200,13 @@ invite a second, paid submit.
   same way on its first sweep, so its escrow is never stranded.
 - <a id="routed-failover"></a>**Routed failover.** When the platform picked the Agent (no pinned version)
   and that Agent can't take the task before starting, the task stays `QUEUED` and goes to another Agent.
-  The triggers are a busy decline (429/503), an unreachable Agent (the DLQ, after the whole retry
+  The triggers are a busy decline (429/503), a contract decline (422 ContractDecline), an unreachable Agent (the DLQ, after the whole retry
   schedule) and an Agent unavailable at dispatch (no longer `ACTIVE`, or its version superseded, found by
   the check before every send). A failure after the Agent started (`EXECUTING`: a reported failure, a timeout, a spec
   violation) is never failed over. In one transaction under the task row lock
-  (`TaskExecutionPortImpl.declineAsBusy` / `markFailed` / `prepareDispatch`, then `RoutingAppService.failOver`):
+  (`TaskExecutionPortImpl.declineAsBusy` / `declineContract` / `markFailed` / `prepareDispatch`, then `RoutingAppService.failOver`):
   - the failed attempt is recorded in the [dispatch history](data-model.md#dispatch-attempts) (`BUSY`,
-    `UNAVAILABLE`, or `UNREACHABLE` plus `EXECUTION_FAILED` against that Agent);
+    `CONTRACT_DECLINED`, `UNAVAILABLE`, or `UNREACHABLE` plus `EXECUTION_FAILED` against that Agent);
   - the next candidate is picked from the same candidate query and matcher as initial routing (same budget
     and eligibility, the Client's deadline measured from this hop), excluding every Agent already in the task's history, under any version
     (`RoutedFailoverDomainService`);
@@ -183,8 +216,8 @@ invite a second, paid submit.
   The new WorkOrder is published only after that transaction commits. At most **3 distinct Agents**
   (`RoutedFailoverDomainService.MAX_DISTINCT_AGENTS`) are tried per task. With no untried eligible Agent
   left, or 3 tried, the task ends `FAILED` with `NO_ALTERNATIVE_AGENT`, a full refund and a `task.failed`
-  webhook. If untried Agents exist but the [client deadline](#client-deadline) rules every one out at
-  that hop, the reason is `NO_ELIGIBLE_AGENT` instead. A late callback from a replaced Agent gets 401: its token names the old version, which is no
+  webhook. If untried Agents that are otherwise eligible (budget, Offer coverage, relevance floor) exist but the
+  [client deadline](#client-deadline) rules every one out at that hop, the reason is `NO_ELIGIBLE_AGENT` instead. A late callback from a replaced Agent gets 401: its token names the old version, which is no
   longer the task's assigned one. A dead letter or busy reply for a replaced version is ignored. If the
   publish still fails after the commit (the dispatch template retries it first), the task stays `QUEUED` and
   its execution timeout refunds it without blame.
@@ -219,9 +252,12 @@ Agent has an AgentSigningSecret, `X-HireAI-Signature` (see **Signature** below).
 | `agentVersionId` | The version the task was assigned to, so one endpoint can serve several versions |
 | `title`, `description` | Exactly what the Client submitted |
 | `category` | The task's category (a direct booking takes the version's first category) |
-| `outputSpec` | The task's frozen output spec (Hard Invariant #4) as a JSON object: `format`, `schema`, `acceptanceCriteria`. Your result is validated, and any dispute judged, against it |
+| `contract` | The task's frozen [Contract](data-model.md#acceptance) (Hard Invariant #4) as a JSON object: `{template, version, params, aiReview?}`, in the shape of [`contract.v1.schema.json`](../formats/contract.v1.schema.json); the Template's checks and parameter meanings are at `GET /api/catalogue/templates/{key}/{version}`. Your result is checked, and any dispute judged, against it. Your Offer covers it (or your Builder accepted it as an Engagement's variant), or you would not have been sent the task |
+| `outputSpec` | A description of the Contract for Agents that read only this: `format` (the Template's output shape, `TEXT`/`JSON`/`FILE`), `schema` (the Contract's `schema` parameter, if any) and the Client's prose `acceptanceCriteria` (intent, never checked automatically). It is not a second contract |
 | `executionDeadline` | ISO-8601 instant: the `execution_deadline` stamped at assignment. After it the task times out |
 | `callbackUrl` | Where to POST the result, with the same bearer token and your own signature (see **Result callback** below) |
+| `rework` | Only on a **rework** WorkOrder: `{reworkNo, maxReworks, failedChecks: [{rule, detail}]}`. Your last result failed these automatic checks; deliver a fixed one through the same callback. After the last rework a failing result ends the task (refund, `SPEC_VIOLATION`). See [Acceptance engine](data-model.md#acceptance-engine). On a multi-Item Task whose sample the buyer's reviewer failed, the one rule is `SAMPLE_REJECTED` (`reworkNo` = `maxReworks` = 1) and `items` holds only the Items not yet settled: answer those; the Task is sampled again ([Sampling](sampling.md)) |
+| `items` | Only on a multi-Item Task ([Items](data-model.md#items)): `[{itemNo, input, source?, rework?}]`, one entry per Item awaiting a result, numbered from 1. `rework` (`{reworkNo, maxReworks, failedChecks}`, as below) is present when that Item comes back because its last result failed a check: such a WorkOrder carries only the Items to redo (plus the Task-level `rework` with rule `ITEM_CHECKS_FAILED`); answer those, and the Items that passed are kept. Absent otherwise, so a single-deliverable WorkOrder is unchanged. `source` is present only when the Item's input is a document the buyer uploaded under an [Engagement](data-model.md#engagements) with this Agent (confidential): `{url, sha256, mediaType, sizeBytes, filename, expiresAt}`. `GET url` needs no other credential; the link is signed for this one Item (`HmacSourceLinkSigner`, a key derived from the dispatch token secret, so it is never a dispatch token), expires at `expiresAt` (the execution deadline, whole seconds), and every attempt is logged for the buyer. A forged or expired link is 401, a document deleted by retention is 410. Check the bytes against `sha256` |
 
 Nothing else is sent: no Client identity and no budget.
 
@@ -238,6 +274,12 @@ registration form, `frontend/components/AckContract.tsx`):
   (`TaskExecutionPort.declineAsBusy`). A routed task then goes to another Agent
   ([routed failover](#routed-failover)); a pinned task ends `FAILED` with FailureReason `AGENT_BUSY`, a
   refund and a `task.failed` webhook.
+- **Decline the Contract:** reply 422 with the JSON body `{"decline":"CONTRACT","reason":"…"}` (reason
+  optional; the first 8 KiB of the body are read) when your Agent can't meet this task's terms. It is
+  handled exactly like a busy decline (not retried, **no** reputation event, failover or `FAILED` with
+  FailureReason `CONTRACT_DECLINED` and a refund; `TaskExecutionPort.declineContract`), but the history row
+  is `CONTRACT_DECLINED` with your reason, which the task's Client can read, and it counts in your Agent's
+  public [decline rate](data-model.md#dispatch-attempts). A 422 with any other body is an ordinary failed send.
 - **After a failover, the task is no longer yours:** a result you post for it afterwards gets 401.
 - **Deliver only through the callback:** the result is accepted only as a POST to `callbackUrl`. Anything
   in the WorkOrder's HTTP response body is ignored.
@@ -268,9 +310,18 @@ To verify, the Agent:
 **Result callback.** POST to `callbackUrl` with `Content-Type: application/json`, `Authorization: Bearer <the WorkOrder's
 token>` and an `X-HireAI-Signature` over the exact body bytes you send, in the same format as above, made
 with your **current** signing secret and the current time. Body:
-`{ taskId, agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }`. `taskId` is
+`{ taskId, agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message, anomalies? }` (`anomalies`: up to 20 `{check?, description}` you self-report about the brief; one naming a content check the Template allows, such as `IMAGE_BACKGROUND_COLOUR`, sends a failure of that check to the Client's review instead of a rework, and you are paid if they accept) (for a FILE result, `resultUrl` is fetched once, right away, and frozen as the [DeliverySnapshot](data-model.md#delivery-snapshots): later changes at that link change nothing). `taskId` is
 required and must be the WorkOrder's `taskId`: the signature covers only the timestamp and body, so the body
 naming its task is what stops a signed result from being replayed onto another task's callback.
+
+For a multi-Item Task, send `items: [{itemNo, agentStatus, resultPayloadJson, resultUrl, anomalies?}]`, one per Item of the
+WorkOrder; the top-level `resultPayloadJson` may then be left out. An Item's `anomalies` (up to 20) are what you report
+about that Item's source, such as an invoice whose figures don't add up (name the arithmetic check, e.g.
+`INVOICE_TOTAL`; see [`ap_invoice_extraction`](data-model.md#invoice-extraction)). Each Item is checked against the Task's
+Contract and settled on its own. An Item reported `FAILED` or left out is refunded; an `itemNo` the Task does not
+have, or one named twice, or an Item `resultUrl` that is not an absolute https URL, makes the whole callback a
+400 (nothing recorded, so it can be resent). A top-level
+`agentStatus` other than `COMPLETED` fails the whole Task, as for a single deliverable.
 
 The platform reads the raw bytes, verifies the token, then verifies the signature with the secret of the
 token's Agent version (which must be the task's assigned one), and only then parses the JSON. It answers
@@ -353,3 +404,44 @@ requeued once as it is, and dropped if that redelivery fails too.
 - `hireai.dispatch.consumers` consumers each take one message at a time, so a hanging Agent
   holds only the consumer that is waiting on it.
 - Every attempt re-runs step 1, so a task that ended while its message waited is dropped, not sent.
+
+### Rejection notice
+
+<a id="rejection-notice"></a>When a Client rejects your result for reason A, B or C (#95), the platform POSTs a
+**rejection notice** to the same webhook, with `Authorization: Bearer <token>` (a fresh dispatch token, valid
+until the response deadline plus the callback margin) and, once you have a signing secret,
+`X-HireAI-Signature` over the exact body. Reply 2xx to acknowledge it; a failed send is retried a few times while
+your window is open. It is told apart from a WorkOrder by `event`:
+
+| Field | Meaning |
+|---|---|
+| `event` | `task.rejected` |
+| `taskId`, `agentVersionId` | As in the WorkOrder |
+| `round` | 1 for the first rejection; 2 when a revision was rejected again |
+| `reasonCategory`, `reason` | The Client's reason: `A_MISMATCH`, `B_FACTUAL` or `C_INCOMPLETE`, and their optional text |
+| `responseDeadline` | ISO-8601 instant. If you have not responded by then, you are taken to stand by your result without a reason |
+| `revisionAllowed` | False once you have revised this task: you may only concede or stand by |
+| `responseUrl` | Where to POST your response |
+| `title`, `description`, `contract`, `outputSpec` | The task again, so a revision can be made from the notice alone: the frozen `contract` exactly as the WorkOrder carries it, and `outputSpec` describing it |
+
+**Response.** POST `{"taskId", "action", "reason"?, "resultPayloadJson"?, "resultUrl"?}` to `responseUrl` with the
+notice's bearer token and your own `X-HireAI-Signature`, exactly like a result callback (401 otherwise; the
+signed body must name the task). `action` is:
+
+- `REVISE`: a revised result in `resultPayloadJson` and/or `resultUrl`. It is checked against the frozen Contract
+  like your first result and goes back to the Client for review. Allowed once per task.
+- `CONCEDE`: the Client is refunded in full and you record a zero-quality Reliability sample.
+- `STAND_BY`: `reason` (≤ 500 characters) is shown to the Client, who accepts or asks for AI arbitration.
+
+A response after the deadline, a second response, or a revision that is no longer allowed gets 409.
+
+### Item rejection notice
+
+<a id="item-rejection-notice"></a>On a sampled multi-Item Task ([Sampling](sampling.md)) the buyer's reviewer
+rejects single Items. Each rejected Item gets its own notice, sent and retried like the one above, with
+`event: "task.item_rejected"` and three more fields: `itemNo`, `itemInput` and `itemResult` (the result being
+rejected). Its `responseDeadline` counts business days. Respond the same way, to its `responseUrl`
+(`/api/agent-callbacks/{taskId}/items/{itemNo}/rejection-response`): `REVISE` (the revised Item result, checked
+against the Contract and reviewed again; once per Item), `CONCEDE` (the Item is refunded and counts as wrong in
+the sample) or `STAND_BY` (the buyer then accepts it). Silence counts as standing by.
+

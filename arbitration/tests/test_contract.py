@@ -20,6 +20,8 @@ JAVA_FIELDS = {
     "resultPayloadJson",
     "resultUrl",
     "reasonCategory",
+    "deliverable",
+    "contract",
 }
 
 

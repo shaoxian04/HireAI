@@ -18,7 +18,9 @@ The agent listens on `http://localhost:9000/run`. Set `HIREAI_AGENT_SIGNING_SECR
 
 It ignores the task apart from `taskId` and `callbackUrl`, and always sends a **hard-coded** summary (`DEMO_SUMMARY` in `app.py`) of [`demo-article.txt`](demo-article.txt) as `{"summary": ...}` with `resultUrl: null`. Paste that article as the task description so the result reads as genuine.
 
-It therefore passes `TEXT`, or `JSON` with no conflicting schema. It fails `FILE` format and any schema requiring other fields, ending in `SPEC_VIOLATION`.
+It therefore passes `TEXT`, or `JSON` with no conflicting schema, and fails any schema requiring other fields, ending in `SPEC_VIOLATION`.
+
+For a `FILE` WorkOrder it sends a `resultUrl`: the URL in a `#deliver:<https-url>` tag in the task description, else `HIREAI_AGENT_FILE_URL`. The platform fetches that link once and freezes it as the DeliverySnapshot, so a demo can deliver a passing file and a wrong-type one (for example an HTML page) from the same running stub. `HIREAI_AGENT_WORK_SECONDS` (default 2) sets how long it "works" before calling back. A rework WorkOrder (it carries `rework`) delivers the `#rework:<https-url>` link instead when the description has one, so a demo can fail a check once and pass on the rework; a `#anomaly:<CHECK>` tag self-reports an anomaly about that check with every result.
 
 Because it ignores the task, a demo with this stub cannot show whether real task content reaches an agent. See [Known gaps](../docs/details/build-status.md#known-gaps).
 
@@ -36,4 +38,5 @@ cloudflared tunnel --url http://localhost:9000     # -> https://<random>.tryclou
 ## Wire contracts
 
 - **Receives:** the WorkOrder (shape, rules and signature verification in `docs/details/matching.md`) with headers `Authorization: Bearer <token>`, `X-Correlation-ID: <id>` and, when the agent has a secret, `X-HireAI-Signature`. The stub logs the title and description it received, then returns its staged output whatever was asked.
+- **Rejection notices** (`event: "task.rejected"`, [shape](../docs/details/matching.md#rejection-notice)): after ~2s it answers at `responseUrl` with a signed `REVISE` (a re-worded summary), `CONCEDE` or `STAND_BY`. A `#revise`, `#concede`, `#standby` or `#silent` tag in the Client's rejection text picks the answer; otherwise `HIREAI_AGENT_REJECTION_RESPONSE` (default `STAND_BY`). A revision the notice no longer allows becomes a stand-by.
 - **Sends** to `callbackUrl`: `{ taskId, agentStatus: "COMPLETED"|"FAILED", resultPayloadJson, resultUrl, message }` with `Authorization: Bearer <same token>` and, when the secret is set, `X-HireAI-Signature` over the exact body bytes (`sign_body`).

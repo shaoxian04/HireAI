@@ -69,9 +69,9 @@ class JdbcAdminQueryDaoIntegrationTest {
 
         UUID taskId = UUID.randomUUID();
         jdbc.update("""
-                INSERT INTO tasks (id, client_id, title, description, budget, output_spec, status,
+                INSERT INTO tasks (id, client_id, title, description, budget, contract, status,
                                    reject_reason_category, rejection_reason, category)
-                VALUES (?, ?, 'Admin evidence task', 'Summarise the attached report.', ?, '{"format":"TEXT"}'::jsonb,
+                VALUES (?, ?, 'Admin evidence task', 'Summarise the attached report.', ?, contract_from_output_spec('{"format":"TEXT"}'::jsonb),
                         'DISPUTED', 'A_MISMATCH', 'The summary is about a different report entirely.', 'summarisation')
                 """, taskId, clientId, budget);
         jdbc.update("""
@@ -93,8 +93,15 @@ class JdbcAdminQueryDaoIntegrationTest {
         jdbc.update("INSERT INTO settlements (id, task_id, type, net, commission) VALUES (?, ?, 'SPLIT', 8.50, 1.50)",
                 UUID.randomUUID(), UUID.randomUUID());
 
+        BigDecimal feesBefore = dao.overview().aiReviewFeesEarned();
+        UUID walletId = jdbc.queryForObject("SELECT id FROM wallets LIMIT 1", UUID.class);
+        jdbc.update("INSERT INTO ledger_entries (id, wallet_id, entry_type, amount, balance_after, related_task_id, "
+                + "correlation_id, created_at) VALUES (?, ?, 'AI_REVIEW_FEE', -0.40, 0.00, ?, 'ai-review-x', now())",
+                UUID.randomUUID(), walletId, UUID.randomUUID());
+
         AdminViews.Overview o = dao.overview();
 
+        assertThat(o.aiReviewFeesEarned()).isEqualByComparingTo(feesBefore.add(new BigDecimal("0.40")));
         assertThat(o.disputesEscalated()).isGreaterThanOrEqualTo(1);
         assertThat(o.escrowHeld()).isGreaterThanOrEqualTo(new BigDecimal("20.00"));
         assertThat(o.commissionEarned()).isGreaterThanOrEqualTo(new BigDecimal("1.50"));
@@ -126,5 +133,7 @@ class JdbcAdminQueryDaoIntegrationTest {
         assertThat(ev.get().budget()).isEqualByComparingTo(new BigDecimal("20.00"));
         assertThat(ev.get().category()).isEqualTo("summarisation");
         assertThat(ev.get().submittedAt()).isNotNull();
+        // The task's frozen Contract, the binding terms (not the agent version's output spec).
+        assertThat(ev.get().contractJson()).contains("\"template\"");
     }
 }

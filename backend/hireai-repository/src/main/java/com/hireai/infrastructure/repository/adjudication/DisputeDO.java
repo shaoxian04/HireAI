@@ -20,11 +20,20 @@ public class DisputeDO {
     @Column(name = "correlation_id", nullable = false) private String correlationId;
     @Column(name = "resolved_at") private Instant resolvedAt;
     @Column(name = "gmt_create", nullable = false) private Instant gmtCreate;
+    @Column(name = "client_accepted_at") private Instant clientAcceptedAt;
+    @Column(name = "builder_accepted_at") private Instant builderAcceptedAt;
+    @Column(name = "appealed_by") private String appealedBy;
+    @Column(name = "appealed_at") private Instant appealedAt;
 
     protected DisputeDO() {}
 
     public DisputeDO(UUID id, UUID taskId, UUID raisedBy, String reasonCategory, String status,
-                     String correlationId, Instant resolvedAt, Instant gmtCreate) {
+                     String correlationId, Instant resolvedAt, Instant gmtCreate,
+                     Instant clientAcceptedAt, Instant builderAcceptedAt, String appealedBy, Instant appealedAt) {
+        this.clientAcceptedAt = clientAcceptedAt;
+        this.builderAcceptedAt = builderAcceptedAt;
+        this.appealedBy = appealedBy;
+        this.appealedAt = appealedAt;
         this.id = id;
         this.taskId = taskId;
         this.raisedBy = raisedBy;
@@ -43,4 +52,8 @@ public class DisputeDO {
     public String getCorrelationId() { return correlationId; }
     public Instant getResolvedAt() { return resolvedAt; }
     public Instant getGmtCreate() { return gmtCreate; }
+    public Instant getClientAcceptedAt() { return clientAcceptedAt; }
+    public Instant getBuilderAcceptedAt() { return builderAcceptedAt; }
+    public String getAppealedBy() { return appealedBy; }
+    public Instant getAppealedAt() { return appealedAt; }
 }

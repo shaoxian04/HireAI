@@ -37,13 +37,18 @@ public class JdbcAdminQueryDao implements AdminQueryPort {
                   (SELECT COUNT(*) FROM users)                                 AS users_total,
                   (SELECT COUNT(*) FROM agents)                                AS agents_total,
                   (SELECT COALESCE(SUM(escrow_balance), 0) FROM wallets)       AS escrow_held,
-                  (SELECT COALESCE(SUM(commission), 0) FROM settlements)       AS commission_earned
+                  ((SELECT COALESCE(SUM(commission), 0) FROM settlements)
+                   + (SELECT COALESCE(SUM(commission), 0) FROM task_item_settlements)) AS commission_earned,
+                  -- An AI Review fee leaves escrow as one AI_REVIEW_FEE entry when charged; a refunded one never does.
+                  (SELECT COALESCE(SUM(ABS(amount)), 0) FROM ledger_entries
+                     WHERE entry_type = 'AI_REVIEW_FEE')                       AS ai_review_fees_earned
                 """;
         return jdbc.queryForObject(sql, Map.of(), (rs, i) -> new AdminViews.Overview(
                 rs.getLong("disputes_open"), rs.getLong("disputes_arbitrating"),
                 rs.getLong("disputes_escalated"), rs.getLong("disputes_resolved"),
                 rs.getLong("tasks_total"), rs.getLong("users_total"), rs.getLong("agents_total"),
-                rs.getBigDecimal("escrow_held"), rs.getBigDecimal("commission_earned")));
+                rs.getBigDecimal("escrow_held"), rs.getBigDecimal("commission_earned"),
+                rs.getBigDecimal("ai_review_fees_earned")));
     }
 
     @Override
@@ -80,7 +85,7 @@ public class JdbcAdminQueryDao implements AdminQueryPort {
                        t.gmt_create AS submitted_at, tr.received_at AS result_received_at,
                        ag.name AS agent_name, split_part(bu.email, '@', 1) AS builder_name,
                        ag.reputation_score AS agent_reputation, av.price AS agent_price,
-                       av.output_spec::text AS output_spec_json,
+                       t.contract::text AS contract_json,
                        tr.result_payload::text AS result_payload_json, tr.result_url, tr.agent_status
                 FROM tasks t
                 JOIN users u ON u.id = t.client_id
@@ -98,7 +103,7 @@ public class JdbcAdminQueryDao implements AdminQueryPort {
                 toInstant(rs.getTimestamp("submitted_at")), toInstant(rs.getTimestamp("result_received_at")),
                 rs.getString("agent_name"), rs.getString("builder_name"),
                 rs.getBigDecimal("agent_reputation"), rs.getBigDecimal("agent_price"),
-                rs.getString("output_spec_json"), rs.getString("result_payload_json"),
+                rs.getString("contract_json"), rs.getString("result_payload_json"),
                 rs.getString("result_url"), rs.getString("agent_status")));
         return rows.stream().findFirst();
     }

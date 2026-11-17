@@ -17,7 +17,7 @@ public enum ReputationEventType {
     /** Client accepted, or a programmatic task passed validation and auto-settled. */
     TASK_ACCEPTED(ReputationComponent.RELIABILITY, BigDecimal.ONE),
 
-    /** Output failed validation against the binding output_spec (Invariant #4). */
+    /** Output failed validation against the binding Contract (Invariant #4). */
     SPEC_VIOLATION(ReputationComponent.RELIABILITY, BigDecimal.ZERO),
 
     /** The agent reported a non-COMPLETED result on its callback. */
@@ -34,6 +34,30 @@ public enum ReputationEventType {
 
     /** NOT_FULFILLED. */
     DISPUTE_LOST(ReputationComponent.RELIABILITY, BigDecimal.ZERO),
+
+    /**
+     * The Agent conceded a Client's A/B/C rejection and the Client was refunded (#95, spec D22):
+     * quality 0, like a lost dispute, but without an arbitration.
+     */
+    REJECTION_CONCEDED(ReputationComponent.RELIABILITY, BigDecimal.ZERO),
+
+    /**
+     * A finished multi-Item Task (spec D22, D27): one event per Task, weight 1, whose quality is the
+     * fraction of its Items that were accepted. Quality is carried per event, like {@link #RATING}.
+     */
+    ITEMS_SETTLED(ReputationComponent.RELIABILITY, null),
+
+    /**
+     * A decisive AI Review (API/MCP, spec D38) found every criterion met: settled as accepted. Scored
+     * like the ruling it maps to (FULFILLED), but named for what judged it, since no one disputed.
+     */
+    AI_REVIEW_PASSED(ReputationComponent.RELIABILITY, BigDecimal.ONE),
+
+    /** A decisive AI Review found some criteria met (PARTIALLY_FULFILLED): settled as a split. */
+    AI_REVIEW_PARTIAL(ReputationComponent.RELIABILITY, new BigDecimal("0.5")),
+
+    /** A decisive AI Review found no criterion met (NOT_FULFILLED): the Client was refunded. */
+    AI_REVIEW_FAILED(ReputationComponent.RELIABILITY, BigDecimal.ZERO),
 
     /**
      * A client rating. Quality is carried per-event rather than by the constant, because it is

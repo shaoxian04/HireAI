@@ -59,6 +59,10 @@ class AgentWriteAppServiceImplTest {
             AgentVersionModel version = versionStore.get(agentVersionId);
             return version == null ? Optional.empty() : Optional.ofNullable(secrets.get(version.agentId()));
         }
+        @Override public Optional<String> findWebhookUrlByVersionId(UUID agentVersionId) {
+            AgentVersionModel version = versionStore.get(agentVersionId);
+            return version == null ? Optional.empty() : Optional.ofNullable(version.webhookUrl());
+        }
 
         @Override public AgentModel save(AgentModel agent) {
             store.put(agent.id(), agent);
@@ -176,7 +180,8 @@ class AgentWriteAppServiceImplTest {
             new AgentActivateDomainServiceImpl(), new AgentSuspendDomainServiceImpl(),
             new AgentReactivateDomainServiceImpl(), new AgentDeactivateDomainServiceImpl(), publisher,
             new com.hireai.domain.biz.offering.agent.service.impl.AgentSigningSecretGeneratorImpl(), urlValidator,
-            TestCategories.listOf("summarisation", "translation", "other"), suggestions);
+            TestCategories.listOf("summarisation", "translation", "other"), suggestions,
+            org.mockito.Mockito.mock(com.hireai.application.biz.acceptance.TemplateReadAppService.class));
 
     private AgentRegisterInfo info(UUID ownerId) {
         return new AgentRegisterInfo(ownerId, "Summariser Bot",

@@ -19,6 +19,16 @@ describe("directBookSignature", () => {
     expect(directBookSignature({ ...base, deadlineSeconds: 600 })).not.toBe(directBookSignature(base));
   });
 
+  it("changes with the Engagement and with which documents are the Items", () => {
+    const base = { title: "t", description: "d", budget: 12, agentId: "ag-1", engagementId: "en-1" };
+    const two = { ...base, items: [{ sourceId: "s-1" }, { sourceId: "s-2" }] };
+    expect(directBookSignature(two)).not.toBe(directBookSignature(base));
+    expect(directBookSignature({ ...two, items: [{ sourceId: "s-1" }, { sourceId: "s-3" }] }))
+      .not.toBe(directBookSignature(two));
+    expect(directBookSignature({ ...two, engagementId: "en-2" })).not.toBe(directBookSignature(two));
+    expect(directBookSignature({ ...two })).toBe(directBookSignature(two));
+  });
+
   it("has no signature until something is bookable", () => {
     expect(directBookSignature(null)).toBe("");
   });

@@ -72,8 +72,8 @@ class JdbcDisputeQueryDaoIntegrationTest {
     private UUID insertTask(UUID clientId, String title, String status) {
         UUID taskId = UUID.randomUUID();
         jdbc.update("""
-                INSERT INTO tasks (id, client_id, title, description, budget, output_spec, status, category)
-                VALUES (?, ?, ?, 'A task under dispute.', ?, '{"format":"TEXT"}'::jsonb, ?, 'summarisation')
+                INSERT INTO tasks (id, client_id, title, description, budget, contract, status, category)
+                VALUES (?, ?, ?, 'A task under dispute.', ?, contract_from_output_spec('{"format":"TEXT"}'::jsonb), ?, 'summarisation')
                 """, taskId, clientId, title, new BigDecimal("20.00"), status);
         return taskId;
     }

@@ -62,6 +62,9 @@ class WorkOrderContentIntegrationTest extends WholeAppIntegrationTest {
         assertThat(body.path("outputSpec").path("format").asText()).isEqualTo("JSON");
         assertThat(body.path("outputSpec").path("schema").asText()).isEqualTo("{\"type\":\"array\"}");
         assertThat(body.path("outputSpec").path("acceptanceCriteria").asText()).isEqualTo("five bullets");
+        // The frozen Contract itself travels too (Hard Invariant #4, #110); outputSpec describes it.
+        assertThat(body.path("contract").path("template").asText()).isEqualTo("custom_json");
+        assertThat(body.path("contract").path("params").path("schema").asText()).isEqualTo("{\"type\":\"array\"}");
     }
 
     @Test
@@ -80,8 +83,9 @@ class WorkOrderContentIntegrationTest extends WholeAppIntegrationTest {
 
         assertWorkOrder(body, taskId, seeded.versionId(), "Translate memo",
                 "Translate the attached memo into formal French", category);
-        // A direct booking binds the Agent's own spec (Hard Invariant #4).
+        // A direct booking without client terms freezes the Agent's own terms as the Contract (Invariant #4).
         assertThat(body.path("outputSpec").path("acceptanceCriteria").asText()).isEqualTo("agent spec");
+        assertThat(body.path("contract").path("template").asText()).isNotBlank();
     }
 
     private void assertWorkOrder(JsonNode body, UUID taskId, UUID versionId, String title,
@@ -101,7 +105,7 @@ class WorkOrderContentIntegrationTest extends WholeAppIntegrationTest {
         java.util.List<String> fields = new java.util.ArrayList<>();
         body.fieldNames().forEachRemaining(fields::add);
         assertThat(fields).containsExactlyInAnyOrder("taskId", "agentVersionId", "title", "description",
-                        "category", "outputSpec", "executionDeadline", "callbackUrl");
+                        "category", "outputSpec", "contract", "executionDeadline", "callbackUrl");
         assertThat(body.toString()).doesNotContain(DEV_CLIENT.toString());
     }
 
@@ -129,6 +133,7 @@ class WorkOrderContentIntegrationTest extends WholeAppIntegrationTest {
         jdbc.update("INSERT INTO agent_versions (id, agent_id, version_number, output_spec, capability_categories, "
                         + "webhook_url, max_execution_seconds, price) VALUES (?, ?, 1, ?::jsonb, ?, ?, 60, ?)",
                 versionId, agentId, AGENT_SPEC, new String[]{category}, webhookUrl, new BigDecimal("10.00"));
+        acceptAnyJsonSchema(versionId);
         jdbc.update("INSERT INTO agent_profiles (agent_id, tagline, is_listed) VALUES (?, 'T', true)", agentId);
         return new SeededAgent(agentId, versionId);
     }

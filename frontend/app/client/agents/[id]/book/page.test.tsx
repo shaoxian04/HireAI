@@ -75,6 +75,39 @@ describe("book agent — idempotency", () => {
     expect(keys[1]).toBe(keys[0]);
   });
 
+  it("books the ticked Engagement documents as the Items, at the price per document", async () => {
+    const doc = (id: string) => ({
+      id, engagementId: "en-1", filename: `${id}.pdf`, mediaType: "application/pdf", sizeBytes: 900,
+      sha256: "cd".repeat(32), uploadedAt: "2026-11-16T09:00:00Z", downloads: [],
+    });
+    server.use(
+      http.get("*/api/engagements", () => ok([{ id: "en-1", clientId: "u-1", agentId: "ag-1", status: "ACTIVE",
+        consentedAt: "2026-11-16T09:00:00Z", retentionDays: 30, createdAt: "2026-11-16T09:00:00Z" }])),
+      http.get("*/api/engagements/en-1/sources", () => ok([doc("inv-1"), doc("inv-2")])),
+    );
+    let body: Record<string, unknown> | null = null;
+    server.use(http.post("*/api/tasks/direct", async ({ request }) => {
+      body = (await request.json()) as Record<string, unknown>;
+      return ok({ id: "t-1", status: "SUBMITTED" });
+    }));
+    renderPage();
+    fireEvent.change(await screen.findByLabelText(/title/i), { target: { value: "Extract" } });
+    fireEvent.change(screen.getByLabelText(/description/i), { target: { value: "the invoices" } });
+    fireEvent.click(await screen.findByLabelText("Send inv-1.pdf as an Item"));
+
+    // One document is a one-Item Task (spec S3: 1..n Items): it is checked like a batch.
+    expect(screen.getByRole("button", { name: /book and freeze/i })).toHaveTextContent(/10 cr/);
+    expect(screen.getByText(/how the batch is checked/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Send inv-2.pdf as an Item"));
+    const book = screen.getByRole("button", { name: /book and freeze/i });
+    expect(book).toHaveTextContent(/20 cr/); // 10 cr × 2
+    fireEvent.click(book);
+    await waitFor(() => expect(body).not.toBeNull());
+    expect(body).toMatchObject({ engagementId: "en-1", budget: 10,
+      items: [{ sourceId: "inv-1" }, { sourceId: "inv-2" }] });
+  });
+
   it("issues a new key once the payload changes", async () => {
     const keys: string[] = [];
     renderPage();

@@ -1,11 +1,15 @@
 package com.hireai.application.biz.adjudication.dispute;
 
 import com.hireai.application.biz.adjudication.dispute.impl.DisputeAppServiceImpl;
+import com.hireai.application.biz.acceptance.delivery.DeliverySnapshotAppService;
+import com.hireai.application.biz.adjudication.port.ArbitrationDeliverable;
 import com.hireai.application.biz.adjudication.port.ArbitrationGateway;
 import com.hireai.application.biz.adjudication.port.RulingInfo;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
+import com.hireai.domain.biz.adjudication.enums.DisputeParty;
 import com.hireai.domain.biz.adjudication.enums.DisputeStatus;
+import com.hireai.domain.biz.ledger.settlement.enums.DisputeFeeType;
 import com.hireai.domain.biz.adjudication.enums.RulingCategory;
 import com.hireai.domain.biz.adjudication.enums.RulingDecidedBy;
 import com.hireai.domain.biz.adjudication.model.DisputeModel;
@@ -13,6 +17,7 @@ import com.hireai.domain.biz.adjudication.model.Ruling;
 import com.hireai.domain.biz.adjudication.repository.DisputeRepository;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.OutputFormat;
+import com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.domain.biz.task.enums.TaskResolution;
 import com.hireai.domain.biz.task.model.OutputSpec;
@@ -25,9 +30,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,7 +52,9 @@ class DisputeAppServiceImplTest {
     AgentRepository agentRepository;
     SettlementWriteAppService settlement;
     ArbitrationGateway gateway;
+    DeliverySnapshotAppService snapshots;
     ReputationWriteAppService reputationWriteAppService;
+    ApiKeyTaskRepository apiKeyTasks;
     DisputeAppServiceImpl service;
 
     UUID clientId = UUID.randomUUID();
@@ -59,8 +70,14 @@ class DisputeAppServiceImplTest {
         settlement = mock(SettlementWriteAppService.class);
         gateway = mock(ArbitrationGateway.class);
         reputationWriteAppService = mock(ReputationWriteAppService.class);
+        snapshots = mock(DeliverySnapshotAppService.class);
+        apiKeyTasks = mock(ApiKeyTaskRepository.class);
+        when(apiKeyTasks.findApiKeyIdByTask(any())).thenReturn(Optional.empty());
+        when(snapshots.forArbitration(any())).thenReturn(Optional.empty());
         service = new DisputeAppServiceImpl(disputeRepository, taskRepository, agentRepository,
-                settlement, gateway, reputationWriteAppService);
+                settlement, gateway, snapshots, reputationWriteAppService,
+                new DisputeFeeSchedule(new BigDecimal("3.00"), new BigDecimal("5.00"), Duration.ofHours(24)),
+                Clock.systemUTC(), apiKeyTasks);
 
         when(disputeRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
@@ -73,11 +90,12 @@ class DisputeAppServiceImplTest {
                 .passValidation()
                 .dispute(RejectReason.A_MISMATCH, "mismatch");
         when(taskRepository.findByIdForUpdate(disputedTask.id())).thenReturn(Optional.of(disputedTask));
+        when(taskRepository.findById(disputedTask.id())).thenReturn(Optional.of(disputedTask));
     }
 
     @Test
     void openWithSynchronousNotFulfilledRulingRecordsProposal_doesNotSettle() {
-        when(gateway.requestRuling(any(), any()))
+        when(gateway.requestRuling(any(), any(), any()))
                 .thenReturn(Optional.of(new RulingInfo(RulingCategory.NOT_FULFILLED, "no")));
 
         UUID disputeId = service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
@@ -97,7 +115,7 @@ class DisputeAppServiceImplTest {
 
     @Test
     void synchronousPartialRulingRecordsProposal_doesNotSettle() {
-        when(gateway.requestRuling(any(), any()))
+        when(gateway.requestRuling(any(), any(), any()))
                 .thenReturn(Optional.of(new RulingInfo(RulingCategory.PARTIALLY_FULFILLED, "half")));
         service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
         verifyNoInteractions(settlement);
@@ -110,7 +128,7 @@ class DisputeAppServiceImplTest {
 
     @Test
     void synchronousFulfilledRulingRecordsProposal_doesNotSettle() {
-        when(gateway.requestRuling(any(), any()))
+        when(gateway.requestRuling(any(), any(), any()))
                 .thenReturn(Optional.of(new RulingInfo(RulingCategory.FULFILLED, "ok")));
         service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
         verifyNoInteractions(settlement);
@@ -122,7 +140,7 @@ class DisputeAppServiceImplTest {
 
     @Test
     void emptyGatewayResponseLeavesDisputeArbitrating() {
-        when(gateway.requestRuling(any(), any())).thenReturn(Optional.empty());
+        when(gateway.requestRuling(any(), any(), any())).thenReturn(Optional.empty());
         service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
         verifyNoInteractions(settlement);
         ArgumentCaptor<DisputeModel> cap = ArgumentCaptor.forClass(DisputeModel.class);
@@ -297,6 +315,52 @@ class DisputeAppServiceImplTest {
     }
 
     @Test
+    void aRulingAgainstTheBuilderWaitsForTheBuilder_whoseAcceptanceSettlesAndChargesItTheCost() {
+        DisputeModel ruled = ruledDispute(RulingCategory.NOT_FULFILLED);
+        when(disputeRepository.findById(ruled.id())).thenReturn(Optional.of(ruled));
+
+        assertThatThrownBy(() -> service.acceptRuling(ruled.id(), clientId))
+                .isInstanceOf(DomainException.class).hasMessageContaining("in your favour");
+        verifyNoInteractions(settlement);
+
+        service.acceptRuling(ruled.id(), builderId);
+
+        verify(settlement).settleRejected(disputedTask.id(), clientId, Money.of("100.00"));
+        // An AI ruling was recorded, so the loser bears the arbitration cost.
+        verify(settlement).chargeArbitrationCost(eq(ruled.id()), eq(disputedTask.id()), eq(clientId), eq(builderId),
+                eq(true), eq(Money.of("3.00")), eq(Money.of("100.00")), eq(Set.of(DisputeParty.BUILDER)));
+        verify(settlement, never()).chargeDisputeFee(any(), any(), any(), any(),
+                eq(DisputeFeeType.APPEAL_FEE), any(), any(), any());
+    }
+
+    @Test
+    void theBuilderMayNotAppealOnTheApiChannel() {
+        // D38: API/MCP has no Builder appeal; the Client's own appeal is unchanged.
+        DisputeModel ruled = ruledDispute(RulingCategory.NOT_FULFILLED);
+        when(disputeRepository.findById(ruled.id())).thenReturn(Optional.of(ruled));
+        when(apiKeyTasks.findApiKeyIdByTask(disputedTask.id())).thenReturn(Optional.of(UUID.randomUUID()));
+
+        assertThatThrownBy(() -> service.appeal(ruled.id(), builderId))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.resultCode()).isEqualTo(com.hireai.utility.result.ResultCode.DOMAIN_RULE_VIOLATION))
+                .hasMessageContaining("web");
+        verify(disputeRepository, never()).save(any());
+    }
+
+    @Test
+    void theBuilderMayAppealARulingAgainstIt() {
+        DisputeModel ruled = ruledDispute(RulingCategory.NOT_FULFILLED);
+        when(disputeRepository.findById(ruled.id())).thenReturn(Optional.of(ruled));
+
+        service.appeal(ruled.id(), builderId);
+
+        ArgumentCaptor<DisputeModel> saved = ArgumentCaptor.forClass(DisputeModel.class);
+        verify(disputeRepository).save(saved.capture());
+        assertThat(saved.getValue().appealedBy()).isEqualTo(DisputeParty.BUILDER);
+        assertThat(saved.getValue().status()).isEqualTo(DisputeStatus.ESCALATED);
+    }
+
+    @Test
     void autoAcceptOne_settlesFromProposal() {
         DisputeModel ruled = ruledDispute(RulingCategory.FULFILLED);
         when(disputeRepository.findById(ruled.id())).thenReturn(Optional.of(ruled));
@@ -311,11 +375,22 @@ class DisputeAppServiceImplTest {
 
     @Test
     void autoAcceptOne_skipsWhenNoLongerRuled() {
-        DisputeModel escalated = ruledDispute(RulingCategory.FULFILLED).appeal();
+        DisputeModel escalated = ruledDispute(RulingCategory.FULFILLED).appeal(DisputeParty.CLIENT, Instant.now());
         when(disputeRepository.findById(escalated.id())).thenReturn(Optional.of(escalated));
 
         service.autoAcceptOne(escalated.id());
 
         verifyNoInteractions(settlement);
+    }
+
+    @Test
+    void theArbitratorIsHandedTheFrozenDeliverableNotTheAgentsLink() {
+        ArbitrationDeliverable frozen = new ArbitrationDeliverable("ab12", "image/png", 3, "AQID");
+        when(snapshots.forArbitration(disputedTask.result())).thenReturn(Optional.of(frozen));
+        when(gateway.requestRuling(any(), any(), any())).thenReturn(Optional.empty());
+
+        service.openDispute(disputedTask, clientId, RejectReason.A_MISMATCH);
+
+        verify(gateway).requestRuling(any(), eq(disputedTask), eq(frozen));
     }
 }

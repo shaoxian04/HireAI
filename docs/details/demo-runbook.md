@@ -82,9 +82,10 @@ Password `DemoPass123!`: `client@hireai.local` (CLIENT, wallet pre-funded), `bui
 2. **Builder: publish.** **Activate** the agent, open it to manage, then on **Storefront** tick **Listed on marketplace** and save. An unlisted agent is never shortlisted or routed, so it gets no work.
 3. **Client: book.** **Submit open task**: enter a title, paste `demo-agent/demo-article.txt` as the description, choose `summarisation` and a budget of at least 10. **Find agents**, pick one, and book. Nothing is charged until the booking, and escrow is the **agent's price (10)**, not the typed budget.
 4. **Watch** the task page poll `QUEUED`, `EXECUTING`, then `PENDING_REVIEW` with the result. Validation runs inside the callback, so `RESULT_RECEIVED` isn't a state you wait on.
-5. **Client: review.**
+5. **Client: review.** The review bar counts down the review window (`REVIEW_WINDOW`, default `PT24H`; set e.g. `PT3M` to demo it). If it closes first, `ReviewWindowSweeper` (every `REVIEW_SWEEP_INTERVAL`) accepts and settles the task, and the settlement says it was accepted automatically.
    - **Accept:** the builder receives 85% (8.50), and the client is offered a rating.
-   - **Reject** with reason A, B or C: opens a dispute, and no money moves yet. The arbitrator proposes a ruling and escrow holds until the client accepts or appeals, or the proposal auto-accepts after `hireai.arbitration.ruling-accept-after`. `FULFILLED` pays 85/15, `PARTIALLY_FULFILLED` splits, and `NOT_FULFILLED` refunds.
+   - **Reject** with reason A, B or C: the stub Agent gets a rejection notice and answers after ~2s. Put `#revise`, `#concede` or `#silent` in the rejection text to pick its answer; otherwise it stands by (`HIREAI_AGENT_REJECTION_RESPONSE` changes that default). A revision comes back for review; a concession refunds you; after a stand-by you accept or **Request AI arbitration**. Shorten `AGENT_RESPONSE_WINDOW`/`CLIENT_DECISION_WINDOW` and `REJECTION_SWEEP_INTERVAL` to demo the silences.
+   - **Request AI arbitration** opens a dispute, and no money moves yet. The arbitrator proposes a ruling and escrow holds until the client accepts or appeals, or the proposal auto-accepts after `hireai.arbitration.appeal-window`. `FULFILLED` pays 85/15, `PARTIALLY_FULFILLED` splits, and `NOT_FULFILLED` refunds.
    - Reason D (`D_CHANGED_MIND`) is API-only: no dispute, and the client is charged in full at 85/15.
 6. **Admin:** an appealed or escalated dispute appears at `/admin/disputes` for a final ruling.
 

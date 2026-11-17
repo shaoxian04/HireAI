@@ -85,8 +85,8 @@ class TaskReliabilityQueriesIntegrationTest {
 
     private UUID insertTask(UUID clientId, String status) {
         UUID id = UUID.randomUUID();
-        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, output_spec, status) " +
-                        "VALUES (?, ?, 'Task', 'desc', 10.00, ?::jsonb, ?)",
+        jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, contract, status) " +
+                        "VALUES (?, ?, 'Task', 'desc', 10.00, contract_from_output_spec(?::jsonb), ?)",
                 id, clientId, "{\"format\":\"JSON\"}", status);
         return id;
     }

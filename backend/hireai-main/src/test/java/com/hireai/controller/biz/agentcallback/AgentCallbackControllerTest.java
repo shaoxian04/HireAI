@@ -43,10 +43,11 @@ class AgentCallbackControllerTest {
     @Autowired ObjectMapper objectMapper;
 
     @MockBean AgentCallbackAppService agentCallbackAppService;
+    @MockBean com.hireai.application.biz.task.RejectionAppService rejectionAppService;
 
     private String body(UUID taskId) throws Exception {
         return objectMapper.writeValueAsString(
-                new AgentResultCallbackRequest(taskId, "COMPLETED", "{\"k\":\"v\"}", "https://x/y", "done"));
+                new AgentResultCallbackRequest(taskId, "COMPLETED", "{\"k\":\"v\"}", "https://x/y", "done", null));
     }
 
     @Test

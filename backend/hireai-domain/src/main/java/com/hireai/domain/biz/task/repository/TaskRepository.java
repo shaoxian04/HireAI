@@ -1,5 +1,6 @@
 package com.hireai.domain.biz.task.repository;
 
+import com.hireai.domain.biz.task.info.ReviewWindowState;
 import com.hireai.domain.biz.task.model.TaskModel;
 
 import java.util.List;
@@ -30,6 +31,39 @@ public interface TaskRepository {
     /** Operational column write (unmapped on the entity — see plan Global Constraints). */
     void stampExecutionDeadline(UUID taskId, java.time.Instant deadline);
 
+    /** The execution deadline stamped at the latest assignment, failover or rework; empty if none. */
+    Optional<java.time.Instant> findExecutionDeadline(UUID taskId);
+
+    /**
+     * Operational column write (unmapped on the entity): when the Client's review window closes,
+     * set once as the task enters PENDING_REVIEW (#94).
+     */
+    void stampReviewDeadline(UUID taskId, java.time.Instant deadline);
+
+    /**
+     * The same Client's other Tasks, submitted before {@code taskId}, with exactly this title and
+     * description: the outside data the duplicate-brief Finding reads (spec D7). Oldest first.
+     */
+    /**
+     * Operational column write (unmapped on the entity): why a result awaits review although no
+     * check rejected it, {@code ANOMALY} or {@code UNDECIDED}, stamped as it enters PENDING_REVIEW.
+     */
+    void stampReviewReason(UUID taskId, String reason);
+
+    /** The task's review reason; empty for a result every check passed. */
+    Optional<String> findReviewReason(UUID taskId);
+
+    List<UUID> findEarlierTaskIdsWithSameBrief(UUID taskId, UUID clientId, String title, String description);
+
+    /** Operational column write (unmapped on the entity): the platform accepted on the Client's behalf. */
+    void markReviewAutoAccepted(UUID taskId);
+
+    /** The task's review window; empty when it never had one (an API task, or one never reviewed). */
+    Optional<ReviewWindowState> findReviewWindow(UUID taskId);
+
+    /** Ids still PENDING_REVIEW whose review window closed at or before {@code now}. */
+    List<UUID> findIdsReviewExpired(java.time.Instant now);
+
     /**
      * Operational column write (unmapped on the entity): the Client's deadline, set once at submit
      * when the Client gave one (#83).
@@ -38,6 +72,25 @@ public interface TaskRepository {
 
     /** The Client's deadline stamped at submit; empty when the Client gave none. */
     Optional<java.time.Instant> findClientDeadline(UUID taskId);
+
+    /**
+     * Operational column write (unmapped on the entity): why no Agent matched the task (#91), written at
+     * each no-match pass while it waits AWAITING_AGENT and kept as the failure detail when it ends
+     * NO_ELIGIBLE_AGENT. Null clears it.
+     */
+    void stampFailureDetail(UUID taskId, String failureDetail);
+
+    /** The task's failure detail; empty when none was recorded. */
+    Optional<String> findFailureDetail(UUID taskId);
+
+    /**
+     * Operational column write (unmapped on the entity): what requirement extraction made of a mode-1
+     * submit (spec S6), written once in the submit transaction; a DB trigger freezes it.
+     */
+    void stampContractExtraction(UUID taskId, com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord extraction);
+
+    /** The task's extraction record; empty when no extraction ran (mode 2, direct booking, older tasks). */
+    Optional<com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord> findContractExtraction(UUID taskId);
 
     /** Operational column write (unmapped on the entity). Pins the agent version for direct bookings. */
     void pinAgentVersion(UUID taskId, UUID agentVersionId);

@@ -37,6 +37,14 @@ public interface TaskExecutionPort {
     /** QUEUED → EXECUTING under a row lock; a no-op once the task has moved past QUEUED. */
     void markExecuting(UUID taskId);
 
+    /**
+     * As {@link #markExecuting(UUID)} for the WorkOrder whose execution deadline is
+     * {@code executionDeadline}: also a no-op when the task now carries another deadline, i.e. it was
+     * re-queued for a newer dispatch (a rework, #98) after this WorkOrder was sent, so the late step
+     * of an earlier send never marks the newer, still-unsent one EXECUTING.
+     */
+    void markExecuting(UUID taskId, java.time.Instant executionDeadline);
+
     void markTimedOut(UUID taskId);
 
     /**
@@ -59,4 +67,15 @@ public interface TaskExecutionPort {
      * to another version).
      */
     void declineAsBusy(UUID taskId, UUID agentVersionId);
+
+    /**
+     * The Agent refused the task's Contract (HTTP 422 with {@code {"decline":"CONTRACT"}}, #93). Same
+     * shape as {@link #declineAsBusy}: under a row lock, a task still QUEUED for {@code agentVersionId}
+     * records a {@code CONTRACT_DECLINED} dispatch attempt carrying the Agent's {@code reason}
+     * (nullable). A routed task then fails over; a pinned task ends FAILED with
+     * {@code CONTRACT_DECLINED}, a refund and a client {@code task.failed} webhook. No reputation event:
+     * being honest about its limits never costs an Agent reputation, though it counts in its public
+     * decline rate. A no-op when the task has moved on.
+     */
+    void declineContract(UUID taskId, UUID agentVersionId, String reason);
 }

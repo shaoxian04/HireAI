@@ -1,6 +1,8 @@
 package com.hireai.domain.biz.adjudication.model;
 
+import com.hireai.domain.biz.adjudication.enums.DisputeParty;
 import com.hireai.domain.biz.adjudication.enums.DisputeStatus;
+import com.hireai.domain.biz.adjudication.enums.RulingDecidedBy;
 import com.hireai.domain.biz.task.enums.RejectReason;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
@@ -8,8 +10,10 @@ import com.hireai.utility.result.ResultCode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -20,7 +24,8 @@ import java.util.UUID;
  *
  * State machine: OPEN → ARBITRATING → RULED → RESOLVED,
  * with a RESOLVED-via-fallback path from OPEN/ARBITRATING, and from RULED branching either to
- * RESOLVED (via accept) or ESCALATED (via appeal).
+ * RESOLVED (once every side the ruling goes against accepts it, or the window lapses) or ESCALATED
+ * (one appeal, by such a side).
  */
 public final class DisputeModel {
 
@@ -33,10 +38,30 @@ public final class DisputeModel {
     private final String correlationId;
     private final Instant createdAt;
     private final Instant resolvedAt;
+    private final Acceptance acceptance;
+
+    /**
+     * Who has accepted the proposed ruling and who appealed it (D42). Only a side the ruling goes
+     * against may do either; a ruling is appealed at most once.
+     */
+    public record Acceptance(Instant clientAcceptedAt, Instant builderAcceptedAt,
+                             DisputeParty appealedBy, Instant appealedAt) {
+        public static final Acceptance NONE = new Acceptance(null, null, null, null);
+
+        Instant acceptedAt(DisputeParty party) {
+            return party == DisputeParty.CLIENT ? clientAcceptedAt : builderAcceptedAt;
+        }
+
+        Acceptance withAccepted(DisputeParty party, Instant at) {
+            return party == DisputeParty.CLIENT
+                    ? new Acceptance(at, builderAcceptedAt, appealedBy, appealedAt)
+                    : new Acceptance(clientAcceptedAt, at, appealedBy, appealedAt);
+        }
+    }
 
     private DisputeModel(UUID id, UUID taskId, UUID raisedBy, RejectReason reasonCategory,
                          DisputeStatus status, List<Ruling> rulings, String correlationId,
-                         Instant createdAt, Instant resolvedAt) {
+                         Instant createdAt, Instant resolvedAt, Acceptance acceptance) {
         this.id = id;
         this.taskId = taskId;
         this.raisedBy = raisedBy;
@@ -46,6 +71,7 @@ public final class DisputeModel {
         this.correlationId = correlationId;
         this.createdAt = createdAt;
         this.resolvedAt = resolvedAt;
+        this.acceptance = acceptance == null ? Acceptance.NONE : acceptance;
     }
 
     /** Open a new dispute for a disputable rejection (A/B/C only). */
@@ -59,7 +85,7 @@ public final class DisputeModel {
                     "Dispute reason must be A/B/C; got " + reasonCategory);
         }
         return new DisputeModel(UUID.randomUUID(), taskId, raisedBy, reasonCategory,
-                DisputeStatus.OPEN, List.of(), correlationId, Instant.now(), null);
+                DisputeStatus.OPEN, List.of(), correlationId, Instant.now(), null, Acceptance.NONE);
     }
 
     /** Rebuild from persisted rows (no validation). */
@@ -67,15 +93,24 @@ public final class DisputeModel {
                                          RejectReason reasonCategory, DisputeStatus status,
                                          List<Ruling> rulings, String correlationId,
                                          Instant createdAt, Instant resolvedAt) {
+        return rehydrate(id, taskId, raisedBy, reasonCategory, status, rulings, correlationId, createdAt,
+                resolvedAt, Acceptance.NONE);
+    }
+
+    /** Rebuild from persisted rows, with who accepted or appealed the proposed ruling. */
+    public static DisputeModel rehydrate(UUID id, UUID taskId, UUID raisedBy,
+                                         RejectReason reasonCategory, DisputeStatus status,
+                                         List<Ruling> rulings, String correlationId,
+                                         Instant createdAt, Instant resolvedAt, Acceptance acceptance) {
         return new DisputeModel(id, taskId, raisedBy, reasonCategory, status, rulings,
-                correlationId, createdAt, resolvedAt);
+                correlationId, createdAt, resolvedAt, acceptance);
     }
 
     /** OPEN → ARBITRATING (handed off for async arbitration). */
     public DisputeModel startArbitrating() {
         requireStatus(DisputeStatus.OPEN, "startArbitrating");
         return new DisputeModel(id, taskId, raisedBy, reasonCategory, DisputeStatus.ARBITRATING,
-                rulings, correlationId, createdAt, resolvedAt);
+                rulings, correlationId, createdAt, resolvedAt, acceptance);
     }
 
     /**
@@ -90,21 +125,74 @@ public final class DisputeModel {
                     "escalate requires OPEN|ARBITRATING; was " + status);
         }
         return new DisputeModel(id, taskId, raisedBy, reasonCategory, DisputeStatus.ESCALATED,
-                rulings, correlationId, createdAt, resolvedAt);
+                rulings, correlationId, createdAt, resolvedAt, acceptance);
     }
 
     /**
-     * RULED → ESCALATED: the client appeals the arbitrator's PROPOSED ruling to the human admin.
-     * The arbitrator ruling stays in the history as the admin's context; settlement has not run yet
-     * (delayed-settlement model), so no money reversal is involved.
+     * RULED → ESCALATED: a side the proposed ruling goes against appeals it to the human admin, once
+     * (D42). The arbitrator ruling stays in the history as the admin's context; settlement has not
+     * run yet (delayed-settlement model), so no money reversal is involved.
      */
-    public DisputeModel appeal() {
-        if (status != DisputeStatus.RULED) {
-            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
-                    "appeal requires RULED; was " + status);
-        }
+    public DisputeModel appeal(DisputeParty party, Instant now) {
+        requireStatus(DisputeStatus.RULED, "appeal");
+        requireMayAct(party);
         return new DisputeModel(id, taskId, raisedBy, reasonCategory, DisputeStatus.ESCALATED,
-                rulings, correlationId, createdAt, resolvedAt);
+                rulings, correlationId, createdAt, resolvedAt,
+                new Acceptance(acceptance.clientAcceptedAt(), acceptance.builderAcceptedAt(), party, now));
+    }
+
+    /**
+     * A side the proposed ruling goes against accepts it. The ruling settles once every such side
+     * has accepted ({@link #acceptedByEverySideThatMayAppeal()}), or when the appeal window lapses.
+     */
+    public DisputeModel accept(DisputeParty party, Instant now) {
+        requireStatus(DisputeStatus.RULED, "accept");
+        requireMayAct(party);
+        return new DisputeModel(id, taskId, raisedBy, reasonCategory, status, rulings, correlationId,
+                createdAt, resolvedAt, acceptance.withAccepted(party, now));
+    }
+
+    /**
+     * The sides that may still accept or appeal the proposed ruling: those it goes against, while it
+     * is the arbitrator's proposal, nobody has appealed it, and they have not accepted it yet.
+     */
+    public Set<DisputeParty> partiesWhoMayAppeal() {
+        if (status != DisputeStatus.RULED || appealedOrAdminRuled()) {
+            return Set.of();
+        }
+        Set<DisputeParty> parties = EnumSet.noneOf(DisputeParty.class);
+        effectiveRuling().ifPresent(r -> r.category().partiesItGoesAgainst().stream()
+                .filter(p -> acceptance.acceptedAt(p) == null)
+                .forEach(parties::add));
+        return parties;
+    }
+
+    /** True once every side the proposed ruling goes against has accepted it. */
+    public boolean acceptedByEverySideThatMayAppeal() {
+        return effectiveRuling()
+                .map(r -> r.category().partiesItGoesAgainst().stream()
+                        .allMatch(p -> acceptance.acceptedAt(p) != null))
+                .orElse(false);
+    }
+
+    private boolean appealedOrAdminRuled() {
+        return acceptance.appealedBy() != null || effectiveRuling()
+                .map(r -> r.decidedBy() == RulingDecidedBy.ADMINISTRATOR).orElse(false);
+    }
+
+    private void requireMayAct(DisputeParty party) {
+        if (appealedOrAdminRuled()) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION, "A ruling can be appealed only once");
+        }
+        Ruling ruling = effectiveRuling().orElseThrow(() -> new DomainException(
+                ResultCode.DOMAIN_RULE_VIOLATION, "Dispute " + id + " has no proposed ruling"));
+        if (!ruling.category().partiesItGoesAgainst().contains(party)) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "The ruling is in your favour; there is nothing to accept or appeal");
+        }
+        if (acceptance.acceptedAt(party) != null) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION, "You already accepted this ruling");
+        }
     }
 
     /** OPEN|ARBITRATING|ESCALATED → RULED: append a ruling to the history. */
@@ -118,14 +206,14 @@ public final class DisputeModel {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "ruling is required");
         }
         return new DisputeModel(id, taskId, raisedBy, reasonCategory, DisputeStatus.RULED,
-                append(ruling), correlationId, createdAt, resolvedAt);
+                append(ruling), correlationId, createdAt, resolvedAt, acceptance);
     }
 
     /** RULED → RESOLVED. */
     public DisputeModel resolve() {
         requireStatus(DisputeStatus.RULED, "resolve");
         return new DisputeModel(id, taskId, raisedBy, reasonCategory, DisputeStatus.RESOLVED,
-                rulings, correlationId, createdAt, Instant.now());
+                rulings, correlationId, createdAt, Instant.now(), acceptance);
     }
 
     /** OPEN|ARBITRATING → RESOLVED via DLQ fallback: append the fallback ruling. */
@@ -138,7 +226,7 @@ public final class DisputeModel {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "fallback ruling is required");
         }
         return new DisputeModel(id, taskId, raisedBy, reasonCategory, DisputeStatus.RESOLVED,
-                append(fallbackRuling), correlationId, createdAt, Instant.now());
+                append(fallbackRuling), correlationId, createdAt, Instant.now(), acceptance);
     }
 
     /** True while a ruling can still be applied (first-ruling-wins guard). */
@@ -149,6 +237,19 @@ public final class DisputeModel {
     /** The highest-tier ruling, or empty if none recorded yet. */
     public Optional<Ruling> effectiveRuling() {
         return rulings.stream().max(Comparator.comparingInt(Ruling::tier));
+    }
+
+    /** True when the AI arbitrator produced a ruling for this dispute (it did not fail before ruling). */
+    public boolean hasAiRuling() {
+        return rulings.stream().anyMatch(r -> r.decidedBy() == RulingDecidedBy.ARBITRATOR);
+    }
+
+    /**
+     * True once the dispute is past the AI arbitrator without an AI ruling (it failed: the admin backstop
+     * or the refund fallback rules instead), so nobody bears the arbitration cost (owner decision on #87).
+     */
+    public boolean arbitrationCostWaived() {
+        return !hasAiRuling() && status != DisputeStatus.OPEN && status != DisputeStatus.ARBITRATING;
     }
 
     private List<Ruling> append(Ruling ruling) {
@@ -173,4 +274,9 @@ public final class DisputeModel {
     public String correlationId() { return correlationId; }
     public Instant createdAt() { return createdAt; }
     public Instant resolvedAt() { return resolvedAt; }
+    public Acceptance acceptance() { return acceptance; }
+    public Instant clientAcceptedAt() { return acceptance.clientAcceptedAt(); }
+    public Instant builderAcceptedAt() { return acceptance.builderAcceptedAt(); }
+    public DisputeParty appealedBy() { return acceptance.appealedBy(); }
+    public Instant appealedAt() { return acceptance.appealedAt(); }
 }

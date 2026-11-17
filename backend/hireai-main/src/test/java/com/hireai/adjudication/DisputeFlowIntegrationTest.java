@@ -24,6 +24,9 @@ import com.hireai.utility.exception.DomainException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import com.hireai.support.dispute.RulingSteps;
+import com.hireai.support.rejection.RejectionSteps;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -87,6 +90,8 @@ class DisputeFlowIntegrationTest {
     }
 
     @Autowired TaskReviewAppService reviewAppService;
+
+    @Autowired ApplicationContext context;
     @Autowired DisputeAppService disputeAppService;
     @Autowired TaskRepository taskRepository;
     @Autowired DisputeRepository disputeRepository;
@@ -161,8 +166,7 @@ class DisputeFlowIntegrationTest {
     @Test
     void mismatchDisputeRefundsClientInFull() {
         Fixture f = seedPendingReview(Money.of("100.00"));
-        reviewAppService.reject(f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "wrong output");
-
+        RejectionSteps.rejectThenArbitrate(context, f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "wrong output");
         // Arbitrator's ruling is a PROPOSAL: dispute RULED, task still DISPUTED, escrow still held.
         TaskModel disputedTask = taskRepository.findById(f.taskId()).orElseThrow();
         assertThat(disputedTask.status()).isEqualTo(TaskStatus.DISPUTED);
@@ -175,7 +179,7 @@ class DisputeFlowIntegrationTest {
         assertThat(heldWallet.escrow()).isEqualTo(Money.of("100.00")); // still held
 
         // Client accepts the proposed ruling -> settles exactly once.
-        disputeAppService.acceptRuling(disputeId, f.clientId());
+        RulingSteps.acceptAsEverySide(context, disputeId);
 
         TaskModel task = taskRepository.findById(f.taskId()).orElseThrow();
         assertThat(task.status()).isEqualTo(TaskStatus.RESOLVED);
@@ -198,15 +202,14 @@ class DisputeFlowIntegrationTest {
     @Test
     void factualDisputeSplits() {
         Fixture f = seedPendingReview(Money.of("100.00"));
-        reviewAppService.reject(f.taskId(), f.clientId(), RejectReason.B_FACTUAL, "some errors");
-
+        RejectionSteps.rejectThenArbitrate(context, f.taskId(), f.clientId(), RejectReason.B_FACTUAL, "some errors");
         UUID disputeId = disputeRepository.findByTaskId(f.taskId()).orElseThrow().id();
         assertThat(disputeRepository.findById(disputeId).orElseThrow().status())
                 .isEqualTo(DisputeStatus.RULED);
         WalletModel heldWallet = walletRepository.findByUserId(f.clientId()).orElseThrow();
         assertThat(heldWallet.escrow()).isEqualTo(Money.of("100.00")); // still held pending accept
 
-        disputeAppService.acceptRuling(disputeId, f.clientId());
+        RulingSteps.acceptAsEverySide(context, disputeId);
 
         SettlementModel s = settlementRepository.findByTaskId(f.taskId()).orElseThrow();
         assertThat(s.type()).isEqualTo(SettlementType.SPLIT);
@@ -230,13 +233,12 @@ class DisputeFlowIntegrationTest {
     @Test
     void incompleteDisputePaysBuilder() {
         Fixture f = seedPendingReview(Money.of("100.00"));
-        reviewAppService.reject(f.taskId(), f.clientId(), RejectReason.C_INCOMPLETE, "missing parts");
-
+        RejectionSteps.rejectThenArbitrate(context, f.taskId(), f.clientId(), RejectReason.C_INCOMPLETE, "missing parts");
         UUID disputeId = disputeRepository.findByTaskId(f.taskId()).orElseThrow().id();
         assertThat(disputeRepository.findById(disputeId).orElseThrow().status())
                 .isEqualTo(DisputeStatus.RULED);
 
-        disputeAppService.acceptRuling(disputeId, f.clientId());
+        RulingSteps.acceptAsEverySide(context, disputeId);
 
         SettlementModel s = settlementRepository.findByTaskId(f.taskId()).orElseThrow();
         assertThat(s.type()).isEqualTo(SettlementType.ACCEPT);

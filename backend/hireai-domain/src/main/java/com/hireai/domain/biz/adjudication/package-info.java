@@ -9,7 +9,7 @@
  * <p>Planned contents:
  * <ul>
  *   <li><b>Validation gate</b> — {@code ValidationReport} (root) + {@code CheckResult} (VO): the
- *       automated check of a result against the task's frozen {@code output_spec} that drives
+ *       automated check of a result against the task's frozen Contract that drives
  *       {@code RESULT_RECEIVED → PENDING_REVIEW} (pass) or {@code → SPEC_VIOLATION} (fail) before any
  *       client sees a result (Hard Invariant #4).</li>
  *   <li><b>Tiered dispute resolution</b> — {@code Dispute} (root) + {@code Ruling} (VO): the

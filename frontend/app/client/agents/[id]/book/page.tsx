@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
@@ -11,6 +11,12 @@ import { errorFor, toFormError, useFocusOnFieldError, validateForm, type FormErr
 import type { AgentProfileDTO, DirectBookRequest, TaskDTO } from "@/lib/types";
 import { directBookSignature, useIdempotencyKey } from "@/lib/useIdempotencyKey";
 import { PageHeader } from "@/components/PageHeader";
+import { AiReviewOption, filledCriteria } from "@/components/AiReviewOption";
+import type { AiReviewQuoteDTO } from "@/lib/types";
+import { EngagementDocuments, type DocumentSelection } from "@/components/EngagementDocuments";
+import { invoiceContract, invoiceTerm, offersBusinessValid, type InvoiceExpectation } from "@/lib/invoice";
+
+/** A multi-Item Task holds two Items or more; a single piece of work is described in the brief. */
 
 function BookingForm() {
   const { id } = useParams<{ id: string }>();
@@ -21,17 +27,42 @@ function BookingForm() {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  // AI Review (spec S10): null while off; the quote is the fee to freeze, null until priced and offered.
+  const [aiCriteria, setAiCriteria] = useState<string[] | null>(null);
+  const [aiQuote, setAiQuote] = useState<AiReviewQuoteDTO | null>(null);
 
   const [error, setError] = useState<FormError | null>(null);
   // A field error clears the moment that field (or any other) is edited, so it never goes stale.
   const clearFieldError = () => setError((er) => (er?.field ? null : er));
   const [submitting, setSubmitting] = useState(false);
+  const [documents, setDocuments] = useState<DocumentSelection>({ engagementId: null, sourceIds: [] });
+  const [stricter, setStricter] = useState(false);
+  const [asInvoices, setAsInvoices] = useState(true);
+  const [expectation, setExpectation] = useState<InvoiceExpectation>("faithful_to_source");
+  const onDocumentsChange = useCallback((s: DocumentSelection) => setDocuments(s), []);
   useFocusOnFieldError(error);
   // Built here rather than in onSubmit so the idempotency signature is derived from the very
   // object that gets sent: retrying the same booking reuses one key (deduped server-side),
   // while an edited title or description starts a fresh one.
+  const itemCount = documents.engagementId ? documents.sourceIds.length : 0;
+  const aiReview = aiCriteria ? filledCriteria(aiCriteria) : [];
+  const strictAllowed = profile?.offer?.strictestInspectionLevel === "III";
+  // Documents booked as invoices (#106) freeze the invoice Contract when the agent offers it.
+  const invoice = itemCount > 0 && asInvoices && profile?.offer ? invoiceContract(profile.offer, expectation) : null;
   const bookingBody: DirectBookRequest | null = profile
-    ? { title, description, budget: profile.card.price, agentId: id }
+    ? {
+        title, description, budget: profile.card.price, agentId: id,
+        // Documents become the Items, priced each at the agent's price, under the Engagement.
+        ...(itemCount > 0 && documents.engagementId
+          ? {
+              engagementId: documents.engagementId,
+              items: documents.sourceIds.map((sourceId) => ({ sourceId })),
+              ...(stricter && strictAllowed ? { inspectionLevel: "III" as const } : {}),
+              ...(invoice ? { contract: invoice } : {}),
+            }
+          : {}),
+        ...(aiCriteria ? { aiReview: { criteria: aiReview } } : {}),
+      }
     : null;
   const getIdempotencyKey = useIdempotencyKey(directBookSignature(bookingBody));
 
@@ -61,8 +92,14 @@ function BookingForm() {
     return <SkeletonRows label="Loading agent profile…" rows={3} />;
 
   const { card } = profile;
-
   const bookErrors = { title: "Title", description: "Description" };
+  const fee = aiCriteria && aiQuote ? aiQuote.fee : 0;
+  // The price as the agent set it; price × documents for a batch; or, once an AI Review is priced, the
+  // platform's own total of price + fee (AI Review is not offered on a batch).
+  const total = itemCount > 0 ? String(Math.round(card.price * itemCount * 100) / 100)
+    : fee > 0 && aiQuote ? aiQuote.total.toFixed(2) : String(card.price);
+  // With AI Review on, book only once it is priced, offered and has a criterion to judge.
+  const aiReviewBlocks = aiCriteria !== null && (aiQuote === null || aiReview.length === 0);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -70,6 +107,15 @@ function BookingForm() {
     const invalid = validateForm(e.currentTarget as HTMLFormElement);
     if (invalid) {
       setError(invalid);
+      return;
+    }
+    if (aiCriteria !== null && itemCount > 0) {
+      setError({ field: null, message: "AI Review is not offered on a batch of documents. Turn AI Review off, "
+        + "or untick the documents." });
+      return;
+    }
+    if (aiCriteria !== null && aiReview.length === 0) {
+      setError({ field: null, message: "Write at least one AI Review criterion, or turn AI Review off." });
       return;
     }
     setSubmitting(true);
@@ -105,7 +151,33 @@ function BookingForm() {
               The agent&apos;s result is validated against these terms before you see it.
             </p>
           </div>
-          <ContractTerms spec={profile.outputSpec} />
+          {invoice ? (
+            <dl className="grid gap-px border-t border-line bg-line text-sm" aria-label="Invoice extraction terms">
+              <div className="bg-surface px-5 py-3">
+                <dt className="text-xs text-dim">Template</dt>
+                <dd className="text-fg">
+                  {"Invoice extraction "}
+                  <span className="font-mono text-xs text-dim">{`${invoice.template}@${invoice.version}`}</span>
+                </dd>
+              </div>
+              <div className="bg-surface px-5 py-3">
+                <dt className="text-xs text-dim">Checked on every invoice</dt>
+                <dd className="text-fg">
+                  Every field is there and well formed; each line, the lines&apos; sum, the tax and the grand total add up.
+                </dd>
+              </div>
+              <div className="bg-surface px-5 py-3">
+                <dt className="text-xs text-dim">When the figures don&apos;t add up</dt>
+                <dd className="text-fg">
+                  {expectation === "business_valid" && offersBusinessValid(profile.offer)
+                    ? "The agent must correct them or report why; an unreported mismatch is refunded."
+                    : "The agent copies the document faithfully and the invoice comes to you to check, outside the sample."}
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <ContractTerms spec={profile.outputSpec} />
+          )}
         </section>
 
         <div className="docket-tear" />
@@ -136,10 +208,88 @@ function BookingForm() {
             />
           </Field>
 
+          <EngagementDocuments agentId={id} agentName={card.name} onChange={onDocumentsChange} />
+          <h2 className="eyebrow pt-2">Review</h2>
+          <AiReviewOption
+            agentId={id}
+            budget={card.price}
+            offerAccepts={profile.offer?.acceptsAiReview ?? false}
+            criteria={aiCriteria}
+            onChange={(c) => { setAiCriteria(c); clearFieldError(); }}
+            onQuote={setAiQuote}
+          />
+
+          {itemCount > 0 && invoiceTerm(profile.offer) && (
+            <fieldset className="space-y-3 rounded-lg border border-line bg-surface px-4 py-3">
+              <legend className="px-1 text-xs font-semibold text-muted">What each document is</legend>
+              <label className="flex items-start gap-2 text-sm text-fg">
+                <input type="checkbox" className="mt-1" checked={asInvoices} onChange={(e) => setAsInvoices(e.target.checked)} />
+                <span>
+                  <span className="font-medium">Supplier invoices.</span>{" "}
+                  <span className="text-muted">
+                    {"The agent extracts each invoice's fields. The platform checks they are all there and that the "
+                      + "figures add up, and tells you about duplicates. A Finding never changes what the agent is paid."}
+                  </span>
+                </span>
+              </label>
+              {asInvoices && (
+                <div className="space-y-2 border-t border-line pt-3">
+                  <p className="text-xs font-semibold text-muted">When an invoice&apos;s figures don&apos;t add up</p>
+                  <label className="flex items-start gap-2 text-sm text-fg">
+                    <input type="radio" name="expectation" className="mt-1" checked={expectation === "faithful_to_source"}
+                      onChange={() => setExpectation("faithful_to_source")} />
+                    <span>
+                      {"Copy the document as it is, and let me check it "}
+                      <span className="text-muted">(recommended: the supplier may have got it wrong)</span>
+                    </span>
+                  </label>
+                  {offersBusinessValid(profile.offer) ? (
+                    <label className="flex items-start gap-2 text-sm text-fg">
+                      <input type="radio" name="expectation" className="mt-1" checked={expectation === "business_valid"}
+                        onChange={() => setExpectation("business_valid")} />
+                      <span>
+                        {"The figures must add up "}
+                        <span className="text-muted">(the agent reports why when they can&apos;t; if it doesn&apos;t, the invoice is refunded)</span>
+                      </span>
+                    </label>
+                  ) : (
+                    <p className="text-xs text-dim">This agent works faithful to the document only.</p>
+                  )}
+                </div>
+              )}
+            </fieldset>
+          )}
+
+          {itemCount > 0 && (
+            <fieldset className="space-y-2 rounded-lg border border-line bg-surface px-4 py-3">
+              <legend className="px-1 text-xs font-semibold text-muted">How the batch is checked</legend>
+              <p className="text-sm text-muted">
+                You check a random sample of the documents against the agent&apos;s results, sized by a standard
+                lot-size table, and the sample decides the rest.
+              </p>
+              {strictAllowed ? (
+                <label className="flex items-start gap-2 text-sm text-fg">
+                  <input type="checkbox" className="mt-1" checked={stricter} onChange={(e) => setStricter(e.target.checked)} />
+                  <span>Inspect more strictly (level III): a larger sample, which this agent accepts.</span>
+                </label>
+              ) : (
+                <p className="text-xs text-dim">This agent accepts the normal inspection level (II) only.</p>
+              )}
+            </fieldset>
+          )}
+
           <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line text-sm">
             <div className="bg-surface px-4 py-3">
               <dt className="text-xs text-dim">You&apos;ll pay</dt>
-              <dd className="display tabular mt-0.5 text-2xl text-accent">{card.price} cr</dd>
+              <dd className="display tabular mt-0.5 text-2xl text-accent">{`${total} cr`}</dd>
+              {itemCount > 0 && (
+                <dd className="tabular text-xs text-dim">
+                  {card.price} cr × {itemCount} {itemCount === 1 ? "document" : "documents"}
+                </dd>
+              )}
+              {itemCount === 0 && fee > 0 && (
+                <dd className="tabular mt-0.5 text-xs text-dim">{`${card.price.toFixed(2)} price + ${fee.toFixed(2)} AI Review`}</dd>
+              )}
             </div>
             <div className="bg-surface px-4 py-3">
               <dt className="text-xs text-dim">Agent must deliver within</dt>
@@ -148,6 +298,7 @@ function BookingForm() {
           </dl>
           <p className="text-xs text-dim">
             The price is fixed by the agent and frozen in escrow, not charged, until you accept the result.
+            {itemCount > 0 && " With documents, each one is an Item that is paid, or refunded, on its own."}
           </p>
 
           {error && !error.field && (
@@ -158,8 +309,8 @@ function BookingForm() {
               {error.message}
             </p>
           )}
-          <Button type="submit" disabled={submitting} className="w-full">
-            {submitting ? "Booking…" : `Book and freeze ${card.price} cr`}
+          <Button type="submit" disabled={submitting || aiReviewBlocks} className="w-full">
+            {submitting ? "Booking…" : `Book and freeze ${total} cr`}
           </Button>
         </form>
       </div>

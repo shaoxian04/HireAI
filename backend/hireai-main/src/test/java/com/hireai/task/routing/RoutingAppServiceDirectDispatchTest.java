@@ -45,8 +45,10 @@ class RoutingAppServiceDirectDispatchTest {
             routingMatchDomainService, taskDispatchPublisher,
             mock(com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository.class),
             mock(com.hireai.domain.biz.task.routing.service.RoutedFailoverDomainService.class),
+            mock(com.hireai.application.biz.acceptance.TemplateReadAppService.class),
             mock(com.hireai.application.biz.offering.embedding.TaskTextEmbeddingAppService.class),
-            Clock.systemUTC(), new com.hireai.domain.biz.task.model.ExecutionGrace(60));
+            Clock.systemUTC(), new com.hireai.domain.biz.task.model.ExecutionGrace(60), org.mockito.Mockito.mock(com.hireai.application.biz.acceptance.source.SourceSnapshotAppService.class,
+                    invocation -> invocation.getArgument(0)));
 
     private static final String TASK_OUTPUT_SPEC = "{\"format\":\"JSON\",\"schema\":\"task-snap\"}";
     private static final String CANDIDATE_OUTPUT_SPEC = "{\"format\":\"TEXT\",\"schema\":\"agent-live\"}";
@@ -81,7 +83,7 @@ class RoutingAppServiceDirectDispatchTest {
         InOrder inOrder = inOrder(taskWriteAppService, taskDispatchPublisher);
         inOrder.verify(taskWriteAppService).assignAndQueue(eq(taskId), eq(versionId), any(Instant.class));
         inOrder.verify(taskDispatchPublisher).publish(any(DispatchMessage.class));
-        verify(taskWriteAppService, never()).markAwaitingAgent(any());
+        verify(taskWriteAppService, never()).markAwaitingAgent(any(), any());
     }
 
     /**
@@ -124,7 +126,7 @@ class RoutingAppServiceDirectDispatchTest {
         service.dispatchDirect(taskId, versionId);
 
         verify(taskWriteAppService).cancelPinnedAsUnavailable(taskId, versionId);
-        verify(taskWriteAppService, never()).markAwaitingAgent(any());
+        verify(taskWriteAppService, never()).markAwaitingAgent(any(), any());
         verify(taskDispatchPublisher, never()).publish(any());
         verify(taskWriteAppService, never()).assignAndQueue(any(), any(), any());
     }

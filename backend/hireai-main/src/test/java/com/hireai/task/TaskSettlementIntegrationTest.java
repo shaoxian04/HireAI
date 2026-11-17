@@ -25,6 +25,9 @@ import com.hireai.domain.shared.model.Money;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import com.hireai.support.dispute.RulingSteps;
+import com.hireai.support.rejection.RejectionSteps;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -80,6 +83,8 @@ class TaskSettlementIntegrationTest {
     }
 
     @Autowired TaskReviewAppService reviewAppService;
+
+    @Autowired ApplicationContext context;
     @Autowired DisputeAppService disputeAppService;
     @Autowired DisputeRepository disputeRepository;
     @Autowired TaskRepository taskRepository;
@@ -172,8 +177,7 @@ class TaskSettlementIntegrationTest {
         UUID builder = newUser("BUILDER");
         TaskModel task = seedReviewableTask(client, newAgentVersion(builder), "20.00");
 
-        reviewAppService.reject(task.id(), client, RejectReason.A_MISMATCH, "wrong format");
-
+        RejectionSteps.rejectThenArbitrate(context, task.id(), client, RejectReason.A_MISMATCH, "wrong format");
         TaskModel disputed = taskRepository.findById(task.id()).orElseThrow();
         assertThat(disputed.status()).isEqualTo(TaskStatus.DISPUTED);
         assertThat(disputed.rejectionReason()).isEqualTo("wrong format"); // set at dispute() time
@@ -187,7 +191,7 @@ class TaskSettlementIntegrationTest {
         assertThat(heldWallet.escrow()).isEqualTo(Money.of("20.00"));
 
         // Client accepts the proposed ruling -> settles exactly once -> full refund.
-        disputeAppService.acceptRuling(disputeId, client);
+        RulingSteps.acceptAsEverySide(context, disputeId);
 
         WalletModel clientWallet = walletRead.getByUserId(client);
         assertThat(clientWallet.available()).isEqualTo(Money.of("100.00"));

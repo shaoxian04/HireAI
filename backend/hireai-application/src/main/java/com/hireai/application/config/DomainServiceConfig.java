@@ -17,6 +17,10 @@ import com.hireai.domain.biz.reputation.service.ReputationScoringDomainService;
 import com.hireai.domain.biz.reputation.service.impl.ReputationScoringDomainServiceImpl;
 import com.hireai.domain.biz.task.routing.service.MatchingPolicy;
 import com.hireai.domain.biz.task.routing.service.RoutingMatchDomainService;
+import com.hireai.domain.biz.acceptance.coverage.service.OfferCoverageDomainService;
+import com.hireai.domain.biz.acceptance.coverage.service.impl.OfferCoverageDomainServiceImpl;
+import com.hireai.domain.biz.acceptance.extraction.service.RequirementExtractionDomainService;
+import com.hireai.domain.biz.acceptance.extraction.service.impl.RequirementExtractionDomainServiceImpl;
 import com.hireai.domain.biz.task.routing.service.impl.RoutingMatchDomainServiceImpl;
 import com.hireai.domain.biz.task.routing.service.RoutedFailoverDomainService;
 import com.hireai.domain.biz.task.routing.service.impl.RoutedFailoverDomainServiceImpl;
@@ -31,6 +35,8 @@ import com.hireai.domain.biz.offering.agent.service.AgentSigningSecretGenerator;
 import com.hireai.domain.biz.offering.agent.service.impl.AgentSigningSecretGeneratorImpl;
 import com.hireai.domain.biz.task.service.TaskSubmitDomainService;
 import com.hireai.domain.biz.task.service.impl.TaskSubmitDomainServiceImpl;
+import com.hireai.domain.biz.ledger.settlement.service.DisputeFeeDomainService;
+import com.hireai.domain.biz.ledger.settlement.service.impl.DisputeFeeDomainServiceImpl;
 import com.hireai.domain.biz.ledger.settlement.service.SettlementDomainService;
 import com.hireai.domain.biz.ledger.wallet.service.WalletFreezeDomainService;
 import com.hireai.domain.biz.ledger.wallet.service.WalletTopUpDomainService;
@@ -81,8 +87,19 @@ public class DomainServiceConfig {
     }
 
     @Bean
-    public RoutingMatchDomainService routingMatchDomainService(MatchingPolicy matchingPolicy) {
-        return new RoutingMatchDomainServiceImpl(matchingPolicy, new SecureRandom());
+    public OfferCoverageDomainService offerCoverageDomainService() {
+        return new OfferCoverageDomainServiceImpl();
+    }
+
+    @Bean
+    public RequirementExtractionDomainService requirementExtractionDomainService() {
+        return new RequirementExtractionDomainServiceImpl();
+    }
+
+    @Bean
+    public RoutingMatchDomainService routingMatchDomainService(MatchingPolicy matchingPolicy,
+                                                               OfferCoverageDomainService offerCoverageDomainService) {
+        return new RoutingMatchDomainServiceImpl(matchingPolicy, new SecureRandom(), offerCoverageDomainService);
     }
 
     @Bean
@@ -133,6 +150,13 @@ public class DomainServiceConfig {
     @Bean
     public SettlementDomainService settlementDomainService() {
         return new SettlementDomainServiceImpl();
+    }
+
+    @Bean
+    public DisputeFeeDomainService disputeFeeDomainService(
+            @org.springframework.beans.factory.annotation.Value("${hireai.arbitration.fee-cap-share:0.20}")
+            java.math.BigDecimal capShare) {
+        return new DisputeFeeDomainServiceImpl(capShare);
     }
 
     @Bean

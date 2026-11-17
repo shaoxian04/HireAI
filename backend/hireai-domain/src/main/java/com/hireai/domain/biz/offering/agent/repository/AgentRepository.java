@@ -44,6 +44,12 @@ public interface AgentRepository {
      */
     Optional<String> findSigningSecretByVersionId(UUID agentVersionId);
 
+    /**
+     * The webhook URL of this agent version, for platform-to-Agent notices after dispatch (a
+     * rejection notice, #95). No status filter: the version that did the work is the one notified.
+     */
+    Optional<String> findWebhookUrlByVersionId(UUID agentVersionId);
+
     Optional<AgentModel> findById(UUID agentId);
 
     List<AgentModel> findByOwnerId(UUID ownerId, AgentQuery query);

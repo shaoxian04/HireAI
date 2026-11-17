@@ -9,14 +9,27 @@ import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
 import { StatusTrack } from "@/components/StatusTrack";
 import { InspectionReport } from "@/components/InspectionReport";
+import { ReworkNotice } from "@/components/ReworkNotice";
+import { AiReviewReport } from "@/components/AiReviewReport";
 import { TaskFailurePanel } from "@/components/TaskFailurePanel";
+import { DeliverablePanel, LegacyDeliverableLink } from "@/components/DeliverablePanel";
 import WebhookDeliveryStatus from "@/components/WebhookDeliveryStatus";
-import type { TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO, ValidationReportDTO } from "@/lib/types";
+import type {
+  TaskDTO, TaskResultDTO, TaskStatus, DisputeOutcomeDTO, ValidationReportDTO, DispatchAttemptDTO,
+} from "@/lib/types";
 import { Badge, Skeleton } from "@/components/ui";
 import { ResultView } from "@/components/ResultView";
 import { ResultReviewBar } from "@/components/ResultReviewBar";
 import { RatingPrompt } from "@/components/RatingPrompt";
 import { DisputeProgressPanel } from "@/components/DisputeProgressPanel";
+import { ContractPanel } from "@/components/AcceptanceTerms";
+import { ItemsPanel } from "@/components/ItemsPanel";
+import { InspectionCard } from "@/components/sampling/InspectionSummary";
+import { settlementStamp } from "@/lib/settlement";
+import { ReceiptsPanel } from "@/components/ReceiptsPanel";
+import { VersionFallbackNotice } from "@/components/VersionFallbackNotice";
+import { DispatchHistory } from "@/components/ContractDeclines";
+import { AgentResponsePending, ClientDecisionPanel, RevisedResultNotice } from "@/components/RejectionPanel";
 
 const POLL_MS = 2000;
 /** Polling slows down while nothing changes (a long-running task), up to this ceiling. */
@@ -46,9 +59,14 @@ function humanize(v: string | null | undefined): string {
 const RESULT_READY: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
   "RESULT_RECEIVED",
   "PENDING_REVIEW",
+  "AWAITING_AGENT_RESPONSE",
+  "AWAITING_CLIENT_DECISION",
   "DISPUTED",
   "RESOLVED",
 ]);
+
+/** Item statuses that have settled (paid or refunded), so each has a receipt. */
+const SETTLED_ITEM: ReadonlySet<string> = new Set(["ACCEPTED", "SPEC_VIOLATION", "FAILED"]);
 
 /** Terminal auto-refund failures that get a plain-English panel. */
 const TERMINAL_FAILURE: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
@@ -66,6 +84,7 @@ function TaskDetail() {
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<DisputeOutcomeDTO | null>(null);
   const [validation, setValidation] = useState<ValidationReportDTO | null>(null);
+  const [attempts, setAttempts] = useState<DispatchAttemptDTO[]>([]);
 
   // Keep the latest result in a ref so the interval closure can read it without re-subscribing.
   const resultRef = useRef<TaskResultDTO | null>(null);
@@ -94,15 +113,34 @@ function TaskDetail() {
   // The validation report: on a spec-violation it explains what failed (the failure drawer); once
   // a result is shown it is the inspection report above it. Best-effort: a 404 (no report) or any
   // error just leaves both off.
+  // While the task is back with its agent (QUEUED/EXECUTING) it may be a rework (#98): the report
+  // then says what failed. A first dispatch has no report yet, so that fetch is a quiet 404.
   const hasResult = !!result;
+  const reworkable = task?.status === "QUEUED" || task?.status === "EXECUTING";
   useEffect(() => {
-    if (task?.status !== "SPEC_VIOLATION" && !hasResult) return;
+    if (task?.status !== "SPEC_VIOLATION" && !hasResult && !reworkable) return;
     let cancelled = false;
-    api<ValidationReportDTO>(`/tasks/${id}/validation`)
-      .then((v) => { if (!cancelled) setValidation(v); })
-      .catch(() => { /* no report — panel still renders without the drawer */ });
+    const fetchReport = () =>
+      api<ValidationReportDTO>(`/tasks/${id}/validation`)
+        .then((v) => { if (!cancelled) setValidation(v); })
+        .catch(() => { /* no report — panel still renders without the drawer */ });
+    fetchReport();
+    // A rework can happen without the status the poller sees ever changing (EXECUTING → a result
+    // the checks reject → EXECUTING again), so the report is re-read while the task is with its agent.
+    const t = reworkable ? setInterval(fetchReport, POLL_MS) : undefined;
+    return () => { cancelled = true; if (t) clearInterval(t); };
+  }, [task?.status, id, hasResult, reworkable]);
+
+  // The hand-off history (#75, #93): re-read whenever the status moves, so a failover or a declined
+  // contract shows up. Best-effort: on any error the section just stays off.
+  useEffect(() => {
+    if (!task?.status) return;
+    let cancelled = false;
+    api<DispatchAttemptDTO[]>(`/tasks/${id}/attempts`)
+      .then((a) => { if (!cancelled) setAttempts(a ?? []); })
+      .catch(() => { /* no history shown */ });
     return () => { cancelled = true; };
-  }, [task?.status, id, hasResult]);
+  }, [task?.status, id]);
 
   // While the task is under dispute, poll the outcome so the client sees it move live through
   // ARBITRATING -> RULED (accept/appeal) -> ESCALATED -> RESOLVED.
@@ -154,8 +192,13 @@ function TaskDetail() {
         if (cancelled) return;
         setTask(t);
 
-        // The validated agent result exists from RESULT_RECEIVED onward; fetch it once.
-        if (RESULT_READY.has(t.status) && !resultRef.current) {
+        // A revision (#95) replaces the result: fetch it again when the task returns to review.
+        if (t.status === "PENDING_REVIEW" && lastStatus !== null && lastStatus !== "PENDING_REVIEW") {
+          resultRef.current = null;
+        }
+        // The validated agent result exists from RESULT_RECEIVED onward; fetch it once. A multi-Item
+        // task's results arrive per Item on the task itself, so there is no single result to fetch.
+        if (RESULT_READY.has(t.status) && !resultRef.current && !t.items?.length) {
           try {
             const r = await api<TaskResultDTO>(`/tasks/${id}/result`);
             if (cancelled) return;
@@ -175,7 +218,7 @@ function TaskDetail() {
         if (TERMINAL.has(t.status)) stop();
 
         // waiting on a result row that is about to land is not "nothing changing"
-        const awaitingResult = RESULT_READY.has(t.status) && !resultRef.current;
+        const awaitingResult = RESULT_READY.has(t.status) && !resultRef.current && !t.items?.length;
         if (t.status !== lastStatus || awaitingResult) {
           delay = POLL_MS;
           unchanged = 0;
@@ -225,8 +268,11 @@ function TaskDetail() {
     );
   }
 
+  const multiItem = !!task.items?.length;
+
   const inFlight =
     !result &&
+    !(multiItem && RESULT_READY.has(task.status)) &&
     !RESULT_READY.has(task.status) &&
     !TERMINAL.has(task.status) &&
     task.status !== "AWAITING_AGENT";
@@ -234,6 +280,7 @@ function TaskDetail() {
   // Once a task is in a dispute (or resolved via one), the execution pipeline is history — the
   // dispute timeline below tells the story instead.
   const inDispute = task.status === "DISPUTED" || !!outcome;
+  const settledItems = (task.items ?? []).filter((i) => SETTLED_ITEM.has(i.status)).length;
 
   // Where the budget is now. A terminal failure is auto-refunded, so it is no longer "in escrow".
   const money = task.resolution
@@ -261,6 +308,14 @@ function TaskDetail() {
               <dt className="text-xs text-dim">Budget</dt>
               <dd className="tabular mt-0.5 text-base font-bold text-fg">{task.budget} credits</dd>
             </div>
+            {multiItem && (
+              <div>
+                <dt className="text-xs text-dim">Items</dt>
+                <dd className="tabular mt-0.5 text-base font-bold text-fg">
+                  {task.itemCount} × {Number(task.itemPrice).toFixed(2)} cr
+                </dd>
+              </div>
+            )}
             <div>
               <dt className="text-xs text-dim">Money</dt>
               <dd
@@ -281,6 +336,21 @@ function TaskDetail() {
           <RichText text={task.description} className="mt-2 text-[0.9375rem] leading-relaxed text-muted" />
         </section>
 
+        {/* The Contract frozen at submit: what the result is accepted against (ADR 0009). */}
+        <section aria-labelledby="contract-h" className="border-t border-line px-6 py-5">
+          <h2 id="contract-h" className="eyebrow">
+            Contract
+          </h2>
+          <div className="mt-2">
+            <ContractPanel contract={task.contract} />
+            {task.templateFallback && (
+              <div className="mt-3">
+                <VersionFallbackNotice fallback={task.templateFallback} context="task" />
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* pipeline — hidden once the task is in dispute; the dispute timeline replaces it */}
         {!inDispute && (
           <div className="border-t border-line bg-surface-2 px-6 py-5">
@@ -295,6 +365,8 @@ function TaskDetail() {
         )}
       </article>
 
+      {reworkable && <ReworkNotice report={validation} />}
+
       {/* Renders nothing for a WEB task or an API task with no webhook subscription. */}
       <WebhookDeliveryStatus taskId={task.id} />
 
@@ -302,9 +374,10 @@ function TaskDetail() {
         <section aria-live="polite" className="rounded-lg border border-amber/30 bg-amber/10 p-4">
           <h2 className="text-sm font-semibold text-amber">Awaiting an agent</h2>
           <p className="mt-1.5 text-sm text-muted">
-            No agent takes this category within your budget yet. We&apos;ll check again shortly; if
-            none turns up, the task is cancelled and your credits are refunded.
+            No agent takes this category and its output terms within your budget yet. We&apos;ll check
+            again shortly; if none turns up, the task is cancelled and your credits are refunded.
           </p>
+          {task.failureDetail && <p className="mt-2 text-sm text-fg">{task.failureDetail}</p>}
         </section>
       )}
 
@@ -315,10 +388,16 @@ function TaskDetail() {
           failureReason={task.failureReason}
           budget={task.budget}
           detail={validation}
+          failureDetail={task.failureDetail}
         />
       )}
 
-      {!result && RESULT_READY.has(task.status) && (
+      <DispatchHistory attempts={attempts} />
+
+      {multiItem && <InspectionCard task={task} />}
+      {multiItem && <ItemsPanel task={task} onChange={setTask} />}
+
+      {!result && !multiItem && RESULT_READY.has(task.status) && (
         <section
           role="status"
           className="flex items-start gap-3 rounded-xl border border-dashed border-line-bright bg-surface px-5 py-4"
@@ -339,7 +418,14 @@ function TaskDetail() {
           report={validation}
           spec={task.outputSpec}
           awaitingYou={task.status === "PENDING_REVIEW"}
+          autoAccepted={!!task.autoAccepted}
+          contract={task.contract}
+          extraction={task.extraction}
         />
+      )}
+
+      {task.contract?.aiReview && (
+        <AiReviewReport taskId={task.id} taskStatus={task.status} frozen={task.contract.aiReview} />
       )}
 
       {result && (
@@ -351,42 +437,114 @@ function TaskDetail() {
             </p>
           </div>
           <ResultView payload={result.resultPayloadJson} />
-          {result.resultUrl && (
-            <a
-              href={result.resultUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-medium text-accent underline-offset-4 hover:underline"
-            >
-              Open deliverable ↗
-            </a>
+          {result.deliverable ? (
+            <DeliverablePanel
+              deliverable={result.deliverable}
+              sourceUrl={result.resultUrl}
+              downloadPath={`/tasks/${task.id}/deliverable`}
+              fileStem={`deliverable-${task.id}`}
+            />
+          ) : (
+            result.resultUrl && <LegacyDeliverableLink url={result.resultUrl} />
+          )}
+          {task.status === "PENDING_REVIEW" && task.rejection?.response === "REVISE" && (
+            <RevisedResultNotice rejection={task.rejection} />
+          )}
+          {task.status === "AWAITING_AGENT_RESPONSE" && task.rejection && (
+            <AgentResponsePending rejection={task.rejection} />
+          )}
+          {task.status === "AWAITING_CLIENT_DECISION" && task.rejection && (
+            <ClientDecisionPanel
+              taskId={task.id}
+              budget={task.budget}
+              rejection={task.rejection}
+              onDecided={setTask}
+            />
           )}
           {task.status === "PENDING_REVIEW" && (
-            <ResultReviewBar taskId={task.id} budget={task.budget} onResolved={setTask} />
+            <ResultReviewBar
+              taskId={task.id}
+              budget={task.budget}
+              reviewDeadline={task.reviewDeadline}
+              onResolved={setTask}
+            />
           )}
         </section>
       )}
 
-      {task.resolution && (
+      {task.resolution && multiItem && (
+        <section aria-live="polite" className="panel relative overflow-hidden p-6">
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <div className="space-y-1">
+              <h2 className="eyebrow">Settlement</h2>
+              <p className="text-[0.9375rem] text-fg">
+                <span className="tabular font-bold text-green">{Number(task.payoutAmount ?? 0).toFixed(2)} cr</span>{" "}paid
+                to the builder for {task.items!.filter((i) => i.status === "ACCEPTED" || i.status === "PRO_RATA").length} of {task.itemCount} Items
+              </p>
+              {task.refundAmount ? (
+                <p className="text-sm text-muted">
+                  <span className="tabular font-semibold text-fg">{Number(task.refundAmount).toFixed(2)} cr</span>{" "}refunded
+                  to your wallet for the Items that weren&apos;t delivered as the contract asks.
+                </p>
+              ) : null}
+              {task.autoAccepted && (
+                <p className="text-sm text-muted">
+                  The Items you hadn&apos;t reviewed were accepted automatically when the review window closed.
+                </p>
+              )}
+            </div>
+            <SettlementStampMark task={task} />
+          </div>
+          {task.resolution === "ACCEPTED" && (
+            <div className="mt-5 border-t border-line pt-5">
+              <RatingPrompt taskId={task.id} />
+            </div>
+          )}
+        </section>
+      )}
+
+      {task.resolution && !multiItem && (
         <section aria-live="polite" className="panel relative overflow-hidden p-6">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div className="space-y-1">
               <h2 className="eyebrow">Settlement</h2>
               {task.resolution === "ACCEPTED" ? (
-                <p className="text-[0.9375rem] text-fg">
-                  <span className="tabular font-bold text-green">{task.payoutAmount} cr</span> paid to the builder
-                </p>
+                <>
+                  <p className="text-[0.9375rem] text-fg">
+                    <span className="tabular font-bold text-green">{Number(task.payoutAmount ?? 0).toFixed(2)} cr</span> paid to the builder
+                  </p>
+                  {task.autoAccepted && (
+                    <p className="text-sm text-muted">
+                      Accepted automatically: the review window closed before you decided.
+                    </p>
+                  )}
+                  {task.rejection?.decisionSilent && (
+                    <p className="text-sm text-muted">
+                      Accepted automatically: the agent stood by its result and you didn&apos;t decide in time.
+                    </p>
+                  )}
+                </>
+              ) : task.resolution === "PARTIALLY_ACCEPTED" ? (
+                <>
+                  <p className="text-[0.9375rem] text-fg">
+                    <span className="tabular font-bold text-green">{Number(task.payoutAmount ?? 0).toFixed(2)} cr</span> paid to the builder
+                    {" · "}<span className="tabular font-bold text-fg">{Number(task.refundAmount ?? 0).toFixed(2)} cr</span> refunded to your wallet
+                  </p>
+                  <p className="text-sm text-muted">The work was ruled partly fulfilled, so the price was split.</p>
+                </>
               ) : (
-                <p className="text-[0.9375rem] text-fg">
-                  <span className="tabular font-bold text-fg">{task.refundAmount} cr</span> refunded to your wallet
-                  {task.rejectionReason ? <span className="text-muted"> — “{task.rejectionReason}”</span> : null}
-                </p>
+                <>
+                  <p className="text-[0.9375rem] text-fg">
+                    <span className="tabular font-bold text-fg">{Number(task.refundAmount ?? 0).toFixed(2)} cr</span> refunded to your wallet
+                    {task.rejectionReason ? <span className="text-muted"> — “{task.rejectionReason}”</span> : null}
+                  </p>
+                  {task.rejection?.response === "CONCEDE" && (
+                    <p className="text-sm text-muted">The agent conceded your rejection.</p>
+                  )}
+                </>
               )}
             </div>
-            <span aria-hidden style={{ animationDelay: "250ms" }} className={`inspect-stamp stamp mr-2 ${task.resolution === "ACCEPTED" ? "text-green" : "text-fg"}`}>
-              {task.resolution === "ACCEPTED" ? "PAID" : "REFUNDED"}
-              <small>{task.resolution === "ACCEPTED" ? "work accepted" : "work rejected"}</small>
-            </span>
+            <SettlementStampMark task={task} />
           </div>
           {task.resolution === "ACCEPTED" && (
             // Rating is a separate call, so it can be skipped here and left later.
@@ -404,7 +562,25 @@ function TaskDetail() {
           onChange={setOutcome}
         />
       )}
+
+      {/* Receipts exist once something has settled: the whole task, or (multi-Item) any one Item. */}
+      {(TERMINAL.has(task.status) || settledItems > 0) && (
+        <ReceiptsPanel taskId={task.id} refreshKey={`${task.status}:${settledItems}`} />
+      )}
     </div>
+  );
+}
+
+const STAMP_TONE = { paid: "text-green", refunded: "text-fg", split: "text-violet" } as const;
+
+/** The Settlement card's stamp, always agreeing with how the task settled. */
+function SettlementStampMark({ task }: { task: TaskDTO }) {
+  const s = settlementStamp(task);
+  return (
+    <span aria-hidden style={{ animationDelay: "250ms" }} className={`inspect-stamp stamp mr-2 ${STAMP_TONE[s.tone]}`}>
+      {s.stamp}
+      <small>{s.note}</small>
+    </span>
   );
 }
 

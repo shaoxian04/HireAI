@@ -53,11 +53,14 @@ class RoutingAppServiceImplTest {
     private final DispatchAttemptRepository dispatchAttemptRepository = mock(DispatchAttemptRepository.class);
     private final RoutedFailoverDomainService routedFailoverDomainService = mock(RoutedFailoverDomainService.class);
     private final TaskTextEmbeddingAppService taskText = mock(TaskTextEmbeddingAppService.class);
+    private final com.hireai.application.biz.acceptance.TemplateReadAppService templateReadAppService =
+            mock(com.hireai.application.biz.acceptance.TemplateReadAppService.class);
 
     private final RoutingAppServiceImpl service = new RoutingAppServiceImpl(
             taskReadAppService, taskWriteAppService, agentRepository,
             routingMatchDomainService, taskDispatchPublisher, dispatchAttemptRepository,
-            routedFailoverDomainService, taskText, clock, new com.hireai.domain.biz.task.model.ExecutionGrace(60));
+            routedFailoverDomainService, templateReadAppService, taskText, clock, new com.hireai.domain.biz.task.model.ExecutionGrace(60), org.mockito.Mockito.mock(com.hireai.application.biz.acceptance.source.SourceSnapshotAppService.class,
+                    invocation -> invocation.getArgument(0)));
 
     // The task's adopted output spec snapshot (Invariant #4). In unit tests the view carries
     // this directly; candidates supply only webhookUrl/version identity.
@@ -93,7 +96,7 @@ class RoutingAppServiceImplTest {
         InOrder inOrder = inOrder(taskWriteAppService, taskDispatchPublisher);
         inOrder.verify(taskWriteAppService).assignAndQueue(eq(taskId), eq(versionId), any(Instant.class));
         inOrder.verify(taskDispatchPublisher).publish(any(DispatchMessage.class));
-        verify(taskWriteAppService, never()).markAwaitingAgent(any());
+        verify(taskWriteAppService, never()).markAwaitingAgent(any(), any());
     }
 
     @Test
@@ -178,7 +181,7 @@ class RoutingAppServiceImplTest {
 
         service.route(taskId);
 
-        verify(taskWriteAppService).markAwaitingAgent(taskId);
+        verify(taskWriteAppService).markAwaitingAgent(eq(taskId), any());
         verify(taskWriteAppService, never()).assignAndQueue(any(), any(), any());
         verify(taskDispatchPublisher, never()).publish(any());
     }
@@ -223,7 +226,7 @@ class RoutingAppServiceImplTest {
         UUID taskId = UUID.randomUUID();
         stubFailoverInputs(taskId, List.of());
         when(routedFailoverDomainService.selectNext(any(), any(), any())).thenReturn(Optional.empty());
-        when(routedFailoverDomainService.exhaustionReason(any(), any()))
+        when(routedFailoverDomainService.exhaustionReason(any(), any(), any()))
                 .thenReturn(FailureReason.NO_ALTERNATIVE_AGENT);
 
         TransactionSynchronizationManager.initSynchronization();

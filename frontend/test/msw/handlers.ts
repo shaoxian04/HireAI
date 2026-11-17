@@ -209,11 +209,16 @@ export const handlers = [
   // Default: a task has no validation report unless a test overrides this (only fetched on
   // SPEC_VIOLATION). Keeps onUnhandledRequest:"error" happy for the failure-panel path.
   http.get("*/api/tasks/:id/validation", () => fail("NOT_FOUND", "No validation report", 404)),
+  // The hand-off history (#93): empty by default, so the task page shows no Hand-offs section.
+  http.get("*/api/tasks/:id/attempts", () => ok([])),
 
   // Default: no webhook deliveries for this task (WEB task / no API subscription) — the
   // WebhookDeliveryStatus indicator mounts unconditionally on the task-detail page, so every
   // taskDetail-family test needs this handled under onUnhandledRequest:"error".
   http.get("*/api/webhooks/deliveries", () => ok([])),
+  // No Engagements by default (the booking page and the builder console ask).
+  http.get("*/api/engagements", () => ok([])),
+  http.get("*/api/engagements/incoming", () => ok([])),
 
   // ── Dispute lifecycle handlers (client-facing accept/appeal) ──
   // Default empty list — Nav renders on nearly every authenticated page and now calls
@@ -285,6 +290,19 @@ export const handlers = [
     if (category && !CARD.categories.includes(category)) return ok([]);
     return ok([CARD]);
   }),
+  http.get("*/api/catalogue/templates", () => ok(TEMPLATES)),
+  http.get("*/api/catalogue/review-windows", () =>
+    ok({ reviewSeconds: 86400, agentResponseSeconds: 7200, clientDecisionSeconds: 86400 }),
+  ),
+  // Requirement extraction (#100): by default it finds nothing, so the base Contract comes back as is.
+  http.post("*/api/contracts/draft", async ({ request }) => {
+    const body = (await request.json()) as { template?: string };
+    const template = body.template ?? "text_basic";
+    return ok({
+      contract: { template, version: 1, params: {} },
+      extraction: { template, version: 1, status: "EXTRACTED", requirements: [] },
+    });
+  }),
   http.get("*/api/catalogue/categories", () =>
     ok([
       { category: "summarisation", label: "Summarisation", agentCount: 1 },
@@ -300,7 +318,18 @@ export const handlers = [
           sampleOutput: '{"summary":"Example output"}',
           galleryUrls: [],
           outputSpec: { format: "JSON", schema: "{}", acceptanceCriteria: "valid JSON" },
-          stats: { requestCount: 7, completedCount: 6, successRate: 0.857, avgTurnaroundSeconds: 42 },
+          offer: {
+            price: 12,
+            terms: [
+              {
+                template: "file_basic",
+                version: 1,
+                params: { max_bytes: { bound: 10485760 }, media_types: { oneOf: ["application/pdf"] } },
+              },
+            ],
+          },
+          stats: { requestCount: 7, completedCount: 6, successRate: 0.857, avgTurnaroundSeconds: 42,
+            contractDeclines: { declined: 1, answered: 6, rate: 1 / 6 } },
           reviews: [
             {
               id: "rev-1",
@@ -369,6 +398,7 @@ export const handlers = [
       agentsTotal: 2,
       escrowHeld: 20,
       commissionEarned: 1.5,
+      aiReviewFeesEarned: 0.4,
     }),
   ),
   http.get("*/api/admin/tasks", () => ok([])),
@@ -409,7 +439,7 @@ export const handlers = [
       builderName: "builder",
       agentReputation: 55,
       agentPrice: 10,
-      outputSpecJson: '{"format":"TEXT"}',
+      contractJson: '{"template":"text_basic","version":1,"params":{"max_length":800}}',
       resultPayloadJson: '{"summary":"..."}',
       resultUrl: null,
       agentStatus: "COMPLETED",
@@ -421,6 +451,10 @@ export const handlers = [
         notFulfilledRefund: 40,
         partialBuilderNet: 17,
         partialClientRefund: 20,
+        fulfilledClientFees: 3,
+        notFulfilledBuilderFees: 3,
+        partialClientFees: 1.5,
+        partialBuilderFees: 1.5,
       },
       rulings: [],
     }),
@@ -445,7 +479,7 @@ export const handlers = [
       builderName: "builder",
       agentReputation: 55,
       agentPrice: 10,
-      outputSpecJson: '{"format":"TEXT"}',
+      contractJson: '{"template":"text_basic","version":1,"params":{"max_length":800}}',
       resultPayloadJson: '{"summary":"..."}',
       resultUrl: null,
       agentStatus: "COMPLETED",
@@ -457,6 +491,10 @@ export const handlers = [
         notFulfilledRefund: 40,
         partialBuilderNet: 17,
         partialClientRefund: 20,
+        fulfilledClientFees: 3,
+        notFulfilledBuilderFees: 3,
+        partialClientFees: 1.5,
+        partialBuilderFees: 1.5,
       },
       rulings: [
         {
@@ -626,3 +664,25 @@ export const manageHandlers = [
 
 export const server = setupServer(...handlers, ...manageHandlers);
 export { ok, fail };
+
+/** Two published Templates for forms that offer output terms (#91). */
+export const TEMPLATES = [
+  {
+    key: "text_basic", version: 1, title: "Text", description: "A plain-text result.", outputShape: "TEXT",
+    checks: [], parameters: [], expectationMode: "NONE",
+    rulingSettlement: { FULFILLED: 1, PARTIALLY_FULFILLED: 0.5, NOT_FULFILLED: 0 },
+    status: "ACTIVE", publishedAt: "2026-11-15T00:00:00Z",
+  },
+  {
+    key: "file_basic", version: 1, title: "File", description: "A delivered file.", outputShape: "FILE",
+    checks: [], expectationMode: "NONE",
+    parameters: [
+      { name: "max_bytes", label: "Largest file accepted", description: null, comparison: "min",
+        bounds: { minimum: 1, maximum: 104857600 } },
+      { name: "media_types", label: "Accepted file types", description: null, comparison: "subset",
+        bounds: { allowedValues: ["application/pdf", "image/png"] } },
+    ],
+    rulingSettlement: { FULFILLED: 1, PARTIALLY_FULFILLED: 0.5, NOT_FULFILLED: 0 },
+    status: "ACTIVE", publishedAt: "2026-11-15T00:00:00Z",
+  },
+];

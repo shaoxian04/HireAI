@@ -45,6 +45,14 @@ describe("ShortlistPanel", () => {
     expect(container.querySelector('img[src="https://cdn.test/l.png"]')).toBeTruthy();
   });
 
+  it("shows each agent's public contract-decline rate", () => {
+    render(<ShortlistPanel open budget={30} onSelect={noop} onClose={noop}
+      shortlist={[opt({ agentVersionId: "v1", contractDeclines: { declined: 1, answered: 4, rate: 0.25 } })]}
+      nearMisses={[opt({ agentVersionId: "v2", price: 40, contractDeclines: { declined: 0, answered: 0, rate: null } })]} />);
+    expect(screen.getByText(/declined terms on/i)).toHaveTextContent("Declined terms on 1 of 4 tasks (25%)");
+    expect(screen.getByText("No terms answered yet")).toBeInTheDocument();
+  });
+
   it("shows the empty state when both lists are empty", () => {
     render(<ShortlistPanel open budget={30} shortlist={[]} nearMisses={[]} onSelect={noop} onClose={noop} />);
     expect(screen.getByText(/no agents match/i)).toBeTruthy();
@@ -71,5 +79,51 @@ describe("ShortlistPanel", () => {
     render(<ShortlistPanel open budget={30} shortlist={[opt({})]} nearMisses={[]} onSelect={noop} onClose={onClose} />);
     fireEvent.click(screen.getByRole("button", { name: /close/i }));
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe("ShortlistPanel — no-match explanation (#91)", () => {
+  const noMatch = {
+    summary: "s",
+    exclusions: [
+      { blocker: "PARAMETER" as const, parameter: "max_bytes", agents: 3 },
+      { blocker: "RELEVANCE_FLOOR" as const, parameter: null, agents: 1 },
+      { blocker: "TEMPLATE" as const, parameter: null, agents: 1 },
+    ],
+    suggestions: [{ parameter: "max_bytes", agents: 2 }],
+  };
+
+  it("names each blocking term with its agent count and offers the relax as the Client's choice", () => {
+    const onRelax = vi.fn();
+    render(<ShortlistPanel open budget={30} shortlist={[]} nearMisses={[]} onSelect={noop} onClose={noop}
+      noMatch={noMatch} labelFor={(p) => (p === "max_bytes" ? "Largest file accepted" : p)} onRelax={onRelax} />);
+
+    expect(screen.getByText(/no agent accepts these terms/i)).toBeTruthy();
+    expect(screen.getByText("Largest file accepted")).toBeTruthy();
+    expect(screen.getByText("3 agents")).toBeTruthy();
+    expect(screen.getByText(/describe work like yours/i)).toBeTruthy();
+    expect(screen.getByText(/deliver this kind of output/i)).toBeTruthy();
+    expect(screen.queryByText(/no agents match this category/i)).toBeNull();
+    expect(onRelax).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /drop largest file accepted → 2 agents/i }));
+    expect(onRelax).toHaveBeenCalledWith("max_bytes");
+    expect(screen.getByText(/ruled out by your output terms/i)).toBeTruthy();
+  });
+
+  it("says the terms came from the description when they were extracted (#101)", () => {
+    render(<ShortlistPanel open budget={30} shortlist={[]} nearMisses={[]} onSelect={noop} onClose={noop}
+      noMatch={noMatch} termsExtracted />);
+
+    expect(screen.getByText(/ruled out by the terms taken from your description/i)).toBeTruthy();
+    expect(screen.queryByText(/your output terms/i)).toBeNull();
+  });
+
+  it("keeps the close-match copy when only the relevance floor ruled agents out", () => {
+    render(<ShortlistPanel open budget={30} shortlist={[]} nearMisses={[]} onSelect={noop} onClose={noop}
+      noCloseMatch noMatch={{ summary: "s", suggestions: [],
+        exclusions: [{ blocker: "RELEVANCE_FLOOR", parameter: null, agents: 2 }] }} />);
+    expect(screen.getByText(/no agent matches this task closely/i)).toBeTruthy();
+    expect(screen.queryByText(/no agent accepts these terms/i)).toBeNull();
   });
 });

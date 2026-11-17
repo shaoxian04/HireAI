@@ -25,6 +25,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import com.hireai.support.dispute.RulingSteps;
+import com.hireai.support.rejection.RejectionSteps;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -110,6 +113,7 @@ class ArbitrationTransportIntegrationTest {
 
     @Autowired TestRestTemplate rest;
     @Autowired TaskReviewAppService reviewAppService;
+    @Autowired ApplicationContext context;
     @Autowired DisputeAppService disputeAppService;
     @Autowired TaskRepository taskRepository;
     @Autowired DisputeRepository disputeRepository;
@@ -214,8 +218,7 @@ class ArbitrationTransportIntegrationTest {
         Fixture f = seedPendingReview(Money.of("100.00"));
 
         // Drive to ARBITRATING in-process (no HTTP; reject is permitted via the app service directly)
-        reviewAppService.reject(f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "wrong output");
-
+        RejectionSteps.rejectThenArbitrate(context, f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "wrong output");
         // Assert ARBITRATING state: task DISPUTED, dispute ARBITRATING, escrow held, no settlement
         TaskModel task = taskRepository.findById(f.taskId()).orElseThrow();
         assertThat(task.status()).isEqualTo(TaskStatus.DISPUTED);
@@ -246,7 +249,7 @@ class ArbitrationTransportIntegrationTest {
         assertThat(clientAfterRuling.escrow()).isEqualTo(Money.of("100.00")); // still held
 
         // Client accepts the proposed ruling -> settles exactly once.
-        disputeAppService.acceptRuling(dispute.id(), f.clientId());
+        RulingSteps.acceptAsEverySide(context, dispute.id());
 
         // Assert full resolution + refund
         TaskModel resolved = taskRepository.findById(f.taskId()).orElseThrow();
@@ -276,7 +279,7 @@ class ArbitrationTransportIntegrationTest {
     @Test
     void firstRulingWins_secondCallbackIsIdempotent() {
         Fixture f = seedPendingReview(Money.of("100.00"));
-        reviewAppService.reject(f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "idempotency test");
+        RejectionSteps.rejectThenArbitrate(context, f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "idempotency test");
         DisputeModel dispute = disputeRepository.findByTaskId(f.taskId()).orElseThrow();
 
         // First ruling proposes -> RULED, no settlement yet.
@@ -287,7 +290,7 @@ class ArbitrationTransportIntegrationTest {
         assertThat(settlementRepository.findByTaskId(f.taskId())).isEmpty();
 
         // Client accepts the proposed ruling -> settles exactly once.
-        disputeAppService.acceptRuling(dispute.id(), f.clientId());
+        RulingSteps.acceptAsEverySide(context, dispute.id());
 
         WalletModel afterFirst = walletRepository.findByUserId(f.clientId()).orElseThrow();
         int settlementCount = jdbc.queryForObject(
@@ -326,7 +329,7 @@ class ArbitrationTransportIntegrationTest {
     @Test
     void callbackAuth_wrongOrAbsentSecretIs401() {
         Fixture f = seedPendingReview(Money.of("100.00"));
-        reviewAppService.reject(f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "auth guard test");
+        RejectionSteps.rejectThenArbitrate(context, f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "auth guard test");
         DisputeModel dispute = disputeRepository.findByTaskId(f.taskId()).orElseThrow();
         assertThat(dispute.status()).isEqualTo(DisputeStatus.ARBITRATING);
 
@@ -359,7 +362,7 @@ class ArbitrationTransportIntegrationTest {
     @Test
     void dlqEscalatesDisputeToAdmin() {
         Fixture f = seedPendingReview(Money.of("100.00"));
-        reviewAppService.reject(f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "dlq escalate test");
+        RejectionSteps.rejectThenArbitrate(context, f.taskId(), f.clientId(), RejectReason.A_MISMATCH, "dlq escalate test");
         DisputeModel dispute = disputeRepository.findByTaskId(f.taskId()).orElseThrow();
         assertThat(dispute.status()).isEqualTo(DisputeStatus.ARBITRATING);
 
@@ -375,7 +378,8 @@ class ArbitrationTransportIntegrationTest {
                 null,
                 "{\"summary\":\"ok\"}",
                 null,
-                RejectReason.A_MISMATCH.name());
+                RejectReason.A_MISMATCH.name(),
+                null);
         rabbitTemplate.convertAndSend("", ArbitrationQueues.DLQ, dlqMsg);
 
         // Awaitility: poll until ArbitrationDlqListener escalates the dispute (async consumer)

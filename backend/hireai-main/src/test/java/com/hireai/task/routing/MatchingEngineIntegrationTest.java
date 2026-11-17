@@ -169,8 +169,8 @@ class MatchingEngineIntegrationTest {
      */
     private void seedFillerTasks(UUID clientId, UUID agentVersionId, String status, int count) {
         for (int i = 0; i < count; i++) {
-            jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, output_spec, status, " +
-                            "agent_version_id) VALUES (?, ?, 'filler', 'filler', 1.00, ?::jsonb, ?, ?)",
+            jdbc.update("INSERT INTO tasks (id, client_id, title, description, budget, contract, status, " +
+                            "agent_version_id) VALUES (?, ?, 'filler', 'filler', 1.00, contract_from_output_spec(?::jsonb), ?, ?)",
                     UUID.randomUUID(), clientId, "{\"format\":\"JSON\"}", status, agentVersionId);
         }
     }

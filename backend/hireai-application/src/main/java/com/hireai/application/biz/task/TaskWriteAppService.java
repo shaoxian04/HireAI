@@ -1,5 +1,6 @@
 package com.hireai.application.biz.task;
 
+import com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import org.jspecify.annotations.NonNull;
 import org.springframework.validation.annotation.Validated;
@@ -27,12 +28,24 @@ public interface TaskWriteAppService {
     UUID submitDirectlyBooked(@NonNull TaskSubmitInfo taskSubmitInfo, @NonNull UUID agentVersionId);
 
     /**
+     * Records what requirement extraction made of a mode-1 submit (spec S6). Joins the submit
+     * transaction (REQUIRED), so the record and the Task commit together.
+     */
+    void recordExtraction(@NonNull UUID taskId,
+                          @NonNull ExtractionRecord extraction);
+
+    /**
      * SUBMITTED/AWAITING_AGENT -> QUEUED, and stamps the execution deadline
      * (assignment time + agent maxExecutionSeconds + grace) used by the timeout sweeper.
      */
     void assignAndQueue(@NonNull UUID taskId, @NonNull UUID agentVersionId, @NonNull Instant executionDeadline);
 
-    void markAwaitingAgent(@NonNull UUID taskId);
+    /**
+     * SUBMITTED/AWAITING_AGENT -> AWAITING_AGENT, recording why nothing matched ({@code noMatchDetail},
+     * nullable; #91). It stays on the task as its failure detail if the re-match sweeper later cancels it
+     * with NO_ELIGIBLE_AGENT.
+     */
+    void markAwaitingAgent(@NonNull UUID taskId, String noMatchDetail);
 
     /** Re-match bookkeeping: increments and returns the task's match_attempts counter. */
     int registerMatchAttempt(@NonNull UUID taskId);
@@ -65,6 +78,14 @@ public interface TaskWriteAppService {
      */
     void reassign(@NonNull UUID taskId, @NonNull UUID newAgentVersionId, @NonNull Instant executionDeadline);
 
+    /**
+     * Rework (D17): RESULT_RECEIVED -> QUEUED for the same Agent, with a new execution deadline, and
+     * returns the deadline stamped. It is always later than the task's previous one (by a microsecond
+     * if need be), so each WorkOrder's deadline names its dispatch and a late mark-EXECUTING of an
+     * earlier send is recognised as stale. Joins the caller's row-locked transaction (MANDATORY).
+     */
+    Instant returnForRework(@NonNull UUID taskId, @NonNull Instant executionDeadline);
+
 
     /**
      * A dispatch failure before the Agent started ended the task (#58): QUEUED/EXECUTING -> FAILED
@@ -87,4 +108,10 @@ public interface TaskWriteAppService {
      * lock serialises every writer of the history, so the numbering cannot race.
      */
     void appendDispatchAttempt(@NonNull UUID taskId, @NonNull UUID agentVersionId, @NonNull DispatchOutcome outcome);
+
+    /**
+     * As {@link #appendDispatchAttempt}, for a {@code CONTRACT_DECLINED} attempt (#93) carrying the
+     * Agent's {@code reason} (nullable, untrusted; normalised by the domain model).
+     */
+    void appendContractDecline(@NonNull UUID taskId, @NonNull UUID agentVersionId, String reason);
 }

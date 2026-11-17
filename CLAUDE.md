@@ -41,7 +41,7 @@ These are needed on every task and are too important to risk being unread. Enfor
 1. **Escrow before execution.** Credits freeze on task submit and leave escrow only via an explicit, recorded settlement (release / refund / split). No dispatch without a successful freeze.
 2. **Append-only money & audit.** `ledger_entries` and `reputation_events` are append-only (DB triggers raise on UPDATE/DELETE). Corrections are compensating entries. Settlement and reputation must be fully reconstructable.
 3. **Deterministic money path.** The LLM may produce a dispute *ruling* but never moves credits. All settlement is computed deterministically in the domain layer from the ruling category.
-4. **The task's frozen output spec is the binding contract.** The `output_spec` stored on the task at submit is the single contract used by both automated validation and arbitration: the Agent's own spec on direct bookings, the client's on routed tasks (see #46). Validation runs before any client sees a result.
+4. **The task's frozen Contract is the binding contract.** The `contract` frozen on the task at submit (a Template version and its parameters, ADR 0009) is the single contract used by automated acceptance, AI Review and arbitration, and an Agent is only ever given a Contract its Offer covers. Acceptance runs before any client sees a result. The retired `output_spec` is never read (see `docs/details/data-model.md`).
 5. **Server-side identity from JWT.** Derive the user ID from the JWT principal; path/body IDs require an explicit ownership check. Builders act only on Agents they own; clients only on their own tasks/wallet.
 6. **Signed, HTTPS-only Agent I/O.** Webhook URLs must be HTTPS and pass the SSRF guard (at registration, publish and every send; redirects never followed); dispatch carries a short-lived signed token, and every WorkOrder is HMAC-signed with the Agent's signing secret; result callbacks are rejected (401) unless the token is valid and unexpired **and** the raw body carries a valid, fresh (±5 min) HMAC signature made with the assigned Agent's current secret, verified before the body is parsed, and the signed body names that task. Extended to **outbound** client webhooks: SSRF-guarded target + HMAC signature (see `docs/details/programmatic-channel.md`).
 
@@ -100,8 +100,12 @@ Read the relevant file on demand — don't preload everything.
   **Read before a structural/convention change, or when questioning why something is the way it is.**
 - **`docs/details/data-model.md`** — aggregates, the 3NF schema, the append-only ledger, status enums.
   **Read before changing the schema, an entity, or the settlement/reputation logic.**
+- **`docs/details/sampling.md`** — sampling inspection of multi-Item Tasks: the lot-size table, the seeded draw, the reviewer, double sampling, rework and pro rata.
+  **Read before touching Items' review, sampling or the reviewer page.**
 - **`docs/details/programmatic-channel.md`** — the API-key machine channel end to end: key auth, idempotency, the two spend caps, open/direct submit, deterministic auto-settlement, signed push webhooks (transactional outbox + sweeper + SSRF guard), and the **MCP server facade + OpenAPI** (§6a — stdio tools over the same REST surface).
   **Read before touching API keys, the programmatic submit path, auto-settlement, webhooks, or the MCP facade.**
+- **`docs/details/receipts.md`** — signed receipts: when one is issued, the `hireai.receipt.v1` format, pseudonymous parties, how to verify, the W3C VC 2.0 and OTel exports, the Contract hash, signing-key config and rotation. JSON Schemas of these open formats: `docs/formats/`.
+  **Read before touching receipts, their keys, or anything a receipt cites.**
 - **`docs/details/demo-runbook.md`** — stand up the full local demo stack (Postgres + RabbitMQ + stub agent + HTTPS tunnel + backend + frontend) and the seed logins.
   **Read before running a live end-to-end demo.**
 - **`docs/details/frontend.md`** — Next.js app structure + conventions (the `/api/*` proxy, the `api()` client, the auth context + localStorage scheme, the UI kit, the route map).

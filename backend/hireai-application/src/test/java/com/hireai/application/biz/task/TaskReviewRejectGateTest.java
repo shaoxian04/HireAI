@@ -34,6 +34,8 @@ class TaskReviewRejectGateTest {
     DisputeAppService disputeAppService;
     ReputationWriteAppService reputationWriteAppService;
     TaskReviewAppServiceImpl service;
+    com.hireai.application.biz.acceptance.aireview.AiReviewAppService aiReview =
+            mock(com.hireai.application.biz.acceptance.aireview.AiReviewAppService.class);
 
     UUID clientId = UUID.randomUUID();
     UUID builderId = UUID.randomUUID();
@@ -48,7 +50,15 @@ class TaskReviewRejectGateTest {
         disputeAppService = mock(DisputeAppService.class);
         reputationWriteAppService = mock(ReputationWriteAppService.class);
         service = new TaskReviewAppServiceImpl(taskRepository, agentRepository, settlement,
-                disputeAppService, reputationWriteAppService);
+                new com.hireai.application.biz.task.impl.AcceptedSettlement(taskRepository, agentRepository,
+                        settlement, reputationWriteAppService),
+                mock(com.hireai.domain.biz.task.rejection.repository.RejectionRepository.class),
+                new com.hireai.domain.biz.task.rejection.model.RejectionWindows(
+                        java.time.Duration.ofHours(2), java.time.Duration.ofHours(24)),
+                mock(org.springframework.context.ApplicationEventPublisher.class),
+                java.time.Clock.systemUTC(), mock(com.hireai.application.biz.task.item.TaskItemAppService.class),
+                aiReview,
+                mock(com.hireai.application.biz.task.sampling.SamplingAppService.class));
 
         when(taskRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         when(agentRepository.findOwnerByVersionId(agentVersionId)).thenReturn(Optional.of(builderId));
@@ -73,13 +83,24 @@ class TaskReviewRejectGateTest {
     }
 
     @Test
-    void mismatchOpensDispute() {
+    void mismatchWaitsForTheAgentsResponseInsteadOfOpeningADispute() {
         service.reject(pendingReview.id(), clientId, RejectReason.A_MISMATCH, "wrong");
-        verify(disputeAppService).openDispute(any(TaskModel.class), eq(clientId), eq(RejectReason.A_MISMATCH));
+        verifyNoInteractions(disputeAppService);
         verify(settlement, never()).settleRejected(any(), any(), any());
         ArgumentCaptor<TaskModel> cap = ArgumentCaptor.forClass(TaskModel.class);
         verify(taskRepository).save(cap.capture());
-        assertThat(cap.getValue().status()).isEqualTo(TaskStatus.DISPUTED);
+        assertThat(cap.getValue().status()).isEqualTo(TaskStatus.AWAITING_AGENT_RESPONSE);
+    }
+
+    @Test
+    void aTaskADecisiveAiReviewIsSettlingCanBeNeitherAcceptedNorRejected() {
+        when(taskRepository.findById(pendingReview.id())).thenReturn(Optional.of(pendingReview));
+        when(aiReview.isDeciding(pendingReview.id())).thenReturn(true);
+        assertThatThrownBy(() -> service.reject(pendingReview.id(), clientId, RejectReason.D_CHANGED_MIND, "x"))
+                .isInstanceOf(DomainException.class).hasMessageContaining("verdict is final");
+        assertThatThrownBy(() -> service.accept(pendingReview.id(), clientId))
+                .isInstanceOf(DomainException.class).hasMessageContaining("verdict is final");
+        verifyNoInteractions(settlement);
     }
 
     @Test

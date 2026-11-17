@@ -41,6 +41,7 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
                    v.max_execution_seconds AS max_execution_seconds,
                    a.reputation_score    AS reputation_score,
                    v.output_spec         AS output_spec,
+                   v.offer               AS offer,
             """ + MatchCandidateSql.LOAD_COLUMNS + MatchCandidateSql.ELIGIBLE_FROM + """
               AND v.price <= :maxPrice
             ORDER BY a.reputation_score DESC
@@ -65,6 +66,7 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
                    v.max_execution_seconds AS max_execution_seconds,
                    a.reputation_score    AS reputation_score,
                    v.output_spec         AS output_spec,
+                   v.offer               AS offer,
                    v.max_concurrent      AS max_concurrent,
                    (SELECT COUNT(*) FROM tasks t
                       JOIN agent_versions av ON av.id = t.agent_version_id
@@ -122,6 +124,8 @@ public interface AgentVersionJpaRepository extends JpaRepository<AgentVersionDO,
         int getMaxExecutionSeconds();
         BigDecimal getReputationScore();
         String getOutputSpec();
+        /** The version's Offer as stored (V39 shape). */
+        String getOffer();
         Integer getMaxConcurrent();
         Long getInFlight();
         Long getSampleCount();

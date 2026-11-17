@@ -5,6 +5,8 @@ import com.hireai.application.biz.offering.agent.AgentReadAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
 import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.callback.AgentCallbackAppService;
+import com.hireai.application.biz.task.item.TaskItemAppService;
+import com.hireai.application.biz.task.sampling.SamplingAppService;
 import com.hireai.domain.biz.reputation.enums.ReputationEventType;
 import com.hireai.application.biz.task.webhookdelivery.WebhookOutboxAppService;
 import com.hireai.application.port.security.DispatchTokenClaims;
@@ -13,6 +15,7 @@ import com.hireai.application.port.security.DispatchTokenService;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.info.AgentResultInfo;
 import com.hireai.domain.biz.task.enums.FailureReason;
+import com.hireai.domain.biz.task.enums.TaskStatus;
 import com.hireai.domain.biz.task.model.TaskModel;
 import com.hireai.domain.biz.task.model.TaskResultModel;
 import com.hireai.domain.biz.task.repository.TaskRepository;
@@ -50,6 +53,9 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
     private final ReputationWriteAppService reputationWriteAppService;
     private final AgentReadAppService agentReadAppService;
     private final Clock clock;
+    private final TaskItemAppService taskItemAppService;
+    /** A web-channel multi-Item Task is inspected by sampling once its Items are judged (spec S8). */
+    private final SamplingAppService samplingAppService;
 
     @Override
     @Transactional(readOnly = true)
@@ -74,11 +80,7 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
         // callback's committed outcome instead of overwriting it.
         TaskModel task = taskRepository.findByIdForUpdate(taskId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "Task not found: " + taskId));
-        if (!claims.agentVersionId().equals(task.agentVersionId())) {
-            throw new DispatchTokenInvalidException(
-                    "Dispatch token agent version " + claims.agentVersionId()
-                            + " does not match task " + taskId + " assignment " + task.agentVersionId());
-        }
+        claims.requireAssignedVersion(task.agentVersionId());
         // A result is accepted while the task is QUEUED or EXECUTING: a fast Agent may call back
         // before the dispatch consumer marks the task EXECUTING. Any later status means the first
         // callback was already processed (or the task ended): first result wins, no-op. There is
@@ -101,20 +103,23 @@ public class AgentCallbackAppServiceImpl implements AgentCallbackAppService {
             log.info("Task {} agent reported {} -> FAILED (refunded)", taskId, result.agentStatus());
             return;
         }
+        if (taskItemAppService.hasItems(taskId)) {
+            // A multi-Item Task: each Item is judged and settled on its own (spec S3).
+            TaskModel judged = taskItemAppService.recordItemResults(task, result);
+            if (judged.status() == TaskStatus.PENDING_REVIEW) {
+                samplingAppService.onItemsDelivered(judged);
+            }
+            return;
+        }
         TaskResultModel resultModel = TaskResultModel.record(
                 taskId, result.agentStatus(), result.resultPayloadJson(), result.resultUrl());
         TaskModel recorded = task.recordResult(resultModel);
         taskRepository.save(recorded);
         log.info("Task {} result recorded; invoking validation gate (agentStatus={})", taskId, result.agentStatus());
-        validationAppService.validateAndGate(recorded);
+        validationAppService.validateAndGate(recorded, result.anomalies());
     }
 
     private DispatchTokenClaims verifyTokenFor(UUID taskId, String bearerToken) {
-        DispatchTokenClaims claims = dispatchTokenService.verify(bearerToken);
-        if (!claims.taskId().equals(taskId)) {
-            throw new DispatchTokenInvalidException(
-                    "Dispatch token task " + claims.taskId() + " does not match callback task " + taskId);
-        }
-        return claims;
+        return dispatchTokenService.verify(bearerToken).requireTask(taskId);
     }
 }

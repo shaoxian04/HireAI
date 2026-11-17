@@ -47,7 +47,8 @@ class AgentCallbackAppServiceImplTest {
     private AgentCallbackAppServiceImpl service() {
         return new AgentCallbackAppServiceImpl(taskRepository, dispatchTokenService,
                 validationAppService, settlementWriteAppService, webhookOutboxAppService,
-                reputationWriteAppService, agentReadAppService, java.time.Clock.systemUTC());
+                reputationWriteAppService, agentReadAppService, java.time.Clock.systemUTC(), org.mockito.Mockito.mock(com.hireai.application.biz.task.item.TaskItemAppService.class),
+                org.mockito.Mockito.mock(com.hireai.application.biz.task.sampling.SamplingAppService.class));
     }
 
     private TaskModel executingTask() {
@@ -77,7 +78,7 @@ class AgentCallbackAppServiceImplTest {
         assertThat(captor.getValue().result()).isNotNull();
         assertThat(captor.getValue().result().agentStatus()).isEqualTo("COMPLETED");
         assertThat(captor.getValue().result().resultPayloadJson()).isEqualTo("{\"k\":\"v\"}");
-        verify(validationAppService).validateAndGate(captor.getValue());
+        verify(validationAppService).validateAndGate(captor.getValue(), java.util.List.of());
     }
 
     @Test

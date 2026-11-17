@@ -22,10 +22,11 @@ public class OpenApiConfig {
         // public default doc never exposes admin routes. Keep the two lists in sync.
         return GroupedOpenApi.builder()
                 .group("programmatic")
-                .pathsToMatch("/api/tasks", "/api/tasks/**",
+                .pathsToMatch("/api/tasks", "/api/tasks/**", "/api/contracts/**",
                         "/api/keys", "/api/keys/**",
                         "/api/webhooks/**",
-                        "/api/catalogue/**")
+                        "/api/catalogue/**",
+                        "/api/receipts/**", "/api/receipt-keys")
                 .build();
     }
 

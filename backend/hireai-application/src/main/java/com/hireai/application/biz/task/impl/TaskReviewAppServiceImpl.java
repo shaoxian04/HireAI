@@ -1,22 +1,33 @@
 package com.hireai.application.biz.task.impl;
 
-import com.hireai.application.biz.adjudication.dispute.DisputeAppService;
 import com.hireai.application.biz.ledger.settlement.SettlementWriteAppService;
-import com.hireai.application.biz.reputation.ReputationWriteAppService;
 import com.hireai.application.biz.task.TaskReviewAppService;
-import com.hireai.domain.biz.reputation.enums.ReputationEventType;
+import com.hireai.application.biz.task.item.TaskItemAppService;
+import com.hireai.application.biz.task.sampling.SamplingAppService;
 import com.hireai.domain.biz.offering.agent.repository.AgentRepository;
 import com.hireai.domain.biz.task.enums.RejectReason;
+import com.hireai.domain.biz.task.enums.TaskStatus;
+import com.hireai.domain.biz.task.event.TaskRejectedDomainEvent;
+import com.hireai.domain.biz.task.info.ReviewWindowState;
+import com.hireai.domain.biz.task.model.ReviewWindow;
 import com.hireai.domain.biz.task.model.TaskModel;
+import com.hireai.domain.biz.task.rejection.enums.AgentResponse;
+import com.hireai.domain.biz.task.rejection.enums.ClientDecision;
+import com.hireai.domain.biz.task.rejection.model.RejectionModel;
+import com.hireai.domain.biz.task.rejection.model.RejectionWindows;
+import com.hireai.domain.biz.task.rejection.repository.RejectionRepository;
 import com.hireai.domain.biz.task.repository.TaskRepository;
-import com.hireai.domain.biz.ledger.settlement.info.SettlementBreakdown;
 import com.hireai.utility.exception.DomainException;
 import com.hireai.utility.result.ResultCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -28,30 +39,90 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
     private final TaskRepository taskRepository;
     private final AgentRepository agentRepository;
     private final SettlementWriteAppService settlementWriteAppService;
-    private final DisputeAppService disputeAppService;
-    private final ReputationWriteAppService reputationWriteAppService;
+    private final AcceptedSettlement acceptedSettlement;
+    private final RejectionRepository rejectionRepository;
+    private final RejectionWindows rejectionWindows;
+    private final ApplicationEventPublisher eventPublisher;
+    /** The app's Clock bean (ClockConfig); tests set it to pick the moment a window closes. */
+    private final Clock clock;
+    /** A multi-Item Task is accepted Item by Item (spec S3). */
+    private final TaskItemAppService taskItemAppService;
+    /** A decisive AI Review settles its Task alone (spec D38). */
+    private final com.hireai.application.biz.acceptance.aireview.AiReviewAppService aiReviewAppService;
+    /** A multi-Item Task's Items are judged through its sampling inspection (spec S8). */
+    private final SamplingAppService samplingAppService;
 
     @Override
     public UUID accept(UUID taskId, UUID clientId) {
         TaskModel task = loadOwned(taskId, clientId);
-        TaskModel resolved = task.accept(); // state guard: PENDING_REVIEW (caller passed the validation gate); exactly-once
-
-        UUID builderId = agentRepository.findOwnerByVersionId(task.agentVersionId())
-                .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND,
-                        "No agent owner for version " + task.agentVersionId()));
-
-        SettlementBreakdown breakdown =
-                settlementWriteAppService.settleAccepted(taskId, clientId, builderId, task.budget());
-
-        // Same transaction as the settlement: the score is never stale, so routing cannot act on a
-        // number that predates the outcome. No sweeper, no cache invalidation (ADR 0003).
-        reputationWriteAppService.recordOutcome(taskId, task.agentVersionId(), clientId,
-                ReputationEventType.TASK_ACCEPTED);
-
-        taskRepository.save(resolved);
-        log.info("Task {} accepted by client {}; payout {} to builder {}, commission {}",
-                taskId, clientId, breakdown.net(), builderId, breakdown.commission());
+        requireNotDecidedByAiReview(taskId);
+        if (taskItemAppService.hasItems(taskId)) {
+            requirePendingReview(task);
+            taskItemAppService.acceptAllAwaitingReview(task, false); // every Item still awaiting review
+            samplingAppService.waive(taskId); // the buyer accepted without waiting for the sample
+            log.info("Task {}: all Items awaiting review accepted by client {}", taskId, clientId);
+            return taskId;
+        }
+        if (task.status() == TaskStatus.AWAITING_CLIENT_DECISION) {
+            // Accepting a result the Agent stood by (#95). Once the decision window has closed the
+            // outcome is the same acceptance, recorded as the silence it already was.
+            RejectionModel rejection = requireLatestRejection(taskId);
+            Instant now = clock.instant();
+            rejectionRepository.save(rejection.decisionWindowClosed(now)
+                    ? rejection.acceptSilently(now)
+                    : rejection.decide(ClientDecision.ACCEPT, now));
+        }
+        acceptedSettlement.settle(task); // state guard: PENDING_REVIEW or AWAITING_CLIENT_DECISION; exactly-once
+        log.info("Task {} accepted by client {}", taskId, clientId);
         return taskId;
+    }
+
+    @Override
+    public void acceptItem(UUID taskId, UUID clientId, int itemNo) {
+        // Accepting one Item is the reviewer's pass on it: it pays the Item and, if it was sampled,
+        // counts towards the sample (spec S8).
+        samplingAppService.judge(taskId, clientId, itemNo, true, null, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> reviewExpiredTaskIds() {
+        return taskRepository.findIdsReviewExpired(clock.instant());
+    }
+
+    @Override
+    public void autoAcceptOne(UUID taskId) {
+        // Row-locked like accept/reject, so the sweeper and a Client clicking at the same moment
+        // serialize: whoever loses re-reads the resolved row and stops here instead of settling twice.
+        TaskModel task = taskRepository.findByIdForUpdate(taskId).orElse(null);
+        if (task == null || task.status() != TaskStatus.PENDING_REVIEW) {
+            return; // reviewed, or auto-accepted by an overlapping pass, since the id was read
+        }
+        Instant deadline = reviewDeadline(taskId);
+        if (!ReviewWindow.hasClosed(deadline, clock.instant())) {
+            return;
+        }
+        // The Client's silence counts as acceptance (spec D10): the same settlement as their click.
+        if (taskItemAppService.hasItems(taskId)) {
+            taskItemAppService.acceptAllAwaitingReview(task, true);
+            samplingAppService.waive(taskId);
+        } else {
+            acceptedSettlement.settle(task);
+        }
+        taskRepository.markReviewAutoAccepted(taskId);
+        log.info("Task {} auto-accepted: review window closed at {} without a review", taskId, deadline);
+    }
+
+    /** A decisive AI Review (API/MCP, D38) settles the Task itself, and is final: no one else decides it. */
+    private void requireNotDecidedByAiReview(UUID taskId) {
+        if (aiReviewAppService.isDeciding(taskId)) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Task " + taskId + " is being settled by the AI Review you chose; its verdict is final");
+        }
+    }
+
+    private Instant reviewDeadline(UUID taskId) {
+        return taskRepository.findReviewWindow(taskId).map(ReviewWindowState::deadline).orElse(null);
     }
 
     @Override
@@ -60,6 +131,22 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
             throw new DomainException(ResultCode.VALIDATION_ERROR, "A reject reason category is required");
         }
         TaskModel task = loadOwned(taskId, clientId);
+        requireNotDecidedByAiReview(taskId);
+        if (taskItemAppService.hasItems(taskId)) {
+            // A multi-Item Task's Items are judged one by one by the buyer's reviewer (spec S8, D17').
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Task " + taskId + " has several Items; judge them one by one "
+                            + "(POST /api/tasks/" + taskId + "/items/{itemNo}/judgement), or accept them all");
+        }
+        if (task.status() == TaskStatus.PENDING_REVIEW) {
+            Instant deadline = reviewDeadline(taskId);
+            if (ReviewWindow.hasClosed(deadline, clock.instant())) {
+                // Silence already counted as acceptance; the sweeper settles it on its next pass.
+                throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                        "The review window for task " + taskId + " closed at " + deadline
+                                + "; the result is accepted automatically");
+            }
+        }
 
         if (reasonCategory == RejectReason.D_CHANGED_MIND) {
             // Buyer's remorse on conformant work → charge 85/15, no dispute.
@@ -71,11 +158,33 @@ public class TaskReviewAppServiceImpl implements TaskReviewAppService {
             return taskId;
         }
 
-        // A/B/C → open a dispute; settlement happens when the ruling lands.
-        TaskModel disputed = task.dispute(reasonCategory, reason);
-        taskRepository.save(disputed);
-        disputeAppService.openDispute(disputed, clientId, reasonCategory);
+        // A/B/C → the Agent's turn (#95, D20): revise once, concede or stand by. Nothing is
+        // arbitrated and no money moves until that is settled.
+        TaskModel awaiting = task.awaitAgentResponse(reasonCategory, reason);
+        List<RejectionModel> earlier = rejectionRepository.findByTaskId(taskId);
+        boolean revisedBefore = earlier.stream().anyMatch(r -> r.response() == AgentResponse.REVISE);
+        RejectionModel round = RejectionModel.open(taskId, earlier.size() + 1, reasonCategory, reason,
+                !revisedBefore, clock.instant(), rejectionWindows);
+        taskRepository.save(awaiting);
+        rejectionRepository.save(round);
+        // The notice goes out after commit, so an Agent never hears of a rejection that rolled back.
+        eventPublisher.publishEvent(new TaskRejectedDomainEvent(taskId));
+        log.info("Task {} rejected ({}), round {}: awaiting the Agent's response until {}",
+                taskId, reasonCategory, round.round(), round.responseDeadline());
         return taskId;
+    }
+
+    private static void requirePendingReview(TaskModel task) {
+        if (task.status() != TaskStatus.PENDING_REVIEW) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Illegal transition accept from " + task.status() + "; expected PENDING_REVIEW");
+        }
+    }
+
+    private RejectionModel requireLatestRejection(UUID taskId) {
+        return rejectionRepository.findLatestByTaskId(taskId)
+                .orElseThrow(() -> new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                        "Task " + taskId + " has no rejection to decide on"));
     }
 
     /**

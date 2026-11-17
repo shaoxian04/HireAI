@@ -1,5 +1,10 @@
 package com.hireai.application.biz.task.impl;
 
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
+import com.hireai.domain.biz.acceptance.extraction.model.ContractExtraction;
+import com.hireai.domain.biz.acceptance.extraction.model.ExtractionRecord;
+import com.hireai.application.biz.acceptance.extraction.ContractDraftAppService;
+
 import com.hireai.application.biz.task.DirectBookingAppService;
 import com.hireai.application.biz.task.SubmitContext;
 import com.hireai.application.biz.task.SubmitFingerprint;
@@ -12,6 +17,7 @@ import com.hireai.domain.biz.identity.apikey.model.SpendCaps;
 import com.hireai.domain.biz.task.idempotency.repository.ApiKeyTaskRepository;
 import com.hireai.domain.biz.task.idempotency.repository.IdempotencyRepository;
 import com.hireai.domain.biz.task.info.DirectBookingInfo;
+import com.hireai.domain.biz.task.item.info.ItemInput;
 import com.hireai.domain.biz.task.info.TaskSubmitInfo;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.utility.exception.DomainException;
@@ -57,6 +63,8 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
     private final SpendReadPort spendReadPort;
     private final CategoryRepository categoryRepository;
     private final Clock clock;
+    /** Requirement extraction for a mode-1 (description-only) submit (spec S6). */
+    private final ContractDraftAppService contractDraftAppService;
 
     /** The Spring proxy of THIS bean (so the {@code @Transactional} {@code *Tx}/re-read methods are
      *  entered through the proxy). {@code null} when constructed directly in a unit test. */
@@ -70,7 +78,8 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
                                              ApiKeyTaskRepository apiKeyTaskRepository,
                                              SpendReadPort spendReadPort,
                                              CategoryRepository categoryRepository,
-                                             Clock clock) {
+                                             Clock clock,
+                                             ContractDraftAppService contractDraftAppService) {
         this.taskWriteAppService = taskWriteAppService;
         this.directBookingAppService = directBookingAppService;
         this.idempotencyRepository = idempotencyRepository;
@@ -78,6 +87,7 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         this.spendReadPort = spendReadPort;
         this.categoryRepository = categoryRepository;
         this.clock = clock;
+        this.contractDraftAppService = contractDraftAppService;
     }
 
     /** The proxied bean in production; {@code this} in a direct-construction unit test. */
@@ -85,15 +95,36 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         return self != null ? self : this;
     }
 
+    /**
+     * Mode 1 (no Contract, spec S6 D28): the description is extracted onto the output spec's Template
+     * (outside any transaction: the LLM call may take seconds) and the result is adopted; submitting is
+     * acceptance. Mode 2 (a Contract): no extraction, the Contract is the only basis for acceptance. The
+     * idempotency fingerprint is the CLIENT's request, so a mode-1 retry matches even though extraction
+     * is not deterministic, and a replay returns the first Task without extracting again.
+     */
     @Override
     public UUID submitRouted(SubmitContext ctx, TaskSubmitInfo submitted) {
         // An unknown slug is a 400 naming the valid ones, before anything is frozen (#80).
         String category = categoryRepository.load().requireKnown(submitted.category());
         TaskSubmitInfo info = new TaskSubmitInfo(submitted.clientId(), submitted.title(),
                 submitted.description(), submitted.budget(), submitted.outputSpec(), category,
-                submitted.deadlineSeconds());
+                submitted.deadlineSeconds(), submitted.contract(), submitted.items());
+        String fingerprint = fingerprint(info);
+        ContractExtraction extraction = null;
+        if (info.contract() == null && info.outputSpec() != null) {
+            if (ctx.hasIdempotencyKey()) {
+                Optional<IdempotencyRecord> existing = idempotencyRepository.find(ctx.ownerId(), ctx.idempotencyKey());
+                if (existing.isPresent()) {
+                    return resolveExisting(existing.get(), fingerprint);
+                }
+            }
+            extraction = contractDraftAppService.draft(ctx.ownerId(), info.title(), info.description(),
+                    info.outputSpec().acceptanceCriteria(), info.outputSpec().toContract());
+            info = new TaskSubmitInfo(info.clientId(), info.title(), info.description(), info.budget(),
+                    info.outputSpec(), info.category(), info.deadlineSeconds(), extraction.contract(), info.items());
+        }
         try {
-            return self().submitRoutedTx(ctx, info);
+            return self().submitRoutedTx(ctx, info, fingerprint, extraction == null ? null : extraction.record());
         } catch (IdempotencyRaceException e) {
             return self().resolveRaceWinner(ctx.ownerId(), ctx.idempotencyKey(), e.fingerprint());
         }
@@ -101,28 +132,66 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
 
     @Override
     public UUID submitDirect(SubmitContext ctx, DirectBookingInfo booked) {
+        return submitDirect(ctx, booked, null);
+    }
+
+    @Override
+    public UUID submitDirect(SubmitContext ctx, DirectBookingInfo booked, ExtractionRecord extraction) {
+        if (extraction != null
+                && (booked.contract() == null || !booked.contract().template().equals(extraction.template()))) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "extraction: it must name the Template version of the booking's contract");
+        }
         // The category is optional on a booking; when given it must be a listed slug (#80).
         DirectBookingInfo info = booked.category() == null ? booked
                 : new DirectBookingInfo(booked.clientId(), booked.title(), booked.description(),
                         booked.budget(), booked.agentId(),
-                        categoryRepository.load().requireKnown(booked.category()), booked.deadlineSeconds());
+                        categoryRepository.load().requireKnown(booked.category()), booked.deadlineSeconds(),
+                        booked.contract(), booked.items(), booked.engagementId(), booked.aiReviewCriteria(),
+                        booked.inspectionLevel());
         try {
-            return self().submitDirectTx(ctx, info);
+            return self().submitDirectTx(ctx, info, extraction);
         } catch (IdempotencyRaceException e) {
             return self().resolveRaceWinner(ctx.ownerId(), ctx.idempotencyKey(), e.fingerprint());
         }
     }
 
     @Transactional
-    public UUID submitRoutedTx(SubmitContext ctx, TaskSubmitInfo info) {
-        return orchestrate(ctx, fingerprint(info), info.budget().value(),
-                () -> taskWriteAppService.submit(info));
+    public UUID submitRoutedTx(SubmitContext ctx, TaskSubmitInfo info, String fingerprint, ExtractionRecord extraction) {
+        // Spend caps count what is frozen: for a multi-Item Task, the per-Item price × the Item count.
+        return orchestrate(ctx, fingerprint, info.escrow().value(), () -> {
+            UUID taskId = taskWriteAppService.submit(info);
+            if (extraction != null) {
+                taskWriteAppService.recordExtraction(taskId, extraction);
+            }
+            return taskId;
+        });
     }
 
     @Transactional
-    public UUID submitDirectTx(SubmitContext ctx, DirectBookingInfo info) {
-        return orchestrate(ctx, fingerprintDirect(info), info.budget().value(),
-                () -> directBookingAppService.book(info));
+    public UUID submitDirectTx(SubmitContext ctx, DirectBookingInfo info, ExtractionRecord extraction) {
+        return orchestrate(ctx, fingerprintDirect(info), frozenBy(ctx, info), () -> {
+            UUID taskId = directBookingAppService.book(info);
+            if (extraction != null) {
+                taskWriteAppService.recordExtraction(taskId, extraction);
+            }
+            return taskId;
+        });
+    }
+
+    /**
+     * What a booking freezes, which is what the spend caps count: the escrow, plus the AI Review fee the
+     * booking freezes beside it (the same quote the booking prices it with). A quote that is not offered
+     * adds nothing: the booking itself then refuses.
+     */
+    private BigDecimal frozenBy(SubmitContext ctx, DirectBookingInfo info) {
+        BigDecimal escrow = info.escrow().value();
+        if (!ctx.isApiKey() || info.aiReviewCriteria().isEmpty()) {
+            return escrow;
+        }
+        var quote = directBookingAppService.quoteAiReview(info.agentId(), info.contract(), info.budget(),
+                info.aiReviewCriteria().size());
+        return quote != null && quote.available() ? escrow.add(quote.fee().value()) : escrow;
     }
 
     /**
@@ -183,7 +252,8 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
 
     private String fingerprint(TaskSubmitInfo info) {
         return SubmitFingerprint.of(info.title(), info.description(), info.category(),
-                info.budget().value(), specJson(info.outputSpec()) + deadlinePart(info.deadlineSeconds()));
+                info.budget().value(), specJson(info.outputSpec()) + deadlinePart(info.deadlineSeconds())
+                        + contractPart(info.contract()) + itemsPart(info.items()));
     }
 
     private String fingerprintDirect(DirectBookingInfo info) {
@@ -191,12 +261,52 @@ public class SubmitOrchestrationAppServiceImpl implements SubmitOrchestrationApp
         // A chosen category joins the fingerprint; without one it stays as before.
         String kind = info.category() == null ? "direct" : "direct|" + info.category();
         return SubmitFingerprint.of(info.title(), info.description(),
-                info.agentId().toString(), info.budget().value(), kind + deadlinePart(info.deadlineSeconds()));
+                info.agentId().toString(), info.budget().value(), kind + deadlinePart(info.deadlineSeconds())
+                        + contractPart(info.contract()) + itemsPart(info.items())
+                        + (info.engagementId() == null ? "" : "|engagement=" + info.engagementId())
+                        + aiReviewPart(info.aiReviewCriteria()));
+    }
+
+    /** AI Review criteria join the fingerprint (spec S10); without any it stays as before. */
+    private static String aiReviewPart(java.util.List<String> criteria) {
+        if (criteria.isEmpty()) {
+            return "";
+        }
+        StringBuilder part = new StringBuilder("|aiReview=").append(criteria.size());
+        criteria.forEach(c -> part.append('|').append(c.length()).append(':').append(c));
+        return part.toString();
+    }
+
+    /**
+     * A Contract joins the fingerprint (#91; params are held sorted, so equal Contracts render alike);
+     * without one it stays as before.
+     */
+    private static String contractPart(Contract contract) {
+        return contract == null ? "" : "|contract=" + contract.template() + contract.params();
     }
 
     /** A deadline joins the fingerprint (as relative seconds, so a retry matches); without one it stays as before. */
     private static String deadlinePart(Long deadlineSeconds) {
         return deadlineSeconds == null ? "" : "|deadline=" + deadlineSeconds;
+    }
+
+    /**
+     * A multi-Item Task's Items join the fingerprint (count, then each input and its document, if any);
+     * without Items it stays as before.
+     */
+    private static String itemsPart(java.util.List<ItemInput> items) {
+        if (items.isEmpty()) {
+            return "";
+        }
+        StringBuilder part = new StringBuilder("|items=").append(items.size());
+        items.forEach(item -> {
+            String input = item.input() == null ? "" : item.input();
+            part.append('|').append(input.length()).append(':').append(input);
+            if (item.hasSource()) {
+                part.append("@").append(item.sourceSnapshotId());
+            }
+        });
+        return part.toString();
     }
 
     /** Stable canonical rendering of the spec for the fingerprint (must match the test helper). */

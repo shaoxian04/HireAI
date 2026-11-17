@@ -52,6 +52,27 @@ async def test_task_description_reaches_the_arbitrator():
     assert "Summarise THIS specific article XYZ" in seen_text
 
 
+async def test_the_frozen_contract_reaches_the_arbitrator():
+    """Invariant #4: arbitration judges against the same Contract automated acceptance used."""
+    llm = FakeLLM("FULFILLED", "ok")
+    graph = build_graph(llm, _settings())
+    contract = '{"template":"text_basic","version":1,"params":{"max_length":800}}'
+    await run_arbitration(graph, _request(contract=contract))
+    seen_text = "".join(
+        m.content for messages in llm.seen for m in messages if hasattr(m, "content")
+    )
+    assert "CONTRACT (binding terms, frozen at submit)" in seen_text
+    assert contract in seen_text
+
+
+def test_contract_is_read_from_the_backend_camel_case_message():
+    req = ArbitrationRequest.model_validate_json(
+        '{"disputeId":"d","taskId":"t","correlationId":"c","format":"TEXT",'
+        '"reasonCategory":"A_MISMATCH","contract":"{\\"template\\":\\"text_basic\\"}"}'
+    )
+    assert req.contract == '{"template":"text_basic"}'
+
+
 async def test_graph_returns_structured_ruling():
     llm = FakeLLM("FULFILLED", "All three sources present.")
     graph = build_graph(llm, _settings())

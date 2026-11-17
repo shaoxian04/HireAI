@@ -29,8 +29,10 @@ spring:
     locations: classpath:db/migration
   servlet:
     multipart:
-      max-file-size: 2MB
-      max-request-size: 5MB
+      # Sized for the largest upload, an Engagement document (hireai.source.max-bytes). Every other
+      # multipart endpoint is held to hireai.upload.default-max-bytes by UploadSizeFilter (413).
+      max-file-size: 25MB
+      max-request-size: 26MB
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -61,7 +63,7 @@ springdoc:
   # DEFAULT ungrouped doc at /v3/api-docs. Scope that default to the same programmatic surface so the
   # public doc never exposes admin/internal routes (brief: "must EXCLUDE admin/internal routes").
   # This list MIRRORS OpenApiConfig#programmaticApi's pathsToMatch (hireai-controller) — keep in sync.
-  paths-to-match: /api/tasks, /api/tasks/**, /api/keys, /api/keys/**, /api/webhooks/**, /api/catalogue/**
+  paths-to-match: /api/tasks, /api/tasks/**, /api/contracts/**, /api/keys, /api/keys/**, /api/webhooks/**, /api/catalogue/**, /api/receipts/**, /api/receipt-keys
 
 hireai:
   # Public base URL the platform advertises to Agents for result callbacks (Plan 4's routing
@@ -69,6 +71,13 @@ hireai:
   # application.yml; consumed by Plan 4's RoutingAppServiceImpl. Localhost default for the demo.
   platform:
     public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
+  source:
+    # Engagement documents (spec S4): the largest upload, and how often the D32 retention pass runs.
+    max-bytes: ${SOURCE_MAX_BYTES:26214400}
+    # D32: a document's bytes are deleted this many days after the last window of every Task using it
+    # closes; an Engagement may ask for fewer (retentionDays), never more.
+    retention-days: ${SOURCE_RETENTION_DAYS:30}
+    retention-sweep-interval: ${SOURCE_RETENTION_SWEEP_INTERVAL:PT1H}
   matching:
     # Multi-factor matcher weights (must sum to 1.0; checked at startup) + epsilon-greedy exploration
     # rate. Explained in docs/details/matching.md (ADR 0006 for relevance).
@@ -98,6 +107,59 @@ hireai:
     # must cover the dispatch path's worst case (see dispatch.retry-delays), or startup fails.
     sweep-interval: ${EXECUTION_SWEEP_INTERVAL:PT30S}
     grace-seconds: ${EXECUTION_GRACE_SECONDS:120}
+  acceptance:
+    # Template version transition (spec D36): after a new Template version is published, the previous
+    # one keeps taking new Contracts for this long, and a Contract falls back to it when no Offer covers
+    # the new one. After it, the previous version takes no new Contracts (or Offer terms).
+    template-transition: ${TEMPLATE_TRANSITION:P30D}
+    # Rework (spec D17, #98): a result a deterministic check rejects goes back to the same Agent with
+    # the failing checks this many times; failing after the last one ends the Task SPEC_VIOLATION
+    # with a refund. The rejection itself is not appealable.
+    max-reworks: ${ACCEPTANCE_MAX_REWORKS:2}
+    # Flagged-share cap (owner decision on #87): of a multi-Item Task's Items, at most this share (rounded
+    # down, but at least flagged-minimum) that a check sent to review are held out of the sampled lot for
+    # the reviewer's own judgement; flagged Items beyond it stay in the random lot.
+    flagged-share: ${ACCEPTANCE_FLAGGED_SHARE:0.10}
+    flagged-minimum: ${ACCEPTANCE_FLAGGED_MINIMUM:1}
+  ai-review:
+    # AI Review (spec S10, D37): an optional, Client-paid judgement of criteria code cannot check, on a
+    # direct booking whose Agent's Offer accepts it. Fee = (base-fee + fee-per-criterion x criteria),
+    # x media-multiplier for a file deliverable; offered only while fee <= max-fee-share of the Item price.
+    base-fee: ${AI_REVIEW_BASE_FEE:0.10}
+    fee-per-criterion: ${AI_REVIEW_FEE_PER_CRITERION:0.10}
+    media-multiplier: ${AI_REVIEW_MEDIA_MULTIPLIER:2}
+    max-fee-share: ${AI_REVIEW_MAX_FEE_SHARE:0.10}
+    max-criteria: ${AI_REVIEW_MAX_CRITERIA:5}
+    # The reviewer: a multimodal chat model, by default the arbitrator's provider and model. Without an
+    # API key every review fails and its fee is refunded.
+    base-url: ${AI_REVIEW_BASE_URL:${OPENAI_BASE_URL:https://api.openai.com/v1}}
+    api-key: ${AI_REVIEW_API_KEY:${OPENAI_API_KEY:}}
+    model: ${AI_REVIEW_MODEL:gpt-4o}
+    timeout: ${AI_REVIEW_TIMEOUT:PT60S}
+    # Images and PDFs larger than this are described, not attached (the arbitrator's limit).
+    media-max-bytes: ${AI_REVIEW_MEDIA_MAX_BYTES:8388608}
+    # Fail closed: no usable verdict is never a pass. A run tries max-attempts times in all: an unusable
+    # answer (refusal, malformed, a criterion missing) is retried once, a transient failure after
+    # retry-backoff (doubling). Then the review fails, the fee is refunded and nothing is settled: an
+    # API result waits for the Client's review (review_reason AI_REVIEW_UNAVAILABLE). A review still
+    # running retry-after after it was requested (a restart mid-run) is run again by the sweeper.
+    max-attempts: ${AI_REVIEW_MAX_ATTEMPTS:3}
+    retry-backoff: ${AI_REVIEW_RETRY_BACKOFF:PT2S}
+    retry-after: ${AI_REVIEW_RETRY_AFTER:PT5M}
+    sweep-interval: ${AI_REVIEW_SWEEP_INTERVAL:PT1M}
+  review:
+    # Client review window (#94): a web-channel result that passed validation waits this long in
+    # PENDING_REVIEW, then the review-window sweeper accepts and settles it on the Client's behalf.
+    window: ${REVIEW_WINDOW:PT24H}
+    sweep-interval: ${REVIEW_SWEEP_INTERVAL:PT1M}
+  rejection:
+    # Rejection response path (#95): after an A/B/C rejection the Agent has agent-response-window
+    # to revise once, concede or stand by (silence = standing by); after a stand-by the Client has
+    # client-decision-window to accept or request arbitration (silence = acceptance). The sweeper
+    # applies both silences and retries rejection notices that did not reach the Agent.
+    agent-response-window: ${AGENT_RESPONSE_WINDOW:PT2H}
+    client-decision-window: ${CLIENT_DECISION_WINDOW:PT24H}
+    sweep-interval: ${REJECTION_SWEEP_INTERVAL:PT1M}
   dispatch:
     # HMAC secret for dispatch tokens. MUST be overridden in real deploys. A token expires at
     # the task's execution deadline + 5 minutes (DispatchTokenService.CALLBACK_MARGIN).
@@ -131,6 +193,20 @@ hireai:
     timeout: ${EMBEDDING_TIMEOUT:PT2S}
     # Re-embed sweeper: fills missing vectors and replaces stale-text or other-model ones.
     sweep-interval: ${EMBEDDING_SWEEP_INTERVAL:PT5M}
+  extraction:
+    # Requirement extraction (spec S6): one structured-output LLM call per description-only submit
+    # and per POST /api/contracts/draft. Without an API key nothing is sent and the Contract is the
+    # Template's defaults (status UNAVAILABLE); submits never fail because of the provider.
+    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+    api-key: ${OPENAI_API_KEY:}
+    model: ${EXTRACTION_MODEL:gpt-4o-mini}
+    # Connect and read timeout per extraction request; a slower answer falls back to the defaults.
+    timeout: ${EXTRACTION_TIMEOUT:PT10S}
+    # Per-user cap on extractions (drafts and description-only submits together), over a sliding
+    # window; beyond it the request is a 429 before anything is extracted or frozen.
+    rate-limit:
+      max-calls: ${EXTRACTION_RATE_LIMIT_MAX_CALLS:20}
+      window: ${EXTRACTION_RATE_LIMIT_WINDOW:PT1M}
   auth:
     # HS256 signing secret for authentication JWTs. MUST be overridden in real deploys.
     # Dev default is >= 32 bytes (HS256 minimum). Never a real secret in git.
@@ -153,10 +229,32 @@ hireai:
     # Human-backstop sweeper: an ARBITRATING dispute older than this is escalated to the admin.
     stale-after: ${ARBITRATION_STALE_AFTER:PT2M}
     sweep-interval: ${ARBITRATION_SWEEP_INTERVAL:PT1M}
-    # Auto-accept sweeper: a RULED (proposed) dispute the client never acted on is auto-accepted
-    # after this long, so escrow doesn't hang forever.
-    ruling-accept-after: ${RULING_ACCEPT_AFTER:PT2M}
+    # Appeal window (D42): how long either side may accept or appeal a proposed (RULED) ruling; after
+    # it the auto-accept sweeper accepts it on everyone's behalf, so escrow doesn't hang forever.
+    # Defaults to the Client's decision window.
+    appeal-window: ${APPEAL_WINDOW:${hireai.rejection.client-decision-window}}
     accept-sweep-interval: ${RULING_ACCEPT_SWEEP_INTERVAL:PT1M}
+    # Loser pays (#96, spec D43): the arbitration cost and the Appeal Fee of a web appeal to an
+    # admin, in credits. The side the effective ruling goes against bears each, capped at
+    # fee-cap-share of the Item price; the platform covers the excess. 0 turns a fee off.
+    cost: ${ARBITRATION_COST:3.00}
+    # The most a loser bears of each fee, as a share of the Item price; the platform covers the rest.
+    fee-cap-share: ${ARBITRATION_FEE_CAP_SHARE:0.20}
+    appeal-fee: ${APPEAL_FEE:5.00}
+  receipts:
+    # Signed receipts (D40, docs/details/receipts.md). The Ed25519 private key, base64 PKCS#8 DER, from the
+    # environment only: never commit one. Unset = a key generated per process (dev/tests only; its
+    # receipts stop verifying after a restart). Rotation: see docs/details/receipts.md.
+    signing-key: ${RECEIPT_SIGNING_KEY:}
+    # Optional override of the key id written into receipts (default: derived from the public key).
+    key-id: ${RECEIPT_KEY_ID:}
+    # Public keys of retired signing keys, still published so older receipts verify:
+    # comma-separated base64 SubjectPublicKeyInfo DER, each optionally prefixed "keyId:".
+    retired-public-keys: ${RECEIPT_RETIRED_PUBLIC_KEYS:}
+    issue-interval: ${RECEIPT_ISSUE_INTERVAL:PT30S}
+    # HMAC key (>= 32 chars) for the pseudonymous party refs in receipts (clientRef, builderRef,
+    # agentVersionRef). Environment only, never committed; unset = a per-process key (dev/tests only).
+    party-key: ${RECEIPT_PARTY_KEY:}
   storage:
     # Supabase Storage (public-read bucket; uploads happen ONLY server-side with the service key).
     supabase-url: ${SUPABASE_URL:}

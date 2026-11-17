@@ -80,6 +80,9 @@ public interface AgentJpaRepository extends JpaRepository<AgentDO, UUID> {
             """, nativeQuery = true)
     Optional<String> findSigningSecretByVersionId(@Param("versionId") UUID versionId);
 
+    @Query(value = "SELECT webhook_url FROM agent_versions WHERE id = :versionId", nativeQuery = true)
+    Optional<String> findWebhookUrlByVersionId(@Param("versionId") UUID versionId);
+
     interface ReputationAggregateRow {
         BigDecimal getReliabilitySum();
         long getReliabilityCount();

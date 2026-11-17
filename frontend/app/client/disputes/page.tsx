@@ -64,10 +64,12 @@ function ClientDisputes() {
               <tr key={r.disputeId} className="border-b border-line/50 hover:bg-surface-2/50">
                 <td className="p-3 text-fg">{r.taskTitle}</td>
                 <td data-label="State" className="p-3">
-                  <Badge status={r.status}>{LABEL[r.status] ?? r.status}</Badge>
+                  <Badge status={r.status === "RULED" && !r.awaitingYou ? "ARBITRATING" : r.status}>
+                    {r.status === "RULED" && !r.awaitingYou ? "Awaiting the builder" : (LABEL[r.status] ?? r.status)}
+                  </Badge>
                 </td>
                 <td data-label="Ruling" className="p-3 text-sm">
-                  <Ruling status={r.status} category={r.proposedCategory} />
+                  <Ruling status={r.status} category={r.proposedCategory} awaitingYou={!!r.awaitingYou} />
                 </td>
                 <td data-label="Updated" className="p-3 text-xs text-dim">{new Date(r.updatedAt).toLocaleString()}</td>
                 <td className="p-3 text-right">
@@ -105,13 +107,16 @@ const RULING_TEXT: Record<RulingCategory, string> = {
   NOT_FULFILLED: "Full refund to you",
 };
 
-function Ruling({ status, category }: { status: string; category: RulingCategory | null }) {
+function Ruling({ status, category, awaitingYou }: { status: string; category: RulingCategory | null; awaitingYou: boolean }) {
   if (!category) return <span className="text-dim">Not ruled yet</span>;
-  if (status === "RESOLVED") return <span className="font-medium text-fg">{RULING_TEXT[category]}</span>;
-  // RULED: the arbitrator has proposed this, and it waits on the client
+  if (status !== "RULED") return <span className="font-medium text-fg">{RULING_TEXT[category]}</span>;
+  // RULED: the arbitrator has proposed this; it waits on whichever side it goes against
   return (
     <span className="text-fg">
-      {RULING_TEXT[category]} <span className="text-xs text-amber">proposed, open the task to respond</span>
+      {RULING_TEXT[category]}{" "}
+      <span className="text-xs text-amber">
+        {awaitingYou ? "proposed, open the task to respond" : "proposed, the builder may accept or appeal"}
+      </span>
     </span>
   );
 }

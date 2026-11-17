@@ -40,12 +40,12 @@ public class WalletWriteAppServiceImpl implements WalletWriteAppService {
     }
 
     private WalletModel loadOrOpen(UUID userId) {
-        return walletRepository.findByUserId(userId)
+        return walletRepository.findByUserIdForUpdate(userId)
                 .orElseGet(() -> walletRepository.save(WalletModel.openFor(userId)));
     }
 
     private WalletModel requireWallet(UUID userId) {
-        return walletRepository.findByUserId(userId)
+        return walletRepository.findByUserIdForUpdate(userId)
                 .orElseThrow(() -> new DomainException(ResultCode.NOT_FOUND, "No wallet for user " + userId));
     }
 }

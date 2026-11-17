@@ -42,9 +42,9 @@ hireai-main           HireAiApplication, application.yml, db/migration, integrat
 
 Layer-local unit tests also live in `hireai-domain`, `hireai-application`, `hireai-infrastructure` and `hireai-utility`.
 
-**Grouping:** domain, application and repository code is grouped by subdomain: `identity`, `ledger`, `offering`, `task`, `reputation`, `adjudication`. `admin` is an extra read-side group in application and repository. Controllers are grouped by HTTP route, a different axis: `controller/biz/apikey` calls code under `identity`.
+**Grouping:** domain, application and repository code is grouped by subdomain: `identity`, `ledger`, `offering`, `task`, `reputation`, `adjudication`, `acceptance`. `admin` is an extra read-side group in application and repository. Controllers are grouped by HTTP route, a different axis: `controller/biz/apikey` calls code under `identity`.
 
-**Nesting:** there is no single rule; follow the neighbours. `ledger` and `offering` nest each aggregate. `identity` keeps `UserModel` flat and nests `apikey` and `webhooksubscription` ([ADR 0002](../adr/0002-apikey-webhook-nest-under-identity-and-task.md)). `task` keeps `TaskModel` flat and nests `idempotency`, `webhookdelivery`, `dispatchattempt` and `routing`. `adjudication` and `reputation` are flat, with their two aggregates side by side.
+**Nesting:** there is no single rule; follow the neighbours. `ledger` and `offering` nest each aggregate. `identity` keeps `UserModel` flat and nests `apikey` and `webhooksubscription` ([ADR 0002](../adr/0002-apikey-webhook-nest-under-identity-and-task.md)). `task` keeps `TaskModel` flat and nests `idempotency`, `webhookdelivery`, `dispatchattempt` and `routing`. `adjudication` and `reputation` are flat, with their two aggregates side by side. `acceptance` nests by concept: `template` (the aggregate), `contract` and `offer` (value objects held by `TaskModel` and `AgentVersionModel`).
 
 ## Naming
 
@@ -65,7 +65,9 @@ Layer-local unit tests also live in `hireai-domain`, `hireai-application`, `hire
 1. **Reach children through the root**, and don't import another aggregate's internals. The allowed cross-subdomain imports in `domain/biz` are shared types only:
    - `adjudication` uses `task.model.OutputSpec`, `task.model.TaskResultModel`, `task.enums.RejectReason`.
    - `offering` uses `task.model.OutputSpec`, `reputation.info.ReputationAggregates`.
-   - `task` uses `offering.agent.info.AgentCandidate`.
+   - `task` uses `offering.agent.info.AgentCandidate`, and `acceptance.contract.model.*` (the Contract) plus `acceptance.offer.model.*` and `acceptance.template.model.{GenericTemplates, TemplateRef}` (the `OutputSpec` → Contract/Offer mapping).
+   - `offering` uses `acceptance.offer.model.Offer`.
+   - `acceptance` imports no other subdomain.
 
    Add to this list deliberately. Anything else goes through an app service.
 2. **One repository per aggregate root**, and depend on the interface. Exceptions: `OAuthIdentityRepository` serves a child of `UserModel`, and `ApiKeyTaskRepository` has no aggregate.

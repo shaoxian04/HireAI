@@ -39,6 +39,11 @@ public class StubTaskExecutionPort implements TaskExecutionPort {
     }
 
     @Override
+    public void markExecuting(UUID taskId, java.time.Instant executionDeadline) {
+        executing.add(taskId);
+    }
+
+    @Override
     public void markTimedOut(UUID taskId) {
         timedOut.add(taskId);
     }
@@ -51,6 +56,12 @@ public class StubTaskExecutionPort implements TaskExecutionPort {
     @Override
     public void declineAsBusy(UUID taskId, UUID agentVersionId) {
         attempts.add(DispatchOutcome.BUSY);
+        failed.add(taskId);
+    }
+
+    @Override
+    public void declineContract(UUID taskId, UUID agentVersionId, String reason) {
+        attempts.add(DispatchOutcome.CONTRACT_DECLINED);
         failed.add(taskId);
     }
 }

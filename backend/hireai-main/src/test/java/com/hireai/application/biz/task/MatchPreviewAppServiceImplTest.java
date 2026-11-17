@@ -40,12 +40,15 @@ class MatchPreviewAppServiceImplTest {
 
     private final MatchPreviewQueryPort queryPort = mock(MatchPreviewQueryPort.class);
     private final TaskTextEmbeddingAppService taskText = mock(TaskTextEmbeddingAppService.class);
+    private final com.hireai.application.biz.acceptance.TemplateReadAppService templateReadAppService =
+            mock(com.hireai.application.biz.acceptance.TemplateReadAppService.class);
 
     private MatchPreviewAppService service() {
         var matcher = new RoutingMatchDomainServiceImpl(
                 MatchingPolicy.defaults().withEpsilon(0.0), new Random(1)); // epsilon 0 -> deterministic
         return new MatchPreviewAppServiceImpl(queryPort, matcher, TestCategories.listOf("summarisation", "other"),
-                taskText, java.time.Clock.systemUTC(), new com.hireai.domain.biz.task.model.ExecutionGrace(60));
+                taskText, templateReadAppService, java.time.Clock.systemUTC(), new com.hireai.domain.biz.task.model.ExecutionGrace(60),
+                mock(com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository.class));
     }
 
     private ShortlistCandidateRow row(String name, String price, String rep, int maxConc, long inFlight, long samples) {

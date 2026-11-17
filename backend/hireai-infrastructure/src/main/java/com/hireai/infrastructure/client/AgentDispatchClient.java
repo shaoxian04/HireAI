@@ -2,6 +2,8 @@ package com.hireai.infrastructure.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hireai.application.port.agent.AgentNoticePort;
+import com.hireai.application.port.agent.RejectionNotice;
 import com.hireai.application.port.webhook.WebhookUrlValidatorPort;
 import com.hireai.domain.biz.task.routing.info.DispatchMessage;
 import com.hireai.domain.biz.task.routing.info.TaskDispatchPayload;
@@ -16,9 +18,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.util.Optional;
 
 /**
  * Dispatches a {@link DispatchMessage} to an Agent's webhook over a signed HTTPS POST
@@ -36,13 +41,17 @@ import java.time.Clock;
  *   <li>Every WorkOrder to an Agent that has an AgentSigningSecret is signed over the exact
  *       body bytes ({@link #SIGNATURE_HEADER}), so the Agent can prove it came from HireAI.</li>
  * </ul>
- * A 429 or 503 reply is the Agent declining as busy and is thrown as {@link AgentBusyException}.
+ * A 429 or 503 reply is the Agent declining as busy and is thrown as {@link AgentBusyException}. A 422
+ * whose body is {@code {"decline":"CONTRACT","reason":…}} (read up to 8 KiB) is the Agent refusing the
+ * Contract and is thrown as {@link AgentContractDeclinedException}; any other 422 is a failed send.
  * Any other failure of the HTTP send itself (non-2xx reply, unreachable endpoint, timeout) is thrown
  * as {@link AgentSendFailedException}; anything else (e.g. a non-HTTPS URL) is a platform-side error.
+ *
+ * <p>It also sends the rejection notice (#95, {@link AgentNoticePort}) under exactly the same rules.
  */
 @Component
 @Slf4j
-public class AgentDispatchClient {
+public class AgentDispatchClient implements AgentNoticePort {
 
     /** WorkOrder signature header; same format as the client-webhook signature. */
     public static final String SIGNATURE_HEADER = "X-HireAI-Signature";
@@ -102,6 +111,14 @@ public class AgentDispatchClient {
                             throw new AgentBusyException("Agent webhook for task " + message.taskId()
                                     + " declined as busy (" + status + ")", status);
                         }
+                        if (status == AgentContractDeclinedException.STATUS) {
+                            Optional<AgentContractDeclinedException.Decline> decline = AgentContractDeclinedException
+                                    .parse(readBounded(response.getBody()), objectMapper);
+                            if (decline.isPresent()) {
+                                throw new AgentContractDeclinedException("Agent webhook for task "
+                                        + message.taskId() + " declined the contract", decline.get().reason());
+                            }
+                        }
                         throw new AgentSendFailedException("Agent webhook for task " + message.taskId()
                                 + " replied " + status, status, null);
                     })
@@ -112,6 +129,64 @@ public class AgentDispatchClient {
         }
 
         log.info("Dispatched task {} to webhook (correlationId={})", message.taskId(), message.correlationId());
+    }
+
+    /** At most {@link AgentContractDeclinedException#MAX_BODY_BYTES} of a reply body; an unreadable one is empty. */
+    private static byte[] readBounded(InputStream body) {
+        try (body) {
+            return body.readNBytes(AgentContractDeclinedException.MAX_BODY_BYTES);
+        } catch (IOException ex) {
+            return new byte[0];
+        }
+    }
+
+    /**
+     * Sends a rejection notice (#95) to the Agent's webhook under the same rules as a WorkOrder: HTTPS
+     * (or the dev localhost opt-in), the SSRF guard at send time, no redirects, the bearer token and
+     * the signature over the exact body bytes. Any failure is logged and reported as {@code false}:
+     * the sweeper retries, and the Agent's silence counts as standing by once its window closes.
+     */
+    @Override
+    public boolean sendRejectionNotice(String webhookUrl, String bearerToken, String signingSecret,
+                                       RejectionNotice notice) {
+        try {
+            requireSecureWebhook(webhookUrl);
+            urlValidator.assertAgentWebhookDeliverable(webhookUrl);
+            byte[] body = serializeNotice(new RejectionNoticeBody(notice.event(), notice.taskId(),
+                    notice.agentVersionId(), notice.round(), notice.reasonCategory(), notice.reason(),
+                    notice.responseDeadline().toString(), notice.revisionAllowed(), notice.responseUrl(),
+                    notice.title(), notice.description(), readJson(notice.outputSpecJson()),
+                    notice.itemNo(), notice.itemInput(), notice.itemResult(),
+                    notice.contractJson() == null ? null : readJson(notice.contractJson())));
+            RestClient.RequestBodySpec request = restClient.post()
+                    .uri(URI.create(webhookUrl))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken)
+                    .contentType(MediaType.APPLICATION_JSON);
+            if (signingSecret != null) {
+                request.header(SIGNATURE_HEADER, WebhookSignature.header(signingSecret,
+                        clock.instant().getEpochSecond(), new String(body, StandardCharsets.UTF_8)));
+            }
+            request.body(body)
+                    .retrieve()
+                    .onStatus(status -> !status.is2xxSuccessful(), (req, response) -> {
+                        throw new AgentSendFailedException("Agent webhook for task " + notice.taskId()
+                                + " replied " + response.getStatusCode().value() + " to the rejection notice",
+                                response.getStatusCode().value(), null);
+                    })
+                    .toBodilessEntity();
+            return true;
+        } catch (RuntimeException ex) {
+            log.warn("Rejection notice for task {} was not delivered: {}", notice.taskId(), ex.toString());
+            return false;
+        }
+    }
+
+    private byte[] serializeNotice(RejectionNoticeBody body) {
+        try {
+            return objectMapper.writeValueAsBytes(body);
+        } catch (Exception ex) {
+            throw new IllegalArgumentException("Could not serialise the rejection notice", ex);
+        }
     }
 
     private byte[] serialize(WebhookDispatchBody body) {
@@ -132,7 +207,16 @@ public class AgentDispatchClient {
                 payload.category(),
                 readJson(payload.outputSpecJson()),
                 payload.executionDeadline() == null ? null : payload.executionDeadline().toString(),
-                payload.callbackUrl());
+                payload.callbackUrl(),
+                payload.items().stream()
+                        .map(item -> new WebhookDispatchBody.Item(item.itemNo(), item.input(),
+                                item.source() == null ? null : new WebhookDispatchBody.Source(item.source().url(),
+                                        item.source().sha256(), item.source().mediaType(), item.source().sizeBytes(),
+                                        item.source().filename(), item.source().expiresAt().toString()),
+                                item.rework()))
+                        .toList(),
+                payload.rework(),
+                readJson(payload.contractJson()));
     }
 
     private JsonNode readJson(String json) {

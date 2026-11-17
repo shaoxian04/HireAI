@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hireai:format:contract.v1",
+  "title": "HireAI Contract (a Task's frozen acceptance terms)",
+  "description": "The Contract a Task freezes at submit (ADR 0009): one Template version plus the values it sets for that Template's parameters. A receipt's contract.sha256 is the SHA-256 (hex) of this document's RFC 8785 form. Prose: docs/details/receipts.md#the-contract-a-receipt-names.",
+  "type": "object",
+  "required": ["template", "version", "params"],
+  "additionalProperties": false,
+  "properties": {
+    "template": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+    "version": { "type": "integer", "minimum": 1 },
+    "params": {
+      "type": "object",
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": {
+        "description": "max/min parameters are numbers, enum parameters one string (a JSON schema parameter is its schema as a string), subset parameters an array of strings, flag parameters a boolean.",
+        "oneOf": [
+          { "type": "number" },
+          { "type": "string" },
+          { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          { "type": "boolean" }
+        ]
+      }
+    }
+  }
+}

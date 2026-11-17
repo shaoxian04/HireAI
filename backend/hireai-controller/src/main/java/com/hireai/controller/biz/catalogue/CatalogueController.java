@@ -7,9 +7,12 @@ import com.hireai.controller.base.BaseController;
 import com.hireai.controller.base.WebResult;
 import com.hireai.controller.biz.catalogue.dto.AgentCardDTO;
 import com.hireai.controller.biz.catalogue.dto.AgentProfileDTO;
+import com.hireai.controller.biz.task.dto.ContractDeclineRateDTO;
 import com.hireai.controller.biz.catalogue.dto.CategoryCountDTO;
 import com.hireai.domain.biz.task.model.OutputSpec;
 import com.hireai.application.biz.task.OutputSpecJsonMapper;
+import com.hireai.application.biz.acceptance.AcceptanceJsonMapper;
+import com.hireai.controller.biz.acceptance.converter.Acceptance2DTOConverter;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,11 +34,14 @@ public class CatalogueController extends BaseController {
 
     private final CatalogueReadAppService readAppService;
     private final OutputSpecJsonMapper outputSpecJsonMapper;
+    private final AcceptanceJsonMapper acceptanceJsonMapper;
 
     public CatalogueController(CatalogueReadAppService readAppService,
-                               @Qualifier("outputSpecJsonMapper") OutputSpecJsonMapper outputSpecJsonMapper) {
+                               @Qualifier("outputSpecJsonMapper") OutputSpecJsonMapper outputSpecJsonMapper,
+                               AcceptanceJsonMapper acceptanceJsonMapper) {
         this.readAppService = readAppService;
         this.outputSpecJsonMapper = outputSpecJsonMapper;
+        this.acceptanceJsonMapper = acceptanceJsonMapper;
     }
 
     @GetMapping("/agents")
@@ -63,8 +69,10 @@ public class CatalogueController extends BaseController {
                 row.galleryUrls(),
                 new AgentProfileDTO.OutputSpecDTO(
                         spec.format().name(), spec.schema(), spec.acceptanceCriteria()),
+                Acceptance2DTOConverter.toDTO(acceptanceJsonMapper.offerFromJson(row.offerJson()), row.card().price()),
                 new AgentProfileDTO.StatsDTO(
-                        requests, row.completedCount(), successRate, row.avgTurnaroundSeconds()),
+                        requests, row.completedCount(), successRate, row.avgTurnaroundSeconds(),
+                        ContractDeclineRateDTO.from(readAppService.contractDeclineRate(agentId))),
                 readAppService.reviews(agentId).stream()
                         .map(r -> new AgentProfileDTO.ReviewDTO(
                                 r.id(), r.rating(), r.reviewText(),

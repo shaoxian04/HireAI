@@ -66,7 +66,7 @@ def test_run_hands_the_configured_secret_to_the_callback(monkeypatch):
 
     secrets = []
 
-    async def fake_complete(task_id, callback_url, token, secret=None):
+    async def fake_complete(task_id, callback_url, token, secret=None, result_url=None, anomalies=None):
         secrets.append(secret)
 
     monkeypatch.setattr(agent, "_complete", fake_complete)

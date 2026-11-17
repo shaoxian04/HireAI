@@ -25,7 +25,8 @@ class CatalogueReadAppServiceImplTest {
     CatalogueQueryPort catalogueQueryPort;
 
     private CatalogueReadAppServiceImpl service() {
-        return new CatalogueReadAppServiceImpl(catalogueQueryPort);
+        return new CatalogueReadAppServiceImpl(catalogueQueryPort,
+                org.mockito.Mockito.mock(com.hireai.domain.biz.task.dispatchattempt.repository.DispatchAttemptRepository.class));
     }
 
     @Test

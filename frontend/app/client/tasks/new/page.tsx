@@ -8,12 +8,26 @@ import { errorFor, toFormError, useFocusOnFieldError, validateForm, type FormErr
 const TASK_FIELDS = { title: "Title", description: "Description", budget: "Budget", deadlineSeconds: "Deadline" };
 import { RoleGuard } from "@/components/RoleGuard";
 import { AppShell } from "@/components/AppShell";
+import { VersionFallbackNotice } from "@/components/VersionFallbackNotice";
 import { ShortlistPanel } from "@/components/ShortlistPanel";
 import { CategoryCombobox } from "@/components/CategoryCombobox";
+import { ContractTermsField, parameterLabel, withoutParameter } from "@/components/ContractTermsField";
+import { refOf, useTemplates } from "@/components/AcceptanceTerms";
 import { fetchMatchPreview } from "@/lib/rebook";
+import { BookingChecks } from "@/components/BookingChecks";
+import {
+  bookedExtraction,
+  draftKey,
+  draftRequest,
+  effectiveContract,
+  requirementFates,
+  type DraftState,
+} from "@/lib/extraction";
 import { DEADLINE_UNITS, toDeadlineSeconds, type DeadlineUnit } from "@/lib/deadline";
 import type {
   AgentOptionDTO,
+  ContractDTO,
+  ContractDraftDTO,
   DirectBookRequest,
   MatchPreviewDTO,
   TaskDTO,
@@ -35,6 +49,7 @@ interface Draft {
   budget: string;
   deadline?: string;
   deadlineUnit?: DeadlineUnit;
+  contract?: ContractDTO | null;
 }
 
 function SubmitTask() {
@@ -50,6 +65,18 @@ function SubmitTask() {
   const [deadline, setDeadline] = useState("");
   const [deadlineUnit, setDeadlineUnit] = useState<DeadlineUnit>("hours");
   const deadlineSeconds = toDeadlineSeconds(deadline, deadlineUnit);
+  // The output terms the shortlist must accept and the booking freezes (#91); null = the agent's own.
+  const [contract, setContract] = useState<ContractDTO | null>(null);
+  const templates = useTemplates(true);
+  // Requirement extraction (#101): the draft made of the description before the search, which request
+  // it answered (so a re-search after a relax reuses it), and the terms the Client dropped since.
+  const [draft, setDraft] = useState<{ key: string; state: DraftState } | null>(null);
+  const [dropped, setDropped] = useState<string[]>([]);
+  const terms = effectiveContract(draft?.state ?? null, contract, dropped);
+  const fates = requirementFates(draft?.state ?? null, terms, dropped);
+  const extraction = bookedExtraction(draft?.state ?? null, terms);
+  const contractTemplate =
+    terms && templates.status === "ready" ? templates.byRef.get(refOf(terms.template, terms.version)) : undefined;
   const [preview, setPreview] = useState<MatchPreviewDTO | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [selected, setSelected] = useState<AgentOptionDTO | null>(null);
@@ -58,6 +85,7 @@ function SubmitTask() {
   // A field error clears the moment that field (or any other) is edited, so it never goes stale.
   const clearFieldError = () => setError((er) => (er?.field ? null : er));
   const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<"reading" | "searching">("searching");
   useFocusOnFieldError(error, { deadlineSeconds: "deadline" });
   const firstPersist = useRef(true);
   // Built here rather than in onBook so the idempotency signature is derived from the very
@@ -67,6 +95,8 @@ function SubmitTask() {
     ? {
         title, description, budget: selected.price, agentId: selected.agentId, // the agent's price, not the typed budget
         ...(typeof deadlineSeconds === "number" ? { deadlineSeconds } : {}),
+        ...(terms ? { contract: terms } : {}),
+        ...(extraction ? { extraction } : {}),
       }
     : null;
   const getIdempotencyKey = useIdempotencyKey(directBookSignature(bookingBody));
@@ -124,6 +154,7 @@ function SubmitTask() {
       );
       setDeadline(typeof d.deadline === "string" ? d.deadline : "");
       if (d.deadlineUnit && DEADLINE_UNITS.some((u) => u.value === d.deadlineUnit)) setDeadlineUnit(d.deadlineUnit);
+      if (d.contract && typeof d.contract.template === "string" && d.contract.params) setContract(d.contract);
     } catch {
       /* ignore a malformed draft */
     }
@@ -138,9 +169,9 @@ function SubmitTask() {
       firstPersist.current = false;
       return;
     }
-    const draft: Draft = { title, description, category, budget, deadline, deadlineUnit };
+    const draft: Draft = { title, description, category, budget, deadline, deadlineUnit, contract };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [title, description, category, budget, deadline, deadlineUnit, rebookId]);
+  }, [title, description, category, budget, deadline, deadlineUnit, contract, rebookId]);
 
   async function onFind(e: FormEvent) {
     e.preventDefault();
@@ -161,10 +192,40 @@ function SubmitTask() {
       return;
     }
     setLoading(true);
+    const key = draftKey(title, description, contract);
+    let state = draft?.key === key ? draft.state : null;
+    let relaxed = draft?.key === key ? dropped : [];
+    if (!state) {
+      setPhase("reading");
+      state = await extract();
+      relaxed = [];
+      setDraft({ key, state });
+      setDropped([]);
+    }
+    await search(budgetNum, effectiveContract(state, contract, relaxed));
+  }
+
+  /** Extraction runs on the description before the search; any failure leaves the description unread. */
+  async function extract(): Promise<DraftState> {
+    try {
+      const result = await api<ContractDraftDTO>("/contracts/draft", {
+        method: "POST",
+        body: JSON.stringify(draftRequest(title, description, contract)),
+      });
+      return { kind: "ready", draft: result };
+    } catch {
+      return { kind: "unavailable" };
+    }
+  }
+
+  async function search(budgetNum: number, terms: ContractDTO | null) {
+    setLoading(true);
+    setPhase("searching");
     try {
       const result = await fetchMatchPreview({
         title, description, category, budget: budgetNum, exclude: excluded,
-        ...(deadlineSeconds !== null ? { deadlineSeconds } : {}),
+        ...(typeof deadlineSeconds === "number" ? { deadlineSeconds } : {}),
+        ...(terms ? { contract: terms } : {}),
       });
       setPreview(result);
       setPreviewOpen(true);
@@ -173,6 +234,17 @@ function SubmitTask() {
     } finally {
       setLoading(false);
     }
+  }
+
+  /** The Client chose a relax suggestion: drop that term and search again with the rest. */
+  function onRelax(parameter: string) {
+    if (!terms) return;
+    const own = contract && parameter in contract.params ? withoutParameter(contract, parameter) : contract;
+    const nowDropped = dropped.includes(parameter) ? dropped : [...dropped, parameter];
+    setContract(own);
+    setDropped(nowDropped);
+    setSelected(null);
+    void search(Number(budget), effectiveContract(draft?.state ?? null, own, nowDropped));
   }
 
   async function onBook() {
@@ -243,6 +315,12 @@ function SubmitTask() {
                 onChange={(v) => { setCategory(v); clearFieldError(); }}
               />
             </Field>
+            <ContractTermsField
+              templates={templates}
+              value={contract}
+              error={error}
+              onChange={(next) => { setContract(next); clearFieldError(); }}
+            />
           </div>
           <div className="docket-tear" />
           <div className="space-y-4 bg-surface-2 p-6">
@@ -283,7 +361,7 @@ function SubmitTask() {
                   aria-label="Deadline unit"
                   value={deadlineUnit}
                   onChange={(e) => { setDeadlineUnit(e.target.value as DeadlineUnit); clearFieldError(); }}
-                  className="w-32 shrink-0"
+                  className="!w-32 shrink-0"
                 >
                   {DEADLINE_UNITS.map((u) => (
                     <option key={u.value} value={u.value}>{u.label}</option>
@@ -297,7 +375,7 @@ function SubmitTask() {
               disabled={loading || !category}
               className="w-full"
             >
-              {loading ? "Searching…" : "Find agents"}
+              {loading ? (phase === "reading" ? "Reading your requirements…" : "Searching…") : "Find agents"}
             </Button>
           </div>
         </form>
@@ -318,6 +396,12 @@ function SubmitTask() {
           shortlist={preview.shortlist}
           nearMisses={preview.nearMisses}
           noCloseMatch={preview.noCloseMatch ?? false}
+          noMatch={preview.noMatch ?? null}
+          labelFor={(p) => parameterLabel(contractTemplate, p)}
+          onRelax={onRelax}
+          fallback={preview.fallback ?? null}
+          templateTitle={contractTemplate?.title}
+          termsExtracted={terms !== null && terms !== contract}
           budget={budgetValue}
           onSelect={(o) => {
             setSelected(o);
@@ -351,6 +435,17 @@ function SubmitTask() {
               <> This is above your {budgetValue} cr budget.</>
             )}
           </p>
+          <p className="mt-1 text-sm text-muted">
+            {!contractTemplate
+              ? "The agent works under its own output terms."
+              : <>The agent is held to your output terms: {contractTemplate.title}.</>}
+          </p>
+          {contractTemplate && preview?.fallback && (
+            <div className="mt-3">
+              <VersionFallbackNotice fallback={preview.fallback} templateTitle={contractTemplate.title} context="booking" />
+            </div>
+          )}
+          <BookingChecks contract={terms} own={contract} template={contractTemplate} draft={draft?.state ?? null} fates={fates} />
           <div className="mt-4 flex items-center gap-4">
             <Button onClick={onBook} disabled={loading}>
               {loading ? "Booking…" : "Confirm & book"}

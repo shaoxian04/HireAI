@@ -1,5 +1,6 @@
 package com.hireai.controller.biz.agent.converter;
 
+import com.hireai.controller.biz.acceptance.converter.Acceptance2DTOConverter;
 import com.hireai.controller.biz.agent.dto.AgentDTO;
 import com.hireai.domain.biz.offering.agent.model.AgentModel;
 import com.hireai.domain.biz.offering.agent.model.AgentVersionModel;
@@ -21,6 +22,7 @@ public final class AgentModel2DTOConverter {
                 version.id(),
                 version.versionNumber(),
                 new AgentDTO.OutputSpecDTO(spec.format().name(), spec.schema(), spec.acceptanceCriteria()),
+                Acceptance2DTOConverter.toDTO(version.offer(), version.pricing().price()),
                 version.capabilityCategories(),
                 version.webhookUrl(),
                 version.maxExecutionSeconds(),

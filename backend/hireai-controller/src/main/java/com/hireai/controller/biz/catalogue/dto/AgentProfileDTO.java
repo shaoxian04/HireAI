@@ -1,5 +1,8 @@
 package com.hireai.controller.biz.catalogue.dto;
 
+import com.hireai.controller.biz.acceptance.dto.OfferDTO;
+import com.hireai.controller.biz.task.dto.ContractDeclineRateDTO;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -14,6 +17,8 @@ public record AgentProfileDTO(
         String sampleOutput,
         List<String> galleryUrls,
         OutputSpecDTO outputSpec,
+        /** The terms the Agent works under (ADR 0009); a direct booking freezes the matching Contract. */
+        OfferDTO offer,
         StatsDTO stats,
         List<ReviewDTO> reviews
 ) {
@@ -26,12 +31,16 @@ public record AgentProfileDTO(
     ) {
     }
 
-    /** Derived execution statistics computed from completed tasks. */
+    /**
+     * Derived execution statistics computed from completed tasks, plus the public contract-decline
+     * rate (#93) from the dispatch history.
+     */
     public record StatsDTO(
             int requestCount,
             int completedCount,
             Double successRate,
-            Double avgTurnaroundSeconds
+            Double avgTurnaroundSeconds,
+            ContractDeclineRateDTO contractDeclines
     ) {
     }
 

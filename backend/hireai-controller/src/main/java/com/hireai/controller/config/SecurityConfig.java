@@ -73,6 +73,9 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/auth/register").permitAll()
                         .requestMatchers("/api/agent-callbacks/**").permitAll()
                         .requestMatchers("/api/arbitration-callbacks/**").permitAll()
+                        // An Item's signed source link (spec S4, D31): the token in the path is the
+                        // credential, checked by the controller (unforged, unexpired, one Item).
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/source-links/*").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         // Public API documentation (springdoc / Swagger UI) — the programmatic OpenAPI group.
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
@@ -80,16 +83,26 @@ public class SecurityConfig {
                         // match-preview is a POST (task text in the body), so it needs its own matcher:
                         // no GET wildcard covers it.
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
-                                "/api/tasks", "/api/tasks/direct", "/api/tasks/match-preview")
+                                "/api/tasks", "/api/tasks/direct", "/api/tasks/match-preview",
+                                "/api/tasks/direct/ai-review-quote", "/api/contracts/draft")
                                 .hasAnyRole("CLIENT", "API_CLIENT")
                         .requestMatchers(org.springframework.http.HttpMethod.GET,
                                 "/api/tasks", "/api/tasks/*", "/api/tasks/*/result",
-                                "/api/tasks/*/validation", "/api/tasks/*/attempts").hasAnyRole("CLIENT", "API_CLIENT")
+                                "/api/tasks/*/validation", "/api/tasks/*/attempts", "/api/tasks/*/ai-review")
+                                .hasAnyRole("CLIENT", "API_CLIENT")
                         // Accept/reject are human-only: a client must review and decide, not a script.
                         // Equivalent to letting them fall through to anyRequest() below; kept explicit
                         // to document intent. An API_CLIENT key is denied (401 at the full app).
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
-                                "/api/tasks/*/accept", "/api/tasks/*/reject").hasAnyRole("CLIENT", "BUILDER", "ADMIN")
+                                "/api/tasks/*/accept", "/api/tasks/*/reject", "/api/tasks/*/arbitration").hasAnyRole("CLIENT", "BUILDER", "ADMIN")
+                        // Engagement documents: a machine buyer may upload and list them with its key.
+                        // Opening, ending or accepting an Engagement (consent) stays human-only (anyRequest).
+                        // Who may see or change which Engagement is the app service's owner check (404).
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/engagements/*/sources")
+                                .hasAnyRole("CLIENT", "BUILDER", "ADMIN", "API_CLIENT")
+                        .requestMatchers(org.springframework.http.HttpMethod.GET,
+                                "/api/engagements", "/api/engagements/*", "/api/engagements/*/sources")
+                                .hasAnyRole("CLIENT", "BUILDER", "ADMIN", "API_CLIENT")
                         // Key management is JWT-only (a leaked key cannot mint keys).
                         .requestMatchers("/api/keys/**").hasRole("CLIENT")
                         // Subscription management is JWT-only (a leaked key cannot repoint the callback).
@@ -100,6 +113,14 @@ public class SecurityConfig {
                                 "/api/webhooks/deliveries").hasAnyRole("CLIENT", "API_CLIENT")
                         .requestMatchers(org.springframework.http.HttpMethod.POST,
                                 "/api/webhooks/deliveries/*/redeliver").hasAnyRole("CLIENT", "API_CLIENT")
+                        // Signed receipts (D40): the public keys are public, so anyone can verify a receipt.
+                        // The receipts themselves go to the task's Client (human or API key) and the
+                        // assigned Agent's Builder; the app service checks which (Hard Invariant #5).
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/receipt-keys").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET,
+                                "/api/tasks/*/receipts", "/api/receipts/*", "/api/receipts/*/credential",
+                                "/api/receipts/*/otel")
+                                .hasAnyRole("CLIENT", "BUILDER", "ADMIN", "API_CLIENT")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // Agent signing-secret rotation: the owning BUILDER only, JWT-only (a leaked API
                         // key cannot mint an agent secret). Ownership is then checked by the app service.

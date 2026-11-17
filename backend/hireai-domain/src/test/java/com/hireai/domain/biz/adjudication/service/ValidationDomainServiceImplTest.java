@@ -12,12 +12,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ValidationDomainServiceImplTest {
 
     // Fake SchemaValidator: parses with a trivial brace check, honours a "SCHEMA_OK"/"SCHEMA_BAD" marker.
-    private final SchemaValidator fake = (payload, schema) -> {
-        boolean valid = payload != null && payload.trim().startsWith("{") && payload.trim().endsWith("}");
-        if (!valid) return new JsonCheckResult(false, false, false, "bad json");
-        if (schema == null || schema.isBlank()) return new JsonCheckResult(true, false, false, "no schema");
-        if ("SCHEMA_BAD".equals(schema)) return new JsonCheckResult(true, true, false, "mismatch");
-        return new JsonCheckResult(true, true, true, "ok");
+    private final SchemaValidator fake = new SchemaValidator() {
+        @Override
+        public JsonCheckResult check(String payload, String schema) {
+            boolean valid = payload != null && payload.trim().startsWith("{") && payload.trim().endsWith("}");
+            if (!valid) return new JsonCheckResult(false, false, false, "bad json");
+            if (schema == null || schema.isBlank()) return new JsonCheckResult(true, false, false, "no schema");
+            if ("SCHEMA_BAD".equals(schema)) return new JsonCheckResult(true, true, false, "mismatch");
+            return new JsonCheckResult(true, true, true, "ok");
+        }
+
+        @Override
+        public java.util.Optional<String> problemWith(String schema) {
+            return java.util.Optional.empty();
+        }
     };
     private final ValidationDomainService svc = new ValidationDomainServiceImpl(fake);
     private final UUID taskId = UUID.randomUUID();
@@ -29,48 +37,48 @@ class ValidationDomainServiceImplTest {
     @Test
     void textNonEmptyPasses() {
         var spec = new OutputSpec(OutputFormat.TEXT, null, null);
-        assertThat(svc.validate(spec, result("a summary", null), 1).verdict()).isEqualTo(Verdict.PASS);
+        assertThat(svc.validate(spec.toContract(), result("a summary", null), 1).verdict()).isEqualTo(Verdict.PASS);
     }
 
     @Test
     void textBlankFails() {
         var spec = new OutputSpec(OutputFormat.TEXT, null, null);
-        assertThat(svc.validate(spec, result("   ", null), 1).verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(svc.validate(spec.toContract(), result("   ", null), 1).verdict()).isEqualTo(Verdict.FAIL);
     }
 
     @Test
     void jsonValidNoSchemaPasses() {
         var spec = new OutputSpec(OutputFormat.JSON, null, null);
-        assertThat(svc.validate(spec, result("{\"a\":1}", null), 1).verdict()).isEqualTo(Verdict.PASS);
+        assertThat(svc.validate(spec.toContract(), result("{\"a\":1}", null), 1).verdict()).isEqualTo(Verdict.PASS);
     }
 
     @Test
     void jsonInvalidFails() {
         var spec = new OutputSpec(OutputFormat.JSON, null, null);
-        assertThat(svc.validate(spec, result("not json", null), 1).verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(svc.validate(spec.toContract(), result("not json", null), 1).verdict()).isEqualTo(Verdict.FAIL);
     }
 
     @Test
     void jsonSchemaMismatchFails() {
         var spec = new OutputSpec(OutputFormat.JSON, "SCHEMA_BAD", null);
-        assertThat(svc.validate(spec, result("{\"a\":1}", null), 1).verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(svc.validate(spec.toContract(), result("{\"a\":1}", null), 1).verdict()).isEqualTo(Verdict.FAIL);
     }
 
     @Test
-    void fileHttpsUrlPasses() {
+    void fileHttpsUrlIsJudgedOnItsFetchedDeliverable() {
         var spec = new OutputSpec(OutputFormat.FILE, null, null);
-        assertThat(svc.validate(spec, result("{}", "https://cdn.example.com/x.pdf"), 1).verdict()).isEqualTo(Verdict.PASS);
+        assertThat(svc.needsDelivery(spec.toContract(), result("{}", "https://cdn.example.com/x.pdf"))).isTrue();
     }
 
     @Test
     void fileNonHttpsFails() {
         var spec = new OutputSpec(OutputFormat.FILE, null, null);
-        assertThat(svc.validate(spec, result("{}", "http://cdn.example.com/x.pdf"), 1).verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(svc.validate(spec.toContract(), result("{}", "http://cdn.example.com/x.pdf"), 1).verdict()).isEqualTo(Verdict.FAIL);
     }
 
     @Test
     void fileMissingUrlFails() {
         var spec = new OutputSpec(OutputFormat.FILE, null, null);
-        assertThat(svc.validate(spec, result("{}", null), 1).verdict()).isEqualTo(Verdict.FAIL);
+        assertThat(svc.validate(spec.toContract(), result("{}", null), 1).verdict()).isEqualTo(Verdict.FAIL);
     }
 }

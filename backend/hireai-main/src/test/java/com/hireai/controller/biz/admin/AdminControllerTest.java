@@ -60,7 +60,7 @@ class AdminControllerTest {
     @WithMockUser(roles = "ADMIN")
     void overviewAllowsAdmin() throws Exception {
         when(adminReadAppService.overview()).thenReturn(new AdminViews.Overview(
-                1, 0, 2, 3, 10, 4, 2, new BigDecimal("20.00"), new BigDecimal("1.50")));
+                1, 0, 2, 3, 10, 4, 2, new BigDecimal("20.00"), new BigDecimal("1.50"), java.math.BigDecimal.ZERO));
         mockMvc.perform(get("/api/admin/overview"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
@@ -79,7 +79,7 @@ class AdminControllerTest {
                 new java.math.BigDecimal("40.00"), "summarisation", "TEXT",
                 java.time.Instant.parse("2026-07-02T00:00:00Z"), java.time.Instant.parse("2026-07-02T00:01:00Z"),
                 "Demo Agent", "builder", new java.math.BigDecimal("50.00"), new java.math.BigDecimal("10.00"),
-                null, null, null, null,
+                null, null, null, null, null,
                 false, null, List.of()));
 
         mockMvc.perform(post("/api/admin/disputes/{id}/rule", disputeId)

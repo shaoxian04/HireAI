@@ -34,6 +34,14 @@ class WebhookPayloadsTest {
             + "\",\"reason\":\"FAILED\",\"failure_reason\":\"AGENT_UNREACHABLE\""
             + ",\"refunded\":120.00,\"occurred_at\":\"2026-07-19T09:12:00Z\"}");
     }
+    @Test void failedCarriesTheFailureDetailWhenThereIsOne() throws Exception {
+        JsonNode node = mapper.readTree(WebhookPayloads.failed(ev, task, "FAILED", FailureReason.NO_ELIGIBLE_AGENT,
+                "3 agents: their offers don't accept \"max_bytes\"", new BigDecimal("1.00"), at));
+        assertThat(node.get("failure_detail").asText()).isEqualTo("3 agents: their offers don't accept \"max_bytes\"");
+        JsonNode none = mapper.readTree(WebhookPayloads.failed(ev, task, "FAILED", FailureReason.AGENT_BUSY,
+                null, new BigDecimal("1.00"), at));
+        assertThat(none.has("failure_detail")).isFalse();
+    }
     @Test void failedRendersAMissingFailureReasonAsJsonNull() throws Exception {
         JsonNode node = mapper.readTree(WebhookPayloads.failed(ev, task, "CANCELLED", null, new BigDecimal("1.00"), at));
         assertThat(node.get("failure_reason").isNull()).isTrue();

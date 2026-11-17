@@ -24,15 +24,21 @@ public final class DispatchAttemptModel {
     private final int attemptNumber;
     private final DispatchOutcome outcome;
     private final Instant occurredAt;
+    /** The Agent's own words on a {@code CONTRACT_DECLINED} attempt; null otherwise (and optional then). */
+    private final String declineReason;
+
+    /** Longest decline reason kept (V43 CHECK); the rest of a longer one is dropped. */
+    public static final int MAX_DECLINE_REASON_LENGTH = 500;
 
     private DispatchAttemptModel(UUID id, UUID taskId, UUID agentVersionId, int attemptNumber,
-                                 DispatchOutcome outcome, Instant occurredAt) {
+                                 DispatchOutcome outcome, Instant occurredAt, String declineReason) {
         this.id = id;
         this.taskId = taskId;
         this.agentVersionId = agentVersionId;
         this.attemptNumber = attemptNumber;
         this.outcome = outcome;
         this.occurredAt = occurredAt;
+        this.declineReason = declineReason;
     }
 
     /**
@@ -41,6 +47,43 @@ public final class DispatchAttemptModel {
      */
     public static DispatchAttemptModel record(UUID taskId, UUID agentVersionId, int attemptNumber,
                                               DispatchOutcome outcome, Instant occurredAt) {
+        if (outcome == DispatchOutcome.CONTRACT_DECLINED) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR,
+                    "A contract decline is recorded with contractDeclined(), which keeps the Agent's reason");
+        }
+        return create(taskId, agentVersionId, attemptNumber, outcome, occurredAt, null);
+    }
+
+    /**
+     * The Agent refused the task's Contract (#93): the attempt after the {@code attemptsSoFar} already
+     * recorded. {@code reason} is the Agent's untrusted free text: trimmed, control characters turned
+     * into spaces, cut to {@value #MAX_DECLINE_REASON_LENGTH} characters; blank means no reason.
+     */
+    public static DispatchAttemptModel contractDeclined(UUID taskId, UUID agentVersionId, int attemptsSoFar,
+                                                        String reason, Instant occurredAt) {
+        return create(taskId, agentVersionId, attemptsSoFar + 1, DispatchOutcome.CONTRACT_DECLINED, occurredAt,
+                normaliseReason(reason));
+    }
+
+    private static String normaliseReason(String reason) {
+        if (reason == null) {
+            return null;
+        }
+        String clean = reason.replaceAll("\\p{Cntrl}+", " ").replaceAll(" {2,}", " ").strip();
+        if (clean.isEmpty()) {
+            return null;
+        }
+        if (clean.length() <= MAX_DECLINE_REASON_LENGTH) {
+            return clean;
+        }
+        // Never cut a surrogate pair in half.
+        int end = Character.isHighSurrogate(clean.charAt(MAX_DECLINE_REASON_LENGTH - 1))
+                ? MAX_DECLINE_REASON_LENGTH - 1 : MAX_DECLINE_REASON_LENGTH;
+        return clean.substring(0, end).strip();
+    }
+
+    private static DispatchAttemptModel create(UUID taskId, UUID agentVersionId, int attemptNumber,
+                                               DispatchOutcome outcome, Instant occurredAt, String declineReason) {
         if (taskId == null || agentVersionId == null || outcome == null || occurredAt == null) {
             throw new DomainException(ResultCode.VALIDATION_ERROR,
                     "A dispatch attempt needs a task, an agent version, an outcome and a time");
@@ -50,7 +93,7 @@ public final class DispatchAttemptModel {
                     "Dispatch attempt numbers start at 1; got " + attemptNumber);
         }
         return new DispatchAttemptModel(UUID.randomUUID(), taskId, agentVersionId, attemptNumber,
-                outcome, occurredAt);
+                outcome, occurredAt, declineReason);
     }
 
     /**
@@ -68,4 +111,5 @@ public final class DispatchAttemptModel {
     public int attemptNumber() { return attemptNumber; }
     public DispatchOutcome outcome() { return outcome; }
     public Instant occurredAt() { return occurredAt; }
+    public String declineReason() { return declineReason; }
 }

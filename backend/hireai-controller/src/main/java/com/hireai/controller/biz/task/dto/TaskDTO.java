@@ -1,9 +1,13 @@
 package com.hireai.controller.biz.task.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.hireai.controller.biz.acceptance.dto.ContractDTO;
+import com.hireai.controller.biz.acceptance.dto.ExtractionDTO;
+import com.hireai.controller.biz.acceptance.dto.VersionFallbackDTO;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /** Outbound HTTP DTO for a task. No domain types leak across the boundary. */
@@ -16,6 +20,8 @@ public record TaskDTO(
         BigDecimal budget,
         String status,
         OutputSpecDTO outputSpec,
+        /** The Contract frozen at submit (ADR 0009); absent on Tasks submitted before Contracts existed. */
+        ContractDTO contract,
         Instant createdAt,
         String resolution,
         Instant resolvedAt,
@@ -31,8 +37,76 @@ public record TaskDTO(
          * The Agent the task was booked with or assigned to; absent when none was (a routed task
          * that never found one) and on list/command responses, which don't resolve it.
          */
-        UUID agentId
+        UUID agentId,
+        /**
+         * When the Client's review window closes (#94): set once the result awaits review on the
+         * web channel, and kept after it is resolved. Absent on list/command responses.
+         */
+        Instant reviewDeadline,
+        /** True when the window closed unreviewed and the platform accepted on the Client's behalf. */
+        Boolean autoAccepted,
+        /**
+         * The latest round of the rejection response path (#95), once the Client rejected for reason
+         * A/B/C; kept after it is settled. Absent otherwise and on list/command responses.
+         */
+        RejectionDTO rejection,
+        /**
+         * Why no Agent matched the task (#91): the blocking Contract parameter, Template version or the
+         * relevance floor, with Agent counts. Present while it waits AWAITING_AGENT and after it ends
+         * NO_ELIGIBLE_AGENT; absent otherwise and on list/command responses.
+         */
+        String failureDetail,
+        /**
+         * A multi-Item Task (spec S3): how many Items, the price of one ({@code budget} is the
+         * escrow, price × count), and each Item with its outcome. All three are absent on a
+         * single-deliverable Task; {@code items} is also absent on list responses.
+         */
+        Integer itemCount,
+        BigDecimal itemPrice,
+        List<TaskItemDTO> items,
+        /**
+         * Present while the task's Contract uses the previous Template version during its transition
+         * (spec D36): no Agent's Offer covered the current version when it was submitted. Absent
+         * otherwise and on list responses.
+         */
+        VersionFallbackDTO templateFallback,
+        /**
+         * Why a result that no machine could pass waits for the Client's review: ANOMALY (the Agent
+         * flagged something), UNDECIDED (a check could not decide) or AI_REVIEW_UNAVAILABLE (a decisive
+         * AI Review gave no usable verdict, #107). Absent otherwise and on list/command responses.
+         */
+        String reviewReason,
+        /**
+         * What requirement extraction made of the description (spec S6): present on a task submitted
+         * with a description only (mode 1), on the submit response and GET /api/tasks/{id}; absent for a
+         * structured Contract (mode 2), a direct booking, and on list responses.
+         */
+        ExtractionDTO extraction
 ) {
+
+    /** This task with its version-fallback notice (null leaves it out). */
+    public TaskDTO withTemplateFallback(VersionFallbackDTO fallback) {
+        return new TaskDTO(id, clientId, title, description, budget, status, outputSpec, contract, createdAt,
+                resolution, resolvedAt, rejectionReason, payoutAmount, commissionAmount, refundAmount,
+                failureReason, category, agentId, reviewDeadline, autoAccepted, rejection, failureDetail,
+                itemCount, itemPrice, items, fallback, reviewReason, extraction);
+    }
+
+    /** This task with why its result waits for the Client's review (null leaves it out). */
+    public TaskDTO withReviewReason(String reason) {
+        return new TaskDTO(id, clientId, title, description, budget, status, outputSpec, contract, createdAt,
+                resolution, resolvedAt, rejectionReason, payoutAmount, commissionAmount, refundAmount,
+                failureReason, category, agentId, reviewDeadline, autoAccepted, rejection, failureDetail,
+                itemCount, itemPrice, items, templateFallback, reason, extraction);
+    }
+
+    /** This task with what extraction made of its description (null leaves it out). */
+    public TaskDTO withExtraction(ExtractionDTO extraction) {
+        return new TaskDTO(id, clientId, title, description, budget, status, outputSpec, contract, createdAt,
+                resolution, resolvedAt, rejectionReason, payoutAmount, commissionAmount, refundAmount,
+                failureReason, category, agentId, reviewDeadline, autoAccepted, rejection, failureDetail,
+                itemCount, itemPrice, items, templateFallback, reviewReason, extraction);
+    }
 
     public record OutputSpecDTO(String format, String schema, String acceptanceCriteria) {
     }

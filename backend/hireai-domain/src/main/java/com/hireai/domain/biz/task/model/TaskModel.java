@@ -1,5 +1,6 @@
 package com.hireai.domain.biz.task.model;
 
+import com.hireai.domain.biz.acceptance.contract.model.Contract;
 import com.hireai.utility.result.ResultCode;
 import com.hireai.domain.biz.task.enums.FailureReason;
 import com.hireai.domain.biz.task.enums.RejectReason;
@@ -24,7 +25,18 @@ public final class TaskModel {
     private final String title;
     private final String description;
     private final Money budget;
-    private final OutputSpec outputSpec;
+    /**
+     * The wire description of the Contract (#110): the deliverable's format (its Template's shape),
+     * the Contract's schema and the Client's prose acceptance criteria. Derived, never a second
+     * contract: automated acceptance and arbitration read {@link #contract}.
+     */
+    private final OutputSpec outputDescription;
+    /**
+     * The Contract frozen at submit (ADR 0009, Hard Invariant #4): the single binding contract.
+     * Never null — the V55 migration gave every Task submitted before Contracts existed the
+     * Contract its output spec mapped onto (the same rules it was already judged by since #90).
+     */
+    private final Contract contract;
     private final String category;
     private final TaskStatus status;
     private final UUID agentVersionId; // nullable until assigned
@@ -39,18 +51,25 @@ public final class TaskModel {
     // Must stay in sync with the V9 rejection_reason DB CHECK and RejectTaskRequest's @Size(max).
     private static final int MAX_REASON_LENGTH = 500;
 
-    /** Canonical 16-arg constructor: used by the rehydration path and all transition helpers. */
+    /**
+     * Canonical 17-arg constructor: used by the rehydration path and all transition helpers.
+     * {@code output} gives the deliverable's format (the Contract's Template shape) and the prose
+     * acceptance criteria; its schema is ignored — the description takes the Contract's own. A null
+     * {@code contract} freezes the one {@code output} maps onto (spec D39).
+     */
     public TaskModel(UUID id, UUID clientId, String title, String description,
-                     Money budget, OutputSpec outputSpec, String category, TaskStatus status,
+                     Money budget, OutputSpec output, Contract contract, String category, TaskStatus status,
                      UUID agentVersionId, TaskResultModel result, Instant createdAt,
                      TaskResolution resolution, Instant resolvedAt, String rejectionReason,
                      RejectReason rejectReasonCategory, FailureReason failureReason) {
+        requirePresent(output, "output description");
         this.id = id;
         this.clientId = clientId;
         this.title = title;
         this.description = description;
         this.budget = budget;
-        this.outputSpec = outputSpec;
+        this.contract = contract != null ? contract : output.toContract();
+        this.outputDescription = OutputSpec.describing(output.format(), this.contract, output.acceptanceCriteria());
         this.category = category;
         this.status = status;
         this.agentVersionId = agentVersionId;
@@ -63,17 +82,42 @@ public final class TaskModel {
         this.failureReason = failureReason;
     }
 
-    /** Pre-review rehydration overload (11-arg): delegates to the canonical constructor. */
+    /** Rehydration with the Contract {@code outputSpec} maps onto (D39): delegates to the canonical constructor. */
+    public TaskModel(UUID id, UUID clientId, String title, String description,
+                     Money budget, OutputSpec outputSpec, String category, TaskStatus status,
+                     UUID agentVersionId, TaskResultModel result, Instant createdAt,
+                     TaskResolution resolution, Instant resolvedAt, String rejectionReason,
+                     RejectReason rejectReasonCategory, FailureReason failureReason) {
+        this(id, clientId, title, description, budget, outputSpec, null, category, status, agentVersionId,
+                result, createdAt, resolution, resolvedAt, rejectionReason, rejectReasonCategory, failureReason);
+    }
+
+    /** Pre-review rehydration overload (11-arg, the Contract {@code outputSpec} maps onto). */
     public TaskModel(UUID id, UUID clientId, String title, String description,
                      Money budget, OutputSpec outputSpec, String category, TaskStatus status,
                      UUID agentVersionId, TaskResultModel result, Instant createdAt) {
-        this(id, clientId, title, description, budget, outputSpec, category, status,
+        this(id, clientId, title, description, budget, outputSpec, null, category, status,
                 agentVersionId, result, createdAt, null, null, null, null, null);
     }
 
-    /** Factory for the SUBMIT transition: enforces invariants and creates a SUBMITTED task. */
+    /**
+     * Factory for the SUBMIT transition: enforces invariants and creates a SUBMITTED task, freezing
+     * the Contract the submitted output spec maps onto (spec D39). The output spec is only an input
+     * shorthand (format, schema, criteria); the Task keeps the Contract, never the spec (#110).
+     */
     public static TaskModel submit(UUID clientId, String title, String description,
                                    Money budget, OutputSpec outputSpec, String category) {
+        return submit(clientId, title, description, budget, outputSpec, category, null);
+    }
+
+    /**
+     * The SUBMIT transition freezing an explicit {@code contract} (#91: a direct booking under the
+     * Client's terms, which the Agent's Offer covers). Null freezes the output spec's equivalent. The
+     * caller checks the Contract against its Template before saving, and passes an output spec whose
+     * format is that Template's shape (it describes the deliverable on the wire).
+     */
+    public static TaskModel submit(UUID clientId, String title, String description,
+                                   Money budget, OutputSpec outputSpec, String category, Contract contract) {
         requirePresent(clientId, "client id");
         requireText(title, "title");
         requireText(description, "description");
@@ -83,7 +127,9 @@ public final class TaskModel {
         // Lowercase to match AgentVersionModel.normaliseCategories' .trim().toLowerCase() idiom,
         // so the routing re-filter's case-sensitive containment check (coversCategory) actually matches.
         return new TaskModel(UUID.randomUUID(), clientId, title.trim(), description.trim(),
-                budget, outputSpec, category.trim().toLowerCase(), TaskStatus.SUBMITTED, null, null, Instant.now());
+                budget, outputSpec, contract,
+                category.trim().toLowerCase(), TaskStatus.SUBMITTED,
+                null, null, Instant.now(), null, null, null, null, null);
     }
 
     private static void requirePresent(Object value, String field) {
@@ -169,6 +215,26 @@ public final class TaskModel {
         return endWithoutResult(TaskStatus.SPEC_VIOLATION, FailureReason.SPEC_VIOLATION);
     }
 
+    /**
+     * RESULT_RECEIVED → QUEUED for the same Agent: a deterministic check rejected the result and it
+     * goes back for rework (spec D17). The rejected result stays until the reworked one replaces it.
+     */
+    public TaskModel returnForRework() {
+        requireStatus(TaskStatus.RESULT_RECEIVED, "returnForRework");
+        requirePresent(agentVersionId, "agent version id");
+        return copyWith(TaskStatus.QUEUED, this.agentVersionId, this.result);
+    }
+
+    /**
+     * PENDING_REVIEW → QUEUED for the same Agent: a multi-Item Task's sample failed twice, so the whole
+     * Task goes back once for rework and is resampled when it returns (spec S8, D19).
+     */
+    public TaskModel returnForSampleRework() {
+        requireStatus(TaskStatus.PENDING_REVIEW, "returnForSampleRework");
+        requirePresent(agentVersionId, "agent version id");
+        return copyWith(TaskStatus.QUEUED, this.agentVersionId, this.result);
+    }
+
     /** SUBMITTED → AWAITING_AGENT (idempotent from AWAITING_AGENT for re-match no-match passes). */
     public TaskModel markAwaitingAgent() {
         requireStatusIn("markAwaitingAgent", TaskStatus.SUBMITTED, TaskStatus.AWAITING_AGENT);
@@ -252,10 +318,123 @@ public final class TaskModel {
         return endWithoutResult(TaskStatus.FAILED, reason);
     }
 
-    /** PENDING_REVIEW → RESOLVED (ACCEPTED): the client accepted the result. */
+    /**
+     * PENDING_REVIEW|AWAITING_CLIENT_DECISION → RESOLVED (ACCEPTED): the client accepted the result,
+     * either on review or after the Agent stood by it following a rejection (#95). The rejection's
+     * reason is kept, so the record shows the result was once rejected.
+     */
     public TaskModel accept() {
-        requireStatus(TaskStatus.PENDING_REVIEW, "accept");
-        return resolved(TaskResolution.ACCEPTED, null);
+        requireStatusIn("accept", TaskStatus.PENDING_REVIEW, TaskStatus.AWAITING_CLIENT_DECISION);
+        return resolved(TaskResolution.ACCEPTED, this.rejectionReason);
+    }
+
+    // --- Rejection response path (#95, spec D20) ---
+
+    /**
+     * PENDING_REVIEW → AWAITING_AGENT_RESPONSE: the client rejected for reason A/B/C. The Agent may
+     * now revise once, concede or stand by; nothing is arbitrated yet.
+     */
+    public TaskModel awaitAgentResponse(RejectReason reasonCategory, String reason) {
+        requireStatus(TaskStatus.PENDING_REVIEW, "awaitAgentResponse");
+        requireDisputable(reasonCategory);
+        return withRejection(TaskStatus.AWAITING_AGENT_RESPONSE, this.result, trimReason(reason), reasonCategory);
+    }
+
+    /**
+     * AWAITING_AGENT_RESPONSE → RESULT_RECEIVED: the Agent revised its result. The revision replaces
+     * the delivered result and goes through validation again, like the first one.
+     */
+    public TaskModel revise(TaskResultModel revised) {
+        requireStatus(TaskStatus.AWAITING_AGENT_RESPONSE, "revise");
+        requirePresent(revised, "revised result");
+        if (!revised.taskId().equals(this.id)) {
+            throw new DomainException(ResultCode.VALIDATION_ERROR, "A revision must be for task " + id);
+        }
+        return withRejection(TaskStatus.RESULT_RECEIVED, revised, this.rejectionReason, this.rejectReasonCategory);
+    }
+
+    /** AWAITING_AGENT_RESPONSE → RESOLVED (REJECTED): the Agent conceded; the client is refunded. */
+    public TaskModel concede() {
+        requireStatus(TaskStatus.AWAITING_AGENT_RESPONSE, "concede");
+        return resolved(TaskResolution.REJECTED, this.rejectionReason);
+    }
+
+    /**
+     * AWAITING_AGENT_RESPONSE → AWAITING_CLIENT_DECISION: the Agent stood by its result, with a
+     * reason or by staying silent. The client now accepts or requests arbitration.
+     */
+    public TaskModel awaitClientDecision() {
+        requireStatus(TaskStatus.AWAITING_AGENT_RESPONSE, "awaitClientDecision");
+        return withRejection(TaskStatus.AWAITING_CLIENT_DECISION, this.result, this.rejectionReason,
+                this.rejectReasonCategory);
+    }
+
+    /**
+     * AWAITING_CLIENT_DECISION → DISPUTED: the client asked for AI arbitration of the rejection the
+     * Agent stood by. Only the client opens arbitration (D17′); no deposit is taken.
+     */
+    public TaskModel requestArbitration() {
+        requireStatus(TaskStatus.AWAITING_CLIENT_DECISION, "requestArbitration");
+        return withRejection(TaskStatus.DISPUTED, this.result, this.rejectionReason, this.rejectReasonCategory);
+    }
+
+    /**
+     * The submitted task stamped with the platform clock's submit time, so every age measured from it (the
+     * SUBMITTED sweeper's) uses the same clock as the cutoff it is compared with. SUBMITTED only.
+     */
+    public TaskModel submittedAt(Instant at) {
+        requireStatus(TaskStatus.SUBMITTED, "submittedAt");
+        requirePresent(at, "submit time");
+        return new TaskModel(id, clientId, title, description, budget, outputDescription, contract, category,
+                status, agentVersionId, result, at, resolution, resolvedAt, rejectionReason, rejectReasonCategory,
+                failureReason);
+    }
+
+    private TaskModel withRejection(TaskStatus newStatus, TaskResultModel newResult, String reason,
+                                    RejectReason reasonCategory) {
+        return new TaskModel(id, clientId, title, description, budget, outputDescription, contract, category,
+                newStatus, agentVersionId, newResult, createdAt,
+                this.resolution, this.resolvedAt, reason, reasonCategory, this.failureReason);
+    }
+
+    private static void requireDisputable(RejectReason reasonCategory) {
+        requirePresent(reasonCategory, "reject reason category");
+        if (!reasonCategory.opensDispute()) {
+            throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
+                    "Only an A/B/C reason starts the rejection response path; got " + reasonCategory);
+        }
+    }
+
+    /**
+     * PENDING_REVIEW → RESOLVED once every Item of a multi-Item Task has settled (spec S3): ACCEPTED
+     * when every Item was accepted, else PARTIALLY_ACCEPTED (some were refunded).
+     */
+    public TaskModel resolveItems(boolean allItemsAccepted) {
+        requireStatus(TaskStatus.PENDING_REVIEW, "resolveItems");
+        return resolved(allItemsAccepted ? TaskResolution.ACCEPTED : TaskResolution.PARTIALLY_ACCEPTED, null);
+    }
+
+    /**
+     * PENDING_REVIEW → RESOLVED: a decisive AI Review (API/MCP, spec D38) settled the result. The
+     * resolution follows the verdict's ruling category, as a dispute ruling's would.
+     */
+    public TaskModel resolveByAiReview(com.hireai.domain.biz.adjudication.enums.RulingCategory category) {
+        requireStatus(TaskStatus.PENDING_REVIEW, "resolveByAiReview");
+        requirePresent(category, "ruling category");
+        return resolved(switch (category) {
+            case FULFILLED -> TaskResolution.ACCEPTED;
+            case PARTIALLY_FULFILLED -> TaskResolution.PARTIALLY_ACCEPTED;
+            case NOT_FULFILLED -> TaskResolution.REJECTED;
+        }, null);
+    }
+
+    /**
+     * PENDING_REVIEW → RESOLVED REJECTED: every Item of a multi-Item Task settled and none was paid
+     * anything (each was refunded on its own).
+     */
+    public TaskModel resolveItemsAllRefunded() {
+        requireStatus(TaskStatus.PENDING_REVIEW, "resolveItemsAllRefunded");
+        return resolved(TaskResolution.REJECTED, null);
     }
 
     /** PENDING_REVIEW → RESOLVED (REJECTED): the client rejected the result. Reason optional, ≤500 chars. */
@@ -272,7 +451,7 @@ public final class TaskModel {
             throw new DomainException(ResultCode.DOMAIN_RULE_VIOLATION,
                     "dispute() requires an A/B/C reason; got " + reasonCategory);
         }
-        return new TaskModel(id, clientId, title, description, budget, outputSpec, category,
+        return new TaskModel(id, clientId, title, description, budget, outputDescription, contract, category,
                 TaskStatus.DISPUTED, agentVersionId, result, createdAt,
                 this.resolution, this.resolvedAt, trimReason(reason), reasonCategory, this.failureReason);
     }
@@ -281,7 +460,7 @@ public final class TaskModel {
     public TaskModel resolveDispute(TaskResolution resolution) {
         requireStatus(TaskStatus.DISPUTED, "resolveDispute");
         requirePresent(resolution, "resolution");
-        return new TaskModel(id, clientId, title, description, budget, outputSpec, category,
+        return new TaskModel(id, clientId, title, description, budget, outputDescription, contract, category,
                 TaskStatus.RESOLVED, agentVersionId, result, createdAt,
                 resolution, Instant.now(), this.rejectionReason, this.rejectReasonCategory, this.failureReason);
     }
@@ -289,7 +468,7 @@ public final class TaskModel {
     /** PENDING_REVIEW → RESOLVED (REJECTED): client changed their mind (D); charged in full, no dispute. */
     public TaskModel chargeChangedMind(String reason) {
         requireStatus(TaskStatus.PENDING_REVIEW, "chargeChangedMind");
-        return new TaskModel(id, clientId, title, description, budget, outputSpec, category,
+        return new TaskModel(id, clientId, title, description, budget, outputDescription, contract, category,
                 TaskStatus.RESOLVED, agentVersionId, result, createdAt,
                 TaskResolution.REJECTED, Instant.now(), trimReason(reason), RejectReason.D_CHANGED_MIND,
                 this.failureReason);
@@ -306,14 +485,14 @@ public final class TaskModel {
 
     private TaskModel resolved(TaskResolution resolution, String rejectionReason) {
         return new TaskModel(this.id, this.clientId, this.title, this.description, this.budget,
-                this.outputSpec, this.category, TaskStatus.RESOLVED, this.agentVersionId, this.result,
+                this.outputDescription, this.contract, this.category, TaskStatus.RESOLVED, this.agentVersionId, this.result,
                 this.createdAt, resolution, Instant.now(), rejectionReason, this.rejectReasonCategory,
                 this.failureReason);
     }
 
     private TaskModel copyWith(TaskStatus newStatus, UUID newAgentVersionId, TaskResultModel newResult) {
         return new TaskModel(this.id, this.clientId, this.title, this.description, this.budget,
-                this.outputSpec, this.category, newStatus, newAgentVersionId, newResult, this.createdAt,
+                this.outputDescription, this.contract, this.category, newStatus, newAgentVersionId, newResult, this.createdAt,
                 this.resolution, this.resolvedAt, this.rejectionReason, this.rejectReasonCategory,
                 this.failureReason);
     }
@@ -326,7 +505,7 @@ public final class TaskModel {
                     "Failure reason already set to " + this.failureReason + "; cannot record " + reason);
         }
         return new TaskModel(this.id, this.clientId, this.title, this.description, this.budget,
-                this.outputSpec, this.category, terminalStatus, this.agentVersionId, this.result,
+                this.outputDescription, this.contract, this.category, terminalStatus, this.agentVersionId, this.result,
                 this.createdAt, this.resolution, this.resolvedAt, this.rejectionReason,
                 this.rejectReasonCategory, reason);
     }
@@ -353,7 +532,12 @@ public final class TaskModel {
     public String title() { return title; }
     public String description() { return description; }
     public Money budget() { return budget; }
-    public OutputSpec outputSpec() { return outputSpec; }
+    /** The Contract's wire description (format, schema, criteria) for WorkOrders, notices and the task API. */
+    public OutputSpec outputDescription() { return outputDescription; }
+    /** The Client's prose acceptance criteria: intent evidence, never an automated check (#110). */
+    public String acceptanceCriteria() { return outputDescription.acceptanceCriteria(); }
+    /** The frozen Contract, the single binding contract (Hard Invariant #4). Never null. */
+    public Contract contract() { return contract; }
     public String category() { return category; }
     public TaskStatus status() { return status; }
     public UUID agentVersionId() { return agentVersionId; }
